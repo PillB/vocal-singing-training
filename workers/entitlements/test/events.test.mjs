@@ -13,6 +13,7 @@ import worker, { handleRequest } from "../src/index.js";
 import { ensureSchema, EVENT_RETENTION_SECONDS, hitRateLimit, resetSchemaMemo, sweepExpired } from "../src/db.js";
 import { clearGoogleJwksCache } from "../src/google.js";
 import {
+  EVENTS_DAILY_CAP,
   EVENTS_IP_RATE_LIMIT,
   EVENTS_RATE_LIMIT,
   EXPERIMENT_PRESETS,
@@ -155,6 +156,97 @@ function adminGet(path, token) {
 function cid(i, prefix) {
   return `${prefix || "c"}${String(i).padStart(15, "0")}`;
 }
+
+/**
+ * The day's cap on stored events, which exists so counting cannot take sign-in
+ * down with it.
+ *
+ * D1's free plan refuses every query for the rest of the UTC day past 100,000
+ * rows written, and one stored event is three rows (its own and its two
+ * indexes) and three more when the sweep deletes it. Without a cap, about 650
+ * learner-days of analytics takes the account layer with it: sign-in, saved
+ * progress, the trial, the licence link, all refused, for a reason no learner
+ * caused. QA worked the arithmetic through on 2026-11-04 against the figures in
+ * `docs/43-WHEN-IT-BREAKS.md` §3.3, which had said the opposite.
+ *
+ * These cases run with the cap turned down to a handful so the behaviour, not
+ * the number, is what is asserted.
+ */
+test("past the day's cap, events are shed and the account layer is not", async () => {
+  const env = freshEnv({ EVENTS_DAILY_CAP: "6" });
+  const first = await call(beacon({ events: [ev("app_open", cid(1)), ev("app_open", cid(1)), ev("app_open", cid(1))] }), env, { now: NOW });
+  assert.equal(first.body.accepted, 3);
+  const second = await call(beacon({ events: [ev("app_open", cid(2)), ev("app_open", cid(2)), ev("app_open", cid(2))] }), env, { now: NOW + 1 });
+  assert.equal(second.body.accepted, 3, "six of six is inside the cap");
+
+  const over = await call(beacon({ events: [ev("practice_start", cid(3))] }), env, { now: NOW + 2 });
+  assert.equal(over.status, 202, JSON.stringify(over.body));
+  assert.equal(over.body.accepted, 0);
+  assert.equal(over.body.reason, "daily_capped");
+  assert.equal((await rows(env, "SELECT * FROM events")).length, 6, "nothing was stored past the cap");
+
+  // The whole point: everything else still works while events are being shed.
+  const health = await call(new Request(`${BASE}/v1/health`), env, { now: NOW + 3 });
+  assert.equal(health.status, 200);
+  const start = await call(
+    new Request(`${BASE}/v1/auth/email/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json", Origin: TEST_ORIGIN },
+      body: JSON.stringify({ email: "learner@example.test" })
+    }),
+    env,
+    { now: NOW + 4, fetchImpl: async () => ({ ok: true, status: 200 }) }
+  );
+  assert.equal(start.status, 200, "sign-in is the thing the cap protects");
+});
+
+test("a refused batch is refused whole, and costs no writes to refuse", async () => {
+  const env = freshEnv({ EVENTS_DAILY_CAP: "4" });
+  assert.equal((await call(beacon({ events: [ev("app_open", cid(1)), ev("app_open", cid(1)), ev("app_open", cid(1))] }), env, { now: NOW })).body.accepted, 3);
+  // Three stored, one slot left, and a batch of three arrives: storing part of
+  // a session would make a funnel read as a drop-off that never happened.
+  const partial = await call(beacon({ events: [ev("app_open", cid(2)), ev("practice_start", cid(2)), ev("practice_recorded", cid(2))] }), env, { now: NOW + 1 });
+  assert.equal(partial.body.reason, "daily_capped");
+  assert.equal((await rows(env, "SELECT * FROM events")).length, 3, "no partial batch");
+
+  // And a refusal must not itself write a rate-limit row, or the ceiling would
+  // spend the budget it exists to protect.
+  const before = (await rows(env, "SELECT * FROM rate_limits")).map((r) => `${r.bucket}:${r.count}`).sort();
+  await call(beacon({ events: [ev("app_open", cid(3)), ev("app_open", cid(3)), ev("app_open", cid(3))] }), env, { now: NOW + 2 });
+  const after = (await rows(env, "SELECT * FROM rate_limits")).map((r) => `${r.bucket}:${r.count}`).sort();
+  assert.deepEqual(
+    after.filter((r) => r.startsWith("evday:")),
+    before.filter((r) => r.startsWith("evday:")),
+    "a refused day-cap call leaves the counter where it was"
+  );
+});
+
+test("the operator can see the cap biting, and the cap resets with its window", async () => {
+  const env = freshEnv({ EVENTS_DAILY_CAP: "2" });
+  await call(beacon({ events: [ev("app_open", cid(1)), ev("app_open", cid(1))] }), env, { now: NOW });
+  await call(beacon({ events: [ev("app_open", cid(2)), ev("app_open", cid(2))] }), env, { now: NOW + 1 });
+  const counted = await rows(env, "SELECT reason, n FROM ingest_daily ORDER BY reason");
+  const capped = counted.find((r) => r.reason === "daily_capped");
+  assert.ok(capped, `ingest_daily should record it: ${JSON.stringify(counted)}`);
+  assert.equal(capped.n, 2, "the events it refused, not the requests");
+  assert.ok(INGEST_REASONS.event.includes("daily_capped"), "and the reason is a declared one");
+
+  // A day later the allowance is back.
+  const later = await call(beacon({ events: [ev("app_open", cid(3))] }), env, { now: NOW + DAY + 2 });
+  assert.equal(later.body.accepted, 1);
+});
+
+test("the shipped cap is sized to leave the account layer most of the free day", () => {
+  // Not a behaviour test: a guard on the number, because the arithmetic in
+  // docs/43 §3.3 is what makes it the right one. 6 rows per event in a steady
+  // state (3 written now, 3 when the sweep deletes it) against D1's free
+  // 100,000 rows a day.
+  const [cap, windowSeconds] = EVENTS_DAILY_CAP;
+  assert.equal(windowSeconds, DAY);
+  assert.ok(cap * 6 < 100000, `${cap} events is ${cap * 6} rows a day, which is the whole free allowance`);
+  assert.ok(cap * 6 <= 60000, `${cap} events leaves only ${100000 - cap * 6} rows a day for accounts`);
+  assert.ok(cap >= 5000, `${cap} is too tight: 25 events a session makes that only ${Math.floor(cap / 25)} sessions a day`);
+});
 
 test("a beacon batch is stored with only the fields that were promised", async () => {
   const env = freshEnv();
@@ -512,6 +604,98 @@ test("the rate limiter can spend several hits at once and refuses what would ove
   const four = await hitRateLimit(env.DB, "t:1", 10, 3600, NOW, 4);
   assert.deepEqual([four.ok, four.count], [true, 10]);
   assert.equal((await hitRateLimit(env.DB, "t:2", 10, 3600, NOW, 11)).ok, false);
+});
+
+test("a bucket only ever moves forward: a clock read in an older window cannot reopen it", async () => {
+  // A Worker request reads one clock and may write several seconds later, so a
+  // request that began just before the hour turned can reach the limiter after
+  // another request has already opened the new window. It then computes an
+  // older window than the one stored. The guarded upsert used to fire on any
+  // difference (`window_start <> ?`), which reset the count AND dragged the
+  // window backwards; the next caller with a current clock saw a difference
+  // again and reset it once more. One such request per boundary therefore
+  // handed out a whole fresh allowance, which on the report route is the day's
+  // write ceiling (QA round 5 re-attack).
+  const env = freshEnv();
+  await ensureSchema(env.DB);
+  const HOUR = 3600;
+  // An exact hour boundary, so "one second before" is genuinely the previous
+  // window rather than arithmetic that happens to agree.
+  const turned = Math.floor(NOW / HOUR) * HOUR + HOUR;
+  const stale = turned - 1;
+  const bucket = "t:boundary";
+  const row = async () =>
+    env.DB.prepare("SELECT count, window_start FROM rate_limits WHERE bucket = ?1").bind(bucket).first();
+
+  // Fill the new window.
+  for (let i = 0; i < 10; i += 1) {
+    assert.equal((await hitRateLimit(env.DB, bucket, 10, HOUR, turned + i)).ok, true, `fill ${i}`);
+  }
+  const full = await row();
+  assert.deepEqual([Number(full.count), Number(full.window_start)], [10, turned]);
+
+  // The straggler from the previous window is refused, and changes nothing.
+  const straggler = await hitRateLimit(env.DB, bucket, 10, HOUR, stale);
+  assert.equal(straggler.ok, false, "a call from the previous window cannot open room in this one");
+  const after = await row();
+  assert.deepEqual(
+    [Number(after.count), Number(after.window_start)],
+    [10, turned],
+    "and it did not move the bucket backwards"
+  );
+
+  // Which is the point: the next caller with a current clock still meets a full
+  // bucket, rather than the empty one the straggler used to leave behind.
+  assert.equal((await hitRateLimit(env.DB, bucket, 10, HOUR, turned + 30)).ok, false);
+
+  // A straggler that arrives while there IS room is counted in the window it
+  // found, not in its own: it spends a slot rather than being thrown away.
+  const second = "t:boundary2";
+  assert.equal((await hitRateLimit(env.DB, second, 3, HOUR, turned)).ok, true);
+  const counted = await hitRateLimit(env.DB, second, 3, HOUR, stale);
+  assert.equal(counted.ok, true);
+  const secondRow = await env.DB
+    .prepare("SELECT count, window_start FROM rate_limits WHERE bucket = ?1")
+    .bind(second)
+    .first();
+  assert.deepEqual([Number(secondRow.count), Number(secondRow.window_start)], [2, turned]);
+
+  // And the window still turns over normally when the clock really has moved on.
+  assert.equal((await hitRateLimit(env.DB, bucket, 10, HOUR, turned + HOUR + 1)).ok, true, "a new hour is a new allowance");
+  const next = await row();
+  assert.deepEqual([Number(next.count), Number(next.window_start)], [1, turned + HOUR]);
+});
+
+test("a window that is already full stays full however many stragglers arrive", async () => {
+  // The sharp form of the same attack. Fill the current window, then fire forty
+  // requests at it, a quarter of them reading a clock from before the boundary.
+  // Every one must be refused. Before the fix each straggler reset the row and
+  // reopened the whole allowance, so this admitted dozens.
+  //
+  // (One straggler arriving while the PREVIOUS window still has room is a
+  // different thing and is allowed to spend a slot there: a fixed window lets
+  // through up to 2x the limit across a boundary by design, which is why this
+  // test fills the window first rather than counting admissions from empty.)
+  const env = freshEnv();
+  await ensureSchema(env.DB);
+  const HOUR = 3600;
+  const turned = Math.floor(NOW / HOUR) * HOUR + HOUR;
+  const bucket = "t:mixed";
+  for (let i = 0; i < 10; i += 1) {
+    assert.equal((await hitRateLimit(env.DB, bucket, 10, HOUR, turned + i)).ok, true);
+  }
+
+  const calls = [];
+  for (let i = 0; i < 40; i += 1) {
+    calls.push(hitRateLimit(env.DB, bucket, 10, HOUR, i % 4 === 0 ? turned - 1 : turned + 20));
+  }
+  const results = await Promise.all(calls);
+  assert.equal(results.filter((r) => r.ok).length, 0, "the hour is spent, whichever clock they read");
+  const row = await env.DB
+    .prepare("SELECT count, window_start FROM rate_limits WHERE bucket = ?1")
+    .bind(bucket)
+    .first();
+  assert.deepEqual([Number(row.count), Number(row.window_start)], [10, turned], "and the row is untouched");
 });
 
 test("the first exposure is the arm for good; forced and switched-off views are not exposures", async () => {

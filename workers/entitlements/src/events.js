@@ -72,6 +72,43 @@ export const EVENTS_IP_RATE_LIMIT = [3000, 3600];
  */
 export const EXPOSURE_IP_CAP = [100, 86400];
 
+/**
+ * Events stored per deployment per rolling day, so counting cannot starve the
+ * thing people actually came for.
+ *
+ * D1's free plan refuses *every* query for the rest of the UTC day once 100,000
+ * rows have been written, and rows are what it bills: "Indexes will add an
+ * additional written row when writes include the indexed column". `events`
+ * carries two indexes, so one stored event is three rows now and three more
+ * when the 180-day sweep deletes it — "Write operations include `INSERT`,
+ * `UPDATE`, and `DELETE`" — which is six rows per event in a steady state.
+ *
+ * Without a cap the arithmetic lands here: about 155 rows per learner-day, so
+ * roughly 650 learner-days fills the free allowance, and past it sign-in, saved
+ * progress, the trial and the licence link all refuse — because of analytics.
+ * A ceiling reached that way should shed the load nobody asked for first.
+ *
+ * 10,000 events leaves about 40,000 rows a day for the account layer, which is
+ * on the order of 500 sign-ins with their progress writes. A refused call writes
+ * nothing (see `hitRateLimit`), so the cap cannot spend the budget it protects.
+ * The window is rolling rather than aligned to 00:00 UTC, which is the safe
+ * direction: it never allows more than the cap inside any 24 hours.
+ *
+ * `EVENTS_DAILY_CAP` in the environment overrides it, which is what a deploy on
+ * the $5 plan wants: there the same ceiling is 500 times higher.
+ */
+export const EVENTS_DAILY_CAP = [10000, 86400];
+
+/**
+ * The cap this deployment runs under.
+ * @param {Object} env Worker env bindings.
+ * @returns {number} Events per rolling day.
+ */
+export function eventsDailyCap(env) {
+  const raw = Number(env && env.EVENTS_DAILY_CAP);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : EVENTS_DAILY_CAP[0];
+}
+
 /** Forget requests per hashed IP per hour. */
 export const FORGET_RATE_LIMIT = [30, 3600];
 
@@ -87,6 +124,11 @@ export const EVENT_NAMES = new Set([
   "ad_impression",
   "ad_suppressed_practice",
   "ad_suppressed_pro",
+  // An AdSense unit that finished its request and came back empty. Separate from
+  // `ad_impression` because that event now fires only on `data-ad-status`
+  // "filled"; without this one, a slot that rendered and filled nothing would be
+  // indistinguishable from a slot that never rendered.
+  "ad_unfilled",
   "app_open",
   "audio_compare",
   "basics_complete",
@@ -141,7 +183,21 @@ export const EVENT_NAMES = new Set([
   // Which design of the site a visit used, how long, and the control being
   // used (src/layouts.js). Sent by js/site-version.js through the same code
   // whatever the design, so none of them is an arm event.
-  ...LAYOUT_EVENTS
+  ...LAYOUT_EVENTS,
+  // The two the trial-length test is read on, added 2026-11-03. Both fire from
+  // the same code in every arm.
+  //
+  // `trial_started` exists because `trial_result` fires on every outcome,
+  // refusals included, and a metric counts an event rather than reading its
+  // props — so "started a trial" could not be told from "tried and could not".
+  //
+  // `pro_paid_first` is the only thing in this list the site does not learn by
+  // watching the person: it is sent the first time the account's own licence
+  // says a paid period, which is the outcome a trial exists to produce. It is
+  // latched per browser, so somebody who was already paying when it shipped
+  // sends it once and lands outside every exposure window anyway.
+  "pro_paid_first",
+  "trial_started"
 ]);
 
 /**
@@ -269,6 +325,60 @@ export const EXPERIMENT_PRESETS = {
       { event: "practice_day", kind: "days", from: 0, to: 14 },
       { event: "first_win", kind: "share", from: 0, to: 7 }
     ]
+  },
+
+  /**
+   * How long should the free trial be?
+   *
+   * control "seven" — seven free days, which is what ships.
+   * treatment "fourteen" — fourteen.
+   *
+   * The one experiment here whose arm the browser does not choose. The arm
+   * decides how much Pro is given away, so the worker assigns it from the
+   * account id (grants.js `trialArmFor`) and writes it on the grant row it
+   * produced; the page is told which arm it got and reports the exposure with
+   * its own browser id, which is why the exposures table still joins to nothing
+   * but a browser. Switched on with the worker's `TRIAL_LEN_EXPERIMENT`, not
+   * with the `enabled` flag in js/experiments-config.js.
+   *
+   * Exposed when a signed-in account is shown the offer, not when the trial
+   * starts. The offer names the length ("Start 14 free days"), so it is already
+   * the treatment, and counting only the people who went on to start would
+   * condition on something the treatment itself moves — the longer offer could
+   * be taken up more often, and the arms would no longer be comparable.
+   *
+   * Primary: share who reach a first paid period within 28 days of that offer.
+   * Guardrails: share who start the trial at all in the first week (the other
+   * half of the question, and the first place a difference would show), and
+   * practice days in the 28 (a longer free run should not mean less practice).
+   *
+   * Plan: 432 per arm, at least 28 days. That is sized for conversion
+   * *doubling*, 5% -> 10%: n = 7.84 * (0.05*0.95 + 0.10*0.90) / 0.05^2. A more
+   * believable 5% -> 7% needs about 2,200 per arm. So this test can only ever
+   * see a very large effect at the traffic this site will have for a long time,
+   * and the honest reading of anything short of that is "no detectable
+   * difference". Run it last, after aa_2026_10 has shown the pipeline is sound.
+   *
+   * And the prior is that there is nothing to find: the only large randomised
+   * test of trial length (337,724 users, six markets — docs/35-PRICING.md)
+   * found seven days beat a thirty-day control and found **fourteen not
+   * significant**. docs/38-AB-TESTING.md says why it is built anyway and why
+   * it should not be switched on at a few hundred users.
+   *
+   * Both arms run identical code — a number in a label and a number of days in
+   * a grant — so no event belongs to one arm and every metric is comparable.
+   */
+  trial_len_2026_11: {
+    arms: ["seven", "fourteen"],
+    weights: [1, 1],
+    control: "seven",
+    armEvents: { seven: [], fourteen: [] },
+    plan: { nPerArm: 432, minDays: 28, mde: 0.05 },
+    primary: { event: "pro_paid_first", kind: "share", from: 0, to: 28 },
+    guardrails: [
+      { event: "trial_started", kind: "share", from: 0, to: 7 },
+      { event: "practice_day", kind: "days", from: 0, to: 28 }
+    ]
   }
 };
 
@@ -286,7 +396,7 @@ export const MIX_CHECK_EVENTS = ["app_open", "practice_start", "practice_recorde
  * The reason is always one of these strings, never anything from a request.
  */
 export const INGEST_REASONS = {
-  event: ["accepted", "unknown_event", "bad_cid", "not_an_object"],
+  event: ["accepted", "unknown_event", "bad_cid", "not_an_object", "daily_capped"],
   exposure: ["exposure_new", "exposure_recovered", "exposure_unregistered", "exposure_capped"],
   request: [
     "origin_not_allowed",
@@ -743,6 +853,28 @@ export async function handleIngest(request, env, deps) {
     if (!gate.ok) {
       await countIngest(env.DB, at, { rate_limited: 1 });
       return limited(gate);
+    }
+  }
+
+  // The day's cap on stored events. Checked after the per-browser gate so a
+  // single looping browser is refused by its own limit first, and before
+  // anything is written, because the whole point is to not write. Costs the
+  // batch's own size: a batch that would cross the cap is refused whole rather
+  // than stored in part, so a learner's session is never half-counted.
+  if (clean.length) {
+    const day = await hitRateLimit(
+      env.DB,
+      "evday",
+      eventsDailyCap(env),
+      EVENTS_DAILY_CAP[1],
+      at,
+      clean.length
+    );
+    if (!day.ok) {
+      await countIngest(env.DB, at, { daily_capped: clean.length });
+      // 202 and not 429: the browser posts no-cors and can neither read this
+      // nor usefully retry, and a retry is the last thing this wants.
+      return json({ ok: true, accepted: 0, reason: "daily_capped" }, 202, cors);
     }
   }
 

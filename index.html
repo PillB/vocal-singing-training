@@ -834,6 +834,12 @@
         </span>
         · <a href="guide.html" id="footer-guide-link" data-i18n="footer.guide">Guía de uso</a>
         · <a href="privacy.html" data-i18n="footer.privacy">Privacidad</a>
+        · <a href="terms.html" data-i18n="footer.terms">Términos</a>
+        ·
+        <!-- The way to tell us something is broken, from the page it broke on.
+             js/reports.js binds every [data-vt-report] control and fills in the
+             text on a page that does not load js/i18n.js. -->
+        <button type="button" class="vt-report-open" data-vt-report="bug" data-i18n="footer.report">Reportar un problema</button>
       </p>
       <!-- Whether this browser sends anonymous statistics, and the way to stop.
            Here as well as in the guide because saying no has to be as easy as
@@ -1174,6 +1180,13 @@
           <p class="muted pricing-note" id="pricing-pay-note" data-i18n="pricing.notePrelaunch">
             La prueba gratis no pide tarjeta. Cuando termina, sigues en el plan Gratis y no se cobra nada.
           </p>
+          <!-- Filled in by renderPricingModal with the route for the rail this
+               person actually paid on, and left empty for everybody else: a
+               trial or a gift has nothing to cancel. Empty in the markup on
+               purpose, because without the scripts there is no way to know
+               which rail it was, and a guess here would be the very thing
+               this element exists to stop. -->
+          <p class="muted pricing-note" id="pricing-cancel-note" hidden></p>
         </div>
       </div>
     </div>
@@ -1201,6 +1214,7 @@
     <script src="js/experiments-config.js?v=20261111a"></script>
     <script src="js/experiments.js?v=20260925a"></script>
     <script src="js/privacy-switch.js?v=20261111a"></script>
+    <script src="js/reports.js?v=20261104a"></script>
     <script src="js/reminders.js?v=20260924c"></script>
     <script src="js/auth-users.generated.js?v=20261006a"></script>
     <script src="js/auth.js?v=20261006a"></script>

@@ -1161,6 +1161,13 @@
     const title = $("#brand-title");
     if (!header || !title) return;
     const was = header.classList.contains("help-fold");
+    // Unfolded before measuring, always. Deleting this line survives the suite
+    // on purpose: measuring while folded only disagrees with measuring unfolded
+    // for titles in the narrow band where the room the two links vacate decides
+    // the wrap, and the width of that band is a property of the browser's text
+    // metrics rather than of this code. A case pinned to it would pass on one
+    // machine and fail on another, which is the exact fault that got the test
+    // above rewritten, so the redundancy is left unasserted and recorded here.
     header.classList.remove("help-fold");
     let fold = false;
     if (window.matchMedia?.("(min-width: 1100px)")?.matches) {
@@ -7228,7 +7235,11 @@
       noteTrialCtaView("pricing");
       if (canTrial) {
         const days = accounts
-          ? Number(acct.methods?.trialDays || 7) // the worker's TRIAL_DAYS, whose default is also 7
+          // This account's own length: TRIAL_DAYS normally, its arm's length
+          // while the trial-length test runs. Seven is the fallback for a
+          // worker that has not answered yet, and is also the default it would
+          // have given.
+          ? Number(acct.trialDays || 7)
           : Number(cfg.freeTrialDays || 0);
         trialBtn.textContent = tt(prelaunch ? "pricing.startTrialFree" : "pricing.startTrial", {
           n: String(days)
@@ -7245,6 +7256,39 @@
       payNote.textContent = tt(key);
       payNote.hidden = prelaunch && (!trialBtn || trialBtn.hidden);
     }
+    // How to cancel, for the rail this person actually paid on.
+    //
+    // `pricing.note` used to end "Cancela cuando quieras desde el mismo sitio
+    // donde te suscribiste", which reads as a promise that this page can take
+    // you there. It cannot, on either rail that will ever be live: the only
+    // self-service control here is the Stripe Customer Portal button, and
+    // `isPortalUrl` accepts Stripe hosts only — on a product whose own
+    // conclusion (VG-19) is that a Peru-registered seller cannot be a Stripe
+    // merchant at all. Creem's portal link is generated per customer and
+    // emailed after each payment, so no single URL could be configured here,
+    // and Mercado Pago's recurring payments are managed inside the payer's own
+    // Mercado Pago account. Three rails, three different routes, and only one
+    // of them a button.
+    //
+    // So the page names the route instead of implying one. A trial or a gift
+    // gets no line at all, because there is nothing to cancel.
+    const cancelNote = $("#pricing-cancel-note");
+    if (cancelNote) {
+      const rail = String(ent.provider || "").toLowerCase();
+      const key = ent.pro && ["stripe", "creem", "mercadopago"].includes(rail)
+        ? "pricing.cancel." + rail
+        : "";
+      if (key) {
+        cancelNote.setAttribute("data-i18n", key);
+        cancelNote.textContent = tt(key);
+        cancelNote.hidden = false;
+      } else {
+        cancelNote.removeAttribute("data-i18n");
+        cancelNote.textContent = "";
+        cancelNote.hidden = true;
+      }
+    }
+
     // Customer Portal: show for Pro/trial when a valid portal URL is configured
     const manage = $("#btn-manage-billing");
     if (manage) {
@@ -8118,6 +8162,17 @@
             toast(tt("pricing.toast.demo"));
             updateBillingChrome();
             renderPricingModal();
+          } else if (res.mode === "signin_required") {
+            // Same handling as the trial's needs_account branch below: the press
+            // worked, and it sent them one step back rather than nowhere.
+            toast(tt("pricing.checkoutNeedsAccount"), { durationMs: 4600 });
+            closePricing();
+            openAccount();
+          } else if (res.mode === "provider_unavailable") {
+            // The worker said it cannot honour this rail, so the press stops
+            // here rather than sending them to pay for something we could not
+            // then switch on.
+            toast(tt("pricing.toast.railUnavailable"), { durationMs: 6000 });
           } else if (res.mode === "verification_unavailable") {
             toast(tt("pricing.toast.verifyUnavailable"), { durationMs: 5200 });
           } else if (res.mode === "unconfigured") {
@@ -8137,6 +8192,10 @@
     // means the card is right by the time anyone reads it, and — as with the
     // account panel — only because somebody opened the panel.
     window.VTAccount?.ensureMethods?.();
+    // And which rails it can honour, for the same reason: asked when the panel
+    // opens, so the answer is there by the time a plan is pressed, and never
+    // asked of somebody who never looks at the prices.
+    window.VTAccount?.ensureRails?.();
     // Remember the trigger before renderPricingModal() rebuilds the card.
     const opener = document.activeElement;
     renderPricingModal();
@@ -8244,6 +8303,36 @@
     const btn = $(sel.btn);
     if (!modal || modal.hidden || !btn || btn.hidden) return;
     trackFunnel("trial_cta_view", { where }, `cta:${where}`);
+    noteTrialArmExposure();
+  }
+
+  /** The trial-length test. Same key in the worker and in js/experiments-config.js. */
+  const TRIAL_LEN_EXPERIMENT = "trial_len_2026_11";
+
+  /**
+   * Where the trial-length test is exposed: the offer now on screen names the
+   * number of free days, so this is the moment the treatment is applied.
+   *
+   * Not when the trial starts, which would be the easier hook. Starting is
+   * something the treatment itself can move — a longer offer may well be taken
+   * up more often — so counting only the people who went on to start would
+   * compare two groups the test had already sorted, and a difference in paid
+   * conversion could be that sorting rather than the length. Everybody shown an
+   * offer belongs to the arm they were shown.
+   *
+   * The arm is the worker's, because it decides how much Pro is given away, and
+   * it is null while the test is off; this does nothing at all until then.
+   */
+  function noteTrialArmExposure() {
+    const acct = window.VTAccount?.getState?.() || null;
+    if (!acct || !acct.signedIn) return;
+    const arm = typeof acct.trialArm === "string" ? acct.trialArm : "";
+    if (!arm) return;
+    try {
+      window.VTExperiments?.exposeServerArm?.(TRIAL_LEN_EXPERIMENT, arm);
+    } catch {
+      /* analytics never breaks the page */
+    }
   }
 
   const ACCOUNT_ERROR_KEYS = {
@@ -8536,7 +8625,7 @@
     if (offerLine) {
       offerLine.hidden = !hasRealSignIn || signedIn;
       if (!offerLine.hidden) {
-        const days = Number(account && account.methods && account.methods.trialDays);
+        const days = Number(account && account.trialDays);
         offerLine.textContent = days > 0
           ? tt("auth.offer", { n: String(days) })
           : tt("auth.offerNoTrial");
@@ -8620,7 +8709,13 @@
       // same way the Pro dialog's button does. The neutral label is the fallback
       // for a worker that has not said yet; no label may name a month, because
       // the trial is seven days.
-      const trialDays = Number(account && account.methods && account.methods.trialDays);
+      //
+      // `account.trialDays` and not `account.methods.trialDays`: the public
+      // route answers before anybody signs in and can only report the
+      // configured default, while the trial-length test gives this account
+      // either seven days or fourteen. The button is where the number is
+      // promised, so the promise has to be the one that will be kept.
+      const trialDays = Number(account && account.trialDays);
       noteTrialCtaView("panel");
       if (trialDays > 0) {
         // The generic [data-i18n] applier calls t(key) with no params, so a key
@@ -8928,6 +9023,10 @@
       const res = await window.VTAccount?.startTrial?.();
       if (res && res.ok) {
         trackFunnel("trial_result", { outcome: "started", where: "panel", kind: "account" });
+        // `trial_result` fires on every outcome and a metric counts an event
+        // rather than reading its props, so "started" needs an event of its
+        // own to be measurable. It is a guardrail of the trial-length test.
+        trackFunnel("trial_started", { where: "panel", kind: "account" });
         toast(tt("pricing.toast.trialStarted", { n: res.days ?? "" }));
         refreshAccountUI();
         updateBillingChrome();
@@ -9203,6 +9302,14 @@
       const t = ingest.totals || {};
       const sum = (keys) => keys.reduce((n, k) => n + (Number(t[k]) || 0), 0);
       const dropped = sum(["unknown_event", "bad_cid", "not_an_object"]);
+      // `daily_capped` is an event-level reason too, and it is deliberately NOT
+      // in that sum: those three are events this worker could not read, and a
+      // capped one is an event it could read and chose not to store because the
+      // day's D1 write allowance was nearly gone. Summing them would put the
+      // one condition an operator has to act on inside a number labelled "mal
+      // formados", which sends them hunting a client bug. It is counted and
+      // named on its own below, and it colours the line.
+      const capped = Number(t.daily_capped) || 0;
       // Every request-level reason the worker counts (INGEST_REASONS.request in
       // workers/entitlements/src/events.js) except "forget", which is a deletion
       // asked for rather than a batch turned away. eu_no_consent was missing
@@ -9220,7 +9327,7 @@
         "eu_no_consent"
       ];
       const refused = sum(refusedKeys);
-      if (!t.accepted && !dropped && !refused) return `<p class="muted ab-ingest">${esc(tt("ab.ingestNone"))}</p>`;
+      if (!t.accepted && !dropped && !refused && !capped) return `<p class="muted ab-ingest">${esc(tt("ab.ingestNone"))}</p>`;
       let line = tt("ab.ingest", { accepted: count(t.accepted), dropped: count(dropped), refused: count(refused) });
       const reasons = refusedKeys.filter((k) => t[k]).map((k) => `${k} ${count(t[k])}`);
       if (reasons.length) line += ` ${tt("ab.ingestReasons", { list: reasons.join(", ") })}`;
@@ -9231,6 +9338,7 @@
         .filter((k) => t[k])
         .map((k) => `${k} ${count(t[k])}`);
       if (exposures.length) line += ` ${tt("ab.ingestExposures", { list: exposures.join(", ") })}`;
+      if (capped) line += ` ${tt("ab.ingestCapped", { n: count(capped) })}`;
       if (ingest.lastAcceptedAt) line += ` ${tt("ab.ingestLast", { when: date(ingest.lastAcceptedAt) })}`;
       // A wrong origin or a stuck limit is a broken pipeline; opted-out,
       // automated and eu_no_consent refusals are the system working, so they are
@@ -9240,8 +9348,11 @@
       // only recorded if that browser comes back another day, so it can skew
       // who is counted. An unregistered one is forged traffic or a site and
       // worker deployed out of step, the registry doing its job, so it is named
-      // but not coloured.
-      const broken = sum(["origin_not_allowed", "rate_limited", "exposure_capped"]) > 0;
+      // but not coloured. A capped *event* does colour it: unlike the others it
+      // is data already lost, and the remedy is Pablo's (raise EVENTS_DAILY_CAP
+      // on the paid plan, or send fewer events), so a quiet readout would be a
+      // decision taken by silence.
+      const broken = sum(["origin_not_allowed", "rate_limited", "exposure_capped"]) > 0 || capped > 0;
       return `<p class="${broken ? "ab-warn" : "muted"} ab-ingest">${esc(line)}</p>`;
     }
 
@@ -9314,6 +9425,7 @@
     const res = await window.VTAccount.startTrial();
     if (res && res.ok) {
       trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "account" });
+      trackFunnel("trial_started", { where: "pricing", kind: "account" });
       toast(tt("pricing.toast.trialStarted", { n: String(res.days ?? "") }));
     } else {
       trackFunnel("trial_result", { outcome: funnelReason(res && res.reason), where: "pricing", kind: "account" });
@@ -9332,6 +9444,7 @@
       toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
     } else {
       trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "local" });
+      trackFunnel("trial_started", { where: "pricing", kind: "local" });
       toast(tt("pricing.toast.trialStarted", { n: String(VTBilling.trialDaysLeft?.() ?? 0) }));
     }
     updateBillingChrome();

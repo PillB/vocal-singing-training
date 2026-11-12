@@ -358,17 +358,9 @@ function transactionIdOf(object) {
  */
 function mapCheckout(checkout, env) {
   const subscription = checkout && checkout.subscription;
-  const metadata = (checkout && checkout.metadata)
-    || (subscription && typeof subscription === "object" && subscription.metadata)
-    || null;
+  const metadata = checkoutMetadata(checkout, subscription);
   const { plan, planSource, unlisted } = planForProduct(checkout && checkout.product, metadata, env);
-  // Creem sends this event when the checkout is finished and the order is
-  // paid; an unfinished one is not sent at all. The order's own status is
-  // still checked, because a status this worker does not recognise must not
-  // read as money having arrived.
-  const orderStatus = String((checkout && checkout.order && checkout.order.status) || "");
-  const paid = String((checkout && checkout.status) || "") === "completed"
-    && (orderStatus === "" || orderStatus === "paid");
+  const paid = checkoutPaid(checkout);
   return {
     provider: "creem",
     claimId: idOf(checkout && checkout.id),
@@ -388,6 +380,24 @@ function mapCheckout(checkout, env) {
     // rather than a lifetime.
     periodEnd: subscriptionPeriodEnd(subscription && typeof subscription === "object" ? subscription : null)
   };
+}
+
+/** The checkout's own metadata, else its nested subscription's, else null. */
+function checkoutMetadata(checkout, subscription) {
+  return (checkout && checkout.metadata)
+    || (subscription && typeof subscription === "object" && subscription.metadata)
+    || null;
+}
+
+/** Whether a checkout says its money arrived: the checkout completed and its order is paid or names no status. */
+function checkoutPaid(checkout) {
+  // Creem sends this event when the checkout is finished and the order is
+  // paid; an unfinished one is not sent at all. The order's own status is
+  // still checked, because a status this worker does not recognise must not
+  // read as money having arrived.
+  const orderStatus = String((checkout && checkout.order && checkout.order.status) || "");
+  return String((checkout && checkout.status) || "") === "completed"
+    && (orderStatus === "" || orderStatus === "paid");
 }
 
 /**
@@ -412,16 +422,10 @@ function mapCheckout(checkout, env) {
 function mapSubscription(subscription, env, eventType) {
   const paid = eventType === "subscription.paid";
   const expired = eventType === "subscription.expired";
-  const canceled = eventType === "subscription.canceled";
   const metadata = (subscription && subscription.metadata) || null;
-  const item = subscription && Array.isArray(subscription.items) ? subscription.items[0] : null;
-  const { plan, planSource, unlisted } = planForProduct(
-    (subscription && subscription.product) || (item && item.product_id),
-    metadata,
-    env
-  );
+  const { plan, planSource, unlisted } = planForProduct(subscriptionProduct(subscription), metadata, env);
   const endedAt = isoSeconds(subscription && subscription.canceled_at);
-  const status = expired || canceled ? "canceled" : mapCreemStatus(subscription && subscription.status);
+  const status = subscriptionEventStatus(subscription, eventType);
   return {
     provider: "creem",
     claimId: null,
@@ -464,6 +468,19 @@ function mapSubscription(subscription, env, eventType) {
   };
 }
 
+/** The product a subscription names: its own `product`, else the first item's `product_id`. */
+function subscriptionProduct(subscription) {
+  const item = subscription && Array.isArray(subscription.items) ? subscription.items[0] : null;
+  return (subscription && subscription.product) || (item && item.product_id);
+}
+
+/** Our status for a subscription event: an expiry or a cancellation ends it, any other event reads the subscription's own status. */
+function subscriptionEventStatus(subscription, eventType) {
+  const expired = eventType === "subscription.expired";
+  const canceled = eventType === "subscription.canceled";
+  return expired || canceled ? "canceled" : mapCreemStatus(subscription && subscription.status);
+}
+
 /**
  * Whether a Creem refund put back everything the customer paid.
  *
@@ -496,11 +513,7 @@ export function isFullCreemRefund(refund) {
   if (transaction && transaction.status === "refunded") {
     return true;
   }
-  const paid = Number(
-    transaction && transaction.amount_paid !== undefined && transaction.amount_paid !== null
-      ? transaction.amount_paid
-      : transaction && transaction.amount
-  );
+  const paid = transactionAmountPaid(transaction);
   if (!Number.isFinite(paid) || paid <= 0) {
     return false;
   }
@@ -510,6 +523,15 @@ export function isFullCreemRefund(refund) {
   }
   const back = Number(refund && refund.refund_amount);
   return Number.isFinite(back) && back >= paid;
+}
+
+/** What a transaction says was paid: `amount_paid` when present, else `amount`, as a Number (NaN or 0 when neither reads). */
+function transactionAmountPaid(transaction) {
+  return Number(
+    transaction && transaction.amount_paid !== undefined && transaction.amount_paid !== null
+      ? transaction.amount_paid
+      : transaction && transaction.amount
+  );
 }
 
 /**
@@ -621,6 +643,12 @@ export function mapCreemEvent(event, env) {
   if (!update.subscriptionId && !update.claimId && !update.paymentId) {
     return { handled: false, reason: "no_license_identity" };
   }
+  stampCreemUpdate(update, event, object);
+  return { handled: true, update };
+}
+
+/** Write onto a mapped update when it happened: occurredAt, and from it reversedAt, endedAt and periodEndFromCharge. */
+function stampCreemUpdate(update, event, object) {
   // When the event was emitted, so a retried or delayed delivery cannot undo a
   // newer one. Creem guarantees neither ordering nor exactly-once delivery: it
   // makes five attempts over 24 hours and a manual resend gets a new id.
@@ -645,5 +673,4 @@ export function mapCreemEvent(event, env) {
       ?? update.occurredAt
       ?? epochSeconds(object.created_at);
   }
-  return { handled: true, update };
 }

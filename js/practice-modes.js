@@ -11249,7 +11249,7 @@
       if (!phase) return;
       // The tail of the last step's sound is not noise
       if (heard && run.t > 1.5) st.noiseAt = run.clock;
-      else if (!heard && phase.rest) st.quietSec += dt;
+      if (phase.rest && !heard) st.quietSec += dt;
     },
     /** The first sound of a compare step opens its take. */
     _openTake(run) {
@@ -11428,7 +11428,8 @@
       if (p.holdsMetric && st.holds > 0) patches[p.holdsMetric] = st.holds;
       // Whole seconds, rounded down: never more than was held
       if (p.longestMetric && st.longest >= 1) patches[p.longestMetric] = Math.floor(st.longest);
-      if (p.restMetric && st.quietSec >= 30) patches[p.restMetric] = Math.round(st.quietSec / 6) / 10;
+      // Whole minutes, rounded down (the field takes whole numbers)
+      if (p.restMetric && st.quietSec >= 60) patches[p.restMetric] = Math.floor(st.quietSec / 60);
       const done = d ? d.run.completed : 0;
       const total = d ? d.run.count : (p.phases || []).length;
       return { patches, summary: this._drillSummary(done, total) };

@@ -380,6 +380,31 @@ export const MUTANTS = {
         to,
         cmd: [...PIANO_SPEC.slice(0, 3), "tests/session-sets.spec.js", "--project=chromium", "--workers=4", "--reporter=dot"]
       }))
+    )
+    .concat(
+      // Guided voice drills (tests/exercise-viz-voice-drill.spec.js): what the microphone may count, and what it may not.
+      [
+        ["VD1 a blip counts as a held sound", "js/practice-modes.js", "if (h.counted || h.len * 1000 < st.minHoldMs) return;", "if (h.counted) return;"],
+        ["VD2 speech is counted as held sounds", "js/practice-modes.js", "      if (h.speech) return;\n      if (h.len > st.longest)", "      if (h.len > st.longest)"],
+        ["VD3 the piano's own note is counted as the learner's", "js/practice-modes.js", "const heard = on && run.clock >= st.deafUntil;", "const heard = on;"],
+        ["VD4 a clear take that is also louder is told off", "js/practice-modes.js", 'if (f.slower) return { text: profileText(p, "pairYes")', 'if (f.slower && !f.louder) return { text: profileText(p, "pairYes")'],
+        ["VD5 a take that only ran longer reads as slower", "js/practice-modes.js", "slower: (dRate != null && dRate <= PAIR_SLOWER.rate) || dShare >= PAIR_SLOWER.share,", "slower: b.voiced > a.voiced * 1.15,"],
+        ["VD6 the longest sound is rounded up to more than was held", "js/practice-modes.js", "patches[p.longestMetric] = Math.floor(st.longest);", "patches[p.longestMetric] = Math.round(st.longest);"],
+        ["VD7 quiet minutes are counted while the learner talks", "js/practice-modes.js", "if (phase.rest && !heard) st.quietSec += dt;", "if (phase.rest) st.quietSec += dt;"],
+        ["VD8 Stop rates the learner's ease for them", "js/practice-modes.js", "      const patches = {};\n      // Only what was heard is written", "      const patches = { easeAfter: 5, comfortAfter: 5, clarityBack: 5, easyVoice: 5 };\n      // Only what was heard is written"],
+        ["VD9 the note drill plays the piano on Start, over its silent first step", "js/app.js", 'const OWN_REFERENCE_MODES = ["openSpace", "voiceDrill"];', 'const OWN_REFERENCE_MODES = ["openSpace"];'],
+        ["VD10 a take that was skipped is shown as still to come", "js/scenes/voice-drill.js", 'return key === "a" && asked === "b" ? "none" : "later";', 'return "later";'],
+        ["VD11 a spoken step shows hold bars", "js/practice-modes.js", "    if (ph && ph.speech) return { draw: A.speak, aspect: DRILL_ASPECT.speak, plain: true };\n", ""],
+        ["VD12 a drill's steps run past its timer", "js/practice-profiles.js", "          sec: 230,", "          sec: 330,"],
+        ["VD13 the note is not sounded when its step begins", "js/practice-modes.js", "      if (p && p.ref) this._playRef(p, run);\n", ""],
+        ["VD14 a glide down is drawn going up", "js/scenes/voice-drill.js", 'if (kind === "down") return 1 - ease(u);', 'if (kind === "down") return ease(u);']
+      ].map(([name, file, from, to]) => ({
+        name,
+        file,
+        from,
+        to,
+        cmd: [...PIANO_SPEC.slice(0, 3), "tests/exercise-viz-voice-drill.spec.js", "--project=chromium", "--workers=4", "--reporter=dot"]
+      }))
     ),
   // Round 4 in the browser: storage of the wrong kind, a full or refused storage, the learner's day, the rail on a
   // phone on its side, the consent bar. A set of its own so that no CI job outgrows its 30 minutes (QA-45).

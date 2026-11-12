@@ -39,15 +39,17 @@ function ledger(todayEx) {
 
 /**
  * @param {import('@playwright/test').Page} page
- * @param {{ tab?: string, lang?: string, todayEx?: string[], session?: object, toasts?: boolean, card?: boolean }} opts
+ * @param {{ tab?: string, lang?: string, todayEx?: string[], session?: object, toasts?: boolean, card?: boolean, design?: string }} opts
  */
 async function boot(page, opts = {}) {
   await page.clock.install({ time: new Date(NOW) });
   await page.addInitScript(
-    ({ days, tab, lang, session, toasts, card }) => {
+    ({ days, tab, lang, session, toasts, card, design }) => {
       try {
         localStorage.setItem("vt_tour_v1", "1");
         localStorage.setItem("vt_lang", lang);
+        // The site's second design ("Enfocado", js/site-version.js), as a visitor who chose it.
+        if (design) localStorage.setItem("vt_site_version_v1", JSON.stringify({ ver: design, src: "chosen" }));
         sessionStorage.setItem("vt_e2e", "1");
         if (card) sessionStorage.setItem("vt_sets_e2e", "1");
         if (toasts) sessionStorage.setItem("vt_debug", "1");
@@ -67,7 +69,8 @@ async function boot(page, opts = {}) {
       lang: opts.lang || "es",
       session: opts.session || null,
       toasts: !!opts.toasts,
-      card: opts.card !== false
+      card: opts.card !== false,
+      design: opts.design || null
     }
   );
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
@@ -338,6 +341,42 @@ test.describe("Goal sets: running one", () => {
     expect(await trail(page)).toBe("dn");
     // Its ending is not claimed by the sets: the plain ending follows (tests/node/session-sets.test.mjs).
     expect(await page.evaluate(() => window.VTSets.onComplete(window.VTStorage.getSession()))).toBe(false);
+  });
+});
+
+test.describe("Goal sets: the site's second design", () => {
+  // Design B (js/site-layout.js) folds every catalogue group but the first, and the four speaking drills of
+  // this round sit in the second. Wrong would be: a drill filed in the open class group (the closed one then
+  // counts 14), a drill that stays hidden once its group opens, or a set that cannot run a step whose card is
+  // folded away.
+  test("in design B the closed group holds the new drills, and a set runs them with the group still closed", async ({ page }) => {
+    await boot(page, { tab: "vocal", design: "b" });
+    expect(await page.evaluate(() => document.documentElement.getAttribute("data-site-version"))).toBe("b");
+    await expect(page.locator("#btn-nav-progress")).toBeVisible();
+
+    const drills = ["v21-straw-to-speech", "v22-voice-recovery", "v23-clear-speech", "v24-vocal-function"];
+    const card = (id) => page.locator(`#exercise-list .card-ex[data-id="${id}"]`);
+    const fold = page.locator("#exercise-list .grid-group-head.tier-advanced .group-fold");
+    await expect(fold).toHaveAttribute("aria-expanded", "false");
+    await expect(fold).toContainText("15 ejercicios");
+    for (const id of drills) await expect(card(id), id).toBeHidden();
+    await fold.click();
+    for (const id of drills) await expect(card(id), id).toBeVisible();
+    await fold.click();
+    await expect(card(drills[0])).toBeHidden();
+
+    // Both steps of this set are in the group that is closed again.
+    await startSet(page, "v-voice");
+    expect((await session(page)).order).toEqual(["v21-straw-to-speech", "v24-vocal-function"]);
+    await expect(page.locator("#session-banner-text")).toHaveText("Ejercicio 1 de 2 · Voz en forma");
+    await expect(page.locator("#ex-title")).toHaveText("De la pajita a la frase");
+    expect(await trail(page)).toBe("n.");
+    // Inside an exercise the design control is out of the way, as in A.
+    await expect(page.locator("#site-version-bar")).toBeHidden();
+    await next(page);
+    await expect(page.locator("#session-banner-text")).toHaveText("Ejercicio 2 de 2 · Voz en forma");
+    await expect(page.locator("#ex-title")).toHaveText("Funciones vocales");
+    expect(await trail(page)).toBe("dn");
   });
 });
 

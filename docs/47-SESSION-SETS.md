@@ -104,14 +104,43 @@ diagnosis words on every card.
 
 ## 5. Verification
 
-Run on 2026-11-12, Chromium, local server:
+Run on 2026-11-12, Chromium, local server, on the branch after `main` was
+merged into it (the site designs of docs/46, the touch hover fixes and the
+audio recovery work):
 
 - `npm run lint`: pass (complexity, waits, asset versions). One legacy
   complexity exemption removed (`modeDisplayName` is now a table).
-- `npm run test:core`: 548 pass.
-- `tests/session-sets.spec.js`: 31 pass. `tests/exercise-viz-voice-drill.spec.js`: 16 pass.
-- Mutants: `node qa/mutate.mjs sets` GS1 to GS13 killed; SS1 to SS12 and
-  VD1 to VD14 (flows set) killed.
+- `npm run test:core`: 661 pass.
+- `tests/session-sets.spec.js`: 32 pass. `tests/exercise-viz-voice-drill.spec.js`: 16 pass.
+- Fifteen wider browser specs (site designs on every device size, touch
+  hover, start visibility, guided scenes, catalogue regression, validation,
+  copy, home choices, all flows, daily session, plan and history, stage,
+  viewport overflow, hit targets): 384 pass.
+- Mutants: `node qa/mutate.mjs sets` GS1 to GS13 killed; SS1 to SS13 and
+  VD1 to VD14 (flows set) killed. Each SS and VD mutant is now judged by the
+  test written to catch it instead of its whole spec: 27 whole-spec runs on
+  top of the flows job's own would outlive its 30 minutes on the build
+  server (the QA-45 failure, which ends as "cancelled", not red).
+
+### The site's two designs
+
+`main` gained a second site design while this branch was open (B,
+"Enfocado": two destinations in the header, catalogue groups that fold).
+What was checked, and how:
+
+- The four new speaking drills sit in the second catalogue group, which B
+  draws closed. One test (`in design B the closed group holds the new
+  drills`) checks that the closed group counts them (15), that they show
+  when it opens, and that a set whose steps are both inside the closed group
+  runs anyway, with the design control out of the way as in A. Mutant SS13
+  files a drill in the wrong group and turns it red.
+- Screenshots in B at 390 × 844, 360 × 640 and 1366 × 768: the start panel,
+  the picker, the catalogue and a live drill. No overflow; the picker covers
+  the design control.
+- Nothing in the sets or the drills branches on the design, so there is no
+  B-only code to plant a defect in. The cost of that: a future change to B
+  that hides the start panel's "Otras formas de practicar" would be caught
+  by this one test only.
 
 Red-team passes this round, each of which changed something:
 

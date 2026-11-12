@@ -1,6 +1,7 @@
 # 47 · Goal sets and guided voice drills (2026-11-11 / 12)
 
-What this round added, why, on what evidence, and what stays open. The code is
+What this round added, why, on what evidence, and what stays open. The
+studies are recorded in `qa/evidence-ledger.json`. The code is
 `js/session-sets.js`, `css/session-sets.css`, `Modes.voiceDrill` in
 `js/practice-modes.js`, `js/scenes/voice-drill.js`, and five exercises in the
 catalogue (v21 to v24, s28).
@@ -61,39 +62,85 @@ each silent, sounded, spoken, or one half of a pair to compare.
 
 ## 3. Evidence
 
-Grades: **moderate** = controlled trials or a review support the short-term
-or trained-task effect in healthy voices; **limited** = one small trial,
+Grades: **moderate** = a review or a controlled trial supports the immediate
+or trained-task effect in healthy voices; **limited** = one small study,
 patient studies, or indirect support; **tradition** = taught, not measured.
+
+Every study named here has a record in `qa/evidence-ledger.json`: where it
+was read (PubMed id or DOI), what was read (abstract or full text), by whom,
+on what date, its design, its people, its numbers, and its limits. A card may
+say only what its records say (`tests/node/evidence-ledger.test.mjs`).
 
 | Claim made in the app | Source | Grade | What the app does not claim |
 |---|---|---|---|
-| Straw and other half-closed sounds lower, for a while, the pressure needed to start the voice and the effort felt | Apfelbach & Guzmán 2024, integrative review of 53 studies (PMID 34774370) | moderate, short-term | That warming up improves how you speak or sing afterwards |
-| Straw into a sentence | Kapsner-Smith et al. 2015 (flow-resistant tube protocol, people with voice problems) | limited | That the carry-over step is tested in healthy speakers |
-| After heavy use, 5 min quiet then 5 min straw recovered the voice better than 10 min quiet | Peng et al. 2026, RCT, 114 healthy adults after 1 h of loading (PMID 42156834) | moderate, one study | Prevention of voice problems |
-| Recovery takes hours | Hunter & Titze 2009 | limited | A safe daily dose |
-| Clear speech is understood better | Picheny et al. 1985 (+17 points, listeners with hearing loss); Smiljanić & Bradlow 2009 (review) | moderate for the listener's benefit | That a short daily drill carries into everyday talk |
-| Vocal function exercises lengthen how long a sound can be sustained | Stemple et al. 1994 (35 women, controlled); Sabol et al. 1995 (20 singers); Bane et al. 2019 (dose); Angadi et al. 2019 (review of 21 studies, no adverse effects) | moderate for the trained task | Better-sounding speech or singing; range; prevention |
-| Pitch varied more is heard as more charismatic; a visual signal increased variation | Rosenberg & Hirschberg 2005; Hincks & Edlund 2009 (n = 14) | limited | A norm for "expressive" |
-| Noticing fillers and pausing instead reduced them | Mancuso & Miltenberger 2016 (n = 6); Spieler & Miltenberger 2017 (n = 4) | limited | Long-term change |
-| Singers rated themselves better after a warm-up; listeners barely heard it | Moorcroft & Kenny 2013 (n = 12) | limited | An audible improvement |
-| Practice with pitch in view improved accuracy more than by ear | Berglin, Pfordresher & Demorest 2022 (one 20-minute session) | limited | Lasting improvement |
-| Singers who cooled down said the voice felt better | Ragan 2016 | limited | Any measured change |
+| Straw and other half-closed sounds lowered the pressure needed to start the voice and the effort felt | Apfelbach & Guzmán 2024, integrative review of 53 studies in adults without voice training, with and without voice problems (PMID 34774370) | moderate for the effect; how long it lasts was rarely measured | That it holds for trained singers (outside the review); that warming up improves how you speak or sing afterwards |
+| Right after a 5-minute warm-up the voice felt more effortful; after 5 quiet minutes it did not | Whitling et al. 2023, 26 healthy adults (PMID 35713650) | limited | A best gap between warm-up and talk |
+| A sentence's melody through the straw | Kapsner-Smith et al. 2015, tube programme, 20 people with voice problems (PMID 25675335) | limited, patients | **The sentence said aloud straight after is this app's own step.** In that programme every exercise stayed inside the straw |
+| After heavy use, 5 min quiet then 5 min straw recovered the voice better than 10 min quiet | Peng et al. 2026, RCT, 114 healthy adults after 1 h of loading (PMID 42156834) | moderate, one study, measured once | Anything about the next day; prevention |
+| Recovery takes hours | Hunter & Titze 2009, 86 adults (PMID 19663377) | limited | A safe daily dose |
+| Clear speech is understood better | Picheny et al. 1985 (+17 points, 5 listeners with hearing loss); Smiljanić & Bradlow 2009 (review) | moderate for the listener's benefit | That a short daily drill carries into everyday talk (those studies did not measure it) |
+| Vocal function exercises lengthen how long a sound can be sustained | Stemple et al. 1994 (35 women, placebo and control groups, 4 weeks); Sabol et al. 1995 (10 of 20 singers, 4 weeks); Bane et al. 2019 (28 women, three doses, 6 weeks, **no untreated group**); Angadi et al. 2019 (review, none of 21 studies reported adverse voice outcomes) | moderate for the trained task | Better-sounding speech or singing in healthy voices; prevention |
+| Clips with higher and more varied pitch were rated more charismatic; a visual signal increased variation more than audio feedback | Rosenberg & Hirschberg 2005 (8 raters, 45 clips of 9 politicians); Hincks & Edlund 2009 (14 Chinese learners of English, two groups) | limited | A norm for "expressive"; that listeners prefer the trained result |
+| Learning to notice fillers reduced them; the taught pause was little used | Luiselli 2022 (review of 7 single-case studies); Mancuso & Miltenberger 2016 (n = 6); Pawlik & Perrin 2020 (n = 4, silent pause) | limited | Long-term change; that fewer fillers makes a talk rate better (in Laske et al. 2024, n = 2, expert ratings did not improve) |
+| Singers rated themselves better after a warm-up; listeners heard it in only some | Moorcroft & Kenny 2013 (12 singers, 6 listeners, no control condition) | limited | An audible improvement |
+| Seeing pitch as well as hearing it improved accuracy more than hearing alone in one 20-minute session; over 10 weeks it gave no advantage | Berglin, Pfordresher & Demorest 2022; Paney & Tharp 2021 | limited, mixed | Lasting improvement from the picture itself |
+| Most singers said the voice felt better after a cool-down; not statistically significant; listeners could not tell | Ragan 2016 (20 singers, 4 listeners, nothing measured by instrument) | limited | Any measured change |
 | Resonance "zones" | Class tradition | tradition | That the phone hears where a voice resonates |
 
-No study shows that any routine here prevents voice disorders (Ruotsalainen
-et al. 2007; Ramos et al. 2025). The copy checker
+Reviews of trials in teachers found no reliable evidence that voice training
+prevents voice disorders (Ruotsalainen et al. 2007: two small, poor-quality
+trials; Ramos et al. 2025: 26 studies, none at low risk of bias, no pooled
+effect). A third review is mixed: 10 of 23 studies linked voice training or
+hygiene education to better voice outcomes (Vermeulen et al. 2022). None
+counted diagnosed disorders. That is absence of good evidence, not proof of
+no effect, and it is why no card promises prevention: the copy checker
 (`tests/node/session-sets.test.mjs`) rejects prevention, cure, guarantee and
 diagnosis words on every card.
+
+### Independent fact-check, 2026-11-12
+
+Two checkers who had not written the cards read each cited record (PubMed,
+Crossref, ERIC) against the sentence that cites it. The papers all exist and
+say roughly what the cards said. Ten sentences went further than their
+source and were corrected in both languages:
+
+| What the app said | What the record says | Now |
+|---|---|---|
+| Half-closed sounds lower pressure and effort "for a while" | The review says few studies measured how long it lasts, and covers adults without voice training | The cards say who was studied and that duration was rarely measured; the singing cards say the review did not include singers |
+| Straw into a sentence "follows the tube protocol" | In that programme every exercise, the "reading" too, was done through the straw | The text says the spoken sentence is this app's own step |
+| Vocal function exercises worked "in small controlled trials (Stemple 1994; Bane 2019)", "for about six weeks" | Bane 2019 compared doses and had no untreated group; Stemple 1994 ran four weeks | One trial is named as controlled, the other as a dose comparison; "four to six weeks" |
+| Once per session "was not enough" | It gave a smaller gain that was not statistically significant | Said so |
+| Singers who cooled down felt better; "the measurements did not change"; "no sign it does harm" | Most said so, not statistically significant; listeners picked the cool-down week 46% of the time; nothing was measured by instrument | Said so. The line about harm is gone: no record supports it |
+| Two filler studies "noticing and pausing instead" | One taught awareness only. Seven small studies exist; where a pause was taught it was little used | The card says noticing is what was tested |
+| "Speakers who varied pitch more were heard as more charismatic"; "a visual signal increased it" | 8 raters, clips of 9 politicians; 14 learners of English, visual against audio feedback | The card gives the people and the comparison |
+| "Other studies do not find the same advantage" (no source) | Paney & Tharp 2021: 10 weeks, no advantage | Named on the card |
+| "No study shows", "nobody has shown", "has not been tested" (8 places) | Nobody can read every study. The reviews found no reliable evidence | Each is now a sentence about the studies named |
+| Resonant voice was left out because trials "found no group effect" | The same small trial found none for straw sounds either (10 per group); the other found a benefit for people who already had problems | See section 4: the reason given was wrong and is restated |
+
+What the correction rests on, and what stays unverified:
+
+- Records were read as abstracts, except Rosenberg & Hirschberg 2005 and
+  Kapsner-Smith et al. 2015, whose full text was read through a page
+  summariser from an open copy (PubMed Central and one university archive
+  refuse automated readers). A person with the PDFs should confirm the two
+  sentences that rest on them.
+- What Mancuso & Miltenberger 2016 taught as the competing response is not
+  in the abstract, and the thesis copy refused access. The card no longer
+  depends on it: Pawlik & Perrin 2020 names a silent pause.
+- Berglin et al. 2022 gives no sample size in its abstract. The card gives
+  none.
+- The review of the code by independent reviewers is still not done (see
+  section 5).
 
 ## 4. Decisions an expert could challenge, and the answer
 
 | Decision | The challenge | Why it stands, or what it costs |
 |---|---|---|
-| "As long as it stays easy" instead of a maximal hold in v24 and s28 | Bane et al. 2025 found a time goal and maximal sustain are active ingredients | Unsupervised maximal holds invite squeezing, and the clinical goal needs a lung-volume measure a phone lacks. Cost: probably a smaller gain than the clinic protocol. A self-referenced goal (first week's median plus a fifth) is the next step and needs per-exercise history |
-| Each exercise twice per run | The studied dose is twice per session, twice a day | The drill does two repetitions; the card says twice a day. Once per session was not enough in Bane et al. 2019 |
+| "As long as it stays easy" instead of a maximal hold in v24 and s28 | Two small trials suggest a time goal and a maximal sustain both matter (Bane et al. 2025, two papers, 19 and 23 people; groups without them improved less, the differences not statistically significant) | Unsupervised maximal holds invite squeezing, and the clinical goal needs a lung-volume measure a phone lacks. Cost: possibly a smaller gain than the clinic protocol; the evidence that it is smaller is itself weak. A self-referenced goal (first week's median plus a fifth) is the next step and needs per-exercise history |
+| Each exercise twice per run | The studied dose is twice per session, twice a day | The drill does two repetitions; the card says twice a day. Once per session gave a smaller gain that was not significant in Bane et al. 2019 |
 | B against A by rate and pause share | Clear speech is defined for the listener | The phone cannot hear intelligibility. It reports two things that do not grow when a take merely runs longer, labels them approximate, and leaves clarity self-rated. The syllable counter undercounts fast speech, which makes "slower" harder to earn, not easier |
 | A louder B is not flagged when it is also slower | The instruction says not to push the volume | Clear speech tends to come out somewhat louder as well, and loudness alone does not make speech clearer. Only "louder and no slower" is pointed out |
-| Resonant voice therapy was not added as an exercise | It is a standard bridge from hum to speech | In healthy speakers the trials found no group effect (Meerschman et al. 2017; Nanjundeswaran et al. 2012). Adding it would contradict the brief |
+| Resonant voice therapy was not added as an exercise | It is a standard bridge from hum to speech | **Restated 2026-11-12.** The first reason given, "the trials found no group effect", does not hold: in Meerschman et al. 2017 (30 healthy students, 10 per group) neither resonant voice nor straw sounds differed from no training, so that trial cannot favour one over the other and is too small to rule either out; in Nanjundeswaran et al. 2012 (31 student teachers, preliminary) it added nothing consistent for healthy voices and helped those with problems. The honest reason is narrower: the app already has humming (s7) and the straw-to-sentence drill for the same bridge, and no trial in healthy speakers shows resonant voice doing more. It stays a candidate, not a rejected technique |
 | No singer cool-down exercise; the cool-down stays a set | A guided cool-down is a common ask | The evidence is one small study of self-report. The set already does it with three existing exercises |
 | The guided routes "Expresión" and "Técnica" keep their 11 exercises | New exercises are missing from them | A ten-minute recovery drill does not belong in an expression session. Sets carry the new drills |
 | The speaking group is renamed "Voz y expresión" | A rename moves a label people know | A straw exercise under "Expresión" is the wrong shelf. The stored tier is unchanged |
@@ -122,6 +169,57 @@ audio recovery work):
   test written to catch it instead of its whole spec: 27 whole-spec runs on
   top of the flows job's own would outlive its 30 minutes on the build
   server (the QA-45 failure, which ends as "cancelled", not red).
+
+### Citation corrections (2026-11-12, after the merge of PR #35)
+
+The independent fact-check of section 3 led to this second change. What was
+run, on Chromium with a local server:
+
+- `tests/node/evidence-ledger.test.mjs` (5 tests) against the wording as
+  merged: **red in 20 places** (16 sentences about all research, 4 "controlled
+  trials" with one controlled trial named). Against the corrected wording:
+  green.
+- `npm run lint` and `npm run test:core`: pass, 666 tests.
+- `node qa/mutate.mjs sets`: GS1 to GS22 killed. GS14 to GS22 are new: a
+  trial given another size, a paper nobody read, a sentence about all
+  research on a card and in a drill, a dose comparison counted as a
+  controlled trial, a self-report study graded moderate, a review given
+  another count, a study dropped in one language, a record with no locator.
+- Seven browser specs (goal sets, guided drills, catalogue regression,
+  catalogue design, copy, validation, viewport overflow): 182 pass.
+
+Five red-team passes on this change:
+
+| # | Attack | Result |
+|---|---|---|
+| 1 | Run the new test on the text that was merged | Red in 20 places. It would have stopped the first version |
+| 2 | Name a study outside brackets in a drill, where no record is looked up | It escaped. Rule added: a year outside brackets is a fault |
+| 3 | Name the same trial twice to make "controlled trials" plural | It passed (two names counted as two). Fixed: a study named twice is one |
+| 4 | Say it another way: "there is no evidence", "no hay evidencia" | It escaped. Both added. **Open:** a list of phrasings is never complete; a new one must be added when seen |
+| 5 | Write the number as a word ("thirty-five women") | **Escapes, and stays open.** Counts of people on cards are now digits so the rule sees them; durations stay as words and are not checked |
+
+What the test cannot do: it holds a card to its record, not the record to
+the paper. A wrong number typed into the ledger and the card together
+passes. The record carries where and when it was read so that a person can
+check it.
+
+Four aesthetic passes: the twelve cards with "Por qué" open at 320 × 568 and
+390 × 844 in both languages (no clipped or overflowing text; the longest
+card, "Antes de hablar", is 554 px tall at 320 wide and scrolls inside the
+sheet); the sheet at 360 × 640 and 768 × 1024; the drill texts under "Pasos y
+consejos" at 320, 390 and 1366 wide. The corrected text of v24 stood 634 px
+tall at 320 wide, ahead of the steps, so v21, v24 and s28 were shortened to
+at or below their merged length (v24 in Spanish: 785 characters).
+
+Trade-offs of this change:
+
+| Decision | The challenge | Why it stands, or what it costs |
+|---|---|---|
+| Cards say who was studied and how many | Longer cards on a small phone | The text is behind "Por qué" and scrolls. Cost: "Antes de hablar" grew by about 100 characters |
+| Sentences about all research are banned, also true-sounding ones | "Nobody has shown X" is often right | It cannot be checked by reading a few records. Each is now a sentence about the studies named. Cost: weaker-sounding caveats |
+| "No sign it does harm" was removed from the cool-down card | It reassures | No record supports it. The card now says it is brief and gentle |
+| The records live in `qa/`, not in the page | The app could show a study's details on tap | Nothing in the page reads them yet. Showing them is a later step |
+| Two records rest on a summariser's reading of the full text | A summariser can misread | Marked in the record and in section 6 for a person to confirm |
 
 ### The site's two designs
 
@@ -215,10 +313,10 @@ one red.
   Whether an iPhone or an Android phone stays awake through v22's five quiet
   minutes has to be seen on the device.
 
-- An independent parallel review (five reviewers, four fact-checkers, four
-  researchers) was started twice and stopped both times by a usage limit
-  before any agent finished. The citations above were checked by the author
-  of this change only.
+- An independent review of the code. A parallel review was started three
+  times and stopped each time by a usage limit before any reviewer
+  finished. The citations were then checked on their own by two independent
+  checkers (section 3); the code was not.
 - Real devices. Everything above ran in desktop Chromium at phone sizes. No
   iPhone, Android or iPad was touched; Safari was not run.
 - A real voice. Counts were exercised with a synthetic voice and scripted
@@ -229,7 +327,12 @@ one red.
 
 | Date | Item | Status |
 |---|---|---|
-| 2026-11-12 | Independent fact-check and adversarial review of this change | open, blocked twice |
+| 2026-11-12 | Independent fact-check of the citations | done 2026-11-12: ten sentences corrected, a ledger and a test added (section 3) |
+| 2026-11-12 | Independent adversarial review of the code | open, blocked three times by a usage limit |
+| 2026-11-12 | Two full texts read through a summariser (Rosenberg & Hirschberg 2005; Kapsner-Smith et al. 2015) confirmed by a person with the PDFs | open |
+| 2026-11-12 | Resonant voice as a guided drill (hum into words) | open, a candidate: no trial in healthy speakers separates it from straw sounds |
+| 2026-11-12 | The "why it helps" lines of the 47 earlier exercises name no study, so the evidence test does not reach them | open: each needs a source and a record, or wording that claims less |
+| 2026-11-12 | Numbers written as words on cards are not held to the records | open |
 | 2026-11-12 | Screen stays awake during a practice (v22 has five minutes with no touch) | done in code, 2026-11-12; open on a real phone |
 | 2026-11-12 | Say "the screen will stay on" in a long quiet step, only while the lock is held | open |
 | 2026-11-12 | No pull-to-refresh while live. A reload mid-practice already asks first (`beforeunload`) and the take is kept on `pagehide`; `overscroll-behavior` on the page would stop the gesture on Android but cannot be tested without a device | open |

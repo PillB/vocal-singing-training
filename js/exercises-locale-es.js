@@ -414,7 +414,7 @@
   },
   "v21-straw-to-speech": {
     "original": "Un sonido suave por una pajita y luego una frase igual de fácil.",
-    "research": "Fonar por una pajita es un ejercicio de tracto vocal semiocluido. Una revisión integradora de 53 estudios (Apfelbach y Guzmán, 2024) encontró que suele bajar el esfuerzo necesario para iniciar la voz justo después; el efecto es de corto plazo y varía según la persona. Pasar de la pajita a una frase sigue el protocolo de tubo de resistencia probado en personas con problemas de voz (Kapsner-Smith y otros, 2015); en personas con la voz sana ese paso es práctica experta, no un resultado probado. Es práctica, no tratamiento.",
+    "research": "Fonar por una pajita es un ejercicio de tracto vocal semiocluido. Una revisión de 53 estudios con adultos sin formación vocal (Apfelbach y Guzmán, 2024) encontró que estos ejercicios suelen bajar la presión necesaria para iniciar la voz y el esfuerzo que se siente; cuánto dura se midió poco. En el programa con tubo probado en 20 personas con problemas de voz (Kapsner-Smith y otros, 2015) todos los ejercicios se hacían dentro de la pajita, también la “lectura”. Decir la frase en voz alta justo después es un paso propio de esta app: ese ensayo no lo probó. Es práctica, no tratamiento.",
     "steps": [
       "Usa tu propia pajita (sorbete o cañita), limpia. Cierra los labios alrededor para que todo el aire salga por ella; mejillas sueltas.",
       "Haz una “u” suave por la pajita, en un tono cómodo de tu voz hablada. Sostén de 3 a 5 segundos, respira y repite.",
@@ -436,7 +436,7 @@
   },
   "v22-voice-recovery": {
     "original": "Tras hablar mucho: 5 min de silencio y 5 de pajita suave.",
-    "research": "En un ensayo aleatorizado con 114 adultos sanos que habían forzado la voz durante una hora, cinco minutos de silencio seguidos de cinco de sonido suave por una pajita recuperaron la voz mejor que diez minutos de silencio (Peng y otros, 2026). Es un solo estudio con medidas a corto plazo, y ningún estudio muestra que enfriar la voz prevenga problemas. Recuperarse de un uso intenso toma horas (Hunter y Titze, 2009): espera la mayor parte para la mañana siguiente. Es práctica, no tratamiento.",
+    "research": "En un ensayo aleatorizado con 114 adultos sanos que habían forzado la voz durante una hora, cinco minutos de silencio seguidos de cinco de sonido suave por una pajita recuperaron la voz mejor que diez minutos de silencio (Peng y otros, 2026). Es un solo estudio con medidas a corto plazo, y no probó si enfriar la voz previene problemas. Recuperarse de un uso intenso toma horas (Hunter y Titze, 2009): espera la mayor parte para la mañana siguiente. Es práctica, no tratamiento.",
     "steps": [
       "Cinco minutos sin hablar ni susurrar. Toma sorbos de agua y respira por la nariz.",
       "Con tu propia pajita, limpia, haz una “u” suave en un tono cómodo. Sostén de 3 a 5 segundos, respira y repite, sin prisa.",
@@ -456,7 +456,7 @@
   },
   "v23-clear-speech": {
     "original": "Dilo como siempre y luego como a alguien que oye poco.",
-    "research": "Cuando se pide hablar como a alguien que oye poco, las personas van más despacio, hacen más pausas y terminan sus sonidos, y quien escucha entiende más: unos 17 puntos porcentuales más de palabras para oyentes con pérdida auditiva en el estudio clásico (Picheny y otros, 1985), un beneficio que una revisión posterior también encontró con otros oyentes y con ruido (Smiljanić y Bradlow, 2009). El beneficio es de quien escucha y se midió en laboratorio; no se ha probado cuánto de una práctica corta diaria pasa a la conversación de todos los días. El teléfono compara tus dos tomas entre sí: no puede oír qué tan claro se entendió.",
+    "research": "Cuando se pide hablar como a alguien que oye poco, las personas van más despacio, hacen más pausas y terminan sus sonidos, y quien escucha entiende más: unos 17 puntos porcentuales más de palabras para oyentes con pérdida auditiva en el estudio clásico (Picheny y otros, 1985), un beneficio que una revisión posterior también encontró con otros oyentes y con ruido (Smiljanić y Bradlow, 2009). El beneficio es de quien escucha y se midió en laboratorio; esos estudios no probaron cuánto de una práctica corta diaria pasa a la conversación de todos los días. El teléfono compara tus dos tomas entre sí: no puede oír qué tan claro se entendió.",
     "steps": [
       "Elige una frase que de verdad vayas a decir esta semana, con un nombre, un número o un día.",
       "Toma A: dila como siempre.",
@@ -477,7 +477,7 @@
   },
   "v24-vocal-function": {
     "original": "Un sonido largo, dos deslizamientos y cinco notas, todo suave.",
-    "research": "Los Ejercicios de Función Vocal (Stemple y otros, 1994) son cuatro ejercicios suaves que se hacen dos veces cada uno, dos veces al día, durante unas seis semanas. En voces sanas alargaron el tiempo que las personas podían sostener un sonido en ensayos controlados pequeños (Stemple y otros, 1994, 35 mujeres; Bane y otros, 2019), y una revisión sistemática de 21 estudios no reportó efectos adversos (Angadi y otros, 2019). Lo que mejora es la tarea entrenada; no se ha mostrado un beneficio al hablar en el día a día ni se ha probado que prevenga nada. En la clínica la meta de tiempo se calcula con el volumen pulmonar; esta app no puede, así que aquí la regla es “mientras siga siendo cómodo”.",
+    "research": "Los Ejercicios de Función Vocal (Stemple y otros, 1994) son cuatro ejercicios suaves, cada uno dos veces, dos veces al día, de cuatro a seis semanas. En voces sanas alargaron el tiempo de sostener un sonido: frente a un placebo en 35 mujeres (Stemple y otros, 1994) y entre tres dosis en 28 mujeres, sin grupo sin tratar (Bane y otros, 2019). Ninguno de 21 estudios de una revisión reportó efectos adversos en la voz (Angadi y otros, 2019). Esos ensayos midieron tareas de voz, no el habla diaria, y las revisiones con docentes no encontraron evidencia confiable de que entrenar la voz prevenga problemas (Ruotsalainen y otros, 2007; Ramos y otros, 2025). Sostén solo “mientras siga siendo cómodo”: la meta de tiempo de la clínica necesita una medida pulmonar que un teléfono no tiene.",
     "steps": [
       "De pie o en una silla, con la espalda larga. Aquí todo va lo más suave que puedas con la voz todavía clara.",
       "Sonido largo: una “i” suave y brillante en una nota cómoda, mientras siga siendo cómodo. Para antes de apretar. Dos veces.",
@@ -486,7 +486,7 @@
       "Cinco notas: la misma “o” suave en cinco notas cómodas de grave a aguda, cada una mientras siga siendo cómodo. Luego las cinco otra vez."
     ],
     "tips": [
-      "La dosis que usaron los estudios: cada ejercicio dos veces, dos veces al día, durante seis semanas. Hacer cada uno una sola vez por sesión no bastó en uno de ellos.",
+      "La dosis que usaron los ensayos: cada ejercicio dos veces, dos veces al día, de cuatro a seis semanas. En el estudio de dosis, hacer cada uno una sola vez por sesión dio una mejora menor, que no fue estadísticamente significativa.",
       "Si la voz se quiebra en un deslizamiento, sigue suave: nunca empujes para pasar.",
       "Para si sientes dolor o ardor, o si terminas con más ronquera que al empezar."
     ],
@@ -1100,7 +1100,7 @@
   },
   "s28-vocal-function": {
     "original": "Una nota larga, dos deslizamientos y cinco notas, todo suave.",
-    "research": "Los Ejercicios de Función Vocal (Stemple y otros, 1994) son cuatro ejercicios suaves que se hacen dos veces cada uno, dos veces al día, durante unas seis semanas. En voces sanas, también de cantantes, alargaron el tiempo que las personas podían sostener un sonido en ensayos controlados pequeños (Stemple y otros, 1994; Sabol y otros, 1995, 20 cantantes; Bane y otros, 2019), y una revisión sistemática de 21 estudios no reportó efectos adversos (Angadi y otros, 2019). Lo que mejora es la tarea entrenada: nadie ha mostrado que haga sonar mejor el canto, y no promete rango. En la clínica la meta de tiempo se calcula con el volumen pulmonar; esta app no puede, así que aquí la regla es “mientras siga siendo cómodo”.",
+    "research": "Los Ejercicios de Función Vocal (Stemple y otros, 1994) son cuatro ejercicios suaves, cada uno dos veces, dos veces al día, de cuatro a seis semanas. En voces sanas alargaron el tiempo de sostener un sonido: frente a un placebo en 35 mujeres (Stemple y otros, 1994), en 10 cantantes frente a 10 que no los hicieron (Sabol y otros, 1995) y entre tres dosis sin grupo sin tratar (Bane y otros, 2019). Ninguno de 21 estudios de una revisión reportó efectos adversos en la voz (Angadi y otros, 2019). Esos ensayos midieron tareas de voz, no cómo suena el canto, y esta app no promete rango. Sostén solo “mientras siga siendo cómodo”: la meta de tiempo de la clínica necesita una medida pulmonar que un teléfono no tiene.",
     "steps": [
       "De pie, con la espalda larga. Aquí todo va lo más suave que puedas cantar con el tono todavía claro.",
       "Nota larga: el piano da una nota; canta en ella una “i” suave y brillante mientras siga siendo cómodo. Para antes de apretar. Dos veces.",
@@ -1110,7 +1110,7 @@
     ],
     "tips": [
       "Si las notas te quedan muy agudas o muy graves, cambia la octava antes de empezar: el ejercicio debe sentirse cómodo, no de manual.",
-      "La dosis que usaron los estudios: cada ejercicio dos veces, dos veces al día, durante seis semanas. Hacer cada uno una sola vez por sesión no bastó en uno de ellos.",
+      "La dosis que usaron los ensayos: cada ejercicio dos veces, dos veces al día, de cuatro a seis semanas. En el estudio de dosis, hacer cada uno una sola vez por sesión dio una mejora menor, que no fue estadísticamente significativa.",
       "Para si sientes dolor o ardor, o si terminas con más ronquera que al empezar."
     ],
     "mistakes": [

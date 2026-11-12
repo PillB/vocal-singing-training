@@ -1,0 +1,571 @@
+{
+  "about": "The studies the goal-set cards and the guided drills name, as read on the date given. A card may state only what is here: tests/node/evidence-ledger.test.mjs holds the cards to it.",
+  "levels": {
+    "review": "a review of studies",
+    "rct": "a randomised trial",
+    "controlled": "a trial with a comparison group, allocation not stated as random",
+    "dose-comparison": "a randomised comparison of doses with no untreated group",
+    "crossover": "each person under both conditions",
+    "pre-post": "before and after, no comparison",
+    "single-case": "a few people, each compared with their own baseline",
+    "correlational": "an association in ratings",
+    "experiment": "a laboratory experiment",
+    "observational": "people followed, nothing assigned"
+  },
+  "sources": [
+    {
+      "key": "Apfelbach 2024",
+      "cite": "Apfelbach CS, Guzmán M. Acoustic, Aerodynamic, Morphometric, and Perceptual Changes During and After Semi-Occluded Vocal Tract Exercise: An Integrative Review. J Voice 2024;38(2):404-425.",
+      "pmid": "34774370",
+      "doi": "10.1016/j.jvoice.2021.09.031",
+      "level": "review",
+      "population": "Vocally untrained adults with and without dysphonia",
+      "numbers": [
+        53
+      ],
+      "finding": "53 articles. Semi-occluded exercises reduce phonation threshold pressure and perceived phonatory effort.",
+      "limits": "Few studies examined how long the changes last after exercise; several trials support sustained effects with regular practice. Singers and trained voices are outside its scope. It does not test warming up before speaking or singing.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Whitling 2023",
+      "cite": "Whitling S, Wan Q, Berardi ML, Hunter EJ. Effects of warm-up exercises on self-assessed vocal effort. Logoped Phoniatr Vocol 2023;48(4):172-179.",
+      "pmid": "35713650",
+      "doi": "10.1080/14015439.2022.2075459",
+      "level": "rct",
+      "population": "26 vocally healthy adults in two randomised groups (reading aloud or semi-occluded exercises)",
+      "numbers": [
+        26,
+        5,
+        2
+      ],
+      "finding": "After a 5-minute warm-up, self-rated vocal effort rose in both groups; after 5 minutes of silence it was back at baseline.",
+      "limits": "Self-rating only. No group without a warm-up.",
+      "checked": "abstract",
+      "by": "author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Kapsner-Smith 2015",
+      "cite": "Kapsner-Smith MR, Hunter EJ, Kirkham K, Cox K, Titze IR. A Randomized Controlled Trial of Two Semi-Occluded Vocal Tract Voice Therapy Protocols. J Speech Lang Hear Res 2015;58(3):535-549.",
+      "pmid": "25675335",
+      "doi": "10.1044/2015_JSLHR-S-13-0231",
+      "level": "rct",
+      "population": "20 adults with hoarseness or vocal fatigue",
+      "numbers": [
+        20,
+        6,
+        4
+      ],
+      "finding": "Flow-resistant tube therapy and vocal function exercises both improved self-reported voice handicap against delayed therapy.",
+      "limits": "Patients, not healthy speakers. All four tube exercises (glide, accents, songs, 'reading' a paragraph without articulation) are done through the straw: the programme has no step of speaking without it. Outcomes are for the whole programme.",
+      "checked": "abstract and full text",
+      "by": "independent checker (abstract); author (full text, a third-party copy read through a page summariser, because PubMed Central refused automated access)",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Peng 2026",
+      "cite": "Peng J, Zou M, Ng ML, Hou Q, Zhu L, Tan J, Zhang Q. The impact and application exercises on vocal fatigue. Sci Rep 2026;16(1):22790.",
+      "pmid": "42156834",
+      "doi": "10.1038/s41598-026-53079-1",
+      "level": "rct",
+      "population": "114 healthy adults after one hour of vocal loading, three groups",
+      "numbers": [
+        114,
+        5,
+        10,
+        60,
+        3,
+        1
+      ],
+      "finding": "Five minutes of rest then five of straw phonation gave better acoustic measures and lower self-rated discomfort and effort than ten minutes of rest alone.",
+      "limits": "One study. Measured once, straight after the ten minutes; no later follow-up. Prevention was not tested.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Hunter 2009",
+      "cite": "Hunter EJ, Titze IR. Quantifying vocal fatigue recovery: dynamic vocal recovery trajectories after a vocal loading exercise. Ann Otol Rhinol Laryngol 2009;118(6):449-460.",
+      "pmid": "19663377",
+      "doi": "10.1177/000348940911800608",
+      "level": "observational",
+      "population": "86 adults after 2 hours of oral reading",
+      "numbers": [
+        86,
+        2,
+        90,
+        4,
+        6,
+        12,
+        18
+      ],
+      "finding": "About 90% of recovery within 4 to 6 hours, full recovery at 12 to 18 hours.",
+      "limits": "Self-tracked short tasks and ratings. Not a safe daily dose.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Picheny 1985",
+      "cite": "Picheny MA, Durlach NI, Braida LD. Speaking clearly for the hard of hearing I: Intelligibility differences between clear and conversational speech. J Speech Hear Res 1985;28(1):96-103.",
+      "pmid": "3982003",
+      "doi": "10.1044/jshr.2801.96",
+      "level": "experiment",
+      "population": "5 listeners with sensorineural hearing loss, 3 talkers, nonsense sentences",
+      "numbers": [
+        17,
+        5,
+        3
+      ],
+      "finding": "Clear speech was understood 17 percentage points better than conversational speech.",
+      "limits": "A laboratory result about the listener. Not a training study.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Smiljanić 2009",
+      "cite": "Smiljanić R, Bradlow AR. Speaking and Hearing Clearly: Talker and Listener Factors in Speaking Style Changes. Lang Linguist Compass 2009;3(1):236-264.",
+      "pmid": "20046964",
+      "doi": "10.1111/j.1749-818X.2008.00112.x",
+      "level": "review",
+      "population": "Review of clear-speech production and perception",
+      "numbers": [],
+      "finding": "The clear-speech benefit holds for several listener groups and in noise.",
+      "limits": "A narrative review. It does not measure what home practice teaches.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Rosenberg 2005",
+      "cite": "Rosenberg A, Hirschberg J. Acoustic/prosodic and lexical correlates of charismatic speech. Interspeech 2005.",
+      "doi": "10.21437/interspeech.2005-329",
+      "url": "https://www.cs.columbia.edu/~julia/files/rosenberg_hirschberg_05.pdf",
+      "level": "correlational",
+      "population": "8 native speakers of American English rated 45 clips from 9 political candidates",
+      "numbers": [
+        8,
+        45,
+        9
+      ],
+      "finding": "Clips with a higher mean pitch and a larger spread of pitch were rated more charismatic.",
+      "limits": "A correlation in ratings of American political speech; the authors say the analysis is not complete and hesitate to generalise.",
+      "checked": "full text",
+      "by": "author (the authors' copy, read through a page summariser; the independent checker reached only the bibliographic record)",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Hincks 2009",
+      "cite": "Hincks R, Edlund J. Promoting Increased Pitch Variation in Oral Presentations with Transient Visual Feedback. Language Learning & Technology 2009 (October issue).",
+      "eric": "EJ868631",
+      "doi": "10.64152/10125/44190",
+      "level": "controlled",
+      "population": "14 Chinese learners of English in two groups, presenting in a second language",
+      "numbers": [
+        14,
+        2
+      ],
+      "finding": "Both groups varied pitch more with training; the group with a visual signal of pitch variation increased it more than the group with audio feedback.",
+      "limits": "Small, second-language speakers. It does not show listeners prefer the result.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Luiselli 2022",
+      "cite": "Luiselli JK. Public speaking disfluencies: A review of habit reversal training and research. J Appl Behav Anal 2022;55(4):1342-1348.",
+      "pmid": "35854406",
+      "doi": "10.1002/jaba.948",
+      "level": "review",
+      "population": "Review of 7 single-case studies in one journal, 2016 to 2022",
+      "numbers": [
+        7
+      ],
+      "finding": "Seven studies evaluated habit reversal (awareness training, with or without a competing response) for filled pauses in public speaking.",
+      "limits": "Its abstract gives no pooled outcome. The seven study abstracts were read one by one (PMIDs 26947580, 27766654, 31032933, 31475352, 33155271, 34289092, 34545944): each reports fewer fillers, in 4 to 9 people, most of them university students.",
+      "checked": "abstract",
+      "by": "author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Mancuso 2016",
+      "cite": "Mancuso C, Miltenberger RG. Using habit reversal to decrease filled pauses in public speaking. J Appl Behav Anal 2016;49(1):188-192.",
+      "pmid": "26947580",
+      "doi": "10.1002/jaba.267",
+      "level": "single-case",
+      "population": "6 participants",
+      "numbers": [
+        6
+      ],
+      "finding": "After awareness training and competing response training, all 6 showed an immediate decrease in filled pauses.",
+      "limits": "No comparison group. The abstract does not say what the competing response was; the thesis copy refused automated access.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Pawlik 2020",
+      "cite": "Pawlik B, Perrin CJ. Reducing speech disfluencies during public speaking using brief habit reversal. J Appl Behav Anal 2020;53(2):1080-1088.",
+      "pmid": "31475352",
+      "doi": "10.1002/jaba.627",
+      "level": "single-case",
+      "population": "4 participants",
+      "numbers": [
+        4,
+        1
+      ],
+      "finding": "Awareness training plus an instructed silent pause: all 4 reduced disfluencies; 1 used the pause at moderate levels.",
+      "limits": "No comparison group. The pause itself was little used. Perrin et al. 2021 (PMID 34289092, 9 students) found the same: the pause stayed high for 1 participant.",
+      "checked": "abstract",
+      "by": "author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Stemple 1994",
+      "cite": "Stemple JC, Lee L, D'Amico B, Pickup B. Efficacy of vocal function exercises as a method of improving voice production. J Voice 1994;8(3):271-278.",
+      "pmid": "7987430",
+      "doi": "10.1016/s0892-1997(05)80299-1",
+      "level": "rct",
+      "population": "35 adult women with normal voice, randomly divided into exercise, placebo and control groups",
+      "numbers": [
+        35,
+        4,
+        3
+      ],
+      "finding": "After 4 weeks, maximum phonation time, frequency range, phonation volume and flow rate changed significantly only in the exercise group.",
+      "limits": "Women only, four weeks. Measures of voice function, not of everyday speech.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Sabol 1995",
+      "cite": "Sabol JW, Lee L, Stemple JC. The value of vocal function exercises in the practice regimen of singers. J Voice 1995;9(1):27-36.",
+      "pmid": "7757147",
+      "doi": "10.1016/s0892-1997(05)80220-6",
+      "level": "controlled",
+      "population": "20 healthy graduate voice majors, 10 exercising and 10 not",
+      "numbers": [
+        20,
+        10,
+        4
+      ],
+      "finding": "After 4 weeks, flow rate, phonation volume and maximum phonation time improved in the exercise group.",
+      "limits": "The abstract says 'divided' and does not state random allocation. No rating of how the singing sounds.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Bane 2019",
+      "cite": "Bane M, Angadi V, Dressler E, Andreatta R, Stemple J. Vocal function exercises for normal voice: The effects of varying dosage. Int J Speech Lang Pathol 2019;21(1):37-45.",
+      "pmid": "28925286",
+      "doi": "10.1080/17549507.2017.1373858",
+      "level": "dose-comparison",
+      "population": "28 women aged 18 to 25 with normal voice, three doses",
+      "numbers": [
+        28,
+        6,
+        3,
+        1,
+        2,
+        4
+      ],
+      "finding": "Six weeks, twice daily. Each exercise twice per session improved maximum phonation time significantly; once per session gave a smaller gain that was not significant.",
+      "limits": "No untreated or placebo group: it compares doses, so it is not a controlled trial of the exercises against nothing.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Angadi 2019",
+      "cite": "Angadi V, Croake D, Stemple J. Effects of Vocal Function Exercises: A Systematic Review. J Voice 2019;33(1):124.e13-124.e34.",
+      "pmid": "29108674",
+      "doi": "10.1016/j.jvoice.2017.08.031",
+      "level": "review",
+      "population": "21 studies of normal and disordered voices",
+      "numbers": [
+        21
+      ],
+      "finding": "None of the included studies reported adverse voice outcomes.",
+      "limits": "No study reported harm; that is not the same as harm being monitored. Shares an author with the 1994 and 1995 trials.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Ruotsalainen 2007",
+      "cite": "Ruotsalainen JH, Sellman J, Lehto L, Jauhiainen M, Verbeek JH. Interventions for preventing voice disorders in adults. Cochrane Database Syst Rev 2007;(4):CD006372.",
+      "pmid": "17943906",
+      "doi": "10.1002/14651858.CD006372.pub2",
+      "level": "review",
+      "population": "2 randomised trials in teachers and student teachers (53 and 43 participants)",
+      "numbers": [
+        2,
+        53,
+        43
+      ],
+      "finding": "No evidence that voice training prevents voice disorders.",
+      "limits": "Two small, poor-quality trials, searched to 2006; none counted diagnosed disorders. Absence of good evidence, not evidence of no effect.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Ramos 2025",
+      "cite": "Ramos LA, Ribeiro CJS, Brasil CCP, Gama ACC. The Effectiveness of Vocal Health Programs in the Prevention of Voice Disorders in Teachers: A Systematic Review and Meta-Analysis. J Voice 2025;39(2):564.e1-564.e21.",
+      "pmid": "36494244",
+      "doi": "10.1016/j.jvoice.2022.09.017",
+      "level": "review",
+      "population": "26 studies of school teachers without vocal complaints, 12 pooled",
+      "numbers": [
+        26,
+        12
+      ],
+      "finding": "No pooled effect on voice handicap, phonation time or acoustic measures; the authors say the results allow no conclusion.",
+      "limits": "No study at low risk of bias. Surrogate measures, not counts of voice disorders.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Moorcroft 2013",
+      "cite": "Moorcroft L, Kenny DT. Singer and listener perception of vocal warm-up. J Voice 2013;27(2):258.e1-258.e13.",
+      "pmid": "23415147",
+      "doi": "10.1016/j.jvoice.2012.12.001",
+      "level": "pre-post",
+      "population": "12 classically trained female singers; 6 experienced listeners",
+      "numbers": [
+        12,
+        6,
+        25
+      ],
+      "finding": "After a 25-minute warm-up all singers perceived changes; most listeners heard a difference only for singers whose vibrato became more moderate.",
+      "limits": "Before and after, no control condition.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Berglin 2022",
+      "cite": "Berglin J, Pfordresher PQ, Demorest S. The effect of visual and auditory feedback on adult poor-pitch remediation. Psychology of Music 2022;50(4):1077-1090.",
+      "doi": "10.1177/03057356211026730",
+      "level": "rct",
+      "population": "Adult poor-pitch singers, three randomised 20-minute conditions",
+      "numbers": [
+        20,
+        3,
+        4
+      ],
+      "finding": "Gains were greater with visual feedback plus hearing the target than with auditory-only practice or a control task.",
+      "limits": "One session, tested straight after, no follow-up. The abstract gives no sample size.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Paney 2021",
+      "cite": "Paney AS, Tharp KL. The effect of concurrent visual feedback on adult singing accuracy. Psychology of Music 2021;49(3):360-370.",
+      "doi": "10.1177/0305735619854534",
+      "level": "rct",
+      "population": "University students not majoring in music, two randomised groups, 10 weeks",
+      "numbers": [
+        10,
+        2
+      ],
+      "finding": "Both groups improved; the group with concurrent visual feedback did not score significantly higher than the group without it.",
+      "limits": "Small; the practice tool was a game.",
+      "checked": "abstract",
+      "by": "author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Ragan 2016",
+      "cite": "Ragan K. The Impact of Vocal Cool-down Exercises: A Subjective Study of Singers' and Listeners' Perceptions. J Voice 2016;30(6):764.e1-764.e9.",
+      "pmid": "26778328",
+      "doi": "10.1016/j.jvoice.2015.10.009",
+      "level": "crossover",
+      "population": "20 classically trained female singers after a 60-minute voice load; 4 expert listeners",
+      "numbers": [
+        20,
+        60,
+        4,
+        68,
+        67,
+        74,
+        46
+      ],
+      "finding": "68%, 67% and 74% reported improvement on three questionnaires; the improvement was not statistically significant; listeners picked the cool-down week 46% of the time.",
+      "limits": "Self-report and listener judgement only; nothing was measured instrumentally.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "app"
+    },
+    {
+      "key": "Vermeulen 2022",
+      "cite": "Vermeulen R, du Toit M, van Lierde K, van der Linde J. The Effect of Vocal Hygiene Education Programs on Voice Quality in Professional Voice Users: A Systematic Review. J Speech Lang Hear Res 2022;65(12):4700-4713.",
+      "pmid": "36351245",
+      "level": "review",
+      "population": "23 studies of professional voice users",
+      "numbers": [
+        23,
+        10,
+        43
+      ],
+      "finding": "10 of 23 studies linked voice training or hygiene education to positive voice outcomes; results were mixed.",
+      "limits": "Voice quality and function, not counts of diagnosed disorders.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "docs"
+    },
+    {
+      "key": "Meerschman 2017",
+      "cite": "Meerschman I, Van Lierde K, Peeters K, Meersman E, Claeys S, D'haeseleer E. Short-Term Effect of Two Semi-Occluded Vocal Tract Training Programs on the Vocal Quality of Future Occupational Voice Users. J Speech Lang Hear Res 2017;60(9):2519-2536.",
+      "pmid": "28837727",
+      "doi": "10.1044/2017_JSLHR-S-17-0017",
+      "level": "rct",
+      "population": "30 healthy speech-language pathology students, 10 per group, 6 weeks",
+      "numbers": [
+        30,
+        10,
+        6
+      ],
+      "finding": "No significant difference between resonant voice training, straw phonation and no training.",
+      "limits": "The null covers straw phonation as well as resonant voice; ten per group cannot rule out an effect. Each trained group improved on one measure.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "docs"
+    },
+    {
+      "key": "Nanjundeswaran 2012",
+      "cite": "Nanjundeswaran C, Li NY, Chan KM, Wong RK, Yiu EM, Verdolini-Abbott K. Preliminary data on prevention and treatment of voice problems in student teachers. J Voice 2012;26(6):816.e1-12.",
+      "pmid": "22921297",
+      "doi": "10.1016/j.jvoice.2012.04.008",
+      "level": "rct",
+      "population": "31 student teachers in three groups",
+      "numbers": [
+        31,
+        3
+      ],
+      "finding": "In healthy participants a hygiene programme stopped the worsening of voice handicap seen in controls; adding resonant voice training gave no consistent extra benefit; it helped those who already had problems.",
+      "limits": "Preliminary, descriptive, self-reported.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "docs"
+    },
+    {
+      "key": "Bane 2025a",
+      "cite": "Bane M, Angadi V, Andreatta R, Stemple J. The Effect of Maximum Phonation Time Goal on Efficacy of Vocal Function Exercises. J Voice 2025;39(5):1254-1261.",
+      "pmid": "37105793",
+      "doi": "10.1016/j.jvoice.2023.03.009",
+      "level": "rct",
+      "population": "19 completers with normal voice, three groups",
+      "numbers": [
+        19,
+        3
+      ],
+      "finding": "The authors conclude the time goal is an active ingredient.",
+      "limits": "The confidence intervals of the group differences cross zero.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "docs"
+    },
+    {
+      "key": "Bane 2025b",
+      "cite": "Bane M, Morton M, Angadi V, Andreatta R, Stemple J. Vocal Function Exercises With and Without Maximally Sustained Phonation: A Randomized Controlled Trial of Individuals With Normal Voice. J Voice 2025;39(2):410-417.",
+      "pmid": "36379827",
+      "doi": "10.1016/j.jvoice.2022.10.012",
+      "level": "rct",
+      "population": "23 completers with normal voice",
+      "numbers": [
+        23
+      ],
+      "finding": "Removing the maximal sustain may attenuate improvement.",
+      "limits": "The difference between groups was not statistically significant.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "docs"
+    },
+    {
+      "key": "Spieler 2017",
+      "cite": "Spieler C, Miltenberger R. Using awareness training to decrease nervous habits during public speaking. J Appl Behav Anal 2017;50(1):38-47.",
+      "pmid": "27766654",
+      "doi": "10.1002/jaba.362",
+      "level": "single-case",
+      "population": "4 university students",
+      "numbers": [
+        4
+      ],
+      "finding": "Awareness training alone reduced filled pauses for all four; booster sessions were needed.",
+      "limits": "No comparison group; no competing response was taught.",
+      "checked": "abstract",
+      "by": "independent checker and author",
+      "date": "2026-11-12",
+      "used": "docs"
+    },
+    {
+      "key": "Laske 2024",
+      "cite": "Laske MM, DiGennaro Reed FD, Braren JTB. The efficacy of remote video-based behavioral skills training and awareness training on public speaking performance. J Appl Behav Anal 2024;57(1):247-261.",
+      "pmid": "37862574",
+      "doi": "10.1002/jaba.1030",
+      "level": "single-case",
+      "population": "2 participants",
+      "numbers": [
+        2
+      ],
+      "finding": "Awareness training reduced disfluencies, but expert ratings of speaking effectiveness did not improve and some worsened.",
+      "limits": "Two people. Fewer fillers did not make experts rate the talk better.",
+      "checked": "abstract",
+      "by": "author",
+      "date": "2026-11-12",
+      "used": "docs"
+    },
+    {
+      "key": "Barsties 2023",
+      "cite": "Barsties v. Latoszek B, Watts CR, Schwan K, Hetjens S. The maximum phonation time as marker for voice treatment efficacy: a network meta-analysis. Clin Otolaryngol 2023;48(2):130-138.",
+      "pmid": "36536593",
+      "level": "review",
+      "population": "12 randomised trials in adults with voice disorders",
+      "numbers": [
+        12
+      ],
+      "finding": "Vocal function exercises were the only intervention with a significant effect on maximum phonation time.",
+      "limits": "Patients only; healthy voices were excluded.",
+      "checked": "abstract",
+      "by": "independent checker",
+      "date": "2026-11-12",
+      "used": "docs"
+    }
+  ]
+}

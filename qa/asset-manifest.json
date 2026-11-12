@@ -112,12 +112,12 @@
     "sha": "012bb5f186b7dfdd"
   },
   "js/exercises-data.js": {
-    "v": "20261111b",
-    "sha": "fa00b20ec34142ec"
+    "v": "20261112b",
+    "sha": "8fda3295894f1329"
   },
   "js/exercises-locale-es.js": {
-    "v": "20261111b",
-    "sha": "2cefb15eaaa7f016"
+    "v": "20261112b",
+    "sha": "6a60047d761fbf4e"
   },
   "js/experiments-config.js": {
     "v": "20261111a",
@@ -228,8 +228,8 @@
     "sha": "5f2c4f4ee948f2a5"
   },
   "js/session-sets.js": {
-    "v": "20261112a",
-    "sha": "7ffb97202769e02b"
+    "v": "20261112b",
+    "sha": "099a1779fae2d675"
   },
   "js/session.js": {
     "v": "20261112a",

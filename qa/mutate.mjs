@@ -38,6 +38,7 @@ const PAGES = ["index.html", "guide.html", "privacy.html", "admin.html"];
 // is empty; Node 24 (CI) waits on it until runTests' 5-minute timeout, so two of those ran the
 // contracts job out of time. Each test gets 30 s, ten times the slowest unmutated one.
 const node = (tests) => [process.execPath, "--test", "--test-timeout=30000", ...tests];
+const EVIDENCE = "tests/node/evidence-ledger.test.mjs";
 const PIANO_SPEC = [
   process.execPath,
   "node_modules/@playwright/test/cli.js",
@@ -116,11 +117,21 @@ export const MUTANTS = {
     ["GS7 moderate support is drawn as the maximum", "js/session-sets.js", "const GRADE_MARKS = { mod: 2, lim: 1, trad: 0 };", "const GRADE_MARKS = { mod: 3, lim: 2, trad: 1 };"],
     ["GS8 a set's step runs longer than the exercise's own timer", "js/session-sets.js", '["s17-jaw-neck-release", 105],\n        ["v22-voice-recovery", 600]', '["s17-jaw-neck-release", 190],\n        ["v22-voice-recovery", 600]'],
     ["GS9 a set names an exercise the catalogue does not have", "js/session-sets.js", '["v11-kill-fillers", 240],', '["v11-kill-filers", 240],'],
-    ["GS10 a card promises prevention", "js/session-sets.js", "Es breve y no hay señal de que haga daño.", "Es breve y previene lesiones."],
+    ["GS10 a card promises prevention", "js/session-sets.js", "Es breve y suave: hazlo si te sienta bien.", "Es breve y previene lesiones."],
     ["GS11 the sets claim the ending of today's basics (no completion card, no day marked)", "js/session-sets.js", 'if (!session || session.path !== "set") return false;\n    const set = resolve(session.set);', "if (!session) return false;\n    const set = resolve(session.set || \"v-pretalk\");"],
     ["GS12 every routine's banner takes a set's name", "js/session-sets.js", 'if (!session || session.path !== "set") return null;', "if (!session) return null;"],
-    ["GS13 the English name of a set is its Spanish one", "js/session-sets.js", 'name: "After a lot of talking",', 'name: "Después de hablar mucho",']
-  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/session-sets.test.mjs"]) })),
+    ["GS13 the English name of a set is its Spanish one", "js/session-sets.js", 'name: "After a lot of talking",', 'name: "Después de hablar mucho",'],
+    // What a card says about a study against the study's record (qa/evidence-ledger.json, docs/47 section 3).
+    ["GS14 a card gives a trial another size", "js/session-sets.js", "En un ensayo con 114 adultos sanos", "En un ensayo con 141 adultos sanos", EVIDENCE],
+    ["GS15 a card names a paper nobody read (the year of another)", "js/session-sets.js", 'src: "Peng et al. 2026, ensayo aleatorizado"', 'src: "Peng et al. 2024, ensayo aleatorizado"', EVIDENCE],
+    ["GS16 a card speaks for all research", "js/session-sets.js", "Esos estudios no midieron cuánto se aprende practicándolo en casa.", "Ningún estudio ha medido cuánto se aprende practicándolo en casa.", EVIDENCE],
+    ["GS17 a dose comparison is counted among controlled trials", "js/session-sets.js", "podían sostener un sonido en ensayos pequeños; uno, con 35 mujeres", "podían sostener un sonido en ensayos controlados pequeños; uno, con 35 mujeres", EVIDENCE],
+    ["GS18 a self-report study is graded moderate", "js/session-sets.js", 'id: "s-cooldown",\n      track: "singing",\n      grade: "lim",', 'id: "s-cooldown",\n      track: "singing",\n      grade: "mod",', EVIDENCE],
+    ["GS19 a drill's text gives the review another count", "js/exercises-data.js", "A review of 53 studies of adults", "A review of 63 studies of adults", EVIDENCE],
+    ["GS20 the Spanish text of a drill drops a study the English names", "js/exercises-locale-es.js", "(Ruotsalainen y otros, 2007; Ramos y otros, 2025)", "(Ruotsalainen y otros, 2007)", EVIDENCE],
+    ["GS21 a record loses where it was read", "qa/evidence-ledger.json", '"pmid": "42156834",\n      "doi": "10.1038/s41598-026-53079-1",', '"pmid": "",\n      "doi": "",', EVIDENCE],
+    ["GS22 a universal claim returns to a drill (no study shows)", "js/exercises-data.js", "it did not test whether a cool-down prevents voice problems.", "no study shows that a cool-down prevents voice problems.", EVIDENCE]
+  ].map(([name, file, from, to, test = "tests/node/session-sets.test.mjs"]) => ({ name, file, from, to, cmd: node([test]) })),
   audio: [
     ["M1 YIN voicing threshold 0.18 -> 0.60 (noise accepted as pitch)", "js/pitch-visualizer.js", "if (cmnd[lag] >= 0.18) continue;", "if (cmnd[lag] >= 0.60) continue;"],
     ["M2 above-band alias guard dropped (1500 Hz read as 750)", "js/pitch-visualizer.js", "for (let shortLag = 2; shortLag < minLag; shortLag++) {", "for (let shortLag = 2; shortLag < 2; shortLag++) {"],

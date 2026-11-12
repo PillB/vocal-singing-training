@@ -650,7 +650,7 @@ window.VT_EXERCISES = {
       durationMin: 5,
       original: "A soft sound through a straw, then a sentence just as easy.",
       research:
-        "Phonating through a straw is a semi-occluded vocal tract exercise. An integrative review of 53 studies (Apfelbach & Guzmán, 2024) found that it tends to lower the effort needed to start the voice right afterwards; the effect is short-term and varies by person. Going straight from the straw into a sentence follows the flow-resistant tube protocol tested in people with voice problems (Kapsner-Smith et al., 2015); in healthy speakers that carry-over step is expert practice, not a tested result. It is practice, not treatment.",
+        "Phonating through a straw is a semi-occluded vocal tract exercise. A review of 53 studies of adults without voice training (Apfelbach & Guzmán, 2024) found that such exercises tend to lower the pressure needed to start the voice and the effort felt; how long that lasts was rarely measured. In the tube programme tested in 20 people with voice problems (Kapsner-Smith et al., 2015) every exercise stayed inside the straw, the “reading” too. Saying the sentence aloud straight afterwards is this app's own step: that trial did not test it. It is practice, not treatment.",
       steps: [
         "Use your own clean drinking straw. Seal your lips around it so all the air leaves through the straw; cheeks loose.",
         "Make a soft “oo” through the straw at a comfortable speaking pitch. Hold 3 to 5 seconds, breathe, repeat.",
@@ -682,7 +682,7 @@ window.VT_EXERCISES = {
       durationMin: 10,
       original: "After heavy talking: 5 quiet minutes, then 5 of soft straw.",
       research:
-        "In a randomised trial of 114 healthy adults who had loaded their voices for an hour, five minutes of quiet followed by five of gentle straw phonation recovered the voice better than ten minutes of quiet alone (Peng et al., 2026). It is one study with short-term measures, and no study shows that a cool-down prevents voice problems. Recovery after heavy use takes hours (Hunter & Titze, 2009): expect most of it by the next morning. It is practice, not treatment.",
+        "In a randomised trial of 114 healthy adults who had loaded their voices for an hour, five minutes of quiet followed by five of gentle straw phonation recovered the voice better than ten minutes of quiet alone (Peng et al., 2026). It is one study with short-term measures, and it did not test whether a cool-down prevents voice problems. Recovery after heavy use takes hours (Hunter & Titze, 2009): expect most of it by the next morning. It is practice, not treatment.",
       steps: [
         "Five minutes without talking or whispering. Sip water and breathe through your nose.",
         "With your own clean straw, make a soft “oo” at a comfortable pitch. Hold 3 to 5 seconds, breathe, repeat, unhurried.",
@@ -712,7 +712,7 @@ window.VT_EXERCISES = {
       durationMin: 4,
       original: "Say it your usual way, then as if to someone who hears poorly.",
       research:
-        "Asked to speak as if to a listener who hears poorly, talkers slow down, pause more and finish their sounds, and listeners understand more: about 17 percentage points more words for listeners with hearing loss in the classic study (Picheny et al., 1985), a benefit that a later review also found for other listeners and in noise (Smiljanić & Bradlow, 2009). The benefit is the listener's and was measured in the lab; how far a short daily drill carries into everyday talk has not been tested. The phone compares your two takes with each other: it cannot hear how clear you were.",
+        "Asked to speak as if to a listener who hears poorly, talkers slow down, pause more and finish their sounds, and listeners understand more: about 17 percentage points more words for listeners with hearing loss in the classic study (Picheny et al., 1985), a benefit that a later review also found for other listeners and in noise (Smiljanić & Bradlow, 2009). The benefit is the listener's and was measured in the lab; those studies did not test how far a short daily drill carries into everyday talk. The phone compares your two takes with each other: it cannot hear how clear you were.",
       steps: [
         "Choose one sentence you will really say this week, with a name, a number or a day in it.",
         "Take A: say it the way you usually do.",
@@ -742,7 +742,7 @@ window.VT_EXERCISES = {
       durationMin: 7,
       original: "One long sound, two glides and five notes, all of it soft.",
       research:
-        "The Vocal Function Exercises (Stemple et al., 1994) are four soft exercises done twice each, twice a day, for about six weeks. In healthy voices they lengthened how long people could sustain a sound in small controlled trials (Stemple et al., 1994, 35 women; Bane et al., 2019), and a systematic review of 21 studies reported no adverse effects (Angadi et al., 2019). What improves is the trained task itself; a benefit for everyday speaking has not been shown, and prevention has not been tested. The clinic sets a personal time goal from lung volume; this app cannot, so the rule here is “as long as it stays easy”.",
+        "The Vocal Function Exercises (Stemple et al., 1994) are four soft exercises, each done twice, twice a day, for four to six weeks. In healthy voices they lengthened how long people could sustain a sound: against a placebo in 35 women (Stemple et al., 1994), and across three doses in 28 women with no untreated group (Bane et al., 2019). None of 21 studies in a review reported adverse voice outcomes (Angadi et al., 2019). Those trials measured voice tasks, not everyday speaking, and reviews in teachers found no reliable evidence that voice training prevents voice problems (Ruotsalainen et al., 2007; Ramos et al., 2025). Hold only “as long as it stays easy”: the clinic's time goal needs a lung measure a phone lacks.",
       steps: [
         "Stand or sit tall. Everything here is as soft as you can make it with the voice still clear.",
         "Long sound: a soft, bright “ee” on one comfortable note, for as long as it stays easy. Stop before you squeeze. Twice.",
@@ -751,7 +751,7 @@ window.VT_EXERCISES = {
         "Five notes: the same soft “oh” on five comfortable notes from low to high, each for as long as it stays easy. Then the five again."
       ],
       tips: [
-        "The dose the studies used: each exercise twice, twice a day, for six weeks. Doing each only once per session was not enough in one of them.",
+        "The dose the trials used: each exercise twice, twice a day, for four to six weeks. In the dose study, doing each only once per session gave a smaller gain that was not statistically significant.",
         "If the voice breaks in a glide, stay soft and keep going: never push through.",
         "Stop if you feel pain or burning, or end up hoarser than you started."
       ],
@@ -1779,7 +1779,7 @@ window.VT_EXERCISES = {
       durationMin: 7,
       original: "One long note, two glides and five held notes, all of it soft.",
       research:
-        "The Vocal Function Exercises (Stemple et al., 1994) are four soft exercises done twice each, twice a day, for about six weeks. In healthy voices, singers included, they lengthened how long people could sustain a sound in small controlled trials (Stemple et al., 1994; Sabol et al., 1995, 20 singers; Bane et al., 2019), and a systematic review of 21 studies reported no adverse effects (Angadi et al., 2019). What improves is the trained task itself: nobody has shown that it makes singing sound better, and it does not promise range. The clinic sets a personal time goal from lung volume; this app cannot, so the rule here is “as long as it stays easy”.",
+        "The Vocal Function Exercises (Stemple et al., 1994) are four soft exercises, each done twice, twice a day, for four to six weeks. In healthy voices they lengthened how long people could sustain a sound: against a placebo in 35 women (Stemple et al., 1994), in 10 singers against 10 who did not do them (Sabol et al., 1995), and across three doses with no untreated group (Bane et al., 2019). None of 21 studies in a review reported adverse voice outcomes (Angadi et al., 2019). Those trials measured voice tasks, not how singing sounds, and this app does not promise range. Hold only “as long as it stays easy”: the clinic's time goal needs a lung measure a phone lacks.",
       steps: [
         "Stand tall. Everything here is as soft as you can sing with the tone still clear.",
         "Long note: the piano gives a note; sing a soft, bright “ee” on it for as long as it stays easy. Stop before you squeeze. Twice.",
@@ -1789,7 +1789,7 @@ window.VT_EXERCISES = {
       ],
       tips: [
         "If the notes sit too high or too low, move the octave before you start: the exercise should feel comfortable, not textbook.",
-        "The dose the studies used: each exercise twice, twice a day, for six weeks. Doing each only once per session was not enough in one of them.",
+        "The dose the trials used: each exercise twice, twice a day, for four to six weeks. In the dose study, doing each only once per session gave a smaller gain that was not statistically significant.",
         "Stop if you feel pain or burning, or end up hoarser than you started."
       ],
       mistakes: ["Holding on until the throat squeezes", "Loud instead of soft", "Opening the lips wide on “oh”"],

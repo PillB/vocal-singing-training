@@ -2,6 +2,16 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <!-- Content Security Policy (a meta tag: GitHub Pages cannot send headers,
+         so frame-ancestors and reporting are not available). Scripts run only
+         from this site, Google's sign-in client, and the one inline flag below
+         by its hash (it must stay inline: it is what keeps analytics off if
+         js/region-gate.js fails to load). Styles allow inline because the app
+         renders style attributes in its templates. Turning on ads
+         (js/ads-config.js) needs the ad hosts added here first; the CSP tests
+         fail on any violation. tests/node/csp.test.mjs checks every inline
+         script's hash is listed. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-jup4jIH0JhrgZhTaTnfk0rGi+ceKUBbGwEpXI/1l8is=' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' https://vocal-studio-entitlements.vocalstudio-pe.workers.dev https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
@@ -16,9 +26,29 @@
         padding: 0 1.25rem 3rem;
         line-height: 1.55;
       }
-      .terms-wrap h1 {
+      /* One <h1> per page: the header carries the site name as text, and the
+         English half's title is an h2 set at the same size, inside lang="en"
+         so screen readers switch voice (WCAG 3.1.2). Same rules as privacy.html. */
+      .brand .brand-name {
+        font-size: 1.05rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--text);
+      }
+      /* The phone header rule hides `.app-header .brand p`; the site name is one */
+      body:not(.view-exercise) .app-header .brand .brand-name {
+        display: block;
+      }
+      /* "English" jumps here: clear of the sticky header (96 px on a phone) */
+      .terms-wrap .part-title {
+        scroll-margin-top: 6.5rem;
+      }
+      .terms-wrap h1,
+      .terms-wrap .part-title {
         font-size: 1.5rem;
+        margin-top: 0;
         margin-bottom: 0.35rem;
+        color: var(--text, #e2e8f0);
       }
       .terms-wrap h2 {
         font-size: 1.05rem;
@@ -38,6 +68,9 @@
         margin-bottom: 1rem;
       }
     </style>
+    <!-- Paints the visitor's design of the site before the first frame
+         (js/site-version.js); a file because the policy allows no inline script. -->
+    <script src="js/site-version.js?v=20261111a"></script>
   </head>
   <body>
     <header class="app-header">
@@ -45,7 +78,7 @@
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">♪</div>
           <div>
-            <h1>Estudio Vocal</h1>
+            <p class="brand-name">Estudio Vocal</p>
             <p>Términos</p>
           </div>
         </div>
@@ -194,140 +227,142 @@
 
       <hr style="margin: 2.5rem 0; border-color: rgba(148, 163, 184, 0.2)" />
 
-      <h1 id="en">Terms of use (English)</h1>
-      <p><strong>Updated:</strong> 2026-11-02</p>
+      <section lang="en" aria-labelledby="en">
+        <h2 id="en" class="part-title">Terms of use (English)</h2>
+        <p><strong>Updated:</strong> 2026-11-02</p>
 
-      <h2>Who provides the service</h2>
-      <p>
-        Vocal Studio is run by the person behind the repository
-        <a href="https://github.com/PillB/vocal-singing-training">PillB/vocal-singing-training</a>,
-        from Peru. For anything in these terms, a cancellation or a complaint
-        included, write through that repository.
-      </p>
+        <h2>Who provides the service</h2>
+        <p>
+          Vocal Studio is run by the person behind the repository
+          <a href="https://github.com/PillB/vocal-singing-training">PillB/vocal-singing-training</a>,
+          from Peru. For anything in these terms, a cancellation or a complaint
+          included, write through that repository.
+        </p>
 
-      <h2>What it is, and what it is not</h2>
-      <p>
-        A practice tool that runs in your browser: speaking and singing exercises,
-        a reference piano, a pitch visualiser, and recordings that stay on your
-        device. It is practice material, not medical or speech-therapy care. If you
-        have pain, hoarseness that does not pass, or any vocal health problem, see a
-        professional.
-      </p>
+        <h2>What it is, and what it is not</h2>
+        <p>
+          A practice tool that runs in your browser: speaking and singing exercises,
+          a reference piano, a pitch visualiser, and recordings that stay on your
+          device. It is practice material, not medical or speech-therapy care. If you
+          have pain, hoarseness that does not pass, or any vocal health problem, see a
+          professional.
+        </p>
 
-      <h2>Your account</h2>
-      <p>
-        An account is optional: without one the app works and your progress is kept
-        on this device. The account exists to carry that progress to another device.
-        You need to be 13 or older to create one; younger than that, ask the person
-        who looks after you to open it and use it with you. Keep your session to
-        your own devices: whoever reaches your email reaches your account. We may
-        close an account used to harm the service or other people, and we will say
-        why when we do.
-      </p>
+        <h2>Your account</h2>
+        <p>
+          An account is optional: without one the app works and your progress is kept
+          on this device. The account exists to carry that progress to another device.
+          You need to be 13 or older to create one; younger than that, ask the person
+          who looks after you to open it and use it with you. Keep your session to
+          your own devices: whoever reaches your email reaches your account. We may
+          close an account used to harm the service or other people, and we will say
+          why when we do.
+        </p>
 
-      <h2>Free and Pro</h2>
-      <p>
-        The free plan costs nothing, asks for no card, and gives you the body of the
-        exercises. Pro adds what the Pro window inside the app lists. The free plan
-        may show studio tips or light ads, never during live practice; Pro and the
-        trial show none.
-      </p>
+        <h2>Free and Pro</h2>
+        <p>
+          The free plan costs nothing, asks for no card, and gives you the body of the
+          exercises. Pro adds what the Pro window inside the app lists. The free plan
+          may show studio tips or light ads, never during live practice; Pro and the
+          trial show none.
+        </p>
 
-      <h2>Prices</h2>
-      <p>
-        In Peru: <strong>S/ 19.90 a month</strong> or <strong>S/ 119.90 a year</strong>.
-        Elsewhere: <strong>$7.99 a month</strong> or <strong>$49 a year</strong>.
-        Prices are shown with any applicable tax included in that number, and they
-        can change; a change never applies to a period already paid for, and it is
-        announced before the next renewal.
-      </p>
-      <p>
-        <strong>Nothing is on sale today.</strong> Payment is not switched on yet,
-        so no plan can be bought and nobody has paid anything. While that holds, Pro
-        exists only as the free trial or as a gift.
-      </p>
+        <h2>Prices</h2>
+        <p>
+          In Peru: <strong>S/ 19.90 a month</strong> or <strong>S/ 119.90 a year</strong>.
+          Elsewhere: <strong>$7.99 a month</strong> or <strong>$49 a year</strong>.
+          Prices are shown with any applicable tax included in that number, and they
+          can change; a change never applies to a period already paid for, and it is
+          announced before the next renewal.
+        </p>
+        <p>
+          <strong>Nothing is on sale today.</strong> Payment is not switched on yet,
+          so no plan can be bought and nobody has paid anything. While that holds, Pro
+          exists only as the free trial or as a gift.
+        </p>
 
-      <h2>The 7-day free trial</h2>
-      <p>
-        One per account, no card. Nothing is charged at the end: the account returns
-        to the free plan and your progress stays where it is.
-      </p>
+        <h2>The 7-day free trial</h2>
+        <p>
+          One per account, no card. Nothing is charged at the end: the account returns
+          to the free plan and your progress stays where it is.
+        </p>
 
-      <h2>Gifted months</h2>
-      <p>
-        We may give Pro as a gift, for a set length of time, to friends, family and
-        people helping test the app. A gift can be given again and can be taken
-        back; it does not transfer to another person, is not exchangeable for money,
-        and does not turn into a subscription by itself.
-      </p>
+        <h2>Gifted months</h2>
+        <p>
+          We may give Pro as a gift, for a set length of time, to friends, family and
+          people helping test the app. A gift can be given again and can be taken
+          back; it does not transfer to another person, is not exchangeable for money,
+          and does not turn into a subscription by itself.
+        </p>
 
-      <h2>Automatic charging, once payment is switched on</h2>
-      <p>
-        A subscription renews by itself at the end of each period, at the price then
-        in force, until you cancel. The charge is made by <strong>Mercado Pago</strong>
-        or the international processor on their own pages; your card details never
-        reach this site. If a charge does not go through, Pro lasts out the period
-        already paid for and then stops; when the money arrives, Pro comes back.
-      </p>
+        <h2>Automatic charging, once payment is switched on</h2>
+        <p>
+          A subscription renews by itself at the end of each period, at the price then
+          in force, until you cancel. The charge is made by <strong>Mercado Pago</strong>
+          or the international processor on their own pages; your card details never
+          reach this site. If a charge does not go through, Pro lasts out the period
+          already paid for and then stops; when the money arrives, Pro comes back.
+        </p>
 
-      <h2>Cancelling</h2>
-      <p>
-        Cancel whenever you like, with no reason given. You keep Pro until the end
-        of the period you already paid for, and there are no charges after that.
-        Cancel from the management link that will appear in the Pro window, from the
-        panel of the processor that charged you, or by writing to us through the
-        repository.
-      </p>
+        <h2>Cancelling</h2>
+        <p>
+          Cancel whenever you like, with no reason given. You keep Pro until the end
+          of the period you already paid for, and there are no charges after that.
+          Cancel from the management link that will appear in the Pro window, from the
+          panel of the processor that charged you, or by writing to us through the
+          repository.
+        </p>
 
-      <h2>Refunds</h2>
-      <p>
-        <strong>14 days</strong> from a charge, no questions: write to us through
-        the repository and we refund that charge in full. After 14 days that period
-        is not refunded, but you can cancel so there is no next one. None of this
-        removes the rights Peruvian consumer law gives you, nor, if you live in the
-        European Union, your right of withdrawal.
-      </p>
+        <h2>Refunds</h2>
+        <p>
+          <strong>14 days</strong> from a charge, no questions: write to us through
+          the repository and we refund that charge in full. After 14 days that period
+          is not refunded, but you can cancel so there is no next one. None of this
+          removes the rights Peruvian consumer law gives you, nor, if you live in the
+          European Union, your right of withdrawal.
+        </p>
 
-      <h2>Acceptable use</h2>
-      <p>
-        Do not try to break, overload or reach the private parts of the service
-        without permission, and do not resell Pro access. The site's code is public
-        and you may read it; the exercises, text and study material are ours and are
-        for your practice, not to republish as your own.
-      </p>
+        <h2>Acceptable use</h2>
+        <p>
+          Do not try to break, overload or reach the private parts of the service
+          without permission, and do not resell Pro access. The site's code is public
+          and you may read it; the exercises, text and study material are ours and are
+          for your practice, not to republish as your own.
+        </p>
 
-      <h2>Availability</h2>
-      <p>
-        This is a small, self-run project: there can be outages, maintenance and
-        changes to the exercises. If the service were closed for good, we would say
-        so in the app and refund the unused part of any period already paid for.
-      </p>
+        <h2>Availability</h2>
+        <p>
+          This is a small, self-run project: there can be outages, maintenance and
+          changes to the exercises. If the service were closed for good, we would say
+          so in the app and refund the unused part of any period already paid for.
+        </p>
 
-      <h2>Liability</h2>
-      <p>
-        The service is offered as it is. So far as the law allows, our liability to
-        you is limited to what you have paid in the last twelve months. None of this
-        limits liability the law does not allow to be limited.
-      </p>
+        <h2>Liability</h2>
+        <p>
+          The service is offered as it is. So far as the law allows, our liability to
+          you is limited to what you have paid in the last twelve months. None of this
+          limits liability the law does not allow to be limited.
+        </p>
 
-      <h2>Changes to these terms</h2>
-      <p>
-        If they change, the date above is updated, and where the change affects
-        something you already paid for it is announced in the app before the next
-        renewal.
-      </p>
+        <h2>Changes to these terms</h2>
+        <p>
+          If they change, the date above is updated, and where the change affects
+          something you already paid for it is announced in the app before the next
+          renewal.
+        </p>
 
-      <h2>Governing law</h2>
-      <p>
-        The laws of the Republic of Peru apply and the courts of Lima have
-        jurisdiction, without taking away your right to complain where the law of
-        your own country allows it.
-      </p>
+        <h2>Governing law</h2>
+        <p>
+          The laws of the Republic of Peru apply and the courts of Lima have
+          jurisdiction, without taking away your right to complain where the law of
+          your own country allows it.
+        </p>
 
-      <h2>Privacy</h2>
-      <p>
-        What is kept and what is not is on <a href="privacy.html#en">the privacy page</a>.
-      </p>
+        <h2>Privacy</h2>
+        <p>
+          What is kept and what is not is on <a href="privacy.html#en">the privacy page</a>.
+        </p>
+      </section>
 
       <p style="margin-top: 2rem"><a href="./">← Volver a la app</a></p>
     </main>

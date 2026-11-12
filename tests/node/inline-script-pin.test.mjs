@@ -9,7 +9,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const PAGES = ["index.html", "guide.html", "privacy.html", "admin.html"];
+// Every page the site serves (the cache gate's list, which tests/node/csp-pins.test.mjs checks against git).
+import { PAGES } from "../../qa/asset-versions.mjs";
 const ALLOWED_INLINE = new Set(["window.VT_REGION_REQUIRED = true;"]);
 const read = (f) => readFileSync(new URL(`../../${f}`, import.meta.url), "utf8");
 const inlineScripts = (html) => [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1].trim());

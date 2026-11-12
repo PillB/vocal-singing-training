@@ -2,6 +2,16 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <!-- Content Security Policy (a meta tag: GitHub Pages cannot send headers,
+         so frame-ancestors and reporting are not available). Scripts run only
+         from this site, Google's sign-in client, and the one inline flag below
+         by its hash (it must stay inline: it is what keeps analytics off if
+         js/region-gate.js fails to load). Styles allow inline because the app
+         renders style attributes in its templates. Turning on ads
+         (js/ads-config.js) needs the ad hosts added here first; the CSP tests
+         fail on any violation. tests/node/csp.test.mjs checks every inline
+         script's hash is listed. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-jup4jIH0JhrgZhTaTnfk0rGi+ceKUBbGwEpXI/1l8is=' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' https://vocal-studio-entitlements.vocalstudio-pe.workers.dev https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- A page for the handful of people testing the site for us, not for
          visitors and not for search engines. -->
@@ -38,7 +48,7 @@
         <strong>No hace falta saber nada técnico</strong>: si algo te resulta raro, eso ya es un
         hallazgo.
       </p>
-      <p class="qa-lede qa-en">
+      <p class="qa-lede qa-en" lang="en">
         This page is for the people helping us test. It says which build is live, what to look at,
         what is deliberately switched off, and how to tell us what you find. You do not need to know
         anything technical: if something feels wrong, that is already a finding.
@@ -107,7 +117,7 @@
           <strong>algo que te gustaría que existiera</strong>. Para lo segundo, elige «Una idea para
           mejorar» en el diálogo.
         </p>
-        <p class="qa-en">
+        <p class="qa-en" lang="en">
           Two things are worth as much as a bug: <strong>something that confused you</strong> and
           <strong>something you wish existed</strong>. For the second one, pick “An idea to make it
           better” in the dialog.

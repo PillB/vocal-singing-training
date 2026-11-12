@@ -12,6 +12,12 @@
   letter-spacing: -0.02em;
   color: var(--text);
 }
+/* The phone header rule in css/styles.css hides `.app-header .brand p`, and the
+   site name is one: without this the header is empty at 360 px (as privacy.html
+   and terms.html already handle). */
+body:not(.view-exercise) .app-header .brand .brand-name {
+  display: block;
+}
 .qa-brand-sub {
   margin: 0;
   font-size: 0.78rem;

@@ -97,19 +97,40 @@ for (const [name, m] of MUTANTS) {
  * directory has to be in the `test` script.
  *
  * The rule below used to cover `*.test.mjs` only, which left the gap it exists
- * to close wide open: `check-cache-stamps.mjs` is a checker, not a node test,
- * and could have been written, committed and run by nothing. Widening it turned
- * up one genuine by-hand tool, so the exception is written down with its reason
+ * to close wide open: a `check-*.mjs` is a checker, not a node test, and could
+ * have been written, committed and run by nothing. Widening it turned up one
+ * genuine by-hand tool, so the exception is written down with its reason
  * rather than left as a hole in the pattern.
+ *
+ * "The test script" is everything `npm test` runs, `npm run` steps followed:
+ * on main `test` is `npm run test:core && playwright test`, and the checkers
+ * live in `test:core` and `lint`. Reading `test` alone found none of them.
  */
 const BY_HAND = {
   "check-header-hit-targets.mjs":
     "drives a real browser against a locally served site; a diagnostic that prints boxes, not a pass/fail gate"
 };
 
+/** The text of a script and of every script it reaches through `npm run <name>`, each once. */
+function reachable(scripts, name, seen = new Set()) {
+  if (seen.has(name) || typeof scripts[name] !== "string") return "";
+  seen.add(name);
+  const text = scripts[name];
+  const called = [...text.matchAll(/npm run ([\w:.-]+)/g)].map((m) => reachable(scripts, m[1], seen));
+  return [text, ...called].join("\n");
+}
+
+test("the script closure follows `npm run` steps, and only those (control)", () => {
+  const scripts = { test: "npm run core && x", core: "node qa/a.mjs && npm run lint", lint: "node qa/b.mjs", other: "node qa/c.mjs" };
+  const text = reachable(scripts, "test");
+  assert.ok(text.includes("qa/a.mjs") && text.includes("qa/b.mjs"));
+  assert.ok(!text.includes("qa/c.mjs"), "a script nothing in `test` runs is not part of it");
+  assert.equal(reachable({ a: "npm run b", b: "npm run a" }, "a"), "npm run b\nnpm run a\n", "a cycle ends");
+});
+
 test("every qa test and checker is named in package.json's test script, or is a by-hand tool with its reason", () => {
   const pkg = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8"));
-  const script = String((pkg.scripts && pkg.scripts.test) || "");
+  const script = reachable(pkg.scripts || {}, "test");
   const files = readdirSync(HERE).filter(
     (name) => name.endsWith(".test.mjs") || (name.startsWith("check-") && name.endsWith(".mjs"))
   );

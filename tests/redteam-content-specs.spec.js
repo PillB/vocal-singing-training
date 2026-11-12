@@ -380,7 +380,8 @@ test.describe("The three stale specs", () => {
   test("the headed forensics spec makes its report folder and does not click a fixed corner", () => {
     const spec = read("tests/headed-exercise-forensics.spec.js");
     const firstWrite = spec.indexOf("fs.writeFileSync(REPORT_JSON");
-    const mk = spec.search(/mkdirSync\(\s*path\.dirname\(\s*REPORT_JSON/);
+    // fs.mkdirSync or the spec's own ensureDir (which wraps it), as main has it
+    const mk = spec.search(/(?:mkdirSync|ensureDir)\(\s*path\.dirname\(\s*REPORT_JSON/);
     expect(mk, "creates the folder").toBeGreaterThan(0);
     expect(mk, "before the first write").toBeLessThan(firstWrite);
     expect(spec, "no click at a fixed point that is '← Practicar' on a phone").not.toMatch(/mouse\.click\(\s*Math\.min\(60/);

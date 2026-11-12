@@ -442,8 +442,6 @@ test("headed mouse-only forensics: exercises × formats", async ({ page }) => {
   test.setTimeout(4 * 60 * 60 * 1000);
 
   ensureDir(SHOT_ROOT);
-  // qa/geometry/ is not tracked, so a fresh checkout does not have it
-  fs.mkdirSync(path.dirname(REPORT_JSON), { recursive: true });
   await page.addInitScript(installClickLogInit);
   await boot(page, { lang: "es", tourDone: true, mic: "silent" });
   await quietOverlays(page);

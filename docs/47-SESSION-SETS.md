@@ -209,6 +209,27 @@ Still resting on one reader: the tube protocol detail (Kapsner-Smith 2015)
 and the 8 raters (Rosenberg 2005) are from full texts read through a
 summariser.
 
+### Final reading and the lock, 2026-11-12
+
+Two more fresh readers took the 24 texts as pushed (158 sentences): one
+against the abstracts, one Spanish against English. Neither found a fault.
+The ten texts that did not change after the second reading were not read
+again.
+
+Each text now carries its last reading in `qa/evidence-ledger.json`, under
+`readings`: who read it, when, and a hash of the words read.
+`tests/node/evidence-readings.test.mjs` fails when a text has no reading,
+when its words changed after the reading, when the reading is by the author
+alone, or when a reading is left behind for a text the app no longer shows.
+`node qa/evidence-texts.mjs` prints the hashes as they stand.
+
+What the lock is, and is not. It is a gate on process: it proves that these
+words were read by someone other than their author, not that the reader was
+right. It makes any edit to a card's evidence text fail the suite until a
+second reading is recorded, which is friction on purpose. A person who types
+a reader's name without a reading having happened defeats it; the record
+then carries that name.
+
 ## 4. Decisions an expert could challenge, and the answer
 
 | Decision | The challenge | Why it stands, or what it costs |
@@ -329,6 +350,24 @@ the chip's word; the three changed drill texts at 320, 390 and 1366 wide in
 both languages; the viewport specs at 320 × 640, 360 × 740, 390 × 844 and
 844 × 390.
 
+The lock (the second commit of the round). `npm run test:core`: 668 pass.
+`node qa/mutate.mjs sets`: GS1 to GS25 killed; GS25 changes "solo en
+algunas" to "en todas" on a card, which no rule about names and numbers
+sees. Red-team passes on it:
+
+| # | Attack | Result |
+|---|---|---|
+| 1 | Change one word and leave the reading as it is | Caught: the hash no longer matches |
+| 2 | Change the words and record the new hash as read by "author", "Author" or "the author" | Caught. A made-up reader's name **escapes**: the test cannot know who read. The name stays in the record |
+| 3 | Add a card, or cite a study in a drill that cited none, with no reading | Caught: "never read by a second reader" |
+| 4 | Remove a card and leave its reading | Caught: "a reading of a text the app no longer shows" |
+| 5 | Edit only a drill's tip, where the dose is stated | Caught: the tips are part of what is hashed |
+| 6 | Type an accent as two characters | Not a change: the text is normalised before hashing |
+| 7 | Reword the "why it helps" line of one of the 47 exercises that name no study | **Not covered**: the lock follows the texts that name studies. Open in section 6 |
+
+Nothing a learner sees changed in that commit, so the four aesthetic passes
+above stand for it.
+
 Trade-offs of this round:
 
 | Decision | The challenge | Why it stands, or what it costs |
@@ -337,6 +376,7 @@ Trade-offs of this round:
 | The schedule left the research text of the vocal function drills | The reader of that text no longer sees the dose | The tip directly under it states it. Cost: one more place to look |
 | "A set of voice exercises", no longer "four" | The programme does have four | No abstract in the ledger counts them. The drill's own steps still show four |
 | "Soft" removed from what the recovery trial did | The app asks for a soft sound | The abstract does not say soft. The instruction stays in the steps, as the app's own |
+| A lock on the wording of every text that names a study | It is a change detector: it fails on any edit, right or wrong, and can be silenced by recording a hash | That is its job here. The fault it answers is wording that changed after it was last read, which happened twice on this branch in one day. Cost: every copy edit to these texts needs a second reader before the suite is green |
 | Plain-wording changes taken from a reader who is a model, not a person from Peru | It can be wrong about what sounds natural | Each change was kept only where it removed a second reading or an ambiguity. Two vocabulary questions are left for a person (section 6) |
 
 ### The site's two designs
@@ -449,7 +489,7 @@ one red.
 | 2026-11-12 | Second independent reading, each sentence against its abstract | done 2026-11-12: 13 sentences reworded, two studies added to the ledger, two rules added to the test (section 3) |
 | 2026-11-12 | Third reading of the reworded sentences, by a fact reader and a bilingual plain-language reader | done 2026-11-12: eight more sentences changed on the facts, one difference between the languages closed, wording made plainer (section 3) |
 | 2026-11-12 | One word for a straw across the app ("pajita", "pajilla" and "cañita" are all in use), and "hum" or "zumbido" | open |
-| 2026-11-12 | Faults a rule cannot see (an outcome narrowed, a sample credited to one arm, a detail beside the wrong study) | open: only a second reader catches them. A lock that fails when wording changes after its last reading is the next step |
+| 2026-11-12 | Faults a rule cannot see (an outcome narrowed, a sample credited to one arm, a detail beside the wrong study) | done 2026-11-12 for the 34 texts that name studies: each carries its last independent reading, and the suite fails when the words change after it (section 3). Open for the 47 earlier exercises |
 | 2026-11-12 | Independent adversarial review of the code | open, blocked three times by a usage limit |
 | 2026-11-12 | Two full texts read through a summariser (Rosenberg & Hirschberg 2005; Kapsner-Smith et al. 2015) confirmed by a person with the PDFs | open |
 | 2026-11-12 | Resonant voice as a guided drill (hum into words) | open, a candidate: no trial in healthy speakers separates it from straw sounds |

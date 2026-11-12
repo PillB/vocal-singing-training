@@ -39,6 +39,7 @@ const PAGES = ["index.html", "guide.html", "privacy.html", "admin.html"];
 // contracts job out of time. Each test gets 30 s, ten times the slowest unmutated one.
 const node = (tests) => [process.execPath, "--test", "--test-timeout=30000", ...tests];
 const EVIDENCE = "tests/node/evidence-ledger.test.mjs";
+const READINGS = "tests/node/evidence-readings.test.mjs";
 const PIANO_SPEC = [
   process.execPath,
   "node_modules/@playwright/test/cli.js",
@@ -132,7 +133,8 @@ export const MUTANTS = {
     ["GS21 a record loses where it was read", "qa/evidence-ledger.json", '"pmid": "42156834",\n      "doi": "10.1038/s41598-026-53079-1",', '"pmid": "",\n      "doi": "",', EVIDENCE],
     ["GS22 a universal claim returns to a drill (no study shows)", "js/exercises-data.js", "it did not test whether a cool-down prevents voice problems.", "no study shows that a cool-down prevents voice problems.", EVIDENCE],
     ["GS23 a card ranks the evidence (the best studied)", "js/session-sets.js", "The straw belongs to a family of exercises with a review of 53 studies behind it;", "The straw is the best studied item here, with a review of 53 studies behind it;", EVIDENCE],
-    ["GS24 a number stays in one language only", "js/session-sets.js", "After warming up, the 12 female singers in one study noticed", "After warming up, the female singers in one study noticed", EVIDENCE]
+    ["GS24 a number stays in one language only", "js/session-sets.js", "After warming up, the 12 female singers in one study noticed", "After warming up, the female singers in one study noticed", EVIDENCE],
+    ["GS25 a card's wording changes after its second reading", "js/session-sets.js", "quienes escuchaban notaron la diferencia solo en algunas.", "quienes escuchaban notaron la diferencia en todas.", READINGS]
   ].map(([name, file, from, to, test = "tests/node/session-sets.test.mjs"]) => ({ name, file, from, to, cmd: node([test]) })),
   audio: [
     ["M1 YIN voicing threshold 0.18 -> 0.60 (noise accepted as pitch)", "js/pitch-visualizer.js", "if (cmnd[lag] >= 0.18) continue;", "if (cmnd[lag] >= 0.60) continue;"],

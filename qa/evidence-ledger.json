@@ -1,5 +1,5 @@
 {
-  "about": "The studies the goal-set cards and the guided drills name, as read on the date given. A card may state only what is here: tests/node/evidence-ledger.test.mjs holds the cards to it.",
+  "about": "The studies the goal-set cards and the guided drills name, as read on the date given. A card may state only what is here: tests/node/evidence-ledger.test.mjs holds the cards to it. Under \"readings\", each text the app shows carries the last reading by someone other than its author, with a hash of the words read (node qa/evidence-texts.mjs prints them): tests/node/evidence-readings.test.mjs fails when the words change after it.",
   "levels": {
     "review": "a review of studies",
     "rct": "a randomised trial",
@@ -143,7 +143,7 @@
       "finding": "In clear speech the speaking rate fell substantially, by pauses inserted between words and by longer speech sounds; vowels were less reduced and word-final consonants were released.",
       "limits": "It describes what the talkers did, in nonsense sentences spoken for hearing-impaired listeners. Not a training study.",
       "checked": "abstract",
-      "by": "author",
+      "by": "independent checker and author",
       "date": "2026-11-12",
       "used": "app"
     },
@@ -212,7 +212,7 @@
       "finding": "Seven studies evaluated habit reversal (awareness training, with or without a competing response) for filled pauses in public speaking.",
       "limits": "Its abstract gives no pooled outcome. The seven study abstracts were read one by one (PMIDs 26947580, 27766654, 31032933, 31475352, 33155271, 34289092, 34545944): each reports fewer fillers, in 4 to 9 people, most of them university students.",
       "checked": "abstract",
-      "by": "author",
+      "by": "independent checker and author",
       "date": "2026-11-12",
       "used": "app"
     },
@@ -247,7 +247,7 @@
       "finding": "Awareness training plus an instructed silent pause: all 4 reduced disfluencies; 1 used the pause at moderate levels.",
       "limits": "No comparison group. The pause itself was little used. Perrin 2021 found the same.",
       "checked": "abstract",
-      "by": "author",
+      "by": "independent checker and author",
       "date": "2026-11-12",
       "used": "app"
     },
@@ -266,7 +266,7 @@
       "finding": "Awareness training plus a silent pause, with a group reward: disfluencies fell meaningfully. The pause rose for all participants and stayed high for 1.",
       "limits": "No comparison group. The training came with a group reward, so the two are not separated.",
       "checked": "abstract",
-      "by": "author",
+      "by": "independent checker and author",
       "date": "2026-11-12",
       "used": "app"
     },
@@ -600,6 +600,252 @@
       "by": "independent checker",
       "date": "2026-11-12",
       "used": "docs"
+    }
+  ],
+  "readings": [
+    {
+      "id": "v-pretalk",
+      "lang": "es",
+      "sha": "0d53567e04c2",
+      "by": "independent reader, second reading (each sentence against its abstract)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v-pretalk",
+      "lang": "en",
+      "sha": "de7d17180cab",
+      "by": "independent reader, second reading (each sentence against its abstract)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v-aftertalk",
+      "lang": "es",
+      "sha": "b0503b4f7fbe",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v-aftertalk",
+      "lang": "en",
+      "sha": "fe9a46d6e1e3",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v-clarity",
+      "lang": "es",
+      "sha": "7375392acf4d",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v-clarity",
+      "lang": "en",
+      "sha": "eeed5ec64466",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v-expression",
+      "lang": "es",
+      "sha": "f2b1019636dd",
+      "by": "independent reader, second reading (each sentence against its abstract)",
+      "date": "2026-11-12",
+      "note": "The reader could not confirm the 8 raters or the direction of the result from the abstract of Rosenberg & Hirschberg 2005: they rest on the full text, read through a page summariser."
+    },
+    {
+      "id": "v-expression",
+      "lang": "en",
+      "sha": "10f391810f56",
+      "by": "independent reader, second reading (each sentence against its abstract)",
+      "date": "2026-11-12",
+      "note": "The reader could not confirm the 8 raters or the direction of the result from the abstract of Rosenberg & Hirschberg 2005: they rest on the full text, read through a page summariser."
+    },
+    {
+      "id": "v-fillers",
+      "lang": "es",
+      "sha": "4bd60e0f9e70",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v-fillers",
+      "lang": "en",
+      "sha": "a32b882648f8",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v-voice",
+      "lang": "es",
+      "sha": "490d1ef0a253",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v-voice",
+      "lang": "en",
+      "sha": "5cc25ee8c3b8",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "s-warmup",
+      "lang": "es",
+      "sha": "d363b4cebf15",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "s-warmup",
+      "lang": "en",
+      "sha": "f4ac4e658224",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "s-pitch",
+      "lang": "es",
+      "sha": "70c822d5889a",
+      "by": "independent reader, second reading (each sentence against its abstract)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "s-pitch",
+      "lang": "en",
+      "sha": "5d7f7010f016",
+      "by": "independent reader, second reading (each sentence against its abstract)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "s-technique",
+      "lang": "es",
+      "sha": "bbc37f6c6dab",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "s-technique",
+      "lang": "en",
+      "sha": "a9aa2b2903e6",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "s-function",
+      "lang": "es",
+      "sha": "3065673e3131",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "s-function",
+      "lang": "en",
+      "sha": "761a52023e3b",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "s-range",
+      "lang": "es",
+      "sha": "4c79d4a02671",
+      "by": "independent reader, second reading (each sentence against its abstract)",
+      "date": "2026-11-12",
+      "note": "Graded tradition: it names no study."
+    },
+    {
+      "id": "s-range",
+      "lang": "en",
+      "sha": "b8da7a528323",
+      "by": "independent reader, second reading (each sentence against its abstract)",
+      "date": "2026-11-12",
+      "note": "Graded tradition: it names no study."
+    },
+    {
+      "id": "s-cooldown",
+      "lang": "es",
+      "sha": "489497144b26",
+      "by": "independent reader, second reading (each sentence against its abstract)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "s-cooldown",
+      "lang": "en",
+      "sha": "be095fbb82ef",
+      "by": "independent reader, second reading (each sentence against its abstract)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v21-straw-to-speech",
+      "lang": "es",
+      "sha": "3cc2f57f324b",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12",
+      "note": "That every tube exercise was done through the tube rests on the full text of Kapsner-Smith 2015, read through a page summariser."
+    },
+    {
+      "id": "v21-straw-to-speech",
+      "lang": "en",
+      "sha": "0c7a6bdb39dc",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12",
+      "note": "That every tube exercise was done through the tube rests on the full text of Kapsner-Smith 2015, read through a page summariser."
+    },
+    {
+      "id": "v22-voice-recovery",
+      "lang": "es",
+      "sha": "27d4331be41d",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v22-voice-recovery",
+      "lang": "en",
+      "sha": "6a7905a07f0e",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v23-clear-speech",
+      "lang": "es",
+      "sha": "6f1c8182a570",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v23-clear-speech",
+      "lang": "en",
+      "sha": "1c60dfc83df9",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v24-vocal-function",
+      "lang": "es",
+      "sha": "bd7e54bbe72c",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "v24-vocal-function",
+      "lang": "en",
+      "sha": "d8e0d00ee3e0",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "s28-vocal-function",
+      "lang": "es",
+      "sha": "a8d941801570",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
+    },
+    {
+      "id": "s28-vocal-function",
+      "lang": "en",
+      "sha": "8ef966f44e91",
+      "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
+      "date": "2026-11-12"
     }
   ]
 }

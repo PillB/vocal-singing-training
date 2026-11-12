@@ -353,11 +353,9 @@ export function planFromAutoRecurring(autoRecurring) {
  */
 export function planForPreapproval(preapproval, env) {
   const planId = preapproval && preapproval.preapproval_plan_id;
-  if (planId && env && planId === env.MP_PLAN_PRO_MONTHLY) {
-    return { plan: "pro_monthly", planSource: "preapproval_plan_id" };
-  }
-  if (planId && env && planId === env.MP_PLAN_PRO_YEARLY) {
-    return { plan: "pro_yearly", planSource: "preapproval_plan_id" };
+  const byPlanId = planFromConfiguredPlanId(planId, env);
+  if (byPlanId) {
+    return byPlanId;
   }
   const byReason = planFromText(preapproval && preapproval.reason);
   const byReference = planFromText(preapproval && preapproval.external_reference);
@@ -375,6 +373,22 @@ export function planForPreapproval(preapproval, env) {
   if (byReference) {
     return { plan: byReference, planSource: "external_reference" };
   }
+  return defaultPreapprovalPlan(preapproval, planId);
+}
+
+/** The plan the operator mapped a `preapproval_plan_id` to in wrangler.toml, or null. */
+function planFromConfiguredPlanId(planId, env) {
+  if (planId && env && planId === env.MP_PLAN_PRO_MONTHLY) {
+    return { plan: "pro_monthly", planSource: "preapproval_plan_id" };
+  }
+  if (planId && env && planId === env.MP_PLAN_PRO_YEARLY) {
+    return { plan: "pro_yearly", planSource: "preapproval_plan_id" };
+  }
+  return null;
+}
+
+/** Monthly when nothing names the plan, with the hints that were present recorded in its source. */
+function defaultPreapprovalPlan(preapproval, planId) {
   // Unknowable: default to monthly (the cheaper grant) and record what we saw.
   const seen = [
     planId ? `plan_id=${planId}` : null,

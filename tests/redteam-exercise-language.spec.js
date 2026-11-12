@@ -679,7 +679,11 @@ test.describe("the exercise title", () => {
   test("a title cut on a phone carries its full name, and follows a language switch", async ({ page }) => {
     await page.setViewportSize(PHONE);
     await seed(page, { lang: "en" });
-    await openEx(page, "s9-pitch-match");
+    // A name that is cut in any font. "Single-Note Pitch Match" (s9), the first
+    // choice, ran past its 182 px row by 3 px in DejaVu Sans (the CI runner's
+    // font) and fitted in Inter and Liberation Sans, so the check below failed
+    // on the font, not the page. This one runs past by 42-97 px in all three.
+    await openEx(page, "s26-placement-compare");
     const read = () =>
       page.evaluate(() => {
         const t = document.getElementById("ex-title");

@@ -724,13 +724,16 @@ export const MUTANTS = {
       ["D5 the room for the consent bar stays after it is answered (UIB-01)", "js/region-gate.js", "    barWatch = null;\n    reserveBarRoom();\n  }", "    barWatch = null;\n  }", "tests/focus-consent-bar.spec.js"],
       ["D6 scroll padding forgets the exercise's Back row: Shift+Tab leaves a control under it (UIB-04)", "css/styles.css", "scroll-padding-top: calc(var(--header-h, 58px) + var(--ex-chrome-h, 0px) + 0.5rem);", "scroll-padding-top: calc(var(--header-h, 58px) + 0.5rem);", "tests/focus-reverse.spec.js"],
       ["D7 phones 742 to 799 px wide get one rail row again: the landscape bound moved to 741 px (C1)","css/styles.css","@media (max-height: 500px) and (max-width: 799.98px)","@media (max-height: 500px) and (max-width: 741px)","tests/rail-landscape-bounds.spec.js"],
-      ["D8 phones 381 to 500 px tall get one rail row again: the height bound moved to 380 px (C2)","css/styles.css","@media (max-height: 500px) and (max-width: 799.98px)","@media (max-height: 380px) and (max-width: 799.98px)","tests/rail-landscape-bounds.spec.js"]
-    ].map(([name, file, from, to, spec]) => ({
+      ["D8 phones 381 to 500 px tall get one rail row again: the height bound moved to 380 px (C2)","css/styles.css","@media (max-height: 500px) and (max-width: 799.98px)","@media (max-height: 380px) and (max-width: 799.98px)","tests/rail-landscape-bounds.spec.js"],
+      // The merge of PR #21 (2026-11-12): the page under a language switch, and focus on the sticky rows' own controls
+      ["D9 focus on a control of the sticky rows throws the page to near its top again (csswg-drafts #7930)", "css/styles.css", "  scroll-margin-top: calc(-1 * (var(--header-h, 58px) + var(--ex-chrome-h, 0px) + 0.5rem));\n", "", "tests/focus-not-obscured.spec.js", "sticky rows leaves the page"],
+      ["D10 a language switch reopens the piano as if asked for: the page ends at the piano, not where the learner was", "js/app.js", 'if (keep.piano && !$("#btn-toggle-piano")?.hidden) togglePianoPanel({ reveal: false });', 'if (keep.piano && !$("#btn-toggle-piano")?.hidden) togglePianoPanel();', "tests/redteam-exercise-language.spec.js", "has not started"]
+    ].map(([name, file, from, to, spec, grep]) => ({
       name,
       file,
       from,
       to,
-      cmd: [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot"]
+      cmd: [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
     }))
   ).concat([
     // QA-57: the specs that drive the practice-mode registry fail by name when it is not there; they used to skip.

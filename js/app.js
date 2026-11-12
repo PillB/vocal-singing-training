@@ -7287,8 +7287,13 @@
     });
   }
 
-  /** Open or close the piano panel under the stage. */
-  function togglePianoPanel() {
+  /**
+   * Open or close the piano panel under the stage. Opened from its button, the
+   * panel is scrolled into view once it has opened; `reveal: false` opens it
+   * where it is, for a panel put back rather than asked for (a language switch
+   * rebuilding the screen, renderExerciseInPlace), whose page stays put.
+   */
+  function togglePianoPanel({ reveal = true } = {}) {
     state.pianoOpen = !state.pianoOpen;
     const block = $("#piano-block");
     const mini = $("#piano-mini-opts");
@@ -7303,6 +7308,7 @@
           if (!state.pianoOpen) return;
           block.classList.add("is-settled");
           fitHighwayToViewport();
+          if (!reveal) return;
           revealBelowStickyRows(block, scrollBehavior());
         });
       } else {
@@ -7333,7 +7339,8 @@
 
   function bindPianoPanel() {
     $("#piano-block")?.addEventListener("focusin", (e) => revealBelowStickyRows(e.target));
-    $("#btn-toggle-piano")?.addEventListener("click", togglePianoPanel);
+    // Not the bare function: the click event would arrive as its options
+    $("#btn-toggle-piano")?.addEventListener("click", () => togglePianoPanel());
   }
 
   /** Metrics form, timer and recorder. */
@@ -10399,7 +10406,10 @@
     renderExercise();
     if (keep.guide) $("#btn-toggle-guide")?.click();
     if (keep.metrics) openMetricsPanel(true, { reveal: false });
-    if (keep.piano && !$("#btn-toggle-piano")?.hidden) $("#btn-toggle-piano")?.click();
+    // Put back, not asked for: opened from its button the panel scrolls into
+    // view once it has opened (after the page is put back below), so the
+    // switch would end at the piano instead of where the learner was
+    if (keep.piano && !$("#btn-toggle-piano")?.hidden) togglePianoPanel({ reveal: false });
     if (keep.mic) {
       relabelMicBlocked();
       const box = $("#mic-blocked");

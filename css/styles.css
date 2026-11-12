@@ -53,6 +53,16 @@ html {
 html:has(body.view-exercise) {
   scroll-padding-top: calc(var(--header-h, 58px) + var(--ex-chrome-h, 0px) + 0.5rem);
 }
+/* The controls of those two rows sit inside that band and never leave the
+   screen, yet a browser brings them "into view" past it all the same: with the
+   page scrolled down, focus on "Más", the language button or "Ayuda" (Escape
+   out of the menu, Shift+Tab, a dialog handing focus back) scrolled the page
+   to near its top while the control did not move (csswg-drafts #7930, Firefox
+   bug 1731491). A negative scroll margin as tall as the band takes it back off
+   for them, the workaround #7930 names; everything below the rows keeps it. */
+html:has(body.view-exercise) :is(.app-header, .exercise-header-compact) * {
+  scroll-margin-top: calc(-1 * (var(--header-h, 58px) + var(--ex-chrome-h, 0px) + 0.5rem));
+}
 
 body {
   margin: 0;

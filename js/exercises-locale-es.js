@@ -413,6 +413,90 @@
       "Cambiar de energía cada frase sin plan"
     ]
   },
+  "v21-straw-to-speech": {
+    "original": "Un sonido suave por una pajita y luego una frase igual de fácil.",
+    "research": "Fonar por una pajita es un ejercicio de tracto vocal semiocluido. Una revisión integradora de 53 estudios (Apfelbach y Guzmán, 2024) encontró que suele bajar el esfuerzo necesario para iniciar la voz justo después; el efecto es de corto plazo y varía según la persona. Pasar de la pajita a una frase sigue el protocolo de tubo de resistencia probado en personas con problemas de voz (Kapsner-Smith y otros, 2015); en personas con la voz sana ese paso es práctica experta, no un resultado probado. Es práctica, no tratamiento.",
+    "steps": [
+      "Usa tu propia pajita (sorbete o cañita), limpia. Cierra los labios alrededor para que todo el aire salga por ella; mejillas sueltas.",
+      "Haz una “u” suave por la pajita, en un tono cómodo de tu voz hablada. Sostén de 3 a 5 segundos, respira y repite.",
+      "Desliza la voz un poco hacia arriba y de vuelta, como una sirena pequeña, siempre por la pajita.",
+      "Haz olas de volumen en un mismo aire (u-U-u-U): el impulso sale del abdomen y la garganta queda suelta.",
+      "“Di” tu primera frase por la pajita: solo salen su melodía y su ritmo.",
+      "Quita la pajita y di la misma frase con la misma facilidad. Dila dos veces y sigue hablando."
+    ],
+    "tips": [
+      "La clave es que sea suave: si se inflan las mejillas o el sonido se corta, usa menos aire o una pajita más ancha.",
+      "Hazlo poco antes de hablar: lo que cambia dura poco.",
+      "Para si sientes mareo, dolor o ronquera. No compartas la pajita."
+    ],
+    "mistakes": [
+      "Soplar aire sin voz",
+      "Empujar para que suene fuerte",
+      "Saltarte la frase sin pajita"
+    ]
+  },
+  "v22-voice-recovery": {
+    "original": "Tras hablar mucho: 5 min de silencio y 5 de pajita suave.",
+    "research": "En un ensayo aleatorizado con 114 adultos sanos que habían forzado la voz durante una hora, cinco minutos de silencio seguidos de cinco de sonido suave por una pajita recuperaron la voz mejor que diez minutos de silencio (Peng y otros, 2026). Es un solo estudio con medidas a corto plazo, y ningún estudio muestra que enfriar la voz prevenga problemas. Recuperarse de un uso intenso toma horas (Hunter y Titze, 2009): espera la mayor parte para la mañana siguiente. Es práctica, no tratamiento.",
+    "steps": [
+      "Cinco minutos sin hablar ni susurrar. Toma sorbos de agua y respira por la nariz.",
+      "Con tu propia pajita, limpia, haz una “u” suave en un tono cómodo. Sostén de 3 a 5 segundos, respira y repite, sin prisa.",
+      "Desliza la voz despacio de un tono medio a uno grave, por la pajita. Suave, nunca empujado.",
+      "Termina con unas “u” suaves y graves. Luego di una frase fácil sin la pajita."
+    ],
+    "tips": [
+      "Silencio es no hablar y tampoco susurrar: un tono te avisa cuando pasan los cinco minutos.",
+      "Úsalo después de 45 a 60 minutos o más de hablar mucho: una clase, un turno al teléfono, una reunión larga.",
+      "Si la ronquera dura más de cuatro semanas (antes, si trabajas con la voz), o hay dolor o dificultad para respirar, consulta a un otorrinolaringólogo."
+    ],
+    "mistakes": [
+      "Hablar durante los minutos de silencio",
+      "Empujar el sonido de la pajita",
+      "Usarlo en lugar de ir al médico cuando la ronquera no se va"
+    ]
+  },
+  "v23-clear-speech": {
+    "original": "Dilo como siempre y luego como a alguien que oye poco.",
+    "research": "Cuando se pide hablar como a alguien que oye poco, las personas van más despacio, hacen más pausas y terminan sus sonidos, y quien escucha entiende más: unos 17 puntos porcentuales más de palabras para oyentes con pérdida auditiva en el estudio clásico (Picheny y otros, 1985), un beneficio que una revisión posterior también encontró con otros oyentes y con ruido (Smiljanić y Bradlow, 2009). El beneficio es de quien escucha y se midió en laboratorio; no se ha probado cuánto de una práctica corta diaria pasa a la conversación de todos los días. El teléfono compara tus dos tomas entre sí: no puede oír qué tan claro se entendió.",
+    "steps": [
+      "Elige una frase que de verdad vayas a decir esta semana, con un nombre, un número o un día.",
+      "Toma A: dila como siempre.",
+      "Toma B: dila como a alguien que oye poco, al otro lado de una mesa: un poco más despacio, cada final completo, una pausa corta entre ideas. No más fuerte.",
+      "Clara otra vez con la frase en pantalla: dale su forma completa al día, a la hora y al lugar.",
+      "Ahora habla un minuto a tu ritmo normal y conserva solo los finales completos y las pausas."
+    ],
+    "tips": [
+      "Ve más despacio con pausas, no estirando cada palabra.",
+      "Al detener, escucha A y B una tras otra: la diferencia que oyes importa más que los números.",
+      "Úsala donde cuenta: nombres, números, instrucciones, la primera frase de una llamada."
+    ],
+    "mistakes": [
+      "Subir el volumen en vez de aclarar",
+      "Deletrear cada sílaba como un robot",
+      "Comerte el final de las frases"
+    ]
+  },
+  "v24-vocal-function": {
+    "original": "Un sonido largo, dos deslizamientos y cinco notas, todo suave.",
+    "research": "Los Ejercicios de Función Vocal (Stemple y otros, 1994) son cuatro ejercicios suaves que se hacen dos veces cada uno, dos veces al día, durante unas seis semanas. En voces sanas alargaron el tiempo que las personas podían sostener un sonido en ensayos controlados pequeños (Stemple y otros, 1994, 35 mujeres; Bane y otros, 2019), y una revisión sistemática de 21 estudios no reportó efectos adversos (Angadi y otros, 2019). Lo que mejora es la tarea entrenada; no se ha mostrado un beneficio al hablar en el día a día ni se ha probado que prevenga nada. En la clínica la meta de tiempo se calcula con el volumen pulmonar; esta app no puede, así que aquí la regla es “mientras siga siendo cómodo”.",
+    "steps": [
+      "De pie o en una silla, con la espalda larga. Aquí todo va lo más suave que puedas con la voz todavía clara.",
+      "Sonido largo: una “i” suave y brillante en una nota cómoda, mientras siga siendo cómodo. Para antes de apretar. Dos veces.",
+      "Deslizamiento hacia arriba: labios redondeados y casi cerrados en “o”, sube despacio de tu nota cómoda más grave a la más aguda. Dos veces.",
+      "Deslizamiento hacia abajo: la misma forma, de agudo a grave. Dos veces.",
+      "Cinco notas: la misma “o” suave en cinco notas cómodas de grave a aguda, cada una mientras siga siendo cómodo. Luego las cinco otra vez."
+    ],
+    "tips": [
+      "La dosis que usaron los estudios: cada ejercicio dos veces, dos veces al día, durante seis semanas. Hacer cada uno una sola vez por sesión no bastó en uno de ellos.",
+      "Si la voz se quiebra en un deslizamiento, sigue suave: nunca empujes para pasar.",
+      "Para si sientes dolor o ardor, o si terminas con más ronquera que al empezar."
+    ],
+    "mistakes": [
+      "Aguantar hasta que la garganta aprieta",
+      "Fuerte en lugar de suave",
+      "Apurar los deslizamientos"
+    ]
+  },
   "s1-vocal-fry": {
     "original": "De un fry suave a una /A/ clara: siente el cierre y canta sin forzar.",
     "research": "Un fry suave ayuda a sentir el contacto de las cuerdas; luego pasas a tono libre con aire parejo, sin apretar ni soplar.",
@@ -1013,6 +1097,27 @@
       "Respirar en mitad de una pasada",
       "Perseguir la nota más aguda en vez de una pasada limpia",
       "Apretar los labios en vez de mandar más aire"
+    ]
+  },
+  "s28-vocal-function": {
+    "original": "Una nota larga, dos deslizamientos y cinco notas, todo suave.",
+    "research": "Los Ejercicios de Función Vocal (Stemple y otros, 1994) son cuatro ejercicios suaves que se hacen dos veces cada uno, dos veces al día, durante unas seis semanas. En voces sanas, también de cantantes, alargaron el tiempo que las personas podían sostener un sonido en ensayos controlados pequeños (Stemple y otros, 1994; Sabol y otros, 1995, 20 cantantes; Bane y otros, 2019), y una revisión sistemática de 21 estudios no reportó efectos adversos (Angadi y otros, 2019). Lo que mejora es la tarea entrenada: nadie ha mostrado que haga sonar mejor el canto, y no promete rango. En la clínica la meta de tiempo se calcula con el volumen pulmonar; esta app no puede, así que aquí la regla es “mientras siga siendo cómodo”.",
+    "steps": [
+      "De pie, con la espalda larga. Aquí todo va lo más suave que puedas cantar con el tono todavía claro.",
+      "Nota larga: el piano da una nota; canta en ella una “i” suave y brillante mientras siga siendo cómodo. Para antes de apretar. Dos veces.",
+      "Deslizamiento hacia arriba: labios redondeados y casi cerrados en “o”, sube despacio de tu nota cómoda más grave a la más aguda. Dos veces.",
+      "Deslizamiento hacia abajo: la misma forma, de agudo a grave. Dos veces.",
+      "Cinco notas: el piano da cinco notas que suben, una por una. Sostén una “o” suave en cada una mientras siga siendo cómodo, dos veces."
+    ],
+    "tips": [
+      "Si las notas te quedan muy agudas o muy graves, cambia la octava antes de empezar: el ejercicio debe sentirse cómodo, no de manual.",
+      "La dosis que usaron los estudios: cada ejercicio dos veces, dos veces al día, durante seis semanas. Hacer cada uno una sola vez por sesión no bastó en uno de ellos.",
+      "Para si sientes dolor o ardor, o si terminas con más ronquera que al empezar."
+    ],
+    "mistakes": [
+      "Aguantar hasta que la garganta aprieta",
+      "Fuerte en lugar de suave",
+      "Abrir mucho los labios en la “o”"
     ]
   }
 };

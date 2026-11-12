@@ -2,16 +2,16 @@
   "version": 2,
   "generatedNote": "Frozen catalog for regression — update intentionally when content is added/removed",
   "totals": {
-    "exercises": 47,
-    "vocal": 20,
-    "singing": 27,
-    "practiceModes": 40
+    "exercises": 52,
+    "vocal": 24,
+    "singing": 28,
+    "practiceModes": 41
   },
   "tiers": {
     "vocal_basic": 9,
-    "vocal_advanced": 11,
+    "vocal_advanced": 15,
     "singing_basic": 16,
-    "singing_advanced": 11
+    "singing_advanced": 12
   },
   "exerciseIds": [
     "s1-vocal-fry",
@@ -34,6 +34,7 @@
     "s25-zone-tour",
     "s26-placement-compare",
     "s27-lip-trill-solfege",
+    "s28-vocal-function",
     "s3-song-stanzas",
     "s4-lip-trills",
     "s5-sirens",
@@ -54,6 +55,10 @@
     "v19-authority-close",
     "v2-volume",
     "v20-energy-match",
+    "v21-straw-to-speech",
+    "v22-voice-recovery",
+    "v23-clear-speech",
+    "v24-vocal-function",
     "v3-soft-palate",
     "v4-articulation-pen",
     "v5-neutral-ears",
@@ -99,6 +104,7 @@
     "staccatoLegato",
     "storyTimer",
     "trillSolfege",
+    "voiceDrill",
     "volumeLadder",
     "volumeSteady",
     "vowelLadder",
@@ -427,7 +433,7 @@
       "showPitch": false,
       "showHold": false,
       "pitchChallenge": false,
-      "steps": 4,
+      "steps": 5,
       "tips": 3,
       "mistakes": 3,
       "metrics": [
@@ -452,7 +458,7 @@
       "showPitch": false,
       "showHold": false,
       "pitchChallenge": false,
-      "steps": 4,
+      "steps": 5,
       "tips": 3,
       "mistakes": 3,
       "metrics": [
@@ -615,6 +621,105 @@
       "hasPitchViz": false,
       "hasRecord": true,
       "durationMin": 8
+    },
+    {
+      "id": "v21-straw-to-speech",
+      "track": "vocal",
+      "tier": "advanced",
+      "number": 21,
+      "titleEn": "Straw to Speech",
+      "titleEs": "De la pajita a la frase",
+      "mode": "voiceDrill",
+      "showPitch": false,
+      "showHold": false,
+      "pitchChallenge": false,
+      "steps": 6,
+      "tips": 3,
+      "mistakes": 3,
+      "metrics": [
+        "strawHolds",
+        "easeAfter",
+        "carryOver"
+      ],
+      "hasOriginal": true,
+      "hasPiano": false,
+      "hasPitchViz": false,
+      "hasRecord": true,
+      "durationMin": 5
+    },
+    {
+      "id": "v22-voice-recovery",
+      "track": "vocal",
+      "tier": "advanced",
+      "number": 22,
+      "titleEn": "Voice Recovery",
+      "titleEs": "Recuperar la voz",
+      "mode": "voiceDrill",
+      "showPitch": false,
+      "showHold": false,
+      "pitchChallenge": false,
+      "steps": 4,
+      "tips": 3,
+      "mistakes": 3,
+      "metrics": [
+        "quietMin",
+        "strawHolds",
+        "comfortAfter"
+      ],
+      "hasOriginal": true,
+      "hasPiano": false,
+      "hasPitchViz": false,
+      "hasRecord": true,
+      "durationMin": 10
+    },
+    {
+      "id": "v23-clear-speech",
+      "track": "vocal",
+      "tier": "advanced",
+      "number": 23,
+      "titleEn": "Clear Speech",
+      "titleEs": "Habla clara",
+      "mode": "voiceDrill",
+      "showPitch": false,
+      "showHold": false,
+      "pitchChallenge": false,
+      "steps": 5,
+      "tips": 3,
+      "mistakes": 3,
+      "metrics": [
+        "clarityBack",
+        "naturalClear"
+      ],
+      "hasOriginal": true,
+      "hasPiano": false,
+      "hasPitchViz": false,
+      "hasRecord": true,
+      "durationMin": 4
+    },
+    {
+      "id": "v24-vocal-function",
+      "track": "vocal",
+      "tier": "advanced",
+      "number": 24,
+      "titleEn": "Vocal Function",
+      "titleEs": "Funciones vocales",
+      "mode": "voiceDrill",
+      "showPitch": false,
+      "showHold": false,
+      "pitchChallenge": false,
+      "steps": 5,
+      "tips": 3,
+      "mistakes": 3,
+      "metrics": [
+        "longHolds",
+        "longestHold",
+        "easyVoice"
+      ],
+      "hasOriginal": true,
+      "hasPiano": false,
+      "hasPitchViz": false,
+      "hasRecord": true,
+      "durationMin": 7
     },
     {
       "id": "s1-vocal-fry",
@@ -1159,7 +1264,7 @@
       "showHold": false,
       "pitchChallenge": true,
       "steps": 5,
-      "tips": 4,
+      "tips": 5,
       "mistakes": 4,
       "metrics": [
         "matches",
@@ -1294,6 +1399,31 @@
       "hasOriginal": true,
       "hasPiano": true,
       "hasPitchViz": true,
+      "hasRecord": true,
+      "durationMin": 7
+    },
+    {
+      "id": "s28-vocal-function",
+      "track": "singing",
+      "tier": "advanced",
+      "number": 28,
+      "titleEn": "Vocal Function on Notes",
+      "titleEs": "Función vocal con notas",
+      "mode": "voiceDrill",
+      "showPitch": false,
+      "showHold": false,
+      "pitchChallenge": false,
+      "steps": 5,
+      "tips": 3,
+      "mistakes": 3,
+      "metrics": [
+        "longHolds",
+        "longestHold",
+        "easyVoice"
+      ],
+      "hasOriginal": true,
+      "hasPiano": true,
+      "hasPitchViz": false,
       "hasRecord": true,
       "durationMin": 7
     }

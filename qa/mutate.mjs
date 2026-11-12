@@ -6,7 +6,7 @@
  * suite that stays green on a mutant is not testing that behaviour, however
  * high its coverage. Ported from the QA thread's mutate.py (2026-11-01).
  *
- *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching)
+ *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets)
  *   node qa/mutate.mjs audio      # one set
  *   node qa/mutate.mjs stage a11y flows regress billing scoring controls audit toast designs  # browser sets: need Playwright's Chromium
  *
@@ -107,6 +107,22 @@ export const MUTANTS = {
     ["VC4 the first straw exercise asks for nasal humming", "js/exercises-data.js", "Phonate a soft /u/-like tone with lips gently sealed around the straw; let air exit through it, not through the nose.", "Hum through the straw and keep your lips sealed."],
     ["VC5 starter straw dose is raised from 2 to 5 minutes", "js/exercises-data.js", 'labelEs: "Fonación cómoda con cañita (minutos)", type: "number", target: 2, unit: "min"', 'labelEs: "Fonación cómoda con cañita (minutos)", type: "number", target: 5, unit: "min"']
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/technical-coaching.test.mjs"]) })),
+  // Goal sets (js/session-sets.js, docs/47): the data rules and the parts of the engine that need no browser.
+  sets: [
+    ["GS1 the engine forgets which set is running (a reload shows a nameless routine)", "js/session.js", "      if (routine?.set) session.set = String(routine.set);\n", ""],
+    ["GS2 the step count of a set carries the stored word \"set\"", "js/session.js", 'const NAMED_ON_BANNER = ["daily", "basics", "set"];', 'const NAMED_ON_BANNER = ["daily", "basics"];'],
+    ["GS3 a set starts without its own timers (every step runs the exercise's full default)", "js/session-sets.js", "        sec: set.sec,\n        set: set.id,", "        set: set.id,"],
+    ["GS4 a step whose exercise is missing is kept (the routine opens nothing on that step)", "js/session-sets.js", "if (!exists(exId) || order.includes(exId)) return;", "if (order.includes(exId)) return;"],
+    ["GS5 a one-step leftover is offered as a set", "js/session-sets.js", "if (order.length < 2) return null;", "if (order.length < 1) return null;"],
+    ["GS6 a set is started on whatever tab is open (a singing set stored as a speaking session)", "js/session-sets.js", "if (hooks.getTab?.() !== set.track) hooks.setTab?.(set.track);", ""],
+    ["GS7 moderate support is drawn as the maximum", "js/session-sets.js", "const GRADE_MARKS = { mod: 2, lim: 1, trad: 0 };", "const GRADE_MARKS = { mod: 3, lim: 2, trad: 1 };"],
+    ["GS8 a set's step runs longer than the exercise's own timer", "js/session-sets.js", '["s17-jaw-neck-release", 105],\n        ["v22-voice-recovery", 600]', '["s17-jaw-neck-release", 190],\n        ["v22-voice-recovery", 600]'],
+    ["GS9 a set names an exercise the catalogue does not have", "js/session-sets.js", '["v11-kill-fillers", 240],', '["v11-kill-filers", 240],'],
+    ["GS10 a card promises prevention", "js/session-sets.js", "Es breve y no hay señal de que haga daño.", "Es breve y previene lesiones."],
+    ["GS11 the sets claim the ending of today's basics (no completion card, no day marked)", "js/session-sets.js", 'if (!session || session.path !== "set") return false;\n    const set = resolve(session.set);', "if (!session) return false;\n    const set = resolve(session.set || \"v-pretalk\");"],
+    ["GS12 every routine's banner takes a set's name", "js/session-sets.js", 'if (!session || session.path !== "set") return null;', "if (!session) return null;"],
+    ["GS13 the English name of a set is its Spanish one", "js/session-sets.js", 'name: "After a lot of talking",', 'name: "Después de hablar mucho",']
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/session-sets.test.mjs"]) })),
   audio: [
     ["M6 +150c (adjacent semitone) accepted as in tune", "js/practice-modes.js", "const hi = this.profile.centsHi == null ? 50 : this.profile.centsHi;", "const hi = this.profile.centsHi == null ? 150 : this.profile.centsHi;"],
     ["M7 -140c accepted as in tune", "js/practice-modes.js", "const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;", "const lo = this.profile.centsLo == null ? -140 : this.profile.centsLo;"],
@@ -544,7 +560,84 @@ export const MUTANTS = {
     ["FM3 Stop does nothing", "js/app.js", '$("#btn-practice-stop")?.addEventListener("click", () => stopPractice(false));', '$("#btn-practice-stop")?.addEventListener("click", () => {});'],
     ["FM4 an uncaught exception on every Start", "js/app.js", "async function startPractice() {\n    const ex = state.exercise;", 'async function startPractice() {\n    setTimeout(() => { throw new Error("planted"); }, 0);\n    const ex = state.exercise;'],
     ["FM5 the mic slider is disconnected", "js/app.js", "const applyMicSens = (raw) => {\n", "const applyMicSens = (raw) => {\n      if (micRange?.dataset.ready) return;\n      if (micRange) micRange.dataset.ready = '1';\n"]
-  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: FLOW_SPEC })),
+  ]
+    .map(([name, file, from, to]) => ({ name, file, from, to, cmd: FLOW_SPEC }))
+    .concat(
+      // Goal sets in the browser (tests/session-sets.spec.js): what the node tests cannot see.
+      [
+        ["SS1 a set is started as today's basics (it picks a size and marks the day's basics)", "js/app.js", 'startSet: (r) => startStructured("set", r),', 'startSet: (r) => startStructured("basics", r),', "a set runs as a set|a finished set ends on its card"],
+        ["SS2 the banner never asks the sets for a name (a set reads as \"Sesión guiada\")", "js/app.js", "    const set = window.VTSets?.bannerName(s);\n    if (set) return set;\n", "", "a set runs as a set"],
+        ["SS3 the trail is never drawn", "js/app.js", "    window.VTSets?.syncTrail(s);\n", "", "a set runs as a set"],
+        ["SS4 a borrowed step in a set carries the other track's label", "js/app.js", 'const BORROWING_PATHS = ["basics", "set"];', 'const BORROWING_PATHS = ["basics"];', "a set runs as a set"],
+        ["SS5 a finished set falls through to the plain toast (no card)", "js/app.js", "    if (window.VTSets?.onComplete(done)) return;\n", "", "a finished set ends on its card"],
+        ["SS6 the set's start line is replaced by the basics' (\"Básicos de hoy: , 2 ejercicios\")", "js/app.js", 'toast(routine.toast || tt("loop.startToast"', 'toast(tt("loop.startToast"', "a set runs as a set"],
+        ["SS7 the trail takes a row of its own in the banner", "css/session-sets.css", ".session-trail {\n  position: absolute;", ".session-trail {\n  position: static;\n  width: 100%;", "the trail lies inside the banner"],
+        ["SS8 on a phone the picker is a centred card again, cut by the screen edge", "css/session-sets.css", "    place-items: end stretch;\n    padding: 0;", "    place-items: center;", "the picker is a sheet on the bottom edge"],
+        ["SS9 the picker stays open over another page", "js/session-sets.js", 'if (!home.classList.contains("active")) closeDialogs();', "void closeDialogs;", "it closes when the page under it changes"],
+        ["SS10 a short drag closes the sheet", "js/session-sets.js", "const far = e.clientY - startY > 72;", "const far = e.clientY - startY > 2;", "a drag down on the handle"],
+        ["SS11 the trail marks every step as the current one", "js/session-sets.js", 'i < session.index ? "is-done" : i === now ? "is-now" : ""', 'i < session.index ? "is-now" : i === now ? "is-now" : ""', "a set runs as a set"],
+        ["SS12 a set counts steps practised on any day as practised today", "js/session-sets.js", "const row = D.read().days[D.summary().today];", "const row = Object.values(D.read().days)[0];", "practised today says so"],
+        ["SS13 a new drill is filed in the class group: design B's closed group counts 14", "js/exercises-data.js", 'tier: "advanced",\n      number: 24,', 'tier: "basic",\n      number: 24,', "in design B"]
+      ].map(([name, file, from, to, grep]) => ({
+        name,
+        file,
+        from,
+        to,
+        // Each mutant is judged by the test written to catch it: thirteen runs of the whole spec, on top of
+        // the fourteen below, would outlive the flows job's 30 minutes (QA-45).
+        cmd: [...PIANO_SPEC.slice(0, 3), "tests/session-sets.spec.js", "--project=chromium", "--workers=4", "--reporter=dot", "-g", grep]
+      }))
+    )
+    .concat(
+      // Guided voice drills (tests/exercise-viz-voice-drill.spec.js): what the microphone may count, and what it may not.
+      [
+        ["VD1 a blip counts as a held sound", "js/practice-modes.js", "if (h.counted || h.len * 1000 < st.minHoldMs) return;", "if (h.counted) return;", "a sound counts once"],
+        ["VD2 speech is counted as held sounds", "js/practice-modes.js", "      if (h.speech) return;\n      if (h.len > st.longest)", "      if (h.len > st.longest)", "a sound counts once"],
+        ["VD3 the piano's own note is counted as the learner's", "js/practice-modes.js", "const heard = on && run.clock >= st.deafUntil;", "const heard = on;", "the piano's own note"],
+        ["VD4 a clear take that is also louder is told off", "js/practice-modes.js", 'if (f.slower) return { text: profileText(p, "pairYes")', 'if (f.slower && !f.louder) return { text: profileText(p, "pairYes")', "B against A"],
+        ["VD5 a take that only ran longer reads as slower", "js/practice-modes.js", "slower: (dRate != null && dRate <= PAIR_SLOWER.rate) || dShare >= PAIR_SLOWER.share,", "slower: b.voiced > a.voiced * 1.15,", "B against A"],
+        ["VD6 the longest sound is rounded up to more than was held", "js/practice-modes.js", "patches[p.longestMetric] = Math.floor(st.longest);", "patches[p.longestMetric] = Math.round(st.longest);", "what the microphone counts"],
+        ["VD7 quiet minutes are counted while the learner talks", "js/practice-modes.js", "if (phase.rest && !heard && st.mic) st.quietSec += tick;", "if (phase.rest && st.mic) st.quietSec += tick;", "the piano's own note"],
+        ["VD8 Stop rates the learner's ease for them", "js/practice-modes.js", "      const patches = {};\n      // Only what was heard is written", "      const patches = { easeAfter: 5, comfortAfter: 5, clarityBack: 5, easyVoice: 5 };\n      // Only what was heard is written", "Stop never fills a self-rating"],
+        ["VD9 the note drill plays the piano on Start, over its silent first step", "js/app.js", 'const OWN_REFERENCE_MODES = ["openSpace", "voiceDrill"];', 'const OWN_REFERENCE_MODES = ["openSpace"];', "s28 is silent on Start"],
+        ["VD10 a take that was skipped is shown as still to come", "js/scenes/voice-drill.js", 'return key === "a" && asked === "b" ? "none" : "later";', 'return "later";', "the pictures' own rules"],
+        ["VD11 a spoken step shows hold bars", "js/practice-modes.js", "    if (ph && ph.speech) return { draw: A.speak, aspect: DRILL_ASPECT.speak, plain: true };\n", "", "what the microphone counts|the five exercises"],
+        ["VD12 a drill's steps run past its timer", "js/practice-profiles.js", "          sec: 230,", "          sec: 330,", "steps add up to the timer"],
+        ["VD13 the note is not sounded when its step begins", "js/practice-modes.js", "      if (p && p.ref) this._playRef(p, run);\n", "", "s28 is silent on Start"],
+        ["VD14 a glide down is drawn going up", "js/scenes/voice-drill.js", 'if (kind === "down") return 1 - ease(u);', 'if (kind === "down") return ease(u);', "the pictures' own rules"],
+        ["VD15 five silent minutes are written down as four", "js/practice-modes.js", "const quietMin = Math.floor((st.quietSec + QUIET_SLACK_SEC) / 60);", "const quietMin = Math.floor(st.quietSec / 60);", "a silent step is its whole minutes"],
+        ["VD16 a stuttering phone stretches a five-minute step into forty quiet minutes", "js/practice-modes.js", "else this._quietFrame(heard, tick, run, phase);", "else this._quietFrame(heard, dt, run, phase);", "a silent step is its whole minutes"],
+        ["VD17 with the microphone refused the clock's frames count as silence heard", "js/practice-modes.js", "if (phase.rest && !heard && st.mic) st.quietSec += tick;", "if (phase.rest && !heard) st.quietSec += tick;", "a silent step is its whole minutes"],
+        ["VD18 the app's clock-only frames do not say they carry no microphone", "js/app.js", "holdSec: 0, noMic: true });", "holdSec: 0 });", "with the microphone refused"],
+        ["VD19 a step says Quiet to a microphone that is off", "js/practice-modes.js", "      if (!st.mic) return { text: L(\"Sin micrófono · aquí no se mide nada\", \"No microphone · nothing is measured here\"), color: C.warn };\n", "", "a silent step is its whole minutes"]
+      ].map(([name, file, from, to, grep]) => ({
+        name,
+        file,
+        from,
+        to,
+        cmd: [...PIANO_SPEC.slice(0, 3), "tests/exercise-viz-voice-drill.spec.js", "--project=chromium", "--workers=4", "--reporter=dot", "-g", grep]
+      }))
+    )
+    .concat(
+      // The screen stays on while a practice is live (js/wake-lock.js, tests/wake-lock.spec.js).
+      [
+        ["WL1 Stop leaves the phone awake for the rest of the visit", "js/wake-lock.js", "    state.refused = false;\n    release();\n", "    state.refused = false;\n", "Start asks for a screen lock once"],
+        ["WL2 the screen is kept on before Start", "js/wake-lock.js", 'doc.body.classList.contains("practice-live") && doc.visibilityState === "visible"', 'doc.visibilityState === "visible"', "Start asks for a screen lock once"],
+        ["WL3 back from another app the screen is no longer kept on", "js/wake-lock.js", '    doc.addEventListener("visibilitychange", sync);\n', "", "back from the background"],
+        ["WL4 a hidden page asks for the screen", "js/wake-lock.js", 'doc.body.classList.contains("practice-live") && doc.visibilityState === "visible"', 'doc.body.classList.contains("practice-live")', "back from the background"],
+        ["WL5 a lock that arrives after Stop is kept", "js/wake-lock.js", "    if (!wanted()) {\n      drop(lock);\n      return;\n    }\n", "", "arrives after Stop"],
+        ["WL6 a browser that refuses is asked again on every restyle", "js/wake-lock.js", "      state.refused = true;\n      return;", "      return;", "a refusal is asked once"],
+        ["WL7 a refusal is never asked again, even on the next Start", "js/wake-lock.js", "    state.refused = false;\n    release();\n", "    release();\n", "a refusal is asked once"],
+        ["WL8 a second lock is asked for while one is held", "js/wake-lock.js", "if (state.lock || state.asking || !supported()) return;", "if (state.asking || !supported()) return;", "Start asks for a screen lock once"],
+        ["WL9 a browser with no wake lock throws on Start", "js/wake-lock.js", "if (state.lock || state.asking || !supported()) return;", "if (state.lock || state.asking) return;", "no wake lock practises as before"]
+      ].map(([name, file, from, to, grep]) => ({
+        name,
+        file,
+        from,
+        to,
+        cmd: [...PIANO_SPEC.slice(0, 3), "tests/wake-lock.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", grep]
+      }))
+    ),
   // Round 4 in the browser: storage of the wrong kind, a full or refused storage, the learner's day, the rail on a
   // phone on its side, the consent bar. A set of its own so that no CI job outgrows its 30 minutes (QA-45).
   regress: [].concat(
@@ -734,7 +827,7 @@ export const MUTANTS = {
   }))
 };
 
-export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching"];
+export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets"];
 
 /** What the last failing command printed, so a red baseline in CI says which test failed. */
 let lastFailure = "";

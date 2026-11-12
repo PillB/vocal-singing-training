@@ -1957,9 +1957,20 @@
   /** The step "¿Terminar la rutina?" was asked on; another step drops the question. */
   let endAsking = null;
 
+  /** The routine's name on the banner: a goal set's own, the class, today's basics, or the catalog route. */
+  function sessionName(s) {
+    const set = window.VTSets?.bannerName(s);
+    if (set) return set;
+    if (s.path === "daily") return tt("daily.banner");
+    if (s.path === "basics") return tt("loop.banner", { tier: tt("loop.tier." + (s.tier || "min")) });
+    return tt("session.bannerTitle", { track: tt(s.track === "vocal" ? "tab.vocalShort" : "tab.singingShort") });
+  }
+
   function updateSessionBanner() {
     const banner = $("#session-banner");
     const s = VTSession.get();
+    // The step trail under the line (js/session-sets.js) follows every routine.
+    window.VTSets?.syncTrail(s);
     if (!s || s.status === "completed") {
       endAsking = null;
       banner.classList.remove("visible");
@@ -1969,14 +1980,8 @@
     }
     if (endAsking != null && endAsking !== s.index) endAsking = null;
     banner.classList.add("visible");
-    const trackLabel = tt(s.track === "vocal" ? "tab.vocalShort" : "tab.singingShort");
     const status = tt(s.status === "paused" ? "session.statusPaused" : "session.statusActive");
-    const name =
-      s.path === "daily"
-        ? tt("daily.banner")
-        : s.path === "basics"
-          ? tt("loop.banner", { tier: tt("loop.tier." + (s.tier || "min")) })
-          : tt("session.bannerTitle", { track: trackLabel });
+    const name = sessionName(s);
     // One line (design: session-chrome): where you are first and never cut,
     // then "En pausa" only when it is, the route's name and the routine's
     // name, which a narrow phone cuts with "…". The title keeps the whole line
@@ -2451,10 +2456,14 @@
    * their warm-up was advanced singing.
    */
   function basicsRoutineTrack(ex) {
+    // A goal set (js/session-sets.js) borrows across tracks the same way.
     if (!state.structured || !ex) return null;
     const s = VTSession.get();
-    return s && s.path === "basics" && s.order?.includes(ex.id) ? s.track || null : null;
+    return s && BORROWING_PATHS.includes(s.path) && s.order?.includes(ex.id) ? s.track || null : null;
   }
+
+  /** Routines built from both tracks' exercises: today's basics and the goal sets. */
+  const BORROWING_PATHS = ["basics", "set"];
 
   /** Set by a catalog card's click, read by the open that follows it. */
   let openingFromCatalog = false;
@@ -3979,54 +3988,61 @@
   }
 
   /** Human label for practice mode ids (toasts / chips — never show camelCase). */
+  /**
+   * Mode names for the "live" toast, [es, en]. A mode not listed reads as its
+   * id split into words.
+   */
+  const MODE_NAMES = {
+    rateLadder: ["Escalera de ritmo", "Rate ladder"],
+    volumeSteady: ["Volumen estable", "Steady volume"],
+    volumeLadder: ["Escalera de volumen", "Volume ladder"],
+    shAirLadder: ["Escalera de aire SH", "SH air ladder"],
+    breathS: ["Soporte de aire", "Breath support"],
+    pitchHold: ["Sostén de tono", "Pitch hold"],
+    pitchMatch: ["Afinar nota", "Pitch match"],
+    pitchChord: ["Acordes / solfeo", "Chords / solfege"],
+    pitchSong: ["Canción", "Song stanzas"],
+    scaleSteps: ["Escala", "Scale steps"],
+    sirenRange: ["Sirenas", "Sirens"],
+    sovtFlow: ["Flujo SOVT", "SOVT flow"],
+    humTargets: ["Tarareo", "Hum targets"],
+    onsetReps: ["Ataques suaves", "Easy onset"],
+    staccatoLegato: ["Staccato / legato", "Staccato / legato"],
+    dynamicSwell: ["Dinámica", "Dynamics"],
+    pitchContour: ["Contorno", "Pitch contour"],
+    weekPlan: ["Plan 12 semanas", "12-week plan"],
+    recordOnly: ["Grabar y revisar", "Record & review"],
+    pauseDetect: ["Pausas", "Pauses"],
+    fillerDetect: ["Muletillas", "Fillers"],
+    voiceDrill: ["Práctica guiada", "Guided practice"],
+    countPace: ["Cuenta a ritmo", "Paced counting"],
+    articulationContrast: ["Contraste con bolígrafo", "Pen contrast"],
+    speechEnergy: ["Conversación", "Conversation"],
+    reviewSession: ["Grabar y revisar", "Record & review"],
+    metronomeSpeech: ["Fluidez con metáforas", "Metaphor fluency"],
+    keyPointPace: ["Ritmo y punto clave", "Pace and key point"],
+    gestureReps: ["Gestos con intención", "Purposeful gestures"],
+    facePhases: ["Expresión facial", "Facial expression"],
+    concisionGate: ["Puerta de concisión", "Concision gate"],
+    storyTimer: ["Historia con pico", "Story with a peak"],
+    authorityLand: ["Cierre con autoridad", "Authority close"],
+    energyMatch: ["Ajustar la energía", "Energy match"],
+    releaseFlow: ["Soltar mandíbula y cuello", "Jaw & neck release"],
+    breathCycle: ["Respiración costo-abdominal", "Low rib & belly breath"],
+    openSpace: ["Espacio interno", "Inner space"],
+    vowelLadder: ["Cinco vocales", "Five vowels"],
+    resonanceZone: ["Zonas de resonancia", "Resonance zones"],
+    placementAB: ["Comparar colocaciones", "Placement compare"],
+    trillSolfege: ["Solfeo en trino de labios", "Lip-trill solfège"]
+  };
+
   function modeDisplayName(modeId) {
     const es =
       (window.VTI18n && VTI18n.lang === "es") ||
       (document.documentElement.lang || "").startsWith("es");
-    const map = {
-      rateLadder: es ? "Escalera de ritmo" : "Rate ladder",
-      volumeSteady: es ? "Volumen estable" : "Steady volume",
-      volumeLadder: es ? "Escalera de volumen" : "Volume ladder",
-      shAirLadder: es ? "Escalera de aire SH" : "SH air ladder",
-      breathS: es ? "Soporte de aire" : "Breath support",
-      pitchHold: es ? "Sostén de tono" : "Pitch hold",
-      pitchMatch: es ? "Afinar nota" : "Pitch match",
-      pitchChord: es ? "Acordes / solfeo" : "Chords / solfege",
-      pitchSong: es ? "Canción" : "Song stanzas",
-      scaleSteps: es ? "Escala" : "Scale steps",
-      sirenRange: es ? "Sirenas" : "Sirens",
-      sovtFlow: es ? "Flujo SOVT" : "SOVT flow",
-      humTargets: es ? "Tarareo" : "Hum targets",
-      onsetReps: es ? "Ataques suaves" : "Easy onset",
-      staccatoLegato: es ? "Staccato / legato" : "Staccato / legato",
-      dynamicSwell: es ? "Dinámica" : "Dynamics",
-      pitchContour: es ? "Contorno" : "Pitch contour",
-      weekPlan: es ? "Plan 12 semanas" : "12-week plan",
-      recordOnly: es ? "Grabar y revisar" : "Record & review",
-      pauseDetect: es ? "Pausas" : "Pauses",
-      fillerDetect: es ? "Muletillas" : "Fillers",
-      countPace: es ? "Cuenta a ritmo" : "Paced counting",
-      articulationContrast: es ? "Contraste con bolígrafo" : "Pen contrast",
-      speechEnergy: es ? "Conversación" : "Conversation",
-      reviewSession: es ? "Grabar y revisar" : "Record & review",
-      metronomeSpeech: es ? "Fluidez con metáforas" : "Metaphor fluency",
-      keyPointPace: es ? "Ritmo y punto clave" : "Pace and key point",
-      gestureReps: es ? "Gestos con intención" : "Purposeful gestures",
-      facePhases: es ? "Expresión facial" : "Facial expression",
-      concisionGate: es ? "Puerta de concisión" : "Concision gate",
-      storyTimer: es ? "Historia con pico" : "Story with a peak",
-      authorityLand: es ? "Cierre con autoridad" : "Authority close",
-      energyMatch: es ? "Ajustar la energía" : "Energy match",
-      releaseFlow: es ? "Soltar mandíbula y cuello" : "Jaw & neck release",
-      breathCycle: es ? "Respiración costo-abdominal" : "Low rib & belly breath",
-      openSpace: es ? "Espacio interno" : "Inner space",
-      vowelLadder: es ? "Cinco vocales" : "Five vowels",
-      resonanceZone: es ? "Zonas de resonancia" : "Resonance zones",
-      placementAB: es ? "Comparar colocaciones" : "Placement compare",
-      trillSolfege: es ? "Solfeo en trino de labios" : "Lip-trill solfège"
-    };
+    const names = MODE_NAMES[modeId];
     // A mode with no name here is called plain "practice": its id never reaches the learner
-    return map[modeId] || (es ? "práctica" : "practice");
+    return names ? names[es ? 0 : 1] : es ? "práctica" : "practice";
   }
 
   function setPracticeUI(live) {
@@ -4134,12 +4150,17 @@
   }
 
   /**
+   * Modes that open on silent steps and sound their own reference note at the
+   * first step that needs one: s19 (openSpace) and the guided voice drills.
+   */
+  const OWN_REFERENCE_MODES = ["openSpace", "voiceDrill"];
+
+  /**
    * Whether Empezar itself starts the piano: an exercise that wants sound,
-   * except s19, which opens on silent steps (its mode plays its own reference
-   * at the first sung step).
+   * unless its mode sounds its own reference when a step asks for it.
    */
   function soundsOnStart(ex, profile) {
-    return exerciseWantsSound(ex, profile) && profile?.mode !== "openSpace";
+    return exerciseWantsSound(ex, profile) && !OWN_REFERENCE_MODES.includes(profile?.mode);
   }
 
   /** Seconds each reference or chord is held: the sustain box, or 2.5 s with sustain off (a learner's "off" is kept). */
@@ -4809,7 +4830,9 @@
       const dtMs = now - last;
       last = now;
       try {
-        state.modeInstance.onFrame({ dtMs, rms: 0, voiced: false, voiceFreq: 0, holdSec: 0 });
+        // noMic: these frames carry the clock and nothing else. A mode that measures silence
+        // must not read "no sound in the frame" as "silence heard".
+        state.modeInstance.onFrame({ dtMs, rms: 0, voiced: false, voiceFreq: 0, holdSec: 0, noMic: true });
       } catch (err) {
         console.warn(err);
       }
@@ -6891,9 +6914,10 @@
 
   /* —— Structured session —— */
   /**
-   * @param {string} [path] basic | advanced | full | daily | basics
-   * @param {{ order?: string[], sec?: Object<string, number>, tier?: string, label?: string }} [routine]
-   *   a prepared sequence (today's basics) instead of a catalog route
+   * @param {string} [path] basic | advanced | full | daily | basics | set
+   * @param {{ order?: string[], sec?: Object<string, number>, tier?: string, label?: string, set?: string, toast?: string }} [routine]
+   *   a prepared sequence (today's basics, a goal set) instead of a catalog
+   *   route; `toast` replaces the basics' start line
    */
   function startStructured(path, routine) {
     const p = path || $("#session-path")?.value || "basic";
@@ -6902,7 +6926,7 @@
     const id = VTSession.currentExerciseId();
     if (id) openExercise(id, true);
     if (routine?.order) {
-      toast(tt("loop.startToast", { tier: routine.label || "", n: String(session.order.length) }));
+      toast(routine.toast || tt("loop.startToast", { tier: routine.label || "", n: String(session.order.length) }));
       return session;
     }
     toast(
@@ -6971,6 +6995,8 @@
     const done = VTSession.get();
     setView("home");
     renderExerciseList();
+    // A goal set ends on its own card; basics and the class on the loop's.
+    if (window.VTSets?.onComplete(done)) return;
     if (window.VTLoop?.onRoutineComplete?.(done)) return;
     toast(tt("toast.structuredDone"));
   }
@@ -10473,6 +10499,18 @@
         renderTodayBasics();
       },
       focusReminders: () => openReminders()
+    });
+    // Goal sets (js/session-sets.js) start through the same guided engine.
+    window.VTSets?.bind({
+      getTab: () => state.tab,
+      setTab,
+      findExercise,
+      startSet: (r) => startStructured("set", r),
+      hideToast,
+      refresh: () => {
+        renderNextStepCard();
+        renderTodayBasics();
+      }
     });
     bind();
     bindHeaderMenu();

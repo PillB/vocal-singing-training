@@ -49,3 +49,9 @@ import "./qa-round4-defects.test.mjs";
 // idempotent on its own key. Adding this file without this line is what the
 // guard in config.test.mjs caught, which is the whole reason that guard exists.
 import "./resend-idempotent.test.mjs";
+// Killers for mutants the suites above let live, found while splitting #26's
+// worker functions under main's complexity ceiling. Each fails on its mutant
+// and passes on the code, pre-split and split alike.
+import "./split-store.test.mjs";
+import "./split-stripe-mp.test.mjs";
+import "./split-creem.test.mjs";

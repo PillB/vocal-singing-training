@@ -48,7 +48,7 @@ const plain = (x) => JSON.parse(JSON.stringify(x));
 const vocalIds = () => plain(SETS.filter((s) => s.track === "vocal").map((s) => s.id));
 
 const SLUG = /^(v|s)-[a-z]+(?:-[a-z]+)*$/;
-// Words that promise what no study of healthy voices shows (docs/46): prevention, cure, guarantees, diagnosis.
+// Words that promise what no study of healthy voices shows (docs/47): prevention, cure, guarantees, diagnosis.
 // Whole words where a stem would catch an innocent one ("heal" in "healthy adults", "sana" in "voz sana").
 const PROMISES = /\b(?:previene|prevenir|evita (?:la|las|el|los) (?:lesi|nódul|disfon)|garantiza|diagn[oó]s|guarantee|diagnos|(?:cura|curar|sanar|prevents?|cures?|heals?)\b)/i;
 

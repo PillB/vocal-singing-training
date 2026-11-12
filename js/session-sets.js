@@ -8,7 +8,7 @@
  * by the same guided engine as the basics (js/session.js, path "set"). It
  * adds no measurement of its own and makes no promise: each card says what the
  * set is for, what kind of evidence stands behind it, and where that comes
- * from (docs/46-SESSION-SETS.md keeps the full reasoning and the sources).
+ * from (docs/47-SESSION-SETS.md keeps the full reasoning and the sources).
  *
  * What it deliberately is not:
  * - not today's basics: finishing a set does not pick a size or draw a card.

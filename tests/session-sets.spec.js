@@ -1,5 +1,5 @@
 /**
- * Goal sets ("Rutinas por objetivo", js/session-sets.js, docs/46-SESSION-SETS.md).
+ * Goal sets ("Rutinas por objetivo", js/session-sets.js, docs/47-SESSION-SETS.md).
  *
  * What is pinned here, each with the defect it would otherwise let through
  * (qa/mutate.mjs, set `flows`, SS1 to SS9):

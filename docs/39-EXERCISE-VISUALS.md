@@ -228,7 +228,7 @@ papers before being cited elsewhere.
 - Repp 2005 and Hove et al. 2013 on timing to sounds versus flashes.
 - WCAG 2.2 success criteria 1.3.3, 1.4.1, 1.4.11, 2.2.2, 2.3.1 and 2.5.8.
 
-## Guided voice drills (2026-11-12, docs/46)
+## Guided voice drills (2026-11-12, docs/47)
 
 One mode (`voiceDrill`) and one scene file (`js/scenes/voice-drill.js`). The
 rules above hold: a drawing moves on the clock, never on the voice; only what

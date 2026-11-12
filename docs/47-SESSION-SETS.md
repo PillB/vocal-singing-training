@@ -1,4 +1,4 @@
-# 46 · Goal sets and guided voice drills (2026-11-11 / 12)
+# 47 · Goal sets and guided voice drills (2026-11-11 / 12)
 
 What this round added, why, on what evidence, and what stays open. The code is
 `js/session-sets.js`, `css/session-sets.css`, `Modes.voiceDrill` in

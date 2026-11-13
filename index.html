@@ -20,7 +20,8 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261112a" />
+    <script src="js/boot-head.js?v=20261112a"></script>
+    <link rel="stylesheet" href="css/styles.css?v=20261113b" />
     <link rel="stylesheet" href="css/exercise-viz.css?v=20261002a" />
     <link rel="stylesheet" href="css/session-sets.css?v=20261112a" />
     <link rel="stylesheet" href="css/scenes/speech.css?v=20261002a" />
@@ -35,7 +36,7 @@
     <!-- In <head> and not deferred: it paints the visitor's design of the site
          before the first frame. A file, because the policy above allows no
          inline script but the one flag. -->
-    <script src="js/site-version.js?v=20261111a"></script>
+    <script src="js/site-version.js?v=20261113a"></script>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>" />
   </head>
   <body>
@@ -134,12 +135,26 @@
             <button type="button" class="btn btn-ghost btn-sm" id="rd-dismiss" data-i18n="retain.wbDismiss">Cerrar</button>
           </div>
         </div>
+        <!-- Welcome back (classic arm only): said first, with the due reminder, not
+             under the catalog. Its "5 min" is a plain button, so the start
+             panel's one primary stays the only one on the first screen. -->
+        <div class="welcome-back card" id="welcome-back" hidden>
+          <h3 data-i18n="retain.welcomeTitle">Bienvenido de nuevo</h3>
+          <p id="welcome-back-body" data-i18n="retain.welcomeBody">
+            Llevas unos días sin practicar. 5 minutos bastan para retomar el hábito — sin presión.
+          </p>
+          <div class="welcome-back-actions">
+            <button type="button" class="btn btn-sm" id="wb-micro" data-i18n="retain.micro5">▶ 5 min</button>
+            <button type="button" class="btn btn-sm" id="wb-last" data-i18n="retain.wbLast">Último ejercicio</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="wb-dismiss" data-i18n="retain.wbDismiss">Cerrar</button>
+          </div>
+        </div>
         <!-- Start panel: the single decision point on home. One primary action,
              a first-visit explainer, and the guided session as the quiet alternative. -->
         <section class="hero start-panel" id="start-panel" aria-labelledby="start-title">
           <div class="start-main">
             <p class="start-kicker" id="start-kicker" data-i18n="start.kickerNew">Empieza aquí</p>
-            <h2 class="start-title" id="start-title" data-i18n="start.titleNew">Tu primera práctica, en 5 minutos</h2>
+            <h2 class="start-title" id="start-title" tabindex="-1" data-i18n="start.titleNew">Tu primera práctica, en 5 minutos</h2>
             <p class="start-sub" id="start-sub" data-i18n="start.subNew">
               Un estudio de voz en el navegador: elige un ejercicio, practica con el micrófono y guarda cómo te fue.
             </p>
@@ -232,7 +247,7 @@
 
           <!-- Daily loop: the lifetime count first, the week, then the streak.
                Replaces the first-visit explainer once there is a day sung. -->
-          <aside class="loop-today" id="loop-today" hidden aria-label="Práctica">
+          <aside class="loop-today" id="loop-today" hidden aria-label="Práctica" data-i18n-aria="loop.todayAria">
             <p class="loop-count"><strong id="loop-days">0</strong> <span id="loop-days-label"></span></p>
             <p class="loop-next-ms muted" id="loop-next-ms"></p>
             <p class="loop-week-k muted" id="loop-week-k" aria-hidden="true"></p>
@@ -257,6 +272,14 @@
               <span aria-hidden="true">🔔</span> <span id="btn-reminder-label" data-i18n="retain.open">Poner un recordatorio</span>
             </button>
           </aside>
+
+          <!-- The classic arm has no week card above, so its way in to the
+               reminder dialog sits here (js/app.js renderRetentionChrome hides it in the loop arm). -->
+          <p class="start-remind" id="start-remind" hidden>
+            <button type="button" class="btn btn-ghost btn-sm loop-remind-btn" id="btn-reminder-classic" aria-haspopup="dialog">
+              <span aria-hidden="true">🔔</span> <span id="btn-reminder-classic-label" data-i18n="retain.open">Poner un recordatorio</span>
+            </button>
+          </p>
         </section>
 
         <!-- Catalog: primary IA (track switch + filters + list) — high contrast, above dense studio chrome when collapsed -->
@@ -329,19 +352,6 @@
         <!-- Free-tier native tip / ad slot (never during practice; off until adsEnabled) -->
         <aside id="ad-slot-home" class="ad-slot" hidden aria-label="Studio tip"></aside>
 
-        <div class="welcome-back card" id="welcome-back" hidden>
-          <h3 data-i18n="retain.welcomeTitle">Bienvenido de nuevo</h3>
-          <p id="welcome-back-body" data-i18n="retain.welcomeBody">
-            Llevas unos días sin practicar. 5 minutos bastan para retomar el hábito — sin presión.
-          </p>
-          <div class="welcome-back-actions">
-            <button type="button" class="btn btn-primary btn-sm" id="wb-micro" data-i18n="retain.micro5">▶ 5 min</button>
-            <button type="button" class="btn btn-sm" id="wb-air" data-i18n="retain.wbAir">Aire SH</button>
-            <button type="button" class="btn btn-sm" id="wb-last" data-i18n="retain.wbLast">Último ejercicio</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="wb-dismiss" data-i18n="retain.wbDismiss">Cerrar</button>
-          </div>
-        </div>
-
       </section>
 
       <section id="view-exercise" class="view">
@@ -368,17 +378,17 @@
               <div class="hud-corner hud-tl">
                 <span class="status-pill" id="practice-status" data-i18n="practice.ready">Tiempo</span>
                 <span class="timer-display" id="timer-display">05:00</span>
-                <span class="hold-live" id="hold-display" hidden title="Hold">↓0.0s</span>
+                <span class="hold-live" id="hold-display" hidden title="Sostenido" data-i18n-title="piano.holdTitle">↓0.0s</span>
                 <span class="chord-now" id="chord-now">—</span>
               </div>
               <div class="hud-corner hud-tm" id="hud-prog-bar" hidden>
                 <label class="hud-prog-field" for="sel-progression">
                   <span class="hud-prog-k" data-i18n="piano.chords">Acordes</span>
-                  <select id="sel-progression" class="select-inline hud-prog-select" aria-label="Progresión de acordes"></select>
+                  <select id="sel-progression" class="select-inline hud-prog-select" aria-label="Progresión de acordes" data-i18n-aria="piano.progAria"></select>
                 </label>
                 <label class="hud-prog-field" for="sel-play-mode">
                   <span class="hud-prog-k" data-i18n="piano.playMode">Modo</span>
-                  <select id="sel-play-mode" class="select-inline hud-prog-select" aria-label="Modo de piano">
+                  <select id="sel-play-mode" class="select-inline hud-prog-select" aria-label="Modo de piano" data-i18n-aria="piano.modeAria">
                     <option value="oneNote" data-i18n="piano.modeOneNote" selected>1 nota</option>
                     <option value="arpeggio" data-i18n="piano.modeArpeggio">Arpegio</option>
                     <option value="chords" data-i18n="piano.modeChords">Acordes</option>
@@ -451,15 +461,15 @@
                     <span data-i18n="range.auto">A mi voz</span>
                   </label>
                 </div>
-                <label class="muted piano-opt" title="One note at a time / 1 nota a la vez">
+                <label class="muted piano-opt" title="1 nota a la vez" data-i18n-title="piano.oneNoteTitle">
                   <input type="checkbox" id="chk-one-note" checked />
                   <span data-i18n="piano.oneNote">1 nota</span>
                 </label>
-                <label class="muted piano-opt piano-opt-arp" title="Arpeggio / Arpegio">
-                  <input type="checkbox" id="chk-arpeggio" aria-label="Arpeggio" />
+                <label class="muted piano-opt piano-opt-arp" title="Arpegio" data-i18n-title="piano.arpeggioTitle">
+                  <input type="checkbox" id="chk-arpeggio" />
                   <span data-i18n="piano.arpeggio">Arpegio</span>
                 </label>
-                <label class="muted piano-opt" title="Sustain / Sostener">
+                <label class="muted piano-opt" title="Sostener" data-i18n-title="piano.sustainTitle">
                   <input type="checkbox" id="chk-sustain" checked />
                   <span data-i18n="piano.sustain">Sostener</span>
                 </label>
@@ -470,7 +480,7 @@
                     <option value="5">5s</option>
                   </select>
                 </label>
-                <label class="muted piano-opt" id="opt-auto-piano" title="Auto piano">
+                <label class="muted piano-opt" id="opt-auto-piano" title="Piano automático" data-i18n-title="piano.auto">
                   <input type="checkbox" id="chk-auto-piano" checked />
                   <span data-i18n="piano.auto">Piano automático</span>
                 </label>
@@ -510,6 +520,9 @@
             <!-- A denied microphone used to be a 2.8 s toast, then a frozen step
                  with nothing on screen that moved a guided session on (VG-40). -->
             <div id="mic-blocked" class="mic-blocked" role="alert" hidden>
+              <!-- Only when the exercise goes on without the mic: it sits over
+                   the stage's own controls, so it can be put away for the visit. -->
+              <button type="button" class="btn btn-ghost btn-xs mic-blocked-close" id="btn-mic-close" aria-label="Cerrar" data-i18n-aria="a11y.close" hidden>✕</button>
               <p id="mic-blocked-text"></p>
               <div class="mic-blocked-actions">
                 <button type="button" class="btn btn-sm" id="btn-mic-retry"></button>
@@ -722,7 +735,7 @@
                 <strong data-i18n="pro.insightsTitle">Análisis Pro</strong>
                 <span class="pro-lock" id="pro-insights-lock" hidden data-i18n="pro.locked">Pro</span>
               </div>
-              <div class="pro-spark" id="pro-spark" aria-hidden="true" title="28 days"></div>
+              <div class="pro-spark" id="pro-spark" aria-hidden="true" title="28 días" data-i18n-title="pro.sparkTitle"></div>
               <p class="pro-focus" id="pro-coach-focus"></p>
               <p class="muted pro-hold-trend" id="pro-hold-trend"></p>
             </div>
@@ -1024,6 +1037,7 @@
               <div class="controls-row">
                 <button type="submit" class="btn btn-primary btn-sm" id="account-code-submit" data-i18n="auth.signIn">Entrar</button>
                 <button type="button" class="btn btn-ghost btn-sm" id="account-code-back" data-i18n="auth.useAnotherEmail">Usar otro correo</button>
+                <button type="button" class="btn btn-sm" id="account-code-resend" hidden data-i18n="auth.resendCode">Pedir un código nuevo</button>
               </div>
             </form>
           </div>
@@ -1076,6 +1090,17 @@
           <p class="account-who" id="account-who"></p>
           <p class="account-plan" id="account-plan"></p>
           <p class="muted account-sync" id="account-sync"></p>
+
+          <!-- Practice another account saved on this browser: asked before
+               anything is merged or sent (VTSync ownerState). -->
+          <div class="account-other-owner" id="account-other-owner" role="group" aria-labelledby="account-other-owner-q" hidden>
+            <p class="account-other-owner-q" id="account-other-owner-q" data-i18n="auth.ownerQuestion">Este dispositivo guarda práctica de otra cuenta. ¿La añadimos a esta?</p>
+            <div class="controls-row">
+              <button type="button" class="btn btn-primary btn-sm" id="btn-owner-add" data-i18n="auth.ownerAdd">Añadir la práctica de este dispositivo a esta cuenta</button>
+              <button type="button" class="btn btn-sm" id="btn-owner-mine" data-i18n="auth.ownerMine">Usar solo la de mi cuenta</button>
+            </div>
+            <p class="muted account-other-owner-help" data-i18n="auth.ownerHelp">Con «Usar solo la de mi cuenta», la práctica de este dispositivo se aparta y no se envía a esta cuenta.</p>
+          </div>
 
           <div class="account-actions controls-row">
             <button type="button" class="btn btn-primary btn-sm" id="btn-account-trial" hidden data-i18n="auth.startTrial">Empezar prueba gratis</button>
@@ -1189,7 +1214,7 @@
           </ul>
           <p class="pricing-personal muted" id="pricing-personal" hidden></p>
         </div>
-        <div class="pricing-rails" id="pricing-rails" role="group" aria-label="Payment method"></div>
+        <div class="pricing-rails" id="pricing-rails" role="group" aria-label="Método de pago" data-i18n-aria="pricing.railsAria"></div>
         <div class="pricing-grid" id="pricing-grid"></div>
         <div class="pricing-foot">
           <button type="button" class="btn btn-sm" id="btn-export-progress" data-i18n="pricing.export" hidden>
@@ -1224,61 +1249,63 @@
       </div>
     </div>
 
-    <script src="js/focus-trap.js?v=20260924c"></script>
-    <script src="js/i18n.js?v=20261112b"></script>
-    <script src="js/exercises-data.js?v=20261111b"></script>
-    <script src="js/exercises-locale-es.js?v=20261111b"></script>
-    <script src="js/practice-profiles.js?v=20261111b"></script>
-    <script src="js/storage.js?v=20261112a"></script>
-    <script src="js/practice-days.js?v=20261103a"></script>
-    <script src="js/billing-config.js?v=20261112a"></script>
+    <script src="js/focus-trap.js?v=20261113a"></script>
+    <script src="js/i18n.js?v=20261113a"></script>
+    <script src="js/i18n-early.js?v=20261112a"></script>
+    <script src="js/exercises-data.js?v=20261112b"></script>
+    <script src="js/exercises-locale-es.js?v=20261112b"></script>
+    <script src="js/practice-profiles.js?v=20261112b"></script>
+    <script src="js/storage.js?v=20261113b"></script>
+    <script src="js/practice-days.js?v=20261113a"></script>
+    <script src="js/billing-config.js?v=20261113a"></script>
     <script src="js/license.js?v=20261103d"></script>
     <script src="js/billing.js?v=20261113a"></script>
-    <script src="js/ads-config.js?v=20261112a"></script>
-    <script src="js/ads.js?v=20261112a"></script>
-    <script src="js/value-pulse.js?v=20260924c"></script>
+    <script src="js/ads-config.js?v=20261113a"></script>
+    <script src="js/ads.js?v=20261113a"></script>
+    <script src="js/value-pulse.js?v=20261113a"></script>
     <!-- The page declares that the region gate belongs on it, so that if
          js/region-gate.js ever 404s or fails to parse, js/analytics.js and
          js/experiments.js keep nothing and send nothing rather than reading an
          absent gate as permission. -->
     <script>window.VT_REGION_REQUIRED = true;</script>
-    <script src="js/region-gate.js?v=20261103b"></script>
+    <script src="js/region-gate.js?v=20261112b"></script>
     <script src="js/analytics.js?v=20261103a"></script>
     <script src="js/experiments-config.js?v=20261112a"></script>
     <script src="js/experiments.js?v=20261112a"></script>
     <script src="js/privacy-switch.js?v=20261111a"></script>
     <script src="js/reports.js?v=20261113d"></script>
-    <script src="js/reminders.js?v=20260924c"></script>
+    <script src="js/reminders.js?v=20261113a"></script>
     <script src="js/auth-users.generated.js?v=20261006a"></script>
     <script src="js/auth.js?v=20261006a"></script>
-    <script src="js/account.js?v=20261112a"></script>
-    <script src="js/sync.js?v=20261102a"></script>
-    <script src="js/piano.js?v=20261104d"></script>
+    <script src="js/account.js?v=20261113a"></script>
+    <script src="js/sync.js?v=20261113c"></script>
+    <script src="js/piano.js?v=20261112b"></script>
     <script src="js/range-adapter.js?v=20261006a"></script>
-    <script src="js/pitch-visualizer.js?v=20261103d"></script>
+    <script src="js/pitch-visualizer.js?v=20261112c"></script>
     <script src="js/pitch-game.js?v=20261002a"></script>
-    <script src="js/practice-engine.js?v=20261109a"></script>
-    <script src="js/voice-features.js?v=20261103a"></script>
-    <script src="js/exercise-viz.js?v=20261002a"></script>
+    <script src="js/practice-engine.js?v=20261113a"></script>
+    <script src="js/voice-features.js?v=20261112c"></script>
+    <script src="js/exercise-viz.js?v=20261112b"></script>
     <script src="js/scenes/speech.js?v=20261005g"></script>
     <script src="js/scenes/speech-shape.js?v=20261007a"></script>
-    <script src="js/scenes/volume.js?v=20261002a"></script>
+    <script src="js/scenes/volume.js?v=20261112b"></script>
     <script src="js/scenes/guided.js?v=20261103c"></script>
     <script src="js/scenes/voice-drill.js?v=20261111b"></script>
     <script src="js/scenes/breath.js?v=20261002a"></script>
-    <script src="js/scenes/pitch.js?v=20261002a"></script>
+    <script src="js/scenes/pitch.js?v=20261112b"></script>
     <script src="js/scenes/dynamics.js?v=20261102a"></script>
-    <script src="js/scenes/resonance.js?v=20261007a"></script>
-    <script src="js/practice-modes.js?v=20261112c"></script>
+    <script src="js/scenes/resonance.js?v=20261113a"></script>
+    <script src="js/practice-modes.js?v=20261113a"></script>
     <script src="js/recorder.js?v=20261102a"></script>
     <script src="js/metrics.js?v=20260924c"></script>
-    <script src="js/session.js?v=20261112a"></script>
+    <script src="js/session.js?v=20261113a"></script>
     <script src="js/session-sets.js?v=20261112a"></script>
-    <script src="js/daily-loop.js?v=20261006b"></script>
+    <script src="js/daily-loop.js?v=20261113a"></script>
     <script src="js/site-layout.js?v=20261111a"></script>
-    <script src="js/tour.js?v=20261102a"></script>
-    <script src="js/app.js?v=20261113c"></script>
+    <script src="js/tour.js?v=20261113a"></script>
+    <script src="js/app.js?v=20261113d"></script>
     <script src="js/audio-recovery.js?v=20261103c"></script>
     <script src="js/wake-lock.js?v=20261112b"></script>
+    <script src="js/boot-ready.js?v=20261112a"></script>
   </body>
 </html>

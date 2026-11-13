@@ -50,6 +50,8 @@ async function stopVoice(page) {
  * rumble instead: the noise through `order` one-pole low-passes at `hz`, at
  * the same level for the same gain. `hiss` adds the mic's own white hiss
  * under it at that gain, and `seed` makes the noise the same every run.
+ * `from` switches the fan on that many seconds after the mic opens (a fan
+ * switched on mid-take) instead of from the first frame.
  */
 function fanInRoom(opts) {
   const o = typeof opts === "number" ? { gain: opts } : opts || {};
@@ -66,7 +68,7 @@ function fanInRoom(opts) {
             return seed / 4294967296;
           }
         : Math.random;
-      const noise = (gain, hz, order) => {
+      const noise = (gain, hz, order, from) => {
         const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
         const d = buf.getChannelData(0);
         for (let i = 0; i < d.length; i++) d[i] = rnd() * 2 - 1;
@@ -87,12 +89,13 @@ function fanInRoom(opts) {
         src.buffer = buf;
         src.loop = true;
         const g = ac.createGain();
-        g.gain.value = gain;
+        g.gain.value = from ? 0 : gain;
+        if (from) g.gain.setValueAtTime(gain, ac.currentTime + from);
         src.connect(g).connect(dest);
         src.start();
         return src;
       };
-      window.__fan = noise(o.gain || 0.0055, o.hz, o.order);
+      window.__fan = noise(o.gain || 0.0055, o.hz, o.order, o.from);
       if (o.hiss) noise(o.hiss);
     }
     return stream;

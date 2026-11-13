@@ -36,6 +36,12 @@
 
   /** Widths at or under this get the bottom-sheet card; CSS owns its position. */
   const SHEET_MAX_W = 520;
+  /**
+   * So do heights at or under this: a phone on its side (844x390) has no room
+   * beside or above a target for a floating card either.
+   */
+  const SHEET_MAX_H = 500;
+  const useSheet = () => window.innerWidth <= SHEET_MAX_W || window.innerHeight <= SHEET_MAX_H;
   /** A "spotlight" over most of the screen highlights nothing — drop it instead. */
   const MAX_SPOT_FRACTION = 0.6;
 
@@ -172,7 +178,6 @@
   function homeSteps() {
     const first = document.body.classList.contains("loop-first");
     const loopOn = !first && !!global.VTApp?.loopDrewPanel?.();
-    const phone = isVisible(document.getElementById("btn-more"));
     // Historial before any practice is an empty page: its card says what will
     // fill it instead of describing marked days nobody can see.
     const histEmpty = (() => {
@@ -233,7 +238,12 @@
         view: "home",
         placeKey: "tour.place.more",
         titleKey: "tour.more.title",
-        bodyKey: phone ? "tour.more.bodyPhone" : "tour.more.body",
+        // Read when the card is written, not when the steps are built: turning
+        // the screen across 640px folds the header's items into "Más" (or
+        // unfolds them), and the card must say what is there now.
+        get bodyKey() {
+          return isVisible(document.getElementById("btn-more")) ? "tour.more.bodyPhone" : "tour.more.body";
+        },
         target: ".header-door",
         also: ["#btn-more", "#header-utils"],
         place: "bottom",
@@ -423,6 +433,23 @@
   }
 
   /**
+   * Controls laid over the target (the exercise's bottom rail sits on the
+   * lane on a phone) are cut off the ring, so it holds only what the card names.
+   * @returns {{ top: number, bottom: number }} The ring's new top and bottom.
+   */
+  function trimOverlaid(step, left, top, right, bottom) {
+    for (const sel of step.trim || []) {
+      const o = document.querySelector(sel);
+      if (!o || !isVisible(o)) continue;
+      const b = o.getBoundingClientRect();
+      if (b.bottom <= top || b.top >= bottom || b.right <= left || b.left >= right) continue;
+      if (b.top + b.height / 2 > (top + bottom) / 2) bottom = Math.max(top + 1, Math.min(bottom, b.top));
+      else top = Math.min(bottom - 1, Math.max(top, b.bottom));
+    }
+    return { top, bottom };
+  }
+
+  /**
    * The area a step points at: its target plus the neighbours it names in
    * `also` ("Empezar" with "Grabarme", the account door with "Más"), so one
    * ring holds what the card talks about. Neighbours join in order, and only
@@ -432,8 +459,10 @@
    */
   function targetRect(step, el) {
     let { left, top, right, bottom } = el.getBoundingClientRect();
-    const sheet = window.innerWidth <= SHEET_MAX_W;
-    const fit = window.innerHeight * (sheet ? 0.45 : MAX_SPOT_FRACTION);
+    const sheet = useSheet();
+    // Beside the sheet a short screen has about a third of its height for the
+    // ring, so a neighbour only joins within 30% of it.
+    const fit = window.innerHeight * (sheet ? (window.innerHeight <= SHEET_MAX_H ? 0.3 : 0.45) : MAX_SPOT_FRACTION);
     for (const sel of step.also || []) {
       const o = document.querySelector(sel);
       if (!o || o === el || !isVisible(o)) continue;
@@ -452,16 +481,7 @@
       right = Math.max(right, b.right);
       bottom = btm;
     }
-    // Controls laid over the target (the exercise's bottom rail sits on the
-    // lane on a phone) are cut off the ring, so it holds only what the card names.
-    for (const sel of step.trim || []) {
-      const o = document.querySelector(sel);
-      if (!o || !isVisible(o)) continue;
-      const b = o.getBoundingClientRect();
-      if (b.bottom <= top || b.top >= bottom || b.right <= left || b.left >= right) continue;
-      if (b.top + b.height / 2 > (top + bottom) / 2) bottom = Math.max(top + 1, Math.min(bottom, b.top));
-      else top = Math.min(bottom - 1, Math.max(top, b.bottom));
-    }
+    ({ top, bottom } = trimOverlaid(step, left, top, right, bottom));
     return new DOMRect(left, top, right - left, bottom - top);
   }
 
@@ -589,10 +609,24 @@
     }
   }
 
-  function onResize() {
-    // Layout only. Scrolling here would fight the corrective scroll below:
-    // moving the page fires this listener, which re-centred the target and
-    // undid the correction, every time.
+  let relayoutTimer = 0;
+  function onResize(e) {
+    // A resize or a turn of the screen changes the page under the card after
+    // this event (the exercise stage re-fits over the next frames, the header
+    // folds into "Más"), so place the stop again once that has settled, with a
+    // scroll as a new stop gets, and say what is there now.
+    if (e && e.type === "resize" && active) {
+      clearTimeout(relayoutTimer);
+      relayoutTimer = setTimeout(() => {
+        const step = stepList[index];
+        if (!active || !step) return;
+        if (ui) ui.body.textContent = t(step.bodyKey);
+        positionStep(step, { scroll: true });
+      }, 250);
+    }
+    // Layout only, otherwise. Scrolling here would fight the corrective scroll
+    // below: moving the page fires this listener, which re-centred the target
+    // and undid the correction, every time.
     if (positioning) return;
     if (active && stepList[index]) positionStep(stepList[index], { scroll: false });
   }
@@ -767,12 +801,112 @@
     }
   }
 
+  /**
+   * Place the bottom-sheet card: pick the side and the scroll that keep the
+   * target clear of it.
+   * @returns {DOMRect} The ring as it will stand once that scroll applies.
+   */
+  function placeSheet(u, el, r, vh, scroll) {
+    u.card.classList.remove("tour-card-center");
+    u.card.style.left = "";
+    u.card.style.top = "";
+    // The sheet spans the screen, so the only way to keep it off the target is
+    // to scroll the target into the band the sheet leaves free. Both sides are
+    // costed and the better one wins; if neither can clear it — a target
+    // taller than the band — the one that covers least does. Costing both on
+    // every pass, rather than only when a step first opens, is what makes
+    // stepping backwards behave like stepping forwards.
+    //
+    // Everything here is PREDICTED, never measured after scrolling.
+    // `window.scrollY` does not update until the next frame, so the earlier
+    // measure-scroll-remeasure version read the pre-scroll position back every
+    // time, scored both candidates as failures and kept the first. That is
+    // what put the card on top of the control the step was describing.
+    const startY = window.scrollY;
+    const maxY = Math.max(0, document.documentElement.scrollHeight - vh);
+    const docTop = r.top + startY;
+    let best = null;
+    // With the sheet at the bottom the free band starts below the sticky
+    // header(s), which a target scrolled up to 8px from the top would hide
+    // behind. That band is tried first; the old one, from 8px, stays a
+    // candidate for a target that is taller than the band under the header.
+    //
+    // Placements are scored in this order: the step's own element under the
+    // card (12px of slack: the exercise view shifts it ~11px after the
+    // scroll), then the element under the header, then the whole ring (with
+    // its neighbours) under the card. A plain b0 = stickyBottom() + 8 failed
+    // tour-geometry "speech @narrow": at 320x640 the 238px mode panel only
+    // fits in the old band.
+    const hdrBottom = stickyBottom();
+    const er = el.getBoundingClientRect();
+    const elDocTop = er.top + startY;
+    const cover = (c, vTop, h, x) =>
+      Math.max(0, Math.min(c.right, x.right) - Math.max(c.left, x.left)) *
+      Math.max(0, Math.min(c.bottom, vTop + h) - Math.max(c.top, vTop));
+    const worse = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+    search: for (const top of [r.top > vh - r.bottom, r.top <= vh - r.bottom]) {
+      u.card.classList.toggle("tour-sheet-top", top);
+      const c = u.card.getBoundingClientRect(); // fixed: independent of scroll
+      for (const b0 of top ? [c.bottom + 10] : [Math.max(8, hdrBottom + 8), 8]) {
+        const b1 = top ? vh - 8 : c.top - 10;
+        // Centre the target in the free band, then keep it inside it.
+        const wantTop = clamp((b0 + b1 - r.height) / 2, b0, Math.max(b0, b1 - r.height));
+        const y = scroll ? clamp(docTop - wantTop, 0, maxY) : startY;
+        const vEl = elDocTop - y;
+        const score = [
+          cover(c, vEl, er.height + 12, er),
+          top ? 0 : Math.max(0, hdrBottom - vEl),
+          cover(c, docTop - y, r.height, r)
+        ];
+        if (!best || worse(score, best.score) < 0) best = { top, y, score };
+        if (!score[0] && !score[1] && !score[2]) break search;
+      }
+    }
+    u.card.classList.toggle("tour-sheet-top", best.top);
+    if (scroll && Math.abs(best.y - startY) > 0.5) {
+      window.scrollTo({ top: best.y, behavior: "auto" });
+      // Predicted, for the spotlight below; the scroll listener repositions
+      // everything again once the browser has actually applied it.
+      r = new DOMRect(r.left, docTop - best.y, r.width, r.height);
+    }
+    return r;
+  }
+
+  /** Light the ring around `r`, or drop the dim when there is nothing worth lighting. */
+  function drawSpot(u, r, vh, vw) {
+    // A ring around something taller than most of the screen points at
+    // nothing — the exercise list is 3000px tall. Leave it unlit rather than
+    // outlining the whole viewport.
+    const pad = 8;
+    const top = Math.max(4, r.top - pad);
+    const bottom = Math.min(vh - 4, r.bottom + pad);
+    const left = Math.max(4, r.left - pad);
+    const right = Math.min(vw - 4, r.right + pad);
+    const h = bottom - top;
+    const w = right - left;
+    if (h <= 0 || w <= 0 || r.height > vh * MAX_SPOT_FRACTION) {
+      // No ring is drawn, so the backdrop's own dim takes over — and on the
+      // step that teaches the pitch highway, the thing being taught is the
+      // target, so the dim landed on it. With nothing to contrast against,
+      // drop the dim rather than veil the subject.
+      document.body.classList.add("tour-spot-on");
+      return;
+    }
+
+    u.spot.style.opacity = "1";
+    u.spot.style.left = `${left}px`;
+    u.spot.style.top = `${top}px`;
+    u.spot.style.width = `${w}px`;
+    u.spot.style.height = `${h}px`;
+    document.body.classList.add("tour-spot-on");
+  }
+
   function placeStep(step, scroll) {
     const u = ensureUI();
     clearHighlight();
     hideSpot();
 
-    const sheet = window.innerWidth <= SHEET_MAX_W;
+    const sheet = useSheet();
     const el = step.target ? resolveTarget(step) : null;
     const inset = bottomInset();
     u.card.style.setProperty("--tour-sheet-bottom", `${inset + 16}px`);
@@ -821,74 +955,10 @@
       }
       if (!placed) centerCard();
     } else {
-      u.card.classList.remove("tour-card-center");
-      u.card.style.left = "";
-      u.card.style.top = "";
-      // The sheet spans the screen, so the only way to keep it off the target is
-      // to scroll the target into the band the sheet leaves free. Both sides are
-      // costed and the better one wins; if neither can clear it — a target
-      // taller than the band — the one that covers least does. Costing both on
-      // every pass, rather than only when a step first opens, is what makes
-      // stepping backwards behave like stepping forwards.
-      //
-      // Everything here is PREDICTED, never measured after scrolling.
-      // `window.scrollY` does not update until the next frame, so the earlier
-      // measure-scroll-remeasure version read the pre-scroll position back every
-      // time, scored both candidates as failures and kept the first. That is
-      // what put the card on top of the control the step was describing.
-      const startY = window.scrollY;
-      const maxY = Math.max(0, document.documentElement.scrollHeight - vh);
-      const docTop = r.top + startY;
-      let best = null;
-      for (const top of [r.top > vh - r.bottom, r.top <= vh - r.bottom]) {
-        u.card.classList.toggle("tour-sheet-top", top);
-        const c = u.card.getBoundingClientRect(); // fixed: independent of scroll
-        const b0 = top ? c.bottom + 10 : 8;
-        const b1 = top ? vh - 8 : c.top - 10;
-        // Centre the target in the free band, then keep it inside it.
-        const wantTop = clamp((b0 + b1 - r.height) / 2, b0, Math.max(b0, b1 - r.height));
-        const y = scroll ? clamp(docTop - wantTop, 0, maxY) : startY;
-        const vTop = docTop - y;
-        const over =
-          Math.max(0, Math.min(c.right, r.right) - Math.max(c.left, r.left)) *
-          Math.max(0, Math.min(c.bottom, vTop + r.height) - Math.max(c.top, vTop));
-        if (!best || over < best.over) best = { top, y, over };
-        if (over === 0) break;
-      }
-      u.card.classList.toggle("tour-sheet-top", best.top);
-      if (scroll && Math.abs(best.y - startY) > 0.5) {
-        window.scrollTo({ top: best.y, behavior: "auto" });
-        // Predicted, for the spotlight below; the scroll listener repositions
-        // everything again once the browser has actually applied it.
-        r = new DOMRect(r.left, docTop - best.y, r.width, r.height);
-      }
+      r = placeSheet(u, el, r, vh, scroll);
     }
 
-    // A ring around something taller than most of the screen points at
-    // nothing — the exercise list is 3000px tall. Leave it unlit rather than
-    // outlining the whole viewport.
-    const pad = 8;
-    const top = Math.max(4, r.top - pad);
-    const bottom = Math.min(vh - 4, r.bottom + pad);
-    const left = Math.max(4, r.left - pad);
-    const right = Math.min(vw - 4, r.right + pad);
-    const h = bottom - top;
-    const w = right - left;
-    if (h <= 0 || w <= 0 || r.height > vh * MAX_SPOT_FRACTION) {
-      // No ring is drawn, so the backdrop's own dim takes over — and on the
-      // step that teaches the pitch highway, the thing being taught is the
-      // target, so the dim landed on it. With nothing to contrast against,
-      // drop the dim rather than veil the subject.
-      document.body.classList.add("tour-spot-on");
-      return;
-    }
-
-    u.spot.style.opacity = "1";
-    u.spot.style.left = `${left}px`;
-    u.spot.style.top = `${top}px`;
-    u.spot.style.width = `${w}px`;
-    u.spot.style.height = `${h}px`;
-    document.body.classList.add("tour-spot-on");
+    drawSpot(u, r, vh, vw);
   }
 
   /** Is the open step the site tour's last stop, whose button starts practice? */
@@ -1004,14 +1074,28 @@
     );
   }
 
+  /** The view and scroll the learner is at now, for the tour to put back. */
+  function placeNow() {
+    return { view: global.VTApp?.getState?.().view || null, scrollY: window.scrollY || 0 };
+  }
+
+  /** Show Practicar for the home tour, opened from its button. */
+  function tourHome() {
+    // Silently, as the stops are: goHome() went through the router and wrote
+    // Practicar's bare address over the #plan or #historial the tour was
+    // opened on, so the page and its address disagreed once the tour put the
+    // page back. An exercise still leaves the way its back button does.
+    const shown = global.VTApp?.getState?.()?.view;
+    if (shown && shown !== "exercise" && global.VTApp?.tourShow) global.VTApp.tourShow("home");
+    else goHome();
+  }
+
   function beginTour(steps, { fromButton, pack, stay } = {}) {
     const opener = document.activeElement;
     // Where the user was before we moved them. The home tour scrolls the page
     // and switches to the home view to do its job; leaving them there when it
     // ends means a one-minute tour costs them their place.
-    resumeAt = stay
-      ? null
-      : { view: global.VTApp?.getState?.().view || null, scrollY: window.scrollY || 0 };
+    resumeAt = stay ? null : placeNow();
     ensureUI();
     stepList = filterSteps(steps);
     if (!stepList.length) {
@@ -1026,7 +1110,7 @@
     document.body.classList.add("tour-active");
     setPageInert(true);
     bindListeners();
-    if (fromButton && !pack) goHome();
+    if (fromButton && !pack) tourHome();
     track("tour_start", {
       pack: currentPack,
       steps: stepList.length,
@@ -1101,8 +1185,20 @@
       if (active) return;
       if (!document.body.classList.contains("view-exercise")) return;
       if (global.VTApp?.getState?.()?.structured) return;
+      // Start was pressed inside the delay: the card would open over the mic
+      // primer or over a take that is already running, and take the focus.
+      // The family stays unseen, so the pack offers itself on the next open.
+      if (somethingIsAsking()) return;
       startUiPack(family, { force: false });
     }, 700);
+  }
+
+  /** A dialog is open, the mic primer is up, or a take is starting or live: the learner is mid-action. */
+  function somethingIsAsking() {
+    if (document.body.classList.contains("modal-open")) return true;
+    if (document.querySelector("#mic-primer:not([hidden])")) return true;
+    const st = global.VTApp?.getState?.() || {};
+    return !!(st.practiceLive || st.practiceStarting || document.body.classList.contains("practice-live"));
   }
 
   /**
@@ -1134,6 +1230,7 @@
     const stay = stayOnEnd;
     const step = stepList[index];
     active = false;
+    clearTimeout(relayoutTimer);
     clearHighlight();
     document.body.classList.remove("tour-active");
     document.body.classList.remove("tour-spot-on");
@@ -1153,7 +1250,20 @@
       // The last stop's button: today's practice, from Practicar's own button.
       resumeAt = null;
       Promise.resolve(global.VTApp?.tourShow?.("home")).then(() => {
+        // The tour may have been opened on Plan or Historial and never wrote an
+        // address: Practicar takes its own now, so the exercise that opens
+        // next goes back to a page whose address matches it.
+        if (location.hash) global.VTApp?.goHome?.();
         document.getElementById("btn-next-step")?.click();
+        // On a short screen the exercise hides the header the tour was opened
+        // from, so focus falls to <body>: keep the keyboard on the screen that
+        // just opened.
+        setTimeout(() => {
+          const a = document.activeElement;
+          if (!a || a === document.body || !a.getClientRects().length) {
+            document.getElementById("btn-practice-start")?.focus({ preventScroll: true });
+          }
+        }, 200);
       });
     } else if (!stay) restorePlace();
     // The start panel's invitation is built once and only re-read when the
@@ -1170,9 +1280,10 @@
   function restorePlace() {
     const at = resumeAt;
     resumeAt = null;
+    let shown = null;
     if (at && at.view && at.view !== "exercise") {
       // Silently: the stops never wrote an address, so the page's own is still right.
-      if (global.VTApp?.tourShow) global.VTApp.tourShow(at.view);
+      if (global.VTApp?.tourShow) shown = global.VTApp.tourShow(at.view);
       else global.VTApp?.setView?.(at.view);
     } else {
       goHome();
@@ -1191,6 +1302,8 @@
       const back = () => window.scrollTo({ top: at.scrollY, behavior: "instant" });
       back();
       requestAnimationFrame(() => requestAnimationFrame(back));
+      // Historial reads its list first; tourShow resolves once it is drawn.
+      Promise.resolve(shown).then(() => requestAnimationFrame(back));
     }
   }
 
@@ -1210,6 +1323,8 @@
     if (autoFired()) return;
     setTimeout(() => {
       if (active || done() || autoFired()) return;
+      // The same guard as the exercise coach-marks: not over a dialog.
+      if (somethingIsAsking()) return;
       markAutoFired();
       start(false);
     }, 600);
@@ -1406,7 +1521,24 @@
       dismiss.addEventListener("click", () => {
         track("tour_invite_dismiss", {});
         writeState("dismissed");
-        document.getElementById("home-tour-invite")?.remove();
+        const invite = document.getElementById("home-tour-invite");
+        // Removing the row that holds the focus drops it on <body>: the next Tab
+        // starts again from the top of the page, and a screen reader loses its
+        // place. Move it to the panel's first visible button or link first, or
+        // to its title.
+        if (invite && invite.contains(document.activeElement)) {
+          const panel = document.getElementById("start-panel");
+          const next = [...(panel?.querySelectorAll("button, a[href]") || [])].find(
+            (el) => !invite.contains(el) && !el.disabled && el.getClientRects().length > 0
+          );
+          const title = document.getElementById("start-title");
+          if (next) next.focus({ preventScroll: true });
+          else if (title) {
+            if (!title.hasAttribute("tabindex")) title.setAttribute("tabindex", "-1");
+            title.focus({ preventScroll: true });
+          }
+        }
+        invite?.remove();
       });
     }
   }

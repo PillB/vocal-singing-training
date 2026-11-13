@@ -166,6 +166,11 @@ test.describe("Retention features", () => {
     await page.evaluate(() => {
       const at = new Date().toISOString();
       const old = new Date(Date.now() - 60 * 86400000).toISOString();
+      // A take is always in the day ledger too (the calendar, the counter and the
+      // map all read it); the old day is there as well.
+      const bag = JSON.parse(localStorage.getItem("vt_days_v1"));
+      bag.days[window.VTDays.dayKey(new Date(old))] = { sec: 60, n: 1, ex: ["v1-diction"] };
+      localStorage.setItem("vt_days_v1", JSON.stringify(bag));
       localStorage.setItem("vt_progress_v1", JSON.stringify({ "v1-diction": { completedCount: 2, lastAt: at, lastScore: 6, history: [{ at: old, score: 5, durationSec: 60, metrics: {} }, { at, score: 6, durationSec: 60, metrics: {} }] } }));
     });
     await page.reload({ waitUntil: "networkidle" });

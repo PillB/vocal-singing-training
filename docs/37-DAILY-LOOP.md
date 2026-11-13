@@ -249,7 +249,7 @@ visible: per arm, 30% → 45% needs about 160 people, 30% → 40% about 355, 30%
 | Idea | Why it waits |
 |---|---|
 | A 3 a.m. day rollover for night singers | The heatmap and plan code call the day key with midnight dates; shifting it needs those callers changed together |
-| Choosing to spend a rest day after a miss, instead of automatically | Stronger in one study (Sharif & Shu), but it adds a decision to the moment people are most likely to leave. A good second test |
+| Choosing to spend a rest day after a miss, instead of automatically | Sharif & Shu (Organizational Behavior and Human Decision Processes 163, 2021) found that goals with "emergency reserves" the person spends themselves beat easy or hard goals, and suggest the small cost of choosing to spend one is part of why. They did not test automatic spending, so whether the choice itself matters is untested. It also adds a decision to the moment people are most likely to leave. A good second test |
 | "Sing first, then see" reps with the pitch trace hidden | The best-supported fix for dependence on live feedback, and a change to the practice screen, not the loop |
 | A weekly "then and now" recording | Needs a benchmark exercise and storage design |
 | Musical surprises (a changed final chord, a best take replayed with a fuller piano) | The most natural reward for a singing app; needs work in `js/piano.js` |

@@ -21,6 +21,18 @@
   }
 
   /**
+   * The local day a saved take belongs to. Takes saved since the day was
+   * written down (js/storage.js) carry it; older ones are placed by their time
+   * in the zone the page is in now. Working it out from the time alone moved a
+   * take rated after midnight, or sung before a change of time zone, to the
+   * wrong day.
+   */
+  function takeDay(h) {
+    if (h && typeof h.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(h.day)) return h.day;
+    return h && h.at ? dayKey(h.at) : null;
+  }
+
+  /**
    * Days practised in the plan's current week. They used to be logged by hand
    * ("Registro del día"); the Plan now counts them from the practice-day
    * ledger, and a hand-logged week keeps what it logged.
@@ -31,6 +43,66 @@
     const start = plan && plan.status !== "idle" && plan.startedAt ? dayKey(plan.startedAt) : null;
     if (!start || !D?.countDays) return logged;
     return Math.max(logged, D.countDays(start, D.addDays(start, 6)));
+  }
+
+  /**
+   * When practice was last seen. Practice the ledger saw but progress did not
+   * (an unrated guided step from before this fix, a held note): noon of that
+   * day is close enough for "when did you last practise".
+   */
+  function ledgerLastAt(ledger, lastAt) {
+    if (ledger.lastDay && (!lastAt || dayKey(lastAt) < ledger.lastDay)) {
+      const d = global.VTDays.parseDay(ledger.lastDay);
+      if (d) return d.toISOString();
+    }
+    return lastAt;
+  }
+
+  /** Seconds of practice the day ledger holds, every day of it; 0 without a ledger. */
+  function ledgerSeconds(ledger) {
+    let ledgerSec = 0;
+    if (ledger) {
+      Object.values(global.VTDays.read().days || {}).forEach((row) => {
+        ledgerSec += Number(row?.sec) || 0;
+      });
+    }
+    return ledgerSec;
+  }
+
+  /** 28-day sparkline buckets (sessions per day), oldest first. */
+  function sparkline(progress) {
+    const spark = [];
+    const dayCounts = {};
+    Object.keys(progress).forEach((exId) => {
+      (progress[exId].history || []).forEach((h) => {
+        const d = takeDay(h);
+        if (d) dayCounts[d] = (dayCounts[d] || 0) + 1;
+      });
+    });
+    for (let i = 27; i >= 0; i--) {
+      const at = new Date();
+      at.setHours(12, 0, 0, 0);
+      at.setDate(at.getDate() - i);
+      spark.push(dayCounts[dayKey(at)] || 0);
+    }
+    return spark;
+  }
+
+  /** The weekly sessions goal: 1 to 14, 3 when none is set. */
+  function weeklyTarget() {
+    const goals = global.VTStorage?.getGoals?.() || { weeklySessionsTarget: 3 };
+    return Math.max(1, Math.min(14, Number(goals.weeklySessionsTarget) || 3));
+  }
+
+  /** The 12-week plan's part of the stats. */
+  function planFields(plan) {
+    return {
+      planElement: plan?.element || null,
+      planWeek: plan?.weekNumber || null,
+      planStatus: plan?.status || "idle",
+      checkIns: planDays(plan),
+      completedElements: (plan?.completedElements || []).length
+    };
   }
 
   function compute() {
@@ -55,7 +127,7 @@
       (row.history || []).forEach((h) => {
         totalSec += Number(h.durationSec) || 0;
         if (h.at) {
-          const d = dayKey(h.at);
+          const d = takeDay(h);
           if (d) days.add(d);
           if (!lastAt || h.at > lastAt) lastAt = h.at;
         }
@@ -94,15 +166,14 @@
       restBank = ledger.rest.bank;
       daysAway = ledger.daysAway;
       todayDone = ledger.todayDone;
-      if (ledger.lastDay && (!lastAt || dayKey(lastAt) < ledger.lastDay)) {
-        // Practice the ledger saw but progress did not (an unrated guided step
-        // from before this fix, a held note): noon of that day is close enough
-        // for "when did you last practise".
-        const d = global.VTDays.parseDay(ledger.lastDay);
-        if (d) lastAt = d.toISOString();
-      }
+      lastAt = ledgerLastAt(ledger, lastAt);
     }
 
+    // Practice time comes from the day ledger, which is not capped. The history
+    // keeps the newest 50 takes of each exercise, so past that its sum stops
+    // growing while Sesiones (completedCount) goes on. The history still sets a
+    // floor for a record whose ledger has not caught up with it.
+    totalSec = Math.max(totalSec, ledgerSeconds(ledger));
     const minutes = Math.round(totalSec / 60);
     const avgScore = lastScoreN ? lastScoreSum / lastScoreN : null;
 
@@ -131,20 +202,7 @@
     });
 
     // 28-day sparkline buckets (sessions per day)
-    const spark = [];
-    const dayCounts = {};
-    Object.keys(progress).forEach((exId) => {
-      (progress[exId].history || []).forEach((h) => {
-        const d = dayKey(h.at);
-        if (d) dayCounts[d] = (dayCounts[d] || 0) + 1;
-      });
-    });
-    for (let i = 27; i >= 0; i--) {
-      const at = new Date();
-      at.setHours(12, 0, 0, 0);
-      at.setDate(at.getDate() - i);
-      spark.push(dayCounts[dayKey(at)] || 0);
-    }
+    const spark = sparkline(progress);
 
     const holdTrend = holds
       .slice(0, 5)
@@ -159,12 +217,12 @@
     let sessionsThisWeek = 0;
     Object.keys(progress).forEach((exId) => {
       (progress[exId].history || []).forEach((h) => {
-        if (h.at && h.at >= weekStart.toISOString()) sessionsThisWeek += 1;
+        const d = takeDay(h);
+        if (d && d >= weekKey) sessionsThisWeek += 1;
       });
     });
 
-    const goals = global.VTStorage?.getGoals?.() || { weeklySessionsTarget: 3 };
-    const weeklyTarget = Math.max(1, Math.min(14, Number(goals.weeklySessionsTarget) || 3));
+    const weekly = weeklyTarget();
 
     return {
       sessions,
@@ -181,20 +239,70 @@
       todayDone,
       lastAt,
       avgScore,
-      planElement: plan?.element || null,
-      planWeek: plan?.weekNumber || null,
-      planStatus: plan?.status || "idle",
-      checkIns: planDays(plan),
-      completedElements: (plan?.completedElements || []).length,
+      ...planFields(plan),
       spark,
       holdTrend,
       weakestMetric,
       weakestAvg: weakestMetric != null ? weakestAvg : null,
       sessionsThisWeek,
-      weeklyTarget,
+      weeklyTarget: weekly,
       weekKey,
-      goalMet: sessionsThisWeek >= weeklyTarget
+      goalMet: sessionsThisWeek >= weekly
     };
+  }
+
+  /** "Pace / rate control" -> "pace-rate-control", as the plan.el.* keys spell it. */
+  function slug(text) {
+    return String(text || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+  }
+
+  /**
+   * A plan focus in the interface language. The plan stores the English name so
+   * plans saved earlier keep working; the words shown come from plan.el.*.
+   */
+  function elementName(el) {
+    const key = `plan.el.${slug(el)}`;
+    const out = global.VTI18n?.t?.(key);
+    return out && out !== key ? out : String(el || "");
+  }
+
+  /**
+   * The page's own way of naming a metric (js/app.js: metricLabel), handed over
+   * once it exists. Its Spanish names live in that file, and a second copy here
+   * would drift.
+   */
+  let metricLabeler = null;
+  function setMetricLabeler(fn) {
+    metricLabeler = typeof fn === "function" ? fn : null;
+  }
+
+  /** The catalogue's definition of a metric id, as the exercises declare it. */
+  function metricDef(id) {
+    const catalog = global.VT_EXERCISES || {};
+    for (const track of Object.keys(catalog)) {
+      for (const ex of catalog[track] || []) {
+        const def = (ex.metrics || []).find((m) => m && m.id === id);
+        if (def) return def;
+      }
+    }
+    // Not in the catalogue any more: "pitchComfort" reads "Pitch comfort".
+    const words = String(id).replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+    return { id, label: words.charAt(0).toUpperCase() + words.slice(1) };
+  }
+
+  /** A metric id as a learner reads it, in the interface language. */
+  function metricName(id) {
+    const def = metricDef(id);
+    try {
+      const named = metricLabeler && metricLabeler(def);
+      if (named) return named;
+    } catch {
+      /* fall back to the catalogue's own label */
+    }
+    return def.label || String(id);
   }
 
   function coachFocus(stats, isEs) {
@@ -216,8 +324,8 @@
     }
     if (s.weakestMetric) {
       return isEs
-        ? `Foco: tu métrica más baja reciente es «${s.weakestMetric}» (~${s.weakestAvg.toFixed(1)}/5). Repite ese ejercicio con calma.`
-        : `Focus: your lowest recent metric is “${s.weakestMetric}” (~${s.weakestAvg.toFixed(1)}/5). Revisit that drill calmly.`;
+        ? `Foco: tu métrica más baja reciente es «${metricName(s.weakestMetric)}» (~${s.weakestAvg.toFixed(1)}/5). Repite ese ejercicio con calma.`
+        : `Focus: your lowest recent metric is “${metricName(s.weakestMetric)}” (~${s.weakestAvg.toFixed(1)}/5). Revisit that drill calmly.`;
     }
     if (!s.goalMet) {
       return isEs
@@ -255,25 +363,30 @@
    * @returns {{ cells: { date: string, count: number }[], weeks: number, max: number }}
    */
   function heatmap(weeks = 26) {
-    const progress = global.VTStorage?.getProgress?.() || {};
-    const holds = global.VTStorage?.getHoldLogs?.() || [];
     const counts = {};
-    Object.keys(progress).forEach((exId) => {
-      (progress[exId].history || []).forEach((h) => {
+    // The day ledger is the record of which days were practised, written in the
+    // zone each take was sung in; Historial's calendar and counter read it alone.
+    // The map reads it alone as well. Placing takes by their time in whatever
+    // zone the page is in now added days the calendar did not have.
+    const ledgerDays = global.VTDays?.read?.()?.days;
+    if (ledgerDays) {
+      Object.keys(ledgerDays).forEach((k) => {
+        if (global.VTDays.counts(ledgerDays[k])) counts[k] = Math.max(1, Number(ledgerDays[k].n) || 1);
+      });
+    } else {
+      const progress = global.VTStorage?.getProgress?.() || {};
+      const holds = global.VTStorage?.getHoldLogs?.() || [];
+      Object.keys(progress).forEach((exId) => {
+        (progress[exId].history || []).forEach((h) => {
+          const d = takeDay(h);
+          if (d) counts[d] = (counts[d] || 0) + 1;
+        });
+      });
+      holds.forEach((h) => {
         const d = dayKey(h.at);
         if (d) counts[d] = (counts[d] || 0) + 1;
       });
-    });
-    holds.forEach((h) => {
-      const d = dayKey(h.at);
-      if (d) counts[d] = (counts[d] || 0) + 1;
-    });
-
-    // Guided steps recorded in the day ledger count too, a day at a time.
-    const ledgerDays = global.VTDays?.read?.()?.days || {};
-    Object.keys(ledgerDays).forEach((k) => {
-      if (!counts[k] && global.VTDays.counts(ledgerDays[k])) counts[k] = Math.max(1, Number(ledgerDays[k].n) || 1);
-    });
+    }
 
     const cells = [];
     const nDays = Math.max(7, Math.min(52, weeks) * 7);
@@ -297,6 +410,56 @@
     return { cells, weeks: Math.ceil(nDays / 7), max: Math.max(1, max) };
   }
 
+  /** The Spanish narrative's sentences, for stats with something saved. */
+  function narrativeEs(s) {
+    const parts = [];
+    parts.push(
+      `Has completado ${s.sessions} ${s.sessions === 1 ? "sesión" : "sesiones"} en ${s.exercisesTouched} ejercicio${s.exercisesTouched === 1 ? "" : "s"}` +
+        (s.minutes ? ` (~${s.minutes} min de práctica registrada)` : "") +
+        "."
+    );
+    if (s.streak > 1) parts.push(`Racha activa: ${s.streak} días seguidos.`);
+    else if (s.activeDays > 0) parts.push(`Días con práctica: ${s.activeDays}.`);
+    if (s.bestHoldSec >= 2) {
+      parts.push(`Mejor sostenido: ${s.bestHoldSec.toFixed(1)}s.`);
+    }
+    if (s.avgScore != null) {
+      parts.push(`Puntaje medio reciente: ${s.avgScore.toFixed(1)}/10.`);
+    }
+    if (s.planElement) {
+      parts.push(
+        `Plan 12 semanas: semana ${s.planWeek || "—"}, foco «${elementName(s.planElement)}» (${s.checkIns} ${s.checkIns === 1 ? "registro" : "registros"}).`
+      );
+    }
+    parts.push(
+      "Siguiente paso de coach: exporta este progreso o usa varios perfiles si entrenas a más de una voz."
+    );
+    return parts;
+  }
+
+  /** The English narrative's sentences, for stats with something saved. */
+  function narrativeEn(s) {
+    const parts = [];
+    parts.push(
+      `You've completed ${s.sessions} session${s.sessions === 1 ? "" : "s"} across ${s.exercisesTouched} exercise${s.exercisesTouched === 1 ? "" : "s"}` +
+        (s.minutes ? ` (~${s.minutes} min logged)` : "") +
+        "."
+    );
+    if (s.streak > 1) parts.push(`Active streak: ${s.streak} days.`);
+    else if (s.activeDays > 0) parts.push(`Days with practice: ${s.activeDays}.`);
+    if (s.bestHoldSec >= 2) parts.push(`Best hold: ${s.bestHoldSec.toFixed(1)}s.`);
+    if (s.avgScore != null) parts.push(`Recent avg score: ${s.avgScore.toFixed(1)}/10.`);
+    if (s.planElement) {
+      parts.push(
+        `12-week plan: week ${s.planWeek || "—"}, focus “${elementName(s.planElement)}” (${s.checkIns} ${s.checkIns === 1 ? "check-in" : "check-ins"}).`
+      );
+    }
+    parts.push(
+      "Coach next step: export this progress or use multi-profile if you train more than one voice."
+    );
+    return parts;
+  }
+
   /** Human narrative for Pro Insights / export (ES|EN via isEs flag). */
   function narrative(stats, isEs) {
     const s = stats || compute();
@@ -305,48 +468,7 @@
         ? "Aún no hay sesiones guardadas. Completa un ejercicio y guarda métricas para ver tu progreso."
         : "No saved sessions yet. Finish an exercise and save metrics to see your progress.";
     }
-    const parts = [];
-    if (isEs) {
-      parts.push(
-        `Has completado ${s.sessions} sesión${s.sessions === 1 ? "" : "es"} en ${s.exercisesTouched} ejercicio${s.exercisesTouched === 1 ? "" : "s"}` +
-          (s.minutes ? ` (~${s.minutes} min de práctica registrada)` : "") +
-          "."
-      );
-      if (s.streak > 1) parts.push(`Racha activa: ${s.streak} días seguidos.`);
-      else if (s.activeDays > 0) parts.push(`Días con práctica: ${s.activeDays}.`);
-      if (s.bestHoldSec >= 2) {
-        parts.push(`Mejor sostenido: ${s.bestHoldSec.toFixed(1)}s.`);
-      }
-      if (s.avgScore != null) {
-        parts.push(`Puntaje medio reciente: ${s.avgScore.toFixed(1)}/5.`);
-      }
-      if (s.planElement) {
-        parts.push(
-          `Plan 12 semanas: semana ${s.planWeek || "—"}, foco «${s.planElement}» (${s.checkIns} registros).`
-        );
-      }
-      parts.push(
-        "Siguiente paso de coach: exporta este progreso o usa varios perfiles si entrenas a más de una voz."
-      );
-    } else {
-      parts.push(
-        `You've completed ${s.sessions} session${s.sessions === 1 ? "" : "s"} across ${s.exercisesTouched} exercise${s.exercisesTouched === 1 ? "" : "s"}` +
-          (s.minutes ? ` (~${s.minutes} min logged)` : "") +
-          "."
-      );
-      if (s.streak > 1) parts.push(`Active streak: ${s.streak} days.`);
-      else if (s.activeDays > 0) parts.push(`Days with practice: ${s.activeDays}.`);
-      if (s.bestHoldSec >= 2) parts.push(`Best hold: ${s.bestHoldSec.toFixed(1)}s.`);
-      if (s.avgScore != null) parts.push(`Recent avg score: ${s.avgScore.toFixed(1)}/5.`);
-      if (s.planElement) {
-        parts.push(
-          `12-week plan: week ${s.planWeek || "—"}, focus “${s.planElement}” (${s.checkIns} check-ins).`
-        );
-      }
-      parts.push(
-        "Coach next step: export this progress or use multi-profile if you train more than one voice."
-      );
-    }
+    const parts = isEs ? narrativeEs(s) : narrativeEn(s);
     return parts.join(" ");
   }
 
@@ -410,6 +532,7 @@
     heatmap,
     suggestUpgradeMoment,
     isDismissed,
-    dismiss
+    dismiss,
+    setMetricLabeler
   };
 })(window);

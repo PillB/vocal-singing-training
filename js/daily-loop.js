@@ -619,6 +619,26 @@
     return L.tier || "min";
   }
 
+  /** True when the size was picked today (a pick records when, in the browser's own day). */
+  function pickedToday() {
+    const D = days();
+    const at = readLoop().tierAt;
+    if (!D || !at) return false;
+    const t = new Date(at);
+    return !Number.isNaN(t.getTime()) && D.dayKey(t) === D.dayKey();
+  }
+
+  /**
+   * The size the start panel offers right now. A comeback is offered the
+   * Mínimo, the smallest step back in, unless the learner has picked a size
+   * today: then the pick stands. It used to be forced, so the chips pressed on
+   * a comeback panel changed nothing.
+   */
+  function offeredTier(sum) {
+    if (!sum.todayDone && sum.comeback && !pickedToday()) return "min";
+    return preferredTier();
+  }
+
   /**
    * Today's basics for a track, for the catalog to mark: the routine the start
    * panel offers right now (a comeback is offered the Mínimo). Null while the
@@ -631,7 +651,7 @@
     if (!D || !loopEnabled()) return null;
     const sum = D.summary();
     if (!(sum.practiceDays > 0)) return null;
-    const tier = !sum.todayDone && sum.comeback ? "min" : preferredTier();
+    const tier = offeredTier(sum);
     const r = routine(track, tier);
     return r ? { tier, order: r.order } : null;
   }
@@ -639,7 +659,15 @@
   function setTier(tier) {
     if (!TIERS.includes(tier)) return;
     const L = readLoop();
-    if (L.tier === tier) return;
+    if (L.tier === tier) {
+      // The same size picked on another day is still a pick today: the
+      // comeback panel offers the Mínimo to anyone who has not chosen today.
+      if (!pickedToday()) {
+        L.tierAt = new Date().toISOString();
+        writeLoop(L);
+      }
+      return;
+    }
     L.tier = tier;
     L.tierAt = new Date().toISOString();
     writeLoop(L);
@@ -764,6 +792,18 @@
 
   /* —— Practice events from js/app.js —— */
 
+  /** The short line a practice day earns outside a routine: its milestone, or the count of days. */
+  function dayToast(sum, trackId) {
+    const ms = milestoneToday(sum.practiceDays);
+    if (ms) {
+      markMilestone(ms);
+      // "¡1 días cantados!" was the first celebration anybody ever saw.
+      hooks.toast?.(ms === 1 ? tl("loop.msToastFirst", null, trackId) : tl("loop.msToast", { n: ms }, trackId), { durationMs: 3200 });
+    } else {
+      hooks.toast?.(tl("loop.dayToast", { n: sum.practiceDays }, trackId), { durationMs: 2600 });
+    }
+  }
+
   /**
    * Called whenever practice is recorded. The first record of a day is the one
    * worth marking: it may be a comeback, it may cross a milestone.
@@ -794,13 +834,7 @@
     // a short line is enough.
     if (ev.structured) return;
     const trackId = hooks.findExercise?.(ev.exerciseId)?.track;
-    const ms = milestoneToday(sum.practiceDays);
-    if (ms) {
-      markMilestone(ms);
-      hooks.toast?.(tl("loop.msToast", { n: ms }, trackId), { durationMs: 3200 });
-    } else {
-      hooks.toast?.(tl("loop.dayToast", { n: sum.practiceDays }, trackId), { durationMs: 2600 });
-    }
+    dayToast(sum, trackId);
     refresh();
   }
 
@@ -889,7 +923,9 @@
     const names = tt("loop.weekdayFull").split(",");
     return sum.week
       .map((d, i) => {
-        const label = `${(names[i] || "").trim()} ${Number(d.key.slice(8))}: ${tl("loop.dayState." + d.state, null, trackId)}`;
+        // A day before the first one was not missed: it only gets its date.
+        const dayName = `${(names[i] || "").trim()} ${Number(d.key.slice(8))}`;
+        const label = d.state === "before" ? dayName : `${dayName}: ${tl("loop.dayState." + d.state, null, trackId)}`;
         return `<li class="loop-day is-${d.state}${d.isToday ? " is-today" : ""}${d.basics ? " has-basics" : ""}" aria-label="${esc(label)}" title="${esc(label)}"><span class="loop-day-l" aria-hidden="true">${esc((letters[i] || "").trim())}</span><span class="loop-day-dot" aria-hidden="true"></span></li>`;
       })
       .join("");
@@ -1097,6 +1133,128 @@
     return true;
   }
 
+  /** Where the loop's day stands: done (basics finished), back (a comeback), sang, or go. */
+  function loopState(sum) {
+    const comeback = !sum.todayDone && sum.comeback;
+    let state = "go";
+    if (sum.basicsToday) state = "done";
+    else if (comeback) state = "back";
+    else if (sum.todayDone) state = "sang";
+    return state;
+  }
+
+  /** The start panel's parts the loop writes; null when one it cannot do without is missing. */
+  function homeParts(sub) {
+    const el = {
+      kicker: $("#start-kicker"),
+      title: $("#start-title"),
+      sub,
+      card: $("#next-step-card"),
+      label: $("#next-step-label"),
+      cardTitle: $("#next-step-title"),
+      why: $("#next-step-why"),
+      cta: $("#btn-next-step")
+    };
+    if (!el.kicker || !el.title || !el.sub || !el.card || !el.cta) return null;
+    return el;
+  }
+
+  /** The panel once today's basics are done. */
+  function renderDoneCopy(el, x) {
+    const { D, sum, trackId, tier, r, min, tierName } = x;
+    el.kicker.textContent = tt("loop.kickerDone");
+    el.title.textContent = tt("loop.titleDone");
+    const teaser = tomorrowTeaser(trackId);
+    el.sub.textContent = tl(
+      "loop.subDone",
+      {
+        min: Math.max(1, Math.round((D.read().days[sum.today]?.sec || 0) / 60)),
+        tomorrow: teaser ? tt("loop.tomorrowEss", { what: teaser }) : ""
+      },
+      trackId
+    ).trim();
+    if (el.label) el.label.textContent = tt("loop.labelDone");
+    // What was done, not what the chips offer for another round.
+    const doneLen = D.read().days[sum.today]?.len;
+    const doneTier = TIERS.includes(doneLen) ? doneLen : tier;
+    const doneR = doneTier === tier ? r : routine(trackId, doneTier);
+    const doneMin = doneR ? Math.max(1, Math.round(doneR.totalSec / 60)) : min;
+    if (el.cardTitle) el.cardTitle.textContent = tt("loop.tierChip", { name: tt("loop.tier." + doneTier), min: doneMin });
+    if (el.why) el.why.textContent = tt("loop.whyDone");
+    el.cta.textContent = tt("loop.ctaAgain", { tier: tierName });
+  }
+
+  /** The panel while today's basics are still to do: back, sang or go. */
+  function renderGoCopy(el, x, state) {
+    const { sum, trackId, tier, min, what, stepsTxt, tierName, minKey } = x;
+    const kickerKey = state === "back" ? "loop.kickerBack" : state === "sang" ? "loop.kickerSang" : "loop.kicker";
+    el.kicker.textContent = tl(kickerKey, null, trackId);
+    el.title.textContent =
+      state === "back" ? tt("loop.titleBack", { min }) : tt(minKey, { what: capitalize(what), min });
+    const subTxt =
+      state === "back"
+        ? tt("loop.subBack")
+        : state === "sang"
+          ? tl("loop.subSang", null, trackId)
+          : tt(trackId === "vocal" ? "loop.subVocal" : "loop.sub");
+    const restTxt = restLine(sum);
+    // Headline and button only: the kicker and title already say what today
+    // is. The line shows for the one thing only it says, a rest day spent.
+    el.sub.textContent = restTxt || subTxt;
+    el.sub.hidden = !restTxt;
+    if (el.label) el.label.textContent = tt("loop.label." + tier, { min });
+    if (el.cardTitle) el.cardTitle.textContent = capitalize(stepsTxt);
+    const whyKey = tier === "min" ? "loop.whyMin" : tier === "ess" ? "loop.whyEss" : "loop.whyClass";
+    if (el.why) el.why.textContent = tl(whyKey, null, trackId);
+    // The button says which size it starts, so another size is never a
+    // blind second tap: "▶ Empezar básicos" over "Esencial · 10 min".
+    el.cta.innerHTML = `<span class="cta-go">${esc(tt("loop.cta"))}</span> <span class="cta-size">${esc(
+      tt("loop.tierChip", { name: tierName, min })
+    )}</span>`;
+  }
+
+  /**
+   * The loop's next step on the start panel, for a learner with practice days
+   * and no guided routine open.
+   * @returns {boolean} true when the loop took over the panel's main copy
+   */
+  function renderNextStep(D, sum, sub) {
+    const trackId = hooks.getTab?.() === "vocal" ? "vocal" : "singing";
+    // A comeback is offered the smallest step back in, unless a size was picked today.
+    const tier = offeredTier(sum);
+    const r = routine(trackId, tier);
+    if (!r) return false;
+    renderTiers(tier, trackId);
+
+    const el = homeParts(sub);
+    if (!el) return false;
+    el.card.hidden = false;
+    const min = Math.max(1, Math.round(r.totalSec / 60));
+    const what = list(r.order.slice(0, 2).map(short));
+    // A short routine lists each step with its time; the headline already
+    // names the steps, so the card says how long each one runs.
+    const clock = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+    const stepsTxt =
+      r.order.length <= 3
+        ? r.order.map((id) => `${short(id)} ${clock(r.sec[id] || 0)}`).join(" → ")
+        : tt("loop.stepsN", { n: r.order.length, what: r.order.slice(0, 3).map(short).join(", ") });
+    const tierName = tt("loop.tier." + tier);
+    const minKey = tier === "min" ? "loop.titleMin" : tier === "ess" ? "loop.titleEss" : "loop.titleClass";
+
+    const state = loopState(sum);
+    el.card.dataset.loop = state;
+    el.card.classList.toggle("is-done", state === "done");
+
+    const x = { D, sum, trackId, tier, r, min, what, stepsTxt, tierName, minKey };
+    if (state === "done") renderDoneCopy(el, x);
+    else renderGoCopy(el, x, state);
+    // Done for today: the button stays, quietly. Nothing on the page asks for more.
+    el.cta.classList.toggle("btn-practice", state !== "done");
+    el.cta.classList.toggle("btn-ghost", state === "done");
+    el.cta.onclick = () => startTier(state === "done" ? preferredTier() : tier);
+    return true;
+  }
+
   /**
    * Draw the loop into the start panel.
    * @returns {boolean} true when the loop took over the panel's main copy
@@ -1131,89 +1289,7 @@
       if (tiers) tiers.hidden = true;
       return false;
     }
-    const trackId = hooks.getTab?.() === "vocal" ? "vocal" : "singing";
-    const comeback = !sum.todayDone && sum.comeback;
-    // A comeback is always offered the smallest step back in.
-    const tier = comeback ? "min" : preferredTier();
-    const r = routine(trackId, tier);
-    if (!r) return false;
-    renderTiers(tier, trackId);
-
-    const kicker = $("#start-kicker");
-    const title = $("#start-title");
-    const card = $("#next-step-card");
-    const label = $("#next-step-label");
-    const cardTitle = $("#next-step-title");
-    const why = $("#next-step-why");
-    const cta = $("#btn-next-step");
-    if (!kicker || !title || !sub || !card || !cta) return false;
-    card.hidden = false;
-    const min = Math.max(1, Math.round(r.totalSec / 60));
-    const what = list(r.order.slice(0, 2).map(short));
-    // A short routine lists each step with its time; the headline already
-    // names the steps, so the card says how long each one runs.
-    const clock = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
-    const stepsTxt =
-      r.order.length <= 3
-        ? r.order.map((id) => `${short(id)} ${clock(r.sec[id] || 0)}`).join(" → ")
-        : tt("loop.stepsN", { n: r.order.length, what: r.order.slice(0, 3).map(short).join(", ") });
-    const tierName = tt("loop.tier." + tier);
-    const minKey = tier === "min" ? "loop.titleMin" : tier === "ess" ? "loop.titleEss" : "loop.titleClass";
-
-    let state = "go";
-    if (sum.basicsToday) state = "done";
-    else if (comeback) state = "back";
-    else if (sum.todayDone) state = "sang";
-    card.dataset.loop = state;
-    card.classList.toggle("is-done", state === "done");
-
-    if (state === "done") {
-      kicker.textContent = tt("loop.kickerDone");
-      title.textContent = tt("loop.titleDone");
-      const teaser = tomorrowTeaser(trackId);
-      sub.textContent = tl(
-        "loop.subDone",
-        {
-          min: Math.max(1, Math.round((D.read().days[sum.today]?.sec || 0) / 60)),
-          tomorrow: teaser ? tt("loop.tomorrowEss", { what: teaser }) : ""
-        },
-        trackId
-      ).trim();
-      if (label) label.textContent = tt("loop.labelDone");
-      if (cardTitle) cardTitle.textContent = tt("loop.tierChip", { name: tierName, min });
-      if (why) why.textContent = tt("loop.whyDone");
-      cta.textContent = tt("loop.ctaAgain", { tier: tierName });
-    } else {
-      const kickerKey = state === "back" ? "loop.kickerBack" : state === "sang" ? "loop.kickerSang" : "loop.kicker";
-      kicker.textContent = tl(kickerKey, null, trackId);
-      title.textContent =
-        state === "back" ? tt("loop.titleBack", { min }) : tt(minKey, { what: capitalize(what), min });
-      const subTxt =
-        state === "back"
-          ? tt("loop.subBack")
-          : state === "sang"
-            ? tl("loop.subSang", null, trackId)
-            : tt(trackId === "vocal" ? "loop.subVocal" : "loop.sub");
-      const restTxt = restLine(sum);
-      // Headline and button only: the kicker and title already say what today
-      // is. The line shows for the one thing only it says, a rest day spent.
-      sub.textContent = restTxt || subTxt;
-      sub.hidden = !restTxt;
-      if (label) label.textContent = tt("loop.label." + tier, { min });
-      if (cardTitle) cardTitle.textContent = capitalize(stepsTxt);
-      const whyKey = tier === "min" ? "loop.whyMin" : tier === "ess" ? "loop.whyEss" : "loop.whyClass";
-      if (why) why.textContent = tl(whyKey, null, trackId);
-      // The button says which size it starts, so another size is never a
-      // blind second tap: "▶ Empezar básicos" over "Esencial · 10 min".
-      cta.innerHTML = `<span class="cta-go">${esc(tt("loop.cta"))}</span> <span class="cta-size">${esc(
-        tt("loop.tierChip", { name: tierName, min })
-      )}</span>`;
-    }
-    // Done for today: the button stays, quietly. Nothing on the page asks for more.
-    cta.classList.toggle("btn-practice", state !== "done");
-    cta.classList.toggle("btn-ghost", state === "done");
-    cta.onclick = () => startTier(state === "done" ? preferredTier() : tier);
-    return true;
+    return renderNextStep(D, sum, sub);
   }
 
   function capitalize(s) {
@@ -1243,26 +1319,8 @@
     closeOpen.cards?.();
   }
 
-  function showDone(o) {
-    const modal = $("#loop-done");
-    if (!modal) return;
-    const { sum } = o;
-    const tierName = tt("loop.tier." + o.tier);
-    $("#loop-done-kicker").textContent = tt("loop.done.kicker", { tier: tierName });
-    $("#loop-done-title").textContent = tt(o.comeback ? "loop.done.titleBack" : "loop.done.title");
-    const count = $("#loop-done-count");
-    count.innerHTML = `<strong class="loop-pop">${sum.practiceDays}</strong><span>${esc(
-      sum.practiceDays === 1 ? tl("loop.day1", null, o.track) : tl("loop.days", null, o.track)
-    )}</span>`;
-    const week = $("#loop-done-week");
-    week.innerHTML = weekHtml(sum, o.track);
-    week.setAttribute("aria-label", tt("loop.weekAria"));
-    const L = readLoop();
-    const { lo, hi } = goalRange(L.goal);
-    $("#loop-done-line").innerHTML = `<span>${esc(streakLine(sum))}</span><span>${esc(
-      sum.weekDays >= lo ? tt("loop.goalMet", { n: sum.weekDays }) : tt("loop.goal", { n: sum.weekDays, lo, hi })
-    )}</span>`;
-
+  /** The completion card's extra lines: a comeback, a milestone, today's surprise. */
+  function doneExtras(o, sum, L) {
     const extra = [];
     if (o.comeback) {
       const n = L.comebacks.length;
@@ -1294,28 +1352,11 @@
         </div>`);
       }
     }
-    $("#loop-done-extra").innerHTML = extra.join("");
-    const teaser = tomorrowTeaser(o.track);
-    $("#loop-done-tomorrow").textContent =
-      o.tier === "ess" && teaser
-        ? tt("loop.tomorrowEss", { what: teaser })
-        : tt("loop.tomorrowSame", { min: tierMinutes(o.track, "min") });
+    return extra;
+  }
 
-    const close = $("#loop-done-close");
-    close.textContent = tt("loop.done.close");
-    const remind = $("#loop-done-remind");
-    const remindersOn = !!global.VTReminders?.getConfig?.()?.enabled;
-    if (remind) {
-      remind.hidden = remindersOn;
-      remind.textContent = tt("loop.done.remind");
-    }
-    // The card says what today earned; a toast from the last step (a hold
-    // logged) would sit on its top line, which on a phone turned sideways is
-    // the milestone.
-    hooks.hideToast?.();
-    modal.hidden = false;
-    modal.style.display = "";
-    global.VTFocusTrap?.activate?.(modal, { initialFocus: close });
+  /** How the completion card closes: its button, the reminder button, Escape, or a click on the backdrop. */
+  function bindDoneClose(modal, close, remind) {
     const finish = (then) => {
       closeOpen.done = null;
       modal.hidden = true;
@@ -1344,6 +1385,58 @@
     modal.onclick = (e) => {
       if (e.target === modal) finish();
     };
+  }
+
+  function showDone(o) {
+    const modal = $("#loop-done");
+    if (!modal) return;
+    const { sum } = o;
+    const tierName = tt("loop.tier." + o.tier);
+    $("#loop-done-kicker").textContent = tt("loop.done.kicker", { tier: tierName });
+    $("#loop-done-title").textContent = tt(o.comeback ? "loop.done.titleBack" : "loop.done.title");
+    const count = $("#loop-done-count");
+    count.innerHTML = `<strong class="loop-pop">${sum.practiceDays}</strong><span>${esc(
+      sum.practiceDays === 1 ? tl("loop.day1", null, o.track) : tl("loop.days", null, o.track)
+    )}</span>`;
+    const week = $("#loop-done-week");
+    week.innerHTML = weekHtml(sum, o.track);
+    week.setAttribute("aria-label", tt("loop.weekAria"));
+    const L = readLoop();
+    const { lo, hi } = goalRange(L.goal);
+    $("#loop-done-line").innerHTML = `<span>${esc(streakLine(sum))}</span><span>${esc(
+      sum.weekDays >= lo ? tt("loop.goalMet", { n: sum.weekDays }) : tt("loop.goal", { n: sum.weekDays, lo, hi })
+    )}</span>`;
+
+    const extra = doneExtras(o, sum, L);
+    $("#loop-done-extra").innerHTML = extra.join("");
+    const teaser = tomorrowTeaser(o.track);
+    $("#loop-done-tomorrow").textContent =
+      o.tier === "ess" && teaser
+        ? tt("loop.tomorrowEss", { what: teaser })
+        : tt("loop.tomorrowSame", { min: tierMinutes(o.track, "min") });
+
+    const close = $("#loop-done-close");
+    close.textContent = tt("loop.done.close");
+    const remind = $("#loop-done-remind");
+    const remindersOn = !!global.VTReminders?.getConfig?.()?.enabled;
+    if (remind) {
+      remind.hidden = remindersOn;
+      remind.textContent = tt("loop.done.remind");
+    }
+    // The card says what today earned; a toast from the last step (a hold
+    // logged) would sit on its top line, which on a phone turned sideways is
+    // the milestone.
+    hooks.hideToast?.();
+    modal.hidden = false;
+    modal.style.display = "";
+    // The card opens over the exercise screen, whose button is gone by the time
+    // it closes: focus goes back to home's next step, or its heading.
+    global.VTFocusTrap?.activate?.(modal, {
+      initialFocus: close,
+      returnFocus: () => $("#btn-next-step") || $("#start-title"),
+      fallbackFocus: () => $("#start-title")
+    });
+    bindDoneClose(modal, close, remind);
   }
 
   /* —— The collection —— */

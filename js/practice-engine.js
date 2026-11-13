@@ -27,8 +27,13 @@
   /** Base thresholds at sensitivity = 5 (mid). Higher sensitivity lowers them. */
   const VOICE_RMS_BASE = 0.012;
   const HOLD_RMS_BASE = 0.008;
+  /**
+   * Pitches a frame may report: a bass's A1 (55 Hz), sung up to 90 cents
+   * flat, up to where detectPitch stops (its shortest lag, 1500 Hz at 48 kHz
+   * and 1521 Hz at 44.1 kHz) with a margin
+   */
   const PITCH_MIN = 52;
-  const PITCH_MAX = 1060;
+  const PITCH_MAX = 1600;
   // WebKit can say AudioContext.state === "running" while currentTime is
   // frozen. In that state the analyser can repeat one stale voiced buffer.
   // These are watchdog engineering thresholds, not acoustic guarantees.
@@ -880,6 +885,14 @@
       return measured;
     }
 
+    /**
+     * A frame's `clarity`: how periodic the mic's own samples are, 0–1, at
+     * any level (null without VTPitchUtils). The frame's own note on it, in
+     * _loop (kept as written so its legacy exemption holds), predates the
+     * NSDF detector; with it `rawFreq` says less than clarity: it is null
+     * under −40 dBFS however periodic the sound, and above it a fan or a
+     * rumble still gets a pitch on about 1 % of frames.
+     */
     _clarity(buf, sampleRate) {
       if (global.VTPitchUtils && global.VTPitchUtils.clarity) {
         return global.VTPitchUtils.clarity(buf, sampleRate);

@@ -16,6 +16,18 @@
   "use strict";
 
   const LS_REV = "vt_sync_rev_v1";
+  /**
+   * Which account this browser's practice was last synced with. A browser is
+   * often shared, so the next account to sign in here must not be handed the
+   * last one's practice, nor push it to itself, without being asked.
+   */
+  const LS_OWNER = "vt_sync_owner_v1";
+  /**
+   * Practice put aside on this browser when somebody chose to use only their
+   * own account's copy: [{owner, at, bags: {profileId: bag}}]. It stays on this
+   * browser and is merged back when its account signs in here again.
+   */
+  const LS_ASIDE = "vt_sync_aside_v1";
   /** Most entries kept per exercise, matching the browser's own history cap. */
   const HISTORY_CAP = 50;
   /** Attempts at the read-merge-write cycle before giving up until next time. */
@@ -55,6 +67,9 @@
   let running = null;
   let runningFor = null;
   let lastError = null;
+  // The worker's own word for a refused write ("profile_limit"), so the panel
+  // can say why instead of promising a retry that will not come.
+  let refusedReason = null;
   let lastSyncedAt = null;
   let failures = 0;
 
@@ -69,9 +84,40 @@
   // Kept in memory only, so it can never be a number left behind by another
   // account or another tab.
   const confirmed = new Map();
+  // Profiles whose last write the worker turned down (a fourth profile), with
+  // the version current when that cycle began and the worker's reason. The
+  // same write would be turned down again, so no automatic sync (a save's
+  // timer still pending, the connection coming back, the tab shown again)
+  // sends it until the profile changes here; "Sincronizar ahora" still asks.
+  // Kept in memory: the next visit tries once, in case the account has room.
+  const refusals = new Map();
 
   function unpushed(profileId) {
     return (changedAt.get(profileId) || 0) > (pushedAt.get(profileId) || 0);
+  }
+
+  /**
+   * A profile's refusal while it still stands: nothing written to the profile
+   * since its cycle began. A change made while that cycle was out may not be
+   * in what was turned down, so it ends the refusal and is sent.
+   * @param {string} profileId Profile.
+   * @returns {{before: number, reason: string|null}|null} The refusal, or null.
+   */
+  function standingRefusal(profileId) {
+    const refusal = refusals.get(profileId);
+    return refusal && (changedAt.get(profileId) || 0) <= refusal.before ? refusal : null;
+  }
+
+  /**
+   * Remember a cycle that was turned down, or forget the refusal once the
+   * profile went up.
+   * @param {string} profileId Profile the cycle was for.
+   * @param {{ok: boolean, reason?: string}|null} result The cycle's result.
+   * @param {number} before The version current when the cycle began.
+   */
+  function noteRefusal(profileId, result, before) {
+    if (result && result.ok) refusals.delete(profileId);
+    else if (result && result.reason === "refused") refusals.set(profileId, { before, reason: refusedReason });
   }
 
   /** Whether a profile is no longer on this browser (deleted). */
@@ -192,6 +238,140 @@
     } catch {
       return false;
     }
+  }
+
+  /** The signed-in account's id, once /v1/me has said; null before. */
+  function accountId() {
+    try {
+      return global.VTAccount?.getState?.().account?.id || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function readOwner() {
+    try {
+      return localStorage.getItem(LS_OWNER) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeOwner(id) {
+    if (!id) return;
+    try {
+      localStorage.setItem(LS_OWNER, id);
+    } catch {
+      /* private mode: every sync then asks again, which is the safe side */
+    }
+  }
+
+  /** The put-aside list, dropping anything malformed. */
+  function readAside() {
+    try {
+      const raw = localStorage.getItem(LS_ASIDE);
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list)
+        ? list.filter((e) => e && typeof e.owner === "string" && e.bags && typeof e.bags === "object")
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** @returns {boolean} Whether the list was stored. */
+  function writeAside(list) {
+    try {
+      if (!list.length) localStorage.removeItem(LS_ASIDE);
+      else localStorage.setItem(LS_ASIDE, JSON.stringify(list));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Every profile on this browser. */
+  function localProfileIds() {
+    const list = global.VTStorage.getProfiles?.().list;
+    return Array.isArray(list) && list.length ? list.map((p) => p.id) : [global.VTStorage.getActiveProfileId()];
+  }
+
+  /**
+   * Whether a bag holds anything somebody did: a take, a day practised, a
+   * plan, a goal, a review. A first visit writes an empty day ledger, which
+   * is nobody's practice.
+   */
+  function bagHasPractice(bag) {
+    if (!bag) return false;
+    const rows = Object.values(bag.progress || {});
+    if (rows.some((r) => r && ((r.history || []).length || Number(r.completedCount) > 0))) return true;
+    if ((bag.reviews || []).length || (bag.holdLogs || []).length) return true;
+    if (bag.weekPlan || bag.goals || bag.loop) return true;
+    if (bag.achievements && Object.values(bag.achievements).some(Boolean)) return true;
+    return !!(bag.days && bag.days.days && Object.keys(bag.days.days).length);
+  }
+
+  function deviceHasPractice() {
+    return localProfileIds().some((id) => bagHasPractice(global.VTStorage.readSyncBag(id)));
+  }
+
+  /**
+   * Whose this browser's practice is, as far as a sync may act on it.
+   *   mine     the signed-in account synced it last; or nobody has (practice
+   *            from before any sign-in, which merges on the first sign-in as
+   *            it always has); or there is no practice here at all.
+   *   other    another account synced it last and it holds practice. Nothing
+   *            is merged or sent until the person signed in chooses.
+   *   unknown  an owner is on file and the account has not said who it is.
+   * @returns {{state: "mine"|"other"|"unknown", owner: string|null, me: string|null}} Answer.
+   */
+  function ownerState() {
+    const owner = readOwner();
+    const me = accountId();
+    if (!owner) return { state: "mine", owner, me };
+    if (!me) return { state: "unknown", owner, me };
+    if (owner === me || !deviceHasPractice()) return { state: "mine", owner, me };
+    return { state: "other", owner, me };
+  }
+
+  /** True while the signed-in account has to choose before anything syncs. */
+  function otherOwner() {
+    try {
+      return isAvailable() && ownerState().state === "other";
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Merge back whatever was put aside for this account on this browser, and
+   * mark it to be pushed: it is that account's own practice.
+   * @param {string} me Signed-in account id.
+   * @returns {boolean} Whether any profile got practice back.
+   */
+  function restoreAside(me) {
+    const list = readAside();
+    const entry = list.find((e) => e.owner === me);
+    if (!entry) return false;
+    const left = {};
+    let restored = false;
+    for (const [profileId, bag] of Object.entries(entry.bags)) {
+      // A profile no longer on this browser keeps its copy aside.
+      if (deleted(profileId)) {
+        left[profileId] = bag;
+        continue;
+      }
+      const merged = mergeBag(global.VTStorage.readSyncBag(profileId), bag);
+      global.VTStorage.writeSyncBag(merged, profileId);
+      version += 1;
+      changedAt.set(profileId, version);
+      dataChanged(profileId);
+      restored = true;
+    }
+    const rest = list.filter((e) => e !== entry);
+    if (Object.keys(left).length) rest.push({ ...entry, bags: left });
+    writeAside(rest);
+    return restored;
   }
 
   /**
@@ -387,6 +567,111 @@
   }
 
   /**
+   * Record the signed-in account as this browser's owner after a write it
+   * accepted. If /v1/me has not answered yet, ask it, and record the answer
+   * only if the same session is still the one signed in.
+   */
+  function noteOwner() {
+    const me = accountId();
+    if (me) {
+      writeOwner(me);
+      return;
+    }
+    const token = global.VTAccount?.getSessionToken?.();
+    Promise.resolve(global.VTAccount?.refresh?.())
+      .then(() => {
+        const id = accountId();
+        if (id && !readOwner() && global.VTAccount?.getSessionToken?.() === token) writeOwner(id);
+      })
+      .catch(() => {});
+  }
+
+  /**
+   * What a cycle stops on after reading the account's copy, or null to merge it.
+   * @param {object} pulled The GET's answer.
+   * @param {string} profileId Whose copy.
+   * @returns {{ok: false, reason: string}|null} Result.
+   */
+  function pullStop(pulled, profileId) {
+    if (pulled.status === 401) return { ok: false, reason: "signed_out" };
+    if (!pulled.ok) {
+      // Usually the whole of an offline sync: the read fails before any
+      // write is tried. Say so, or the panel keeps "saved" from last time.
+      lastError = pulled.offline ? "offline" : "error";
+      return { ok: false, reason: lastError };
+    }
+    // Deleted while the read was out: what came back is nobody's here now.
+    if (deleted(profileId)) return { ok: false, reason: "deleted" };
+    return null;
+  }
+
+  /**
+   * Merge the account's copy into this profile's bag and keep the result here.
+   * @param {string} profileId Whose bag.
+   * @param {object} pulled The GET's answer.
+   * @returns {{serverRev: number, seen: number, merged: object}} The revision
+   *   read, the local version merged, and what to push.
+   */
+  function mergePulled(profileId, pulled) {
+    const serverRev = Number(pulled.data?.rev) || 0;
+    const seen = version;
+    const local = localBag(profileId);
+    const merged = mergeBag(local, pulled.data?.doc || null);
+
+    // Write the merged result locally first: even if the push fails, this
+    // device now holds everything both sides knew.
+    global.VTStorage.writeSyncBag(merged, profileId);
+    if (recordOf(merged) !== recordOf(local)) dataChanged(profileId);
+    return { serverRev, seen, merged };
+  }
+
+  /**
+   * The account took the write: remember the revision and what it holds.
+   * @param {string} profileId Whose bag.
+   * @param {object} pushed The PUT's answer.
+   * @param {{serverRev: number, seen: number, merged: object}} step What mergePulled() returned.
+   * @returns {{ok: true, rev: number|null}} Result.
+   */
+  function pushAccepted(profileId, pushed, { serverRev, seen, merged }) {
+    noteOwner();
+    writeRev(profileId, Number(pushed.data?.rev) || serverRev + 1);
+    confirmed.set(profileId, { rev: Number(pushed.data?.rev) || serverRev + 1, doc: merged });
+    pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
+    lastError = null;
+    refusedReason = null;
+    lastSyncedAt = new Date().toISOString();
+    emit();
+    return { ok: true, rev: Number(pushed.data?.rev) || null };
+  }
+
+  /**
+   * The account did not take the write: the result, or null when somebody else
+   * wrote first and the cycle merges again.
+   * @param {object} pushed The PUT's answer.
+   * @returns {{ok: false, reason: string}|null} Result.
+   */
+  function pushFailed(pushed) {
+    if (pushed.status === 401) return { ok: false, reason: "signed_out" };
+    if (pushed.status === 409) return null; // somebody else wrote; merge again
+    if (pushed.status === 413) {
+      lastError = "too_large";
+      emit();
+      return { ok: false, reason: "too_large" };
+    }
+    if (pushed.status === 400) {
+      // Turned down for what it is (a fourth profile on the account), not
+      // for when it was sent: the same write would be turned down again.
+      lastError = "refused";
+      refusedReason = pushed.data?.reason || null;
+      emit();
+      return { ok: false, reason: "refused" };
+    }
+    lastError = pushed.offline ? "offline" : "error";
+    emit();
+    return { ok: false, reason: lastError };
+  }
+
+  /**
    * Run one read-merge-write cycle for one profile.
    *
    * The server's `409` is the whole concurrency story: it means the stored
@@ -419,8 +704,28 @@
     // written back would leave keys behind that no profile owns.
     if (deleted(profileId)) return { ok: false, reason: "deleted" };
 
+    // Every change up to here can be in what this cycle sends; one made while
+    // it is out may not be (see standingRefusal).
+    const before = version;
     runningFor = profileId;
     running = (async () => {
+      // Whose practice this is comes first: nothing of another account's is
+      // read into, merged with or sent to this one until somebody chooses.
+      let who = ownerState();
+      if (who.state === "unknown") {
+        const me = await global.VTAccount.refresh();
+        if (!isAvailable()) return { ok: false, reason: "signed_out" };
+        who = ownerState();
+        if (who.state === "unknown") {
+          lastError = me && me.reason === "offline" ? "offline" : "error";
+          return { ok: false, reason: lastError };
+        }
+      }
+      if (who.state === "other") return { ok: false, reason: "other_owner" };
+      if (who.me) {
+        writeOwner(who.me);
+        restoreAside(who.me);
+      }
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
         const pulled = await global.VTAccount.request(
           "GET",
@@ -428,58 +733,19 @@
           null,
           { timeoutMs: REQUEST_TIMEOUT_MS }
         );
-        if (pulled.status === 401) return { ok: false, reason: "signed_out" };
-        if (!pulled.ok) {
-          // Usually the whole of an offline sync: the read fails before any
-          // write is tried. Say so, or the panel keeps "saved" from last time.
-          lastError = pulled.offline ? "offline" : "error";
-          return { ok: false, reason: lastError };
-        }
-        // Deleted while the read was out: what came back is nobody's here now.
-        if (deleted(profileId)) return { ok: false, reason: "deleted" };
+        const stop = pullStop(pulled, profileId);
+        if (stop) return stop;
 
-        const serverRev = Number(pulled.data?.rev) || 0;
-        const seen = version;
-        const local = localBag(profileId);
-        const merged = mergeBag(local, pulled.data?.doc || null);
-
-        // Write the merged result locally first: even if the push fails, this
-        // device now holds everything both sides knew.
-        global.VTStorage.writeSyncBag(merged, profileId);
-        if (recordOf(merged) !== recordOf(local)) dataChanged(profileId);
-
+        const step = mergePulled(profileId, pulled);
         const pushed = await global.VTAccount.request(
           "PUT",
           "/v1/me/progress",
-          { profileId, doc: merged, baseRev: serverRev },
+          { profileId, doc: step.merged, baseRev: step.serverRev },
           { timeoutMs: REQUEST_TIMEOUT_MS }
         );
-        if (pushed.ok) {
-          writeRev(profileId, Number(pushed.data?.rev) || serverRev + 1);
-          confirmed.set(profileId, { rev: Number(pushed.data?.rev) || serverRev + 1, doc: merged });
-          pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
-          lastError = null;
-          lastSyncedAt = new Date().toISOString();
-          emit();
-          return { ok: true, rev: Number(pushed.data?.rev) || null };
-        }
-        if (pushed.status === 401) return { ok: false, reason: "signed_out" };
-        if (pushed.status === 409) continue; // somebody else wrote; merge again
-        if (pushed.status === 413) {
-          lastError = "too_large";
-          emit();
-          return { ok: false, reason: "too_large" };
-        }
-        if (pushed.status === 400) {
-          // Turned down for what it is (a fourth profile on the account), not
-          // for when it was sent: the same write would be turned down again.
-          lastError = "refused";
-          emit();
-          return { ok: false, reason: "refused" };
-        }
-        lastError = pushed.offline ? "offline" : "error";
-        emit();
-        return { ok: false, reason: lastError };
+        if (pushed.ok) return pushAccepted(profileId, pushed, step);
+        const failed = pushFailed(pushed);
+        if (failed) return failed;
       }
       lastError = "conflict";
       emit();
@@ -493,6 +759,7 @@
     } finally {
       running = null;
       runningFor = null;
+      noteRefusal(profileId, result, before);
       retryIfFailed(result);
       // The emits above run while `running` is still set, so every listener
       // was last told "syncing" and the account panel said "Guardando…" after
@@ -543,6 +810,9 @@
    * large) does not keep the others back; only one every profile would meet
    * alike, offline or signed out, ends the round. A profile that did go up
    * after one that failed does not make the panel say all is saved.
+   * A profile whose write was turned down and has not changed since is not
+   * sent again: it would be turned down again. It still counts as not saved,
+   * and the panel goes on saying why.
    * @returns {Promise<void>}
    */
   async function syncScheduled() {
@@ -551,13 +821,17 @@
     for (const id of [active, ...otherUnpushed(active)]) {
       // Deleted while an earlier profile synced.
       if (deleted(id)) continue;
-      const res = await syncNow(id);
+      const res = standingRefusal(id) ? { ok: false, reason: "refused" } : await syncNow(id);
       if (res.ok || res.reason === "deleted") continue;
       if (STOPS_ALL.has(res.reason)) return;
-      failed = failed || res.reason;
+      // Waiting for the owner question is not a failed save: the panel asks it.
+      if (res.reason === "other_owner") continue;
+      failed = failed || { reason: res.reason, id };
     }
     if (failed && !lastError) {
-      lastError = failed;
+      lastError = failed.reason;
+      // A profile that went up later in the round cleared why; it still holds.
+      refusedReason = failed.reason === "refused" ? refusals.get(failed.id)?.reason || null : null;
       emit();
     }
   }
@@ -577,18 +851,20 @@
    * lost: the changes are still here, and the next visit's sync merges them.
    *
    * @param {{unloading?: boolean}} [opts] Whether the page is going away.
-   * @returns {void}
+   * @returns {Promise<void>|void} When not unloading, settles once what was
+   *   waiting has been tried.
    */
   function flush(opts) {
-    if (!isAvailable()) return;
+    if (!isAvailable()) return Promise.resolve();
     if (!(opts && opts.unloading)) {
-      if (!timer) return;
+      // Signing out waits on this, so the last changes reach the account that
+      // made them before the session is gone.
+      if (!timer) return running ? running.then(() => {}, () => {}) : Promise.resolve();
       clearTimeout(timer);
       timer = null;
-      syncScheduled().catch(() => {
+      return syncScheduled().catch(() => {
         /* reported through getStatus */
       });
-      return;
     }
     const active = global.VTStorage.getActiveProfileId();
     for (const profileId of [active, ...otherUnpushed(active)]) {
@@ -622,12 +898,16 @@
   /**
    * Current sync status, synchronously.
    * @returns {{available: boolean, syncing: boolean, lastSyncedAt: string|null,
-   *            lastError: string|null, rev: number}} Status.
+   *            lastError: string|null, refusedReason: string|null, rev: number,
+   *            otherOwner: boolean}} Status. `otherOwner`: this browser holds
+   *            another account's practice and the one signed in has to choose.
    */
   function getStatus() {
     let rev = 0;
     try {
-      rev = revFor(global.VTStorage.getActiveProfileId());
+      // A revision on file is only this account's if this account synced here.
+      const owner = readOwner();
+      if (!owner || owner === accountId()) rev = revFor(global.VTStorage.getActiveProfileId());
     } catch {
       rev = 0;
     }
@@ -636,7 +916,9 @@
       syncing: !!running,
       lastSyncedAt,
       lastError,
-      rev
+      refusedReason,
+      rev,
+      otherOwner: otherOwner()
     };
   }
 
@@ -644,11 +926,12 @@
    * Pull the account's copy over this browser's, discarding local state.
    * Used deliberately from the account panel ("use my saved progress"), never
    * automatically — losing local work should always be somebody's choice.
+   * @param {string} [id] Profile to pull; the active one when omitted.
    * @returns {Promise<{ok: boolean, reason?: string}>} Result.
    */
-  async function pullOverwrite() {
+  async function pullOverwrite(id) {
     if (!isAvailable()) return { ok: false, reason: "signed_out" };
-    const profileId = global.VTStorage.getActiveProfileId();
+    const profileId = id || global.VTStorage.getActiveProfileId();
     const pulled = await global.VTAccount.request(
       "GET",
       `/v1/me/progress?profileId=${encodeURIComponent(profileId)}`,
@@ -670,11 +953,81 @@
     return { ok: true };
   }
 
+  /**
+   * "Añadir la práctica de este dispositivo a esta cuenta": the account signed
+   * in takes this browser's practice as its own, and it syncs as any other.
+   * @returns {Promise<{ok: boolean, reason?: string}>} The active profile's sync.
+   */
+  async function addDeviceToAccount() {
+    const me = accountId();
+    if (!isAvailable() || !me) return { ok: false, reason: "signed_out" };
+    writeOwner(me);
+    if (lastError === "other_owner") lastError = null;
+    emit();
+    const active = global.VTStorage.getActiveProfileId();
+    const ids = localProfileIds().filter((id) => id === active || bagHasPractice(global.VTStorage.readSyncBag(id)));
+    let first = null;
+    for (const id of [active, ...ids.filter((x) => x !== active)]) {
+      const res = await syncNow(id);
+      if (!first) first = res;
+    }
+    return first || { ok: true };
+  }
+
+  /**
+   * "Usar solo la de mi cuenta": this browser's practice is put aside, on this
+   * browser, under the account that last synced it, and the signed-in
+   * account's own copy is brought down in its place, with whatever this
+   * account itself had put aside here merged back in. Nothing is cleared unless
+   * the copy put aside was stored first.
+   * @returns {Promise<{ok: boolean, reason?: string}>} Result.
+   */
+  async function useAccountOnly() {
+    const me = accountId();
+    if (!isAvailable() || !me) return { ok: false, reason: "signed_out" };
+    const owner = readOwner();
+    const ids = localProfileIds();
+    if (owner && owner !== me) {
+      const bags = {};
+      ids.forEach((id) => {
+        const bag = global.VTStorage.readSyncBag(id);
+        if (bagHasPractice(bag)) bags[id] = bag;
+      });
+      const list = readAside();
+      const prev = list.find((e) => e.owner === owner);
+      if (prev) {
+        for (const [id, bag] of Object.entries(prev.bags)) bags[id] = bags[id] ? mergeBag(bags[id], bag) : bag;
+      }
+      const next = list.filter((e) => e.owner !== owner).concat([{ owner, at: new Date().toISOString(), bags }]);
+      if (!writeAside(next)) return { ok: false, reason: "storage" };
+      ids.forEach((id) => {
+        global.VTStorage.clearProfileData(id);
+        pushedAt.set(id, version);
+      });
+    }
+    writeOwner(me);
+    if (lastError === "other_owner") lastError = null;
+    let result = { ok: true };
+    for (const id of ids) {
+      const res = await pullOverwrite(id);
+      if (!res.ok && res.reason !== "empty" && result.ok) result = res;
+    }
+    // After the pull, never before: a pull overwrites, and what this account
+    // left here may hold takes that never reached it. Restoring merges them
+    // into the account's copy, and they are sent without waiting for a save.
+    if (restoreAside(me)) schedule();
+    dataChanged(global.VTStorage.getActiveProfileId());
+    emit();
+    return result;
+  }
+
   global.VTSync = {
     syncNow,
     schedule,
     flush,
     pullOverwrite,
+    addDeviceToAccount,
+    useAccountOnly,
     getStatus,
     onChange,
     onDataChange,
@@ -698,7 +1051,16 @@
     // Signing in on a fresh device is the moment a sync is most wanted.
     global.VTAccount.onChange((state) => {
       if (state.signedIn) schedule();
-      else confirmed.clear();
+      else {
+        confirmed.clear();
+        // "Guardado en tu cuenta" was about the account that just left.
+        lastError = null;
+        refusedReason = null;
+        // What that account turned down says nothing about the next one's.
+        refusals.clear();
+        lastSyncedAt = null;
+        failures = 0;
+      }
     });
     // The account may have answered while this file was still downloading
     // (its check starts as account.js runs): that sign-in was announced

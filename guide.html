@@ -18,7 +18,7 @@
       content="Guía de uso de Estudio Vocal: cómo practicar, cómo leer la autopista de afinación, qué significan los números y cómo guardar tu progreso."
     />
     <title>Guía de uso · Estudio Vocal</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261112a" />
+    <link rel="stylesheet" href="css/styles.css?v=20261113b" />
     <style>
       .guide-wrap {
         max-width: 46rem;
@@ -174,7 +174,7 @@
     <link rel="stylesheet" href="css/site-version.css?v=20261111c" />
     <!-- Paints the visitor's design of the site before the first frame
          (js/site-version.js); a file because the policy allows no inline script. -->
-    <script src="js/site-version.js?v=20261111a"></script>
+    <script src="js/site-version.js?v=20261113a"></script>
   </head>
   <body>
     <header class="app-header">
@@ -198,7 +198,9 @@
       <h1>Guía de uso</h1>
       <p>
         Todo lo que hace este sitio, explicado en orden. Si solo quieres empezar, lee
-        <a href="#primera">Tu primera práctica</a> y vuelve cuando algo no se entienda.
+        <a href="#primera">Tu primera práctica</a> y vuelve cuando algo no se entienda. Si algo
+        te duele al practicar, o la voz se pone ronca, lee antes
+        <a href="#voz">Cuida tu voz</a>.
       </p>
 
       <nav class="guide-toc" aria-label="Contenido">
@@ -218,6 +220,7 @@
           <li><a href="#confunde">Cosas que confunden</a></li>
           <li><a href="#pro">Cuenta y Pro</a></li>
           <li><a href="#privacidad">Dónde viven tus datos</a></li>
+          <li><a href="#voz">Cuida tu voz</a></li>
         </ol>
       </nav>
 
@@ -284,7 +287,8 @@
       </ol>
       <p class="guide-note">
         Si es tu primera vez y no quieres decidir nada, sirve cualquier ejercicio básico. La
-        constancia pesa más que la elección.
+        constancia pesa más que la elección. Y si algo duele al practicar, para:
+        <a href="#voz">Cuida tu voz</a> dice qué hacer.
       </p>
 
       <h2 id="inicio">3 · La pantalla de inicio</h2>
@@ -448,8 +452,8 @@
       </p>
       <ul>
         <li>
-          <strong>Octava − / +</strong> y <strong>Rango auto</strong> — si las notas te quedan
-          muy graves o muy agudas, mueve la octava. Con Rango auto, el sitio la mueve por ti
+          <strong>Octava − / +</strong> y <strong>A mi voz</strong> — si las notas te quedan
+          muy graves o muy agudas, mueve la octava. Con «A mi voz», el sitio la mueve por ti
           cuando ve que no llegas. El control se detiene a dos octavas de distancia.
         </li>
         <li>
@@ -565,8 +569,12 @@
       </table>
       <p class="guide-note">
         <strong>Si tu voz no aparece nunca.</strong> El detector escucha aproximadamente entre
-        un Do grave y un Sol agudo (65–400 Hz). Una voz muy aguda cantando arriba puede quedar
-        fuera de ese rango: baja una octava con el control de octava y volverá a dibujarse.
+        un La muy grave y un Do muy agudo (La1–Do6, 55–1050 Hz), y con menos seguridad hasta
+        Fa♯6 (unos 1500 Hz); más arriba, un silbido o un Sol6, no dibuja nada. Una voz de mujer
+        o de niño se dibuja en su propia octava, sin bajarla. Lo que no dibuja es ruido, aire,
+        un susurro, el zumbido de la red eléctrica (50 o 60 Hz) o una voz muy floja: canta con
+        la voz llena y sube la sensibilidad. Si la nota que se te pide queda lejos de tu voz,
+        mueve la octava o deja que «A mi voz» la mueva.
       </p>
 
       <h2 id="numeros">7 · Qué significan los números</h2>
@@ -691,7 +699,7 @@
           bucle de la progresión. Merece un vistazo aunque no toques el piano.
         </li>
         <li>
-          <strong>Rango auto</strong> — deja que el sitio mueva la octava cuando ve que una nota
+          <strong>A mi voz</strong> — deja que el sitio mueva la octava cuando ve que una nota
           te queda fuera, en vez de ajustarla tú.
         </li>
         <li>
@@ -812,6 +820,34 @@
         <button type="button" class="btn btn-sm" data-privacy-toggle hidden>No enviar y borrar lo enviado</button>
       </p>
 
+      <h2 id="voz">15 · Cuida tu voz</h2>
+      <p>
+        Practicar no debería doler. Estas pautas son generales: este sitio es práctica, no es
+        un tratamiento para un trastorno de la voz, y no sustituye a un médico.
+      </p>
+      <ul>
+        <li>
+          <strong>Si algo duele, para.</strong> El dolor, el ardor o la sensación de apretar la
+          garganta o el cuello son una señal para detenerte, no para insistir.
+        </li>
+        <li>
+          <strong>Con ronquera, baja la carga.</strong> Carraspear seguido y la ronquera son
+          señales para aligerar. Descansa la voz en vez de cantar o hablar a través de ella:
+          menos tiempo, más suave, o nada ese día. Susurrar con fuerza no descansa la voz.
+        </li>
+        <li>
+          <strong>Consulta a un otorrinolaringólogo (otorrino)</strong> si la ronquera dura más
+          de unas 4 semanas, o antes si hay dolor, dificultad para tragar o respirar, una pérdida
+          repentina de la voz o sangre.
+        </li>
+      </ul>
+      <p>
+        El plazo de unas 4 semanas y las señales de alarma siguen la guía clínica sobre la
+        ronquera de la Academia Estadounidense de Otorrinolaringología y Cirugía de Cabeza y
+        Cuello (AAO-HNS, 2018).
+      </p>
+
+      <h2 id="reportar">Fallos e ideas</h2>
       <p>
         <strong>¿Algo sigue roto, o se te ocurre algo mejor?</strong> Cuéntanoslo:
         <button type="button" class="vt-report-open" data-vt-report="bug" data-vt-report-area="site">Reportar un problema</button>.
@@ -826,7 +862,8 @@
       <p>
         Everything this site does, in order. If you only want to start, read
         <a href="#primera-en">Your first practice</a> and come back when something does not
-        make sense.
+        make sense. If anything hurts while you practise, or your voice goes hoarse, read
+        <a href="#voz-en">Look after your voice</a> first.
       </p>
 
       <nav class="guide-toc" aria-label="Contents">
@@ -846,6 +883,7 @@
           <li><a href="#confunde-en">Things that confuse people</a></li>
           <li><a href="#pro-en">Account and Pro</a></li>
           <li><a href="#privacidad-en">Where your data lives</a></li>
+          <li><a href="#voz-en">Look after your voice</a></li>
         </ol>
       </nav>
 
@@ -911,7 +949,8 @@
       </ol>
       <p class="guide-note">
         If it is your first time and you do not want to decide anything, any basic exercise will
-        do. Showing up matters more than choosing well.
+        do. Showing up matters more than choosing well. And if anything hurts while you
+        practise, stop: <a href="#voz-en">Look after your voice</a> says what to do.
       </p>
 
       <h2 id="inicio-en">3 · The home screen</h2>
@@ -1071,8 +1110,8 @@
       </p>
       <ul>
         <li>
-          <strong>Octave − / +</strong> and <strong>Auto range</strong> — if the notes sit too
-          low or too high for you, move the octave. With Auto range, the site moves it for you
+          <strong>Octave − / +</strong> and <strong>My range</strong> — if the notes sit too
+          low or too high for you, move the octave. With "My range", the site moves it for you
           when it sees you cannot reach. The control stops two octaves out.
         </li>
         <li>
@@ -1182,9 +1221,13 @@
         </tbody>
       </table>
       <p class="guide-note">
-        <strong>If your voice never appears.</strong> The detector listens roughly between a low
-        C and a high G (65–400 Hz). A very high voice singing up top can fall outside that range:
-        drop an octave with the octave control and it will draw again.
+        <strong>If your voice never appears.</strong> The detector listens roughly between a very
+        low A and a very high C (A1–C6, 55–1050 Hz), and less surely up to F♯6 (about 1500 Hz);
+        above that, a whistle or a G6, it draws nothing. A woman's or a child's voice draws in its
+        own octave, with no need to drop it. What it does not draw is noise, air, a whisper, the
+        hum of the mains (50 or 60 Hz) or a very faint voice: sing with a full voice and raise
+        the sensitivity. If the note you are asked for sits far from your voice, move the octave
+        or let "My range" move it.
       </p>
 
       <h2 id="numeros-en">7 · What the numbers mean</h2>
@@ -1307,7 +1350,7 @@
           progression loop. Worth a look even if you do not play piano.
         </li>
         <li>
-          <strong>Auto range</strong> — lets the site move the octave when a note falls outside
+          <strong>My range</strong> — lets the site move the octave when a note falls outside
           your range, instead of you adjusting it.
         </li>
         <li>
@@ -1386,7 +1429,7 @@
       </ul>
       <p>
         Microphone audio is processed on your device and is not sent anywhere. The full detail is
-        in <a href="privacy.html">Privacy</a>.
+        in <a href="privacy.html#en">Privacy</a>.
       </p>
       <p>
         To learn which changes really help, the site sends <strong>anonymous
@@ -1410,7 +1453,7 @@
         <strong>GitHub Pages</strong>, both outside Peru. "Anonymous" means without your name or
         email address; the random number is still an identifier for this browser, and the law treats
         it as personal data. Who receives what, and your rights over all of it, are in
-        <a href="privacy.html">Privacy</a>.
+        <a href="privacy.html#en">Privacy</a>.
       </p>
       <p>
         From the European Economic Area, where the law asks first, nothing is
@@ -1423,6 +1466,34 @@
         <button type="button" class="btn btn-sm" data-privacy-toggle hidden>Stop sending and delete what was sent</button>
       </p>
 
+      <h2 id="voz-en">15 · Look after your voice</h2>
+      <p>
+        Practice should not hurt. These are general guidelines: this site is practice, not a
+        treatment for a voice disorder, and it does not replace a doctor.
+      </p>
+      <ul>
+        <li>
+          <strong>If anything hurts, stop.</strong> Pain, burning, or a squeezing feeling in the
+          throat or neck is a sign to stop, not to push on.
+        </li>
+        <li>
+          <strong>If your voice is hoarse, ease off.</strong> Frequent throat clearing and
+          hoarseness are signs to lighten the load. Rest the voice rather than singing or
+          speaking through it: less time, softer, or nothing that day. A forced whisper is not
+          rest.
+        </li>
+        <li>
+          <strong>See an ear, nose and throat doctor (ENT)</strong> if hoarseness lasts more than
+          about 4 weeks, or sooner with pain, trouble swallowing or breathing, a sudden loss of
+          voice, or blood.
+        </li>
+      </ul>
+      <p>
+        The 4-week limit and the warning signs follow the clinical guideline on hoarseness from
+        the American Academy of Otolaryngology–Head and Neck Surgery (AAO-HNS, 2018).
+      </p>
+
+      <h2 id="reportar-en">Bugs and ideas</h2>
       <p>
         <strong>Still broken, or you thought of something better?</strong> Tell us:
         <button type="button" class="vt-report-open" data-vt-report="bug" data-vt-report-area="site">Report a problem</button>.
@@ -1438,14 +1509,14 @@
          because the endpoint is derived from the worker URL it holds: without it
          this page would say nothing is being sent while the app sends, and the
          delete button would have nowhere to send the deletion. -->
-    <script src="js/billing-config.js?v=20261112a"></script>
+    <script src="js/billing-config.js?v=20261113a"></script>
     <script src="js/experiments-config.js?v=20261112a"></script>
     <!-- The page declares that the region gate belongs on it, so that if
          js/region-gate.js ever 404s or fails to parse, js/analytics.js and
          js/experiments.js keep nothing and send nothing rather than reading an
          absent gate as permission. -->
     <script>window.VT_REGION_REQUIRED = true;</script>
-    <script src="js/region-gate.js?v=20261103b"></script>
+    <script src="js/region-gate.js?v=20261112b"></script>
     <script src="js/analytics.js?v=20261103a"></script>
     <script src="js/experiments.js?v=20261112a"></script>
     <script src="js/site-layout.js?v=20261111a"></script>
@@ -1456,10 +1527,10 @@
          dialog sends through VTAccount.request and nothing else, so without it
          this page offered a report it could never send. It costs the one
          /v1/auth/methods question per visit that privacy.html already names. -->
-    <script src="js/account.js?v=20261112a"></script>
+    <script src="js/account.js?v=20261113a"></script>
     <!-- And focus-trap.js keeps Tab inside it while it is open: without it the
          dialog is aria-modal in name only, and Tab walked out to the page. -->
-    <script src="js/focus-trap.js?v=20260924c"></script>
+    <script src="js/focus-trap.js?v=20261113a"></script>
     <script src="js/reports.js?v=20261113d"></script>
   </body>
 </html>

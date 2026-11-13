@@ -212,10 +212,14 @@ expectNone(
   "the English pricing panel's first proof line no longer says free practice is uncapped, which is the whole differentiator in docs/35-PRICING.md",
   /free, always/.test(proof1[1] || "") ? [] : ["pricing.proof1 (en)"]
 );
+// The claim is scoped to the table. It used to read "every verified competitor",
+// until Nail the Pitch (read 2026-10-28) turned out to keep its real-time pitch
+// monitor free, so the unscoped sentence is false and fails here too. The panel
+// says "almost every" for the same reason.
 const pricingDoc = read("docs/35-PRICING.md");
 expectNone(
   "docs/35-PRICING.md no longer carries the free-tier comparison the panel's claim rests on",
-  /Every verified competitor caps free practice/.test(pricingDoc) ? [] : ["docs/35-PRICING.md"]
+  /Every competitor in this table caps free practice/.test(pricingDoc) ? [] : ["docs/35-PRICING.md"]
 );
 // `pricing.proof3` is a specific comparative price claim about third-party
 // services in a named city, and until 2026-11-04 it had no source anywhere. The

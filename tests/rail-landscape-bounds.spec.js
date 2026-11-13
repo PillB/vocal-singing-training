@@ -1,6 +1,9 @@
 /**
- * Red team round 9 (audit-css). tests/rail-small-screens.spec.js pins the landscape-phone fix (css/styles.css, the rule
+ * Red team round 9 (audit-css). tests/rail-small-screens.spec.js pins the landscape-phone fix (css/styles.css, then the rule
  * `@media (max-height: 500px) and (max-width: 799.98px) { .hud-bottom-rail { flex-wrap: wrap } }`) at 568x320, 667x375 and 740x360 only.
+ * Since the merge of #21 (PR #39) that rule is gone: #21's landscape block wraps the rail at every width, so there is no width
+ * bound left to move, and the bounds mutants D7 and D8 are retired as equivalent (qa/mutate.mjs says why). These sizes stay as a
+ * check of every exercise's rail between the pinned sizes and the old bounds.
  *
  * Goal behaviour: a phone on its side narrower than 800 px and not taller than 500 px keeps Start, the mic and the piano settings
  * apart: no two rail controls overlap, every rail control's centre hits itself, the rail stays inside the stage, the lanes end above

@@ -39,7 +39,9 @@ function errorCents(measured, actual) {
 
 test("real pitch estimator resolves fundamentals, never their octave subharmonics", () => {
   const { detectPitch } = pitchUtils();
-  for (const hz of [55, 60, 65.41, 82.41, 110, 146.83, 220, 329.63, 392, 440, 493.88, 523.25, 659.25, 880, 987.77, 1046.5]) {
+  // 60 Hz left this list with the NSDF detector (PR #21): a frame within 1 % of
+  // 50 or 60 Hz is a mains hum, tested on its own below. A♯1 and B1 either side stay.
+  for (const hz of [55, 58.27, 61.74, 65.41, 82.41, 110, 146.83, 220, 329.63, 392, 440, 493.88, 523.25, 659.25, 880, 987.77, 1046.5, 1174.66, 1396.91]) {
     for (const signal of [sine(hz), harmonic(hz)]) {
       const got = detectPitch(signal, 48000);
       assert.ok(got, `missing fundamental ${hz} Hz`);
@@ -59,7 +61,9 @@ test("noise and silence cannot masquerade as a scored pitched note", () => {
 
 test("uncertain pitch is withheld rather than displayed as a wrong octave", () => {
   const { detectPitch } = pitchUtils();
-  for (const hz of [30, 35, 1500]) {
+  // The band is about 51–1520 Hz (a bass's A1 sung flat to a soprano's F♯6):
+  // under it and over it the answer is "no pitch", never an octave of the tone.
+  for (const hz of [30, 35, 45, 1600, 2000, 3000]) {
     const got = detectPitch(sine(hz), 48000);
     // On an unsupported frequency, returning a confident but unrelated note
     // is more harmful than showing '—' and asking for a range adjustment.
@@ -183,10 +187,40 @@ test("a bright voice's own period is not traded for a multiple of it", () => {
   }
 });
 
+test("a 50 or 60 Hz mains hum is not named as a bass note; the notes either side are", () => {
+  // Correct: a steady 50/60 Hz buzz (a transformer, a ground loop) gives no
+  // pitch, so it cannot score as the learner's low note. Wrong: the hum named
+  // as G1/A♯1, or the rule widened until a bass's real A♯1 (58.27 Hz) or B1
+  // (61.74 Hz) reads nothing. The cost, stated: a note sung within 17 cents of
+  // 50 or 60 Hz (between the semitones) reads nothing.
+  const { detectPitch } = pitchUtils();
+  for (const hz of [50, 60]) {
+    for (const signal of [sine(hz), harmonic(hz)]) assert.equal(detectPitch(signal, 48000), null, `${hz} Hz hum named a pitch`);
+  }
+  for (const hz of [51.91, 58.27, 61.74]) {
+    const got = detectPitch(harmonic(hz), 48000);
+    assert.ok(got && Math.abs(errorCents(got, hz)) <= 50, `bass ${hz} Hz -> ${got}`);
+  }
+});
+
+test("a tone at the top of the band reads its note, not an octave below", () => {
+  // The other side of the next test: 1360–1500 Hz (F6 to F♯6) is inside the
+  // band since PR #21 (it was "above the band" for the YIN detector, which
+  // stopped at 1060 Hz and read a soprano's C6+ as nothing).
+  const { detectPitch } = pitchUtils();
+  for (const sampleRate of PITCH_RATES) {
+    for (let hz = 1360; hz <= 1500; hz += 20) {
+      const got = detectPitch(partials(hz, sampleRate, (h) => (h === 1 ? 0.3 : 0)), sampleRate);
+      assert.ok(got && Math.abs(errorCents(got, hz)) <= 50, `${sampleRate} Hz: a ${hz} Hz tone -> ${got}`);
+    }
+  }
+});
+
 test("beeps and whistles above the band are never named as a note", () => {
   const { detectPitch } = pitchUtils();
   for (const sampleRate of PITCH_RATES) {
-    for (let hz = 1360; hz <= 4000; hz += 40) {
+    // Above the shortest lag (1500 Hz at 48 kHz, 1521 Hz at 44.1 kHz)
+    for (let hz = 1540; hz <= 4000; hz += 40) {
       const got = detectPitch(partials(hz, sampleRate, (h) => (h === 1 ? 0.3 : 0)), sampleRate);
       assert.equal(got, null, `${sampleRate} Hz: a ${hz} Hz tone named ${got} Hz`);
     }

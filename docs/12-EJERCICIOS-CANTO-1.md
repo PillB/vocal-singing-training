@@ -23,3 +23,7 @@ Source PDF (class 1 / month 1 summary): breath as foundation, cordal closure, in
 - Singing: **16** exercises (was 14)  
 - Basic singing: **5** (was 3)  
 - Advanced singing: **11** (unchanged count)
+
+These are the totals at the time of this change. `js/exercises-data.js` now
+has **27** singing exercises (16 basic, 11 advanced) and 20 vocal ones; the
+structured basic path above is unchanged (checked 2026-10-28).

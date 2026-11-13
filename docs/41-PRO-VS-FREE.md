@@ -69,8 +69,10 @@ Two things on that table were corrected to produce it:
 
 Read on 3 November 2026, first-hand, not remembered.
 
-**Every competitor that could be verified caps free practice. We do not.** The
-table in [35-PRICING.md](35-PRICING.md) holds the full list; Riyaz was
+**Every competitor in the table in [35-PRICING.md](35-PRICING.md) caps free
+practice. We do not.** Not every app does: Nail the Pitch keeps its real-time
+pitch monitor free (read 2026-10-28), which is why the panel says "almost
+every". The table holds the full list; Riyaz was
 re-verified from its own App Store listing on 3 November 2026 and still says
 all content is free with practice limited to **8 minutes a day**, with
 "unlimited practice" as the paid promise, at **$24.49 monthly** and $79.99

@@ -18,7 +18,7 @@
       content="Privacidad de Estudio Vocal: práctica en el navegador, micrófono local, pagos seguros."
     />
     <title>Privacidad · Estudio Vocal</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261112a" />
+    <link rel="stylesheet" href="css/styles.css?v=20261113b" />
     <style>
       .privacy-wrap {
         max-width: 42rem;
@@ -38,10 +38,6 @@
       /* The phone header rule hides `.app-header .brand p`; the site name is one */
       body:not(.view-exercise) .app-header .brand .brand-name {
         display: block;
-      }
-      /* "English" jumps here: clear of the sticky header (96 px on a phone) */
-      .privacy-wrap .part-title {
-        scroll-margin-top: 6.5rem;
       }
       .privacy-wrap h1,
       .privacy-wrap .part-title {
@@ -67,10 +63,28 @@
         font-size: 0.85rem;
         margin-bottom: 1rem;
       }
+      .privacy-back {
+        margin-top: 2rem;
+      }
+      /* The sticky header is ~88px on a phone and ~60px on a laptop; an address
+         (#en, the English link) lands below it, as guide.html's do. Main had
+         the same rule for .part-title alone (6.5rem); this one, later and as
+         specific, decided every case, so that copy went in the #21 merge. */
+      .privacy-wrap :where(h1, h2)[id] {
+        scroll-margin-top: 100px;
+      }
+      @media (max-width: 640px) {
+        /* A way back is a touch target. */
+        .privacy-back a {
+          display: inline-flex;
+          align-items: center;
+          min-height: 44px;
+        }
+      }
     </style>
     <!-- Paints the visitor's design of the site before the first frame
          (js/site-version.js); a file because the policy allows no inline script. -->
-    <script src="js/site-version.js?v=20261111a"></script>
+    <script src="js/site-version.js?v=20261113a"></script>
   </head>
   <body>
     <header class="app-header">
@@ -285,6 +299,8 @@
         <a href="https://github.com/PillB/vocal-singing-training">PillB/vocal-singing-training</a>.
       </p>
 
+      <p class="privacy-back"><a href="./">← Volver a la app</a></p>
+
       <hr style="margin: 2.5rem 0; border-color: rgba(148, 163, 184, 0.2)" />
 
       <section lang="en" aria-labelledby="en">
@@ -409,9 +425,9 @@
           What is charged, the 7-day trial, gifts, cancelling and refunds are in
           <a href="terms.html#en">the terms of use</a>.
         </p>
-      </section>
 
-      <p style="margin-top: 2rem"><a href="./">← Volver a la app</a></p>
+        <p class="privacy-back"><a href="./">← Back to the app</a></p>
+      </section>
     </main>
   </body>
 </html>

@@ -12,7 +12,7 @@ Synthesized from multi-platform social listening + product mapping for Vocal Stu
 | UI-06 | Friend streaks polarize | Surprising | r/duolingo | No forced social | Policy |
 | UI-07 | Paid video courses undervalued vs tools | Expected | r/singing course skepticism | Free tools; Pro coach pack | Shipped |
 | UI-08 | Reminders help if controllable | Expected | habit apps + Airship | Opt-in + ICS | Shipped |
-| UI-09 | First success lifts retention | Expected | EdTech D1; 85% drop before week 3 | First-win card after 1st save + kind next steps | **Shipped** |
+| UI-09 | First success lifts retention | Expected | EdTech D1; 85% drop before week 3 (vendor blog, no primary source: unverified) | First-win card after 1st save + kind next steps | **Shipped** |
 | UI-10 | Yearly > monthly retention | Expected | RevenueCat 2025 | Yearly hero plan | Messaging |
 | UI-11 | Heatmap visual habits loved | Expected | habit apps | Year heatmap | **Shipped** |
 | UI-12 | Audio before/after = proof | Expected | r/singing | Recording A/B | **Shipped** (history) |
@@ -29,3 +29,4 @@ Synthesized from multi-platform social listening + product mapping for Vocal Stu
 |------|------|
 | 2026-07-16 | Registry created with orchestration Phases 0–7 |
 | 2026-07-16 | Pass 2: UI-09/17 shipped (first-win + next-step); UI-18/19 added |
+| 2026-10-28 | Source check: the user evidence here is English-language social posts and vendor reports (RevenueCat, Airship, edtech blogs), not research with this product's users, so each insight row is a hypothesis. The 85% (UI-09) and Airship (UI-08) figures are vendor claims; see the source check at the end of [18-USER-INSIGHTS-FEATURE-DISCOVERY-ORCHESTRATION.md](18-USER-INSIGHTS-FEATURE-DISCOVERY-ORCHESTRATION.md). Freezes (UI-05, UI-19) are now rest days ([37-DAILY-LOOP.md](37-DAILY-LOOP.md)) |

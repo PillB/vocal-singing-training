@@ -942,6 +942,12 @@
         else setMessage($("#gate-error"), t("generic", { reason: (result && result.reason) || "error" }), "error");
       }
     });
+    // The server not answering is its own page. Left to the line below it read
+    // as Google's script being blocked, and pointed at browser extensions.
+    if (drawn && drawn.reason === "unreachable" && gate === "signedOut") {
+      showGate("unreachable");
+      return;
+    }
     const ok = !!(drawn && drawn.ok);
     if (fallback) fallback.hidden = ok;
     box.hidden = !ok;
@@ -2258,7 +2264,15 @@
       window.VTAccount.signOut();
       showGate("signedOut");
     });
-    $("#gate-retry")?.addEventListener("click", () => boot());
+    $("#gate-retry")?.addEventListener("click", () => {
+      // From scratch, not by joining whatever probe is already out: the
+      // page's idle probe may have been sent while the server was away and
+      // never come back, and waiting on it left this button doing nothing.
+      showGate("checking");
+      Promise.resolve(window.VTAccount?.refreshMethods?.())
+        .catch(() => null)
+        .then(() => boot());
+    });
   }
 
   /** Look an account up, and give Pro (with the day-count chips). */

@@ -4,8 +4,8 @@
     "sha": "18027e516f4057ab"
   },
   "css/admin.css": {
-    "v": "20260926a",
-    "sha": "49bf31d5b3159754"
+    "v": "20261112a",
+    "sha": "d020a8e7c8bf12d2"
   },
   "css/exercise-viz.css": {
     "v": "20261002a",
@@ -52,36 +52,36 @@
     "sha": "5a4bc220a59822b6"
   },
   "css/styles.css": {
-    "v": "20261111c",
-    "sha": "b294d0a743e9ad1e"
+    "v": "20261112a",
+    "sha": "6059eac895fa95f5"
   },
   "js/account.js": {
-    "v": "20261006b",
-    "sha": "248c7cd91592e50d"
+    "v": "20261112a",
+    "sha": "2e8203120a0dcd79"
   },
   "js/admin-layouts.js": {
     "v": "20261111a",
     "sha": "d1a309907c0e8b86"
   },
   "js/admin.js": {
-    "v": "20261006b",
-    "sha": "7ab7cf2a87a3e37e"
+    "v": "20261112a",
+    "sha": "dfa2d139238abd51"
   },
   "js/ads-config.js": {
-    "v": "20261006a",
-    "sha": "64f8c87aa99f4511"
+    "v": "20261112a",
+    "sha": "8d3cd35dc84d13fa"
   },
   "js/ads.js": {
-    "v": "20261006a",
-    "sha": "a21095f2971b6300"
+    "v": "20261112a",
+    "sha": "f1ef049d33e012af"
   },
   "js/analytics.js": {
     "v": "20261103a",
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261112b",
-    "sha": "1442427ccc75a258"
+    "v": "20261113c",
+    "sha": "50afa80a96c580f0"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -96,12 +96,12 @@
     "sha": "dfe04ab98bbedd4b"
   },
   "js/billing-config.js": {
-    "v": "20261102a",
-    "sha": "b61963af1a8c5294"
+    "v": "20261112a",
+    "sha": "0f6fcd0732fa9382"
   },
   "js/billing.js": {
-    "v": "20261103a",
-    "sha": "4b1faa1108a4b2c9"
+    "v": "20261113a",
+    "sha": "c01b6050bcbccf84"
   },
   "js/daily-loop.js": {
     "v": "20261006b",
@@ -120,20 +120,20 @@
     "sha": "2cefb15eaaa7f016"
   },
   "js/experiments-config.js": {
-    "v": "20261111a",
-    "sha": "0d80b825ea3a66ae"
+    "v": "20261112a",
+    "sha": "bb875f4f3a7a1452"
   },
   "js/experiments.js": {
-    "v": "20260925a",
-    "sha": "6d5e9f2b2a82249e"
+    "v": "20261112a",
+    "sha": "2b6012c2a85ab79a"
   },
   "js/focus-trap.js": {
     "v": "20260924c",
     "sha": "178ba56877e20400"
   },
   "js/i18n.js": {
-    "v": "20261112a",
-    "sha": "2a2f5011563f7eef"
+    "v": "20261112b",
+    "sha": "ed777daaea8b4b04"
   },
   "js/license.js": {
     "v": "20261103d",
@@ -191,6 +191,10 @@
     "v": "20260924c",
     "sha": "ee0f23adcbe0cd3f"
   },
+  "js/reports.js": {
+    "v": "20261113d",
+    "sha": "17b201661d14052c"
+  },
   "js/scenes/breath.js": {
     "v": "20261002a",
     "sha": "7e48f57ef7398d75"
@@ -244,8 +248,8 @@
     "sha": "1a8ed737edf3c143"
   },
   "js/storage.js": {
-    "v": "20261103c",
-    "sha": "f453142870b23007"
+    "v": "20261112a",
+    "sha": "17d3c2208a107c5a"
   },
   "js/sync.js": {
     "v": "20261102a",
@@ -266,5 +270,13 @@
   "js/wake-lock.js": {
     "v": "20261112b",
     "sha": "244f30921d52685d"
+  },
+  "qa/qa.css": {
+    "v": "20261102a",
+    "sha": "93d78055be3e9fa7"
+  },
+  "qa/qa.js": {
+    "v": "20261102a",
+    "sha": "ef27b5dff6b85163"
   }
 }

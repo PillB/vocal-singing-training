@@ -146,9 +146,62 @@ does. **Every verified competitor caps free practice. We do not.**
 | Smule | only as the second singer |
 | **Vocal Studio** | **everything, forever** |
 
+### The other comparison the panel makes, and what it rests on
+
+`pricing.proof3` tells every Spanish-speaking visitor: **"Un año de Pro cuesta
+menos que 3 clases particulares en Lima."** Until 4 November 2026 that sentence
+had no source anywhere in this repository — not in this document, not beside the
+string, nowhere. It is a specific, objective, comparative price claim about
+third-party services in a named city, which is exactly the kind an advertiser is
+expected to be able to substantiate. It is now substantiated, and the honest
+limits of it are written down with it.
+
+Read from Superprof Peru's Lima singing-lessons page on **4 November 2026**:
+
+| What the page says | Figure |
+|---|---|
+| Average price of a private singing lesson | **"una clase particular de canto cuesta en promedio S/66 la hora"** |
+| Cheapest advertised | "desde S/20 la hora" |
+| Typical range, per the page's own article | "suelen estar entre S/35 y S/120 por hora" |
+| Teachers listed | "100 profesores de canto disponibles" |
+| The first five, by their own rate | S/59, S/80, S/65, S/80, S/75 |
+
+Our yearly Peru price is **S/ 119.90**. So:
+
+- Against the stated average, three lessons are **S/ 198**. The claim holds with
+  S/ 78 to spare.
+- Against the five teachers actually listed first, three lessons are **S/ 177 to
+  S/ 240**. It holds against every one of them.
+- Against the bottom of the page's own quoted range, three lessons are **S/ 105**,
+  and against the S/ 20 floor, **S/ 60**. **The claim does not hold there**, and
+  that is worth knowing rather than hiding: it is true of the market's centre,
+  not of its cheapest corner.
+
+One number in it is load-bearing and was chosen correctly by accident. **Three**
+is the smallest multiple that survives: two lessons at the average are S/ 132,
+which holds, but two lessons at the first teacher's S/ 59 are **S/ 118** — less
+than our S/ 119.90. Anyone tempted to sharpen the line to "menos que 2 clases"
+should read that number first.
+
+The English string is weaker and safer by accident too: "A year of Pro costs less
+than three private lessons" names no city and sits beside a **$49** price, so it
+is comfortably true in any market where that comparison would be made. It is
+still unsourced for an unstated market, which is why it says "three" and not a
+figure.
+
+`qa/check-tiers.mjs` now fails the build if either the claim or this evidence
+disappears, the same way it guards the free-practice claim above.
+
 So Pro does not sell access. It sells convenience and continuity — no
-interstitials, export, profiles, insights, goals, streak freezes, cross-device
-sync. That tier lives lower in the market than the access tiers do:
+interstitials, export, profiles, insights, goals, streak freezes. That tier
+lives lower in the market than the access tiers do:
+
+**Corrected on 2026-11-03: cross-device sync is not one of them.** This
+paragraph used to list it, and `/v1/me/progress` asks only for a session, not
+for Pro — saved progress across devices is free to any signed-in account, by
+the decision that closed VG-16, which called losing progress in one browser a
+P0 for everybody. So it cannot justify the price. What is left is thinner than
+this section assumed, and `41-PRO-VS-FREE.md` is where that is faced.
 
 - **VocalGYM**, the Spanish-language direct competitor with a free-forever tier
   and a virtual piano: **$4.99/month**.
@@ -157,8 +210,11 @@ sync. That tier lives lower in the market than the access tiers do:
 - The category median, made of products that gate practice: **$14.99/month**.
 
 $7.99 sits between the convenience band and the access band. It is above the
-Spanish-language competitor, which the cross-device sync and the coach export
-have to justify. If they do not, this is the next number to revisit.
+Spanish-language competitor, and with sync out of the argument the coach export
+and the insights are what have to justify the gap. Nothing in the evidence says
+they do: see `41-PRO-VS-FREE.md`, which puts the three ways out in front of the
+operator. **This is the next number to revisit, and it is now the most likely
+one on this page to be wrong.**
 
 One warning from the same evidence: **Sing Sharp sells ad-removal alone as a
 $2.99 one-time purchase.** "No study-tip interstitials" is worth far less than
@@ -271,12 +327,27 @@ agree on length.
 **What changed the decision.** This section used to argue for 30 days from
 Adapty's and RevenueCat's medians (30% for 1–4 day trials, then a plateau
 around 45%; 37.4% at 7 days against 42.5% at 30). Those are **observational**
-— cross-app comparisons confounded by category and price. The only randomised
-experiment on trial length assigned **337,724 users** across six markets to 7,
-14 or 30 days: against the 30-day control's 14.67% subscription rate, the 7-day
-arm produced **5.59% more subscriptions** (t = 2.58, p < 0.05) in the test data,
-and the 14-day arm was not significant. A randomised result beats a
-cross-sectional median, so the observational argument for 30 days is retired.
+— cross-app comparisons confounded by category and price. The only large
+randomised experiment on trial length is Yoganarasimhan, Barzegary and Pani,
+*Design and Evaluation of Personalized Free Trials* (arXiv:2006.13420): a SaaS
+field experiment across six markets that assigned **337,724 new users** to 7,
+14 or 30 days, about 51,000 in each of the 7- and 14-day arms and the rest
+— 235,667 — in the 30-day control. It compared each arm **with that control**:
+the 7-day arm produced **5.59% more subscriptions** (t = 2.58) and the 14-day
+arm was not significantly different from 30 days (+3.28%, t = 1.51). A
+randomised result beats a cross-sectional median, so the observational argument
+for 30 days is retired.
+
+**What it does not say, and this document used to.** It never tested 7 against
+14. Its own arm counts put that gap at about 0.4 percentage points (15.35%
+against 14.97%), which is z ≈ 1.7, p ≈ 0.09 — not significant, but not called
+null either, and the 14-day arm is the lower of the two. Seeing a gap that size
+at 80% power would need about 136,000 accounts per arm. What the experiment
+actually supports is narrower and still enough: of the three lengths tested,
+the only one that beat the control is the one this site ships. It is also a
+decade-old experiment on creative software sold to professionals, converting at
+around 15% against this site's 2%-ish, so it reaches a singing-practice site by
+argument rather than by measurement.
 
 **The counter-argument, which is real and lost anyway.** A daily singing habit
 plausibly needs longer than a week, and the mechanism behind shorter trials
@@ -285,6 +356,15 @@ in most. Cancellation timing points the same way: 64% of 7-day trial
 cancellations happen on day 0–1 against 31% for 30-day trials. The owner made
 the call for 7 days on 2026-09-24. If it disappoints, the lever is re-entry
 (reminders, the comeback path), not length, and the change is one value.
+
+**The machinery to ask again locally exists and is switched off**
+(`trial_len_2026_11`, added 2026-11-03). The worker assigns each account 7 or
+14 days from its account id, writes the arm on the grant row, and the page
+records the exposure when it shows the offer. It needs 432 accounts per arm to
+see conversion doubling and about 2,200 to see 5% → 7%, against a randomised
+prior in which 14 days was no better than 30, so it is not worth switching
+on at this site's traffic — `docs/38-AB-TESTING.md` has the full reasoning and
+the two switches. The counter-argument above is the only reason it is built.
 
 **Side effect worth having:** Mercado Pago's seller UI presets are 7 and 14
 days, so a 7-day trial needs no API call to configure.
@@ -350,8 +430,8 @@ operator steps in [34-PERU-OPERATOR-RUNBOOK.md](34-PERU-OPERATOR-RUNBOOK.md):
    their checkout URLs in `js/billing-config.js`.
 2. Create two Creem products, $7.99 monthly and $49 yearly, once Creem approves
    a Peru-registered seller.
-3. **VG-20 blocks step 2.** The checkout host allowlist, the provider ids and
-   the worker's claim route are all still written around Stripe, so a Creem
-   checkout link would be refused by our own validation. That is a separate
-   piece of work.
+3. ~~**VG-20 blocks step 2.**~~ Done on 2026-11-03: the Creem rail is wired end
+   to end, the host allow-list takes `checkout.creem.io`, and the claim route
+   and `/v1/health` both know the provider. Nothing blocks step 2 but the
+   account itself.
 4. Confirm Creem's tax mode before the euro price is shown to anyone.

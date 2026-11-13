@@ -18,9 +18,21 @@
      */
     adsEnabled: false,
     /**
-     * "native" — first-party studio tip cards (recommended early)
-     * "adsense" — Google AdSense display only (requires approved units)
-     * "hybrid" — native + optional AdSense fill
+     * "preview" — the slots as they would look, with NO third-party script, no
+     *             network request, no AdSense account and nothing tracked.
+     *             Switch `adsEnabled` on with this mode to decide whether ads
+     *             belong here at all; it is the only mode that shows a card
+     *             whose partner link is still empty, and it says so on the card.
+     * "native"  — first-party studio tip cards (recommended early). A card with
+     *             no `href` and no `open-pricing` action is now skipped rather
+     *             than rendered with a dead button, so with every link empty
+     *             this mode shows nothing. That is intentional: see
+     *             `pickNativeCard` in js/ads.js.
+     * "adsense" — Google AdSense display only (requires an approved account and
+     *             units). Loads Google's script, which then stays loaded for
+     *             the life of the page — including after a learner buys Pro.
+     *             docs/40-GO-LIVE-GATE.md step 9 is the whole of that caveat.
+     * "hybrid"  — native first, AdSense as fill
      */
     mode: "native",
     /** Pro / trial never see ads (conversion stick) */

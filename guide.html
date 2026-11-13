@@ -18,7 +18,7 @@
       content="Guía de uso de Estudio Vocal: cómo practicar, cómo leer la autopista de afinación, qué significan los números y cómo guardar tu progreso."
     />
     <title>Guía de uso · Estudio Vocal</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261111c" />
+    <link rel="stylesheet" href="css/styles.css?v=20261112a" />
     <style>
       .guide-wrap {
         max-width: 46rem;
@@ -812,6 +812,12 @@
         <button type="button" class="btn btn-sm" data-privacy-toggle hidden>No enviar y borrar lo enviado</button>
       </p>
 
+      <p>
+        <strong>¿Algo sigue roto, o se te ocurre algo mejor?</strong> Cuéntanoslo:
+        <button type="button" class="vt-report-open" data-vt-report="bug" data-vt-report-area="site">Reportar un problema</button>.
+        No hace falta tener cuenta, y puedes escribirlo en español.
+      </p>
+
       <p class="guide-back"><a href="./">← Volver a la app</a></p>
 
       <section lang="en">
@@ -1417,6 +1423,12 @@
         <button type="button" class="btn btn-sm" data-privacy-toggle hidden>Stop sending and delete what was sent</button>
       </p>
 
+      <p>
+        <strong>Still broken, or you thought of something better?</strong> Tell us:
+        <button type="button" class="vt-report-open" data-vt-report="bug" data-vt-report-area="site">Report a problem</button>.
+        No account needed, and you can write it in English.
+      </p>
+
       <p class="guide-back"><a href="./">← Back to the app</a></p>
       </section>
     </main>
@@ -1426,8 +1438,8 @@
          because the endpoint is derived from the worker URL it holds: without it
          this page would say nothing is being sent while the app sends, and the
          delete button would have nowhere to send the deletion. -->
-    <script src="js/billing-config.js?v=20261102a"></script>
-    <script src="js/experiments-config.js?v=20261111a"></script>
+    <script src="js/billing-config.js?v=20261112a"></script>
+    <script src="js/experiments-config.js?v=20261112a"></script>
     <!-- The page declares that the region gate belongs on it, so that if
          js/region-gate.js ever 404s or fails to parse, js/analytics.js and
          js/experiments.js keep nothing and send nothing rather than reading an
@@ -1435,8 +1447,19 @@
     <script>window.VT_REGION_REQUIRED = true;</script>
     <script src="js/region-gate.js?v=20261103b"></script>
     <script src="js/analytics.js?v=20261103a"></script>
-    <script src="js/experiments.js?v=20260925a"></script>
+    <script src="js/experiments.js?v=20261112a"></script>
     <script src="js/site-layout.js?v=20261111a"></script>
     <script src="js/privacy-switch.js?v=20261111a"></script>
+    <!-- The report dialog, so a reader who finds the answer is "that is a bug"
+         can say so without leaving the page. It carries its own translations:
+         this page does not load js/i18n.js. account.js is its transport: the
+         dialog sends through VTAccount.request and nothing else, so without it
+         this page offered a report it could never send. It costs the one
+         /v1/auth/methods question per visit that privacy.html already names. -->
+    <script src="js/account.js?v=20261112a"></script>
+    <!-- And focus-trap.js keeps Tab inside it while it is open: without it the
+         dialog is aria-modal in name only, and Tab walked out to the page. -->
+    <script src="js/focus-trap.js?v=20260924c"></script>
+    <script src="js/reports.js?v=20261113d"></script>
   </body>
 </html>

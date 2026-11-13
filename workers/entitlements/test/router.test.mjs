@@ -139,6 +139,9 @@ test("health reports booleans and the site origin, never key material", async ()
     ok: true,
     stripeConfigured: true,
     mercadopagoConfigured: true,
+    // The merchant-of-record rail. One secret, because its webhook carries
+    // everything the store needs and nothing has to be read back.
+    creemConfigured: true,
     signingKeyConfigured: true,
     // The account layer reports itself here too. `createTestEnv` has no D1
     // binding and no auth configuration, which is exactly the shape a
@@ -146,6 +149,9 @@ test("health reports booleans and the site origin, never key material", async ()
     accountsConfigured: false,
     // Events need the same D1 binding, so a payments-only deployment has none.
     eventsEnabled: false,
+    // Reports need it too, and for the same reason: a payments-only deployment
+    // has nowhere to put one, so the page offers the copy-it-yourself way out.
+    reportsEnabled: false,
     authMethods: { email: false, google: false, googleClientId: null, trialDays: 7 },
     siteOrigin: TEST_ORIGIN
   });
@@ -155,11 +161,12 @@ test("health reports booleans and the site origin, never key material", async ()
 
   const unconfigured = await handleRequest(
     new Request(`${BASE}/v1/health`),
-    createTestEnv({ STRIPE_WEBHOOK_SECRET: "", MP_ACCESS_TOKEN: "" })
+    createTestEnv({ STRIPE_WEBHOOK_SECRET: "", MP_ACCESS_TOKEN: "", CREEM_WEBHOOK_SECRET: "" })
   );
   const unconfiguredBody = await unconfigured.json();
   assert.equal(unconfiguredBody.stripeConfigured, false);
   assert.equal(unconfiguredBody.mercadopagoConfigured, false);
+  assert.equal(unconfiguredBody.creemConfigured, false);
 });
 
 test("unknown routes 404 and wrong methods 405", async () => {
@@ -1266,6 +1273,72 @@ test("a paid subscription cancelled at once still keeps the period it paid for",
   const verified = await verifyLicenseToken(claim.body.token, env);
   assert.equal(verified.payload.status, "canceled");
   assert.equal(verified.payload.periodEnd, periodEnd);
+});
+
+test("a paid invoice for an earlier period cannot shorten a later one that was also paid", async () => {
+  // Stripe can emit a paid invoice for an EARLIER period after a later one: a
+  // redelivery with a fresh `created`, or collection re-attempted on an older
+  // invoice. The event-ordering guard does not catch it, because by event time
+  // it really is the newest thing we have heard. What is older is the PERIOD it
+  // names, and that used to replace the period end outright — so a subscriber
+  // who had paid two months was cut back to the end of the first
+  // (QA round 5 re-attack, D2).
+  //
+  // An invoice reports one billing period, so its period end is a floor on
+  // paid-through and never a ceiling. A subscription event still replaces it,
+  // because `current_period_end` is the provider's current answer.
+  const env = createTestEnv();
+  const now = Math.floor(Date.now() / 1000);
+  const MONTH = 31 * DAY;
+  const invoice = (id, eventId, endsAt, createdAt) => ({
+    id: eventId,
+    type: "invoice.paid",
+    created: createdAt,
+    data: {
+      object: {
+        id,
+        customer: "cus_router",
+        subscription: "sub_router",
+        lines: { data: [{ period: { start: endsAt - MONTH, end: endsAt } }] }
+      }
+    }
+  });
+
+  await deliverStripe(env, checkoutEvent("cs_order", "evt_o1", { mode: "subscription", created: now - 40 * DAY }));
+  await deliverStripe(env, invoice("in_m1", "evt_o2", now - 9 * DAY, now - 40 * DAY));
+  await deliverStripe(env, invoice("in_m2", "evt_o3", now + 22 * DAY, now - 9 * DAY));
+  const claimed = await claimFor(env, "stripe", "cs_order");
+  assert.equal(claimed.status, 200, JSON.stringify(claimed.body));
+  const licenseId = claimed.body.licenseId;
+  const before = await getEntitlement(env.ENTITLEMENTS, licenseId);
+  const paidThrough = before.periodEnd;
+  assert.ok(paidThrough > now + 20 * DAY, `two months paid: ${paidThrough - now}`);
+
+  // Month one arrives again, late, with a timestamp newer than month two's.
+  const late = await deliverStripe(env, invoice("in_m1", "evt_o4", now - 9 * DAY, now - 8 * DAY));
+  assert.equal(late.status, 200);
+  const after = await getEntitlement(env.ENTITLEMENTS, licenseId);
+  assert.equal(after.periodEnd, paidThrough, "the second month survived the first month's redelivery");
+  assert.equal((await claimFor(env, "stripe", "cs_order")).status, 200, "and they are still Pro");
+
+  // And the subscription's own event is still the authority, in both
+  // directions: a plan moved to a shorter period really does shorten it.
+  await deliverStripe(env, {
+    id: "evt_o5",
+    type: "customer.subscription.updated",
+    created: now - 7 * DAY,
+    data: {
+      object: {
+        id: "sub_router",
+        customer: "cus_router",
+        status: "active",
+        items: { data: [{ price: { id: "price_x", recurring: { interval: "month", interval_count: 1 } } }] },
+        current_period_end: now + 3 * DAY
+      }
+    }
+  });
+  const moved = await getEntitlement(env.ENTITLEMENTS, licenseId);
+  assert.equal(moved.periodEnd, now + 3 * DAY, "a subscription event replaces the period end");
 });
 
 test("a delayed payment that settles after the subscription was cancelled at once buys no access", async () => {

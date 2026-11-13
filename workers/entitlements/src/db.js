@@ -21,6 +21,15 @@ let schemaReady = new WeakSet();
 export const EVENT_RETENTION_SECONDS = 180 * 86400;
 
 /**
+ * A report we are done with — fixed, declined or a duplicate — is deleted by
+ * `sweepExpired` this long after it was last touched (180 days, the same
+ * number privacy.html gives for everything else here). An open report is kept
+ * for as long as it is open: losing a bug nobody has fixed yet would be worse
+ * than keeping it, and the reporter's own words are the whole value of it.
+ */
+export const CLOSED_REPORT_RETENTION_SECONDS = 180 * 86400;
+
+/**
  * Current time in unix seconds.
  * @param {number} [nowSeconds] Injected clock, for tests.
  * @returns {number} Unix seconds.
@@ -153,11 +162,91 @@ export function normalizeEmail(value) {
 }
 
 /**
+ * How many rows a write actually changed.
+ *
+ * A guarded write — one carrying the condition the caller is really asking
+ * about in its WHERE clause — is the only atomic way to ask "is this still
+ * true?", and this reads its answer. An unreadable count is 0, which refuses
+ * rather than allows: the safe direction when the database will not say.
+ * @param {Object} result The result of a D1 `run()`.
+ * @returns {number} Rows changed.
+ */
+export function changedRows(result) {
+  const n = Number(result && result.meta && result.meta.changes);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * Whether a bucket has room, without writing anything.
+ *
+ * Reads are cheap and writes are the scarce thing (D1's free plan allows
+ * 100,000 rows written a day and 5,000,000 read), so a caller that wants to
+ * refuse a flood for free asks this first. It is also the first half of
+ * `hitRateLimit` below.
+ *
+ * @param {Object} db D1 database binding.
+ * @param {string} bucket Caller-scoped key, e.g. `login:ip:1.2.3.4`.
+ * @param {number} limit Maximum hits per window.
+ * @param {number} windowSeconds Window length.
+ * @param {number} [now] Injected clock.
+ * @param {number} [cost] How many hits the caller means to spend (default 1).
+ * @returns {Promise<{ok: boolean, count: number, retryAfter: number, windowStart: number}>}
+ *   Whether there is room, the count already stored, when the window turns
+ *   over, and which window that is.
+ */
+export async function peekRateLimit(db, bucket, limit, windowSeconds, now, cost) {
+  const at = nowSec(now);
+  const step = Number.isFinite(cost) && cost >= 1 ? Math.floor(cost) : 1;
+  const window = Math.max(1, Math.floor(windowSeconds));
+  const windowStart = at - (at % window);
+  const retryAfter = windowStart + window - at;
+  if (step > limit) {
+    return { ok: false, count: 0, retryAfter, windowStart };
+  }
+  const row = await db
+    .prepare("SELECT count, window_start FROM rate_limits WHERE bucket = ?1")
+    .bind(bucket)
+    .first();
+  // A caller can read a clock that is OLDER than the window already stored:
+  // its request began before the boundary and reached this write after it,
+  // while another request had already opened the new window. Such a caller
+  // belongs to the window it finds, not to the one it would have opened —
+  // counting it in its own older window would hand it an empty bucket, which
+  // is a full fresh allowance every time the hour or the day turns over
+  // (QA round 5 re-attack). So the stored window wins whenever it is newer,
+  // and this function reports it as the window the caller is in.
+  const stored = row ? Number(row.window_start) : Number.NaN;
+  const effective = Number.isFinite(stored) && stored > windowStart ? stored : windowStart;
+  const current = Number.isFinite(stored) && stored === effective ? Number(row.count) : 0;
+  const held = Number.isFinite(current) ? current : 0;
+  return {
+    ok: held + step <= limit,
+    count: held,
+    retryAfter: effective === windowStart ? retryAfter : effective + window - at,
+    windowStart: effective
+  };
+}
+
+/**
  * Fixed-window rate limit backed by the `rate_limits` table.
  *
  * Fixed windows can let through up to 2x the limit across a window boundary.
- * That is fine here: these limits exist to stop email-bombing and code
- * guessing, not to meter a paid API.
+ * That is fine for every limit here: they exist to stop email-bombing, code
+ * guessing and a flood of reports, not to meter a paid API.
+ *
+ * What is NOT fine, and was the bug, is a lost update. This read the count,
+ * decided, and wrote the new count back, so a hundred requests arriving
+ * together each read 0 and each wrote 1, and all hundred passed a limit of ten
+ * (QA round 5, QA-39). The deciding write is now a single guarded statement
+ * that carries both the window and the limit in its WHERE clause, so the
+ * database does the comparison and only one of two racing callers can take the
+ * last slot. The read that comes first is no longer the decision: it is there
+ * to refuse an already-full bucket without writing at all, and to report the
+ * count.
+ *
+ * A refused call writes nothing. That matters beyond tidiness: the report
+ * route's ceiling exists to stop a public POST spending the day's writes, and
+ * a ceiling that itself wrote a row per refusal would be no ceiling.
  *
  * @param {Object} db D1 database binding.
  * @param {string} bucket Caller-scoped key, e.g. `login:ip:1.2.3.4`.
@@ -167,37 +256,55 @@ export function normalizeEmail(value) {
  * @param {number} [cost] How many hits this call spends (default 1); a call
  *   that would take the count past the limit spends nothing and is refused.
  * @returns {Promise<{ok: boolean, count: number, retryAfter: number}>} Decision.
+ *   `count` is what this call believes the bucket reached; with callers racing,
+ *   the stored count may be higher. Nothing decides anything on it.
  */
 export async function hitRateLimit(db, bucket, limit, windowSeconds, now, cost) {
-  const at = nowSec(now);
   const step = Number.isFinite(cost) && cost >= 1 ? Math.floor(cost) : 1;
-  const windowStart = at - (at % Math.max(1, Math.floor(windowSeconds)));
-  const row = await db
-    .prepare("SELECT count, window_start FROM rate_limits WHERE bucket = ?1")
-    .bind(bucket)
-    .first();
-  if (!row || Number(row.window_start) !== windowStart) {
-    if (step > limit) {
-      return { ok: false, count: 0, retryAfter: windowStart + windowSeconds - at };
-    }
-    await db
-      .prepare(
-        `INSERT INTO rate_limits (bucket, count, window_start) VALUES (?1, ?3, ?2)
-         ON CONFLICT(bucket) DO UPDATE SET count = ?3, window_start = ?2`
-      )
-      .bind(bucket, windowStart, step)
-      .run();
+  const room = await peekRateLimit(db, bucket, limit, windowSeconds, now, cost);
+  if (!room.ok) {
+    return { ok: false, count: room.count, retryAfter: room.retryAfter };
+  }
+  // A window that has turned over (or a bucket never seen) starts again at this
+  // call's cost. The WHERE makes it a no-op for a row already in this window,
+  // so two callers cannot both "start" it and lose each other's count.
+  //
+  // `<` and not `<>`, so a bucket can only ever move forward in time. This is
+  // belt and braces rather than the fix: the peek above adopts a newer stored
+  // window, so `room.windowStart` is never behind the row by the time we get
+  // here, and a mutation of this line alone fails no test. It is written as
+  // the invariant anyway, because with `<>` the bug came back the moment the
+  // peek was wrong — a caller reading an older clock reset the count AND
+  // dragged `window_start` backwards, so the next caller with a current clock
+  // saw a mismatch again and reset it once more, and one such request per
+  // boundary reopened the whole allowance. With `<`, the same mistake refuses
+  // the straggler instead of reopening the bucket: still wrong, but wrong in
+  // the direction that costs a request rather than the write budget.
+  const started = await db
+    .prepare(
+      `INSERT INTO rate_limits (bucket, count, window_start) VALUES (?1, ?3, ?2)
+       ON CONFLICT(bucket) DO UPDATE SET count = ?3, window_start = ?2
+       WHERE rate_limits.window_start < ?2`
+    )
+    .bind(bucket, room.windowStart, step)
+    .run();
+  if (changedRows(started) > 0) {
     return { ok: true, count: step, retryAfter: 0 };
   }
-  const count = Number(row.count) + step;
-  if (count > limit) {
-    return { ok: false, count: Number(row.count), retryAfter: windowStart + windowSeconds - at };
-  }
-  await db
-    .prepare("UPDATE rate_limits SET count = ?2 WHERE bucket = ?1")
-    .bind(bucket, count)
+  // Already in this window: the increment carries the limit, so the row moves
+  // only while there is room for this call's cost.
+  const counted = await db
+    .prepare(
+      `UPDATE rate_limits SET count = count + ?3
+       WHERE bucket = ?1 AND window_start = ?2 AND count + ?3 <= ?4`
+    )
+    .bind(bucket, room.windowStart, step, limit)
     .run();
-  return { ok: true, count, retryAfter: 0 };
+  if (changedRows(counted) < 1) {
+    // Somebody else took the room between the read above and this write.
+    return { ok: false, count: limit, retryAfter: room.retryAfter };
+  }
+  return { ok: true, count: room.count + step, retryAfter: 0 };
 }
 
 /**
@@ -217,8 +324,9 @@ export function callerIp(request) {
 
 /**
  * Delete rows that have aged out: consumed or expired login codes, dead
- * sessions, stale rate-limit buckets, and usage events, exposures and ingest
- * counters past their retention.
+ * sessions, stale rate-limit buckets, usage events, exposures and ingest
+ * counters past their retention, and reports we have closed and kept long
+ * enough.
  *
  * Called opportunistically (never on the hot path of a login) so the free tier
  * is not slowly filled with garbage.
@@ -239,6 +347,85 @@ export async function sweepExpired(db, now) {
     db.prepare("DELETE FROM exposures WHERE first_at < ?1").bind(at - EVENT_RETENTION_SECONDS),
     db
       .prepare("DELETE FROM ingest_daily WHERE day < ?1")
-      .bind(new Date((at - EVENT_RETENTION_SECONDS) * 1000).toISOString().slice(0, 10))
+      .bind(new Date((at - EVENT_RETENTION_SECONDS) * 1000).toISOString().slice(0, 10)),
+    // Closed reports only, by `updated_at`: the clock starts when we finished
+    // with it, not when it arrived, so a bug that took four months to fix is
+    // not deleted two months later.
+    db
+      .prepare("DELETE FROM reports WHERE status IN ('fixed', 'wontfix', 'duplicate') AND updated_at < ?1")
+      .bind(at - CLOSED_REPORT_RETENTION_SECONDS)
   ]);
+}
+
+/**
+ * How long a recorded failure is reported as current.
+ *
+ * Long enough that a pinger on a few-minute schedule sees it and opens its
+ * issue, short enough that one transient failure does not hold the probe red
+ * for a day — a probe that is always red teaches people to stop reading it.
+ * The row itself is not deleted when the window passes; it is the operator's
+ * record of when this last happened, and the 180-day sweep clears it.
+ */
+export const HEALTH_FLAG_WINDOW_SECONDS = 3600;
+
+/** The flag a webhook sets when it could not finish. */
+export const WEBHOOK_FAILED_FLAG = "webhook_failed";
+
+/**
+ * Write down that something that must not fail did.
+ *
+ * Never throws. It is called from a catch block on the path that is already
+ * failing, so an error here would replace the real one with a worse one, and
+ * the caller's own `throw` is what makes the provider retry. D1 may itself be
+ * refusing — that is the case where the flag cannot be written and the probe
+ * sees the D1 failure directly instead.
+ *
+ * @param {Object} db D1 database binding.
+ * @param {string} name Flag name, a fixed string from the code.
+ * @param {string} detail Short operator-facing note; never published.
+ * @param {number} [now] Injected clock.
+ * @returns {Promise<void>} Resolves whether or not it was recorded.
+ */
+export async function noteHealthFlag(db, name, detail, now) {
+  if (!db || !name) {
+    return;
+  }
+  const at = Number.isFinite(now) ? Math.floor(now) : Math.floor(Date.now() / 1000);
+  try {
+    // The schema may never have been created: a deployment whose first webhook
+    // is also its first use of D1 is exactly the deployment most likely to have
+    // something misconfigured, so this is the last place to be fussy about the
+    // cost of a CREATE TABLE IF NOT EXISTS batch. It runs only on a failure.
+    await ensureSchema(db);
+    await db
+      .prepare(
+        `INSERT INTO health_flags (name, at, detail) VALUES (?1, ?2, ?3)
+         ON CONFLICT(name) DO UPDATE SET at = ?2, detail = ?3`
+      )
+      .bind(name, at, String(detail || "").slice(0, 200))
+      .run();
+  } catch {
+    // Nothing to do and nothing to say: the caller is mid-failure already.
+  }
+}
+
+/**
+ * Read a flag, and say whether it is recent enough to still mean something.
+ *
+ * This is the statement the health probe already spends proving D1 answers, so
+ * it must behave like one: a missing table or a refusing database throws, and
+ * the probe reports that as the D1 failure it is.
+ *
+ * @param {Object} db D1 database binding.
+ * @param {string} name Flag name.
+ * @param {number} [now] Injected clock.
+ * @param {number} [windowSeconds] Override the window.
+ * @returns {Promise<{current: boolean, at: number|null}>} Decision.
+ */
+export async function readHealthFlag(db, name, now, windowSeconds) {
+  const at = Number.isFinite(now) ? Math.floor(now) : Math.floor(Date.now() / 1000);
+  const window = Number.isFinite(windowSeconds) && windowSeconds > 0 ? windowSeconds : HEALTH_FLAG_WINDOW_SECONDS;
+  const row = await db.prepare("SELECT at FROM health_flags WHERE name = ?1").bind(name).first();
+  const stamp = row && Number.isFinite(Number(row.at)) ? Number(row.at) : null;
+  return { current: stamp !== null && at - stamp < window, at: stamp };
 }

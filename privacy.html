@@ -18,7 +18,7 @@
       content="Privacidad de Estudio Vocal: práctica en el navegador, micrófono local, pagos seguros."
     />
     <title>Privacidad · Estudio Vocal</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261111c" />
+    <link rel="stylesheet" href="css/styles.css?v=20261112a" />
     <style>
       .privacy-wrap {
         max-width: 42rem;
@@ -90,7 +90,7 @@
     <main class="privacy-wrap">
       <p class="lang-switch muted"><a href="#en">English</a> · <strong>Español</strong></p>
       <h1>Tu privacidad, en claro</h1>
-      <p><strong>Actualizado:</strong> 24 sep 2026</p>
+      <p><strong>Actualizado:</strong> 12 nov 2026</p>
 
       <h2>Qué es esta app</h2>
       <p>
@@ -129,6 +129,11 @@
         guardan en <strong>este navegador</strong> (almacenamiento local). Si no
         tienes cuenta y borras los datos del sitio, se pierden: no guardamos
         ninguna copia en nuestro servidor.
+      </p>
+      <p>
+        También queda aquí, y solo aquí, lo que empieces a escribir en «Reportar un
+        problema» si cierras el diálogo sin enviarlo: así no tienes que escribirlo
+        otra vez. Se borra al cerrar la pestaña, o al enviar el reporte.
       </p>
 
       <h2>Si entras con una cuenta</h2>
@@ -190,8 +195,14 @@
         recibe y las guarda un Worker de <strong>Cloudflare</strong> (Estados
         Unidos), en su base de datos D1 y en su almacén KV. Si entras con
         <strong>Google</strong>, Google te identifica ante nosotros. Si contratas
-        Pro, el cobro lo hace <strong>Stripe</strong> o <strong>Mercado
-        Pago</strong> en sus propias páginas. Nadie más recibe nada.
+        Pro, el cobro lo hace <strong>Mercado Pago</strong> (Perú y
+        Latinoamérica) o, con tarjeta internacional, <strong>Creem</strong>
+        (Armitage Labs OÜ, Estonia), en sus propias páginas. Creem te vende en
+        su propio nombre, como comerciante registrado (<em>merchant of
+        record</em>): recibe lo que escribes en su página de pago —tu correo, tu
+        tarjeta, tu país— como responsable de esos datos, según
+        <a href="https://www.creem.io/privacy" rel="noopener">su aviso de privacidad</a>.
+        Nadie más recibe nada.
       </p>
       <p>
         Es decir: tus datos se procesan fuera del Perú. Es un flujo
@@ -211,8 +222,8 @@
 
       <h2>Pagos</h2>
       <p>
-        Si contratas Pro, el pago lo gestiona <strong>Stripe</strong> o
-        <strong>Mercado Pago</strong> en sus páginas seguras. Los datos de tarjeta
+        Si contratas Pro, el pago lo gestiona <strong>Mercado Pago</strong> o
+        <strong>Creem</strong> en sus páginas seguras. Los datos de tarjeta
         no pasan por nuestro sitio.
       </p>
 
@@ -230,6 +241,44 @@
         privacidad.
       </p>
 
+      <h2>Si nos reportas un problema</h2>
+      <p>
+        El botón <strong>«Reportar un problema»</strong> del pie de la app te deja
+        contarnos que algo está roto o que se te ocurre algo mejor. No hace falta
+        tener cuenta. Guardamos exactamente esto: <strong>lo que escribiste</strong>,
+        la <strong>página</strong> en la que estabas, la <strong>versión</strong> del
+        sitio, la <strong>línea que tu navegador envía a cualquier web</strong> (el
+        user-agent, que dice el navegador y el sistema) y la
+        <strong>plataforma</strong> que declara (por ejemplo «iPhone» o «Win32»), el
+        <strong>tamaño de tu pantalla y ventana</strong> y su densidad de píxeles, tu
+        <strong>zona horaria</strong> (solo la diferencia con UTC), si tu navegador
+        decía estar <strong>conectado</strong> o sin conexión, el
+        <strong>idioma</strong> en el que lees el sitio y, si estabas con sesión
+        iniciada, <strong>qué cuenta</strong> lo envió. Si escribes un correo para que te respondamos, lo guardamos también;
+        dejarlo vacío no cambia nada más.
+      </p>
+      <p>
+        No guardamos tu dirección IP con el reporte: se usa solo para limitar
+        cuántos reportes se pueden enviar por hora, y para eso se convierte en un
+        código que cambia cada día y se borra en dos días; la dirección misma no
+        se escribe en la base de datos. Tampoco van tu voz, tus grabaciones ni tu
+        progreso. Si pegas por
+        error algo con forma de número de tarjeta, se borra antes de guardarlo.
+      </p>
+      <p>
+        Lo leemos solo nosotros, para arreglar lo que nos cuentas. Un reporte que ya
+        cerramos —arreglado, descartado o repetido— se borra 180 días después; uno
+        que sigue abierto se guarda mientras siga abierto, porque perderlo sería
+        perder el fallo. Si quieres que borremos un reporte tuyo antes, escríbenos
+        por el repositorio de abajo con su número (<code>VS-…</code>).
+      </p>
+
+      <h2>Términos</h2>
+      <p>
+        Lo que se cobra, la prueba de 7 días, los regalos, cómo se cancela y cómo
+        se devuelve un pago está en <a href="terms.html">los términos de uso</a>.
+      </p>
+
       <h2>Contacto</h2>
       <p>
         Dudas: repositorio del proyecto
@@ -240,7 +289,7 @@
 
       <section lang="en" aria-labelledby="en">
         <h2 id="en" class="part-title">Privacy (English)</h2>
-        <p><strong>Updated:</strong> 2026-09-24</p>
+        <p><strong>Updated:</strong> 2026-11-12</p>
         <p>
           Vocal Studio is a browser practice tool. From the first visit it sends the
           anonymous usage statistics described below to our server, so we can tell
@@ -251,7 +300,7 @@
           recordings. Progress stays in <strong>local storage</strong> on your
           device, and with no account we keep no copy of it on our server. The
           microphone is used only when you start practice; audio is processed in the
-          browser. Paid checkout uses Stripe or Mercado Pago hosted pages — card
+          browser. Paid checkout uses Mercado Pago or Creem hosted pages — card
           data never reaches our site. Free-tier studio tips or ads (if enabled)
           never appear during live practice; Pro is ad-free. Questions: GitHub
           repository above.
@@ -297,8 +346,14 @@
           plans and the anonymous statistics are received and stored by a
           <strong>Cloudflare</strong> Worker (United States), in its D1 database and
           KV store. Signing in with <strong>Google</strong> identifies you to us
-          through Google. Paying uses <strong>Stripe</strong> or <strong>Mercado
-          Pago</strong> on their own pages. Nobody else receives anything. So your
+          through Google. Paying uses <strong>Mercado Pago</strong> (Peru and
+          Latin America) or, by international card, <strong>Creem</strong>
+          (Armitage Labs OÜ, Estonia), on their own pages. Creem sells to you in
+          its own name, as the merchant of record: it receives what you type on
+          its checkout page — your email, your card, your country — as the
+          controller of that data, under
+          <a href="https://www.creem.io/privacy" rel="noopener">its privacy notice</a>.
+          Nobody else receives anything. So your
           data is processed outside Peru — a cross-border transfer, which Peru's Ley
           29733 asks us to tell you about beforehand.
         </p>
@@ -309,6 +364,27 @@
           switch off and delete themselves from the app's footer or the guide, with
           nobody's permission. For anything tied to your account — your email address, your
           progress, your plan — write to us through the repository and we delete it.
+        </p>
+
+        <p>
+          If you report a problem: the <strong>Report a problem</strong> button in the
+          app's footer sends us what you typed, the page you were on, the version of the
+          site, the line your browser sends to any website (the user-agent, which names
+          your browser and system) and the platform it declares (for example “iPhone” or
+          “Win32”), your screen and window size and their pixel density, your time zone
+          (only its offset from UTC), whether your browser said it was online or
+          offline, the language you read the site in, and, if you were signed in, which
+          account sent it. An email
+          address, if you type one so we can reply, is kept too; leaving it empty changes
+          nothing else. Your IP address is not stored with the report — it is used only to
+          limit how many reports can be sent per hour, and for that it is turned into a code
+          that changes every day and is deleted within two days; the address itself is never
+          written to the database — and neither is your voice, your recordings or your progress. Anything card-shaped you paste by mistake is
+          removed before it is stored. Only we read them, to fix what you told us. A
+          report we have closed is deleted 180 days later; one still open is kept while it
+          is open, because losing it would mean losing the bug. To have one deleted
+          sooner, write to us through the repository with its number
+          (<code>VS-…</code>).
         </p>
 
         <p>
@@ -327,6 +403,11 @@
           advertising based on it. Signing in with Google tells us your email address
           and name; we never see your password and have no access to your Google
           account.
+        </p>
+
+        <p>
+          What is charged, the 7-day trial, gifts, cancelling and refunds are in
+          <a href="terms.html#en">the terms of use</a>.
         </p>
       </section>
 

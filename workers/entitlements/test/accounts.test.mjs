@@ -265,3 +265,75 @@ test("toPublicAccount exposes no internal columns", async () => {
   );
   assert.equal(view.trialUsed, false);
 });
+
+test("guesses arriving together spend the allowance once each", async () => {
+  // The count used to be read in the SELECT and written back after the hash
+  // was compared, so guesses that arrived together all read the same number
+  // and every one of them was judged. A hundred parallel wrong guesses were a
+  // hundred one-in-a-million shots at somebody else's account, and the code
+  // was never burned (QA round 7). Six digits is a million values, and the
+  // sign-in a lucky guess buys carries whatever that account holds.
+  const env = await freshEnv();
+  await issueLoginCode(env.DB, "p@example.test", 1000);
+  const answers = await Promise.all(
+    Array.from({ length: 20 }, () => consumeLoginCode(env.DB, "p@example.test", "000000", 1001))
+  );
+  const judged = answers.filter((a) => a.reason === "bad_code").length;
+  const refused = answers.filter((a) => a.reason === "too_many_attempts").length;
+  assert.equal(judged, LOGIN_CODE_MAX_ATTEMPTS - 1, "only the allowance is ever judged");
+  assert.equal(refused, 20 - (LOGIN_CODE_MAX_ATTEMPTS - 1), "the rest never reach the hash");
+});
+
+test("the right code signs in once, however many copies of it arrive at once", async () => {
+  // "Single use" has to mean once. Five parallel submissions of the same right
+  // code each read `consumed_at` as null and each signed in.
+  const env = await freshEnv();
+  const { code } = await issueLoginCode(env.DB, "p@example.test", 1000);
+  const answers = await Promise.all(
+    Array.from({ length: 5 }, () => consumeLoginCode(env.DB, "p@example.test", code, 1001))
+  );
+  assert.equal(answers.filter((a) => a.ok).length, 1);
+  assert.equal(answers.filter((a) => a.ok === false).length, 4);
+});
+
+test("the right code on the last allowed guess still works", async () => {
+  // Counting the guess before judging it must not cost somebody their last
+  // attempt: the fifth guess being right is a sign-in, not a refusal.
+  const env = await freshEnv();
+  const { code } = await issueLoginCode(env.DB, "p@example.test", 1000);
+  for (let i = 1; i < LOGIN_CODE_MAX_ATTEMPTS; i += 1) {
+    assert.equal((await consumeLoginCode(env.DB, "p@example.test", "000000", 1000 + i)).reason, "bad_code");
+  }
+  assert.equal((await consumeLoginCode(env.DB, "p@example.test", code, 1010)).ok, true);
+});
+
+test("a code whose allowance is spent is dead even if nothing burned it", async () => {
+  // The gap between the fifth guess and the burn. The limit used to be checked
+  // only on a wrong guess, so the right code was accepted in that window.
+  const env = await freshEnv();
+  const { code } = await issueLoginCode(env.DB, "p@example.test", 1000);
+  const row = await env.DB
+    .prepare("SELECT id FROM login_codes WHERE consumed_at IS NULL ORDER BY created_at DESC LIMIT 1")
+    .first();
+  await env.DB
+    .prepare("UPDATE login_codes SET attempts = ?2 WHERE id = ?1")
+    .bind(row.id, LOGIN_CODE_MAX_ATTEMPTS)
+    .run();
+  assert.equal(
+    (await consumeLoginCode(env.DB, "p@example.test", code, 1001)).reason,
+    "too_many_attempts"
+  );
+});
+
+test("a code somebody else already signed in with says so, and is not called over-guessed", async () => {
+  const env = await freshEnv();
+  const { code } = await issueLoginCode(env.DB, "p@example.test", 1000);
+  assert.equal((await consumeLoginCode(env.DB, "p@example.test", code, 1001)).ok, true);
+  const row = await env.DB
+    .prepare("SELECT attempts, consumed_at FROM login_codes ORDER BY created_at DESC LIMIT 1")
+    .first();
+  assert.equal(row.consumed_at !== null, true);
+  // The guess was counted even though it was right, which is harmless once the
+  // code is consumed, and the refusal still reads as "gone", not "over-guessed".
+  assert.equal(Number(row.attempts), 1);
+});

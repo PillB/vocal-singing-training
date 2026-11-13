@@ -31,9 +31,13 @@ import {
 import { callerIp, ensureSchema, hitRateLimit, normalizeEmail, nowSec, sweepExpired } from "./db.js";
 import { emailConfigured, sendLoginCode } from "./email.js";
 import {
+  MAX_GRANT_DAYS,
+  TRIAL_ARMS,
+  countGrants,
   createGiftCode,
   createGrant,
   linkLicense,
+  listAllGrants,
   listGrants,
   redeemGiftCode,
   resolveEntitlement,
@@ -42,10 +46,14 @@ import {
   safePlan,
   startTrial,
   toPublicGrant,
+  trialArmFromSource,
+  trialExperimentOn,
+  trialPlanFor,
   trialSeconds
 } from "./grants.js";
 import { googleConfigured, verifyGoogleIdToken } from "./google.js";
 import { buildTokenPayload, isLicenseIdShape, signPayload } from "./license.js";
+import { CLAIMABLE_PROVIDERS } from "./limits.js";
 import { deleteProgress, getProgress, listProgress, putProgress } from "./progress.js";
 import { getEntitlement, getLicenseIdForClaim } from "./store.js";
 
@@ -162,6 +170,18 @@ export async function licenseTokenForResolution(resolution, account, env, now) {
   if (!subject) {
     return null;
   }
+  // `resolveEntitlement` reports the access that lasts longest, and a grant row
+  // carries no provider, so gifting two months to a monthly subscriber makes
+  // the grant win and leaves `resolution.provider` null. The person is still
+  // being charged on their own rail every month, though, and the `provider`
+  // claim answers "who is charging you", not "what granted this token": the
+  // browser's only reader of it is the pricing panel, which uses it to tell
+  // them where to go to cancel. So when a grant wins, the rail from the paid
+  // record underneath it is still the honest answer.
+  const chargingRail = (resolution.paid || []).reduce(
+    (found, record) => found || (record && record.provider) || null,
+    null
+  );
   const record = {
     licenseId: subject,
     plan: safePlan(resolution.plan),
@@ -169,7 +189,7 @@ export async function licenseTokenForResolution(resolution, account, env, now) {
     // whatever the provider last said, so "canceled but paid through March"
     // still reads as canceled in the token.
     status: resolution.status === "free" ? "active" : resolution.status,
-    provider: resolution.provider || resolution.source || "grant",
+    provider: resolution.provider || chargingRail || resolution.source || "grant",
     periodEnd: resolution.periodEnd
   };
   // Build the payload, add the two account claims, then sign once — so the
@@ -193,6 +213,7 @@ export async function licenseTokenForResolution(resolution, account, env, now) {
 export async function buildMePayload(env, account, now) {
   const resolution = await resolveEntitlement(env.DB, env.ENTITLEMENTS, account.id, now);
   const minted = await licenseTokenForResolution(resolution, account, env, now).catch(() => null);
+  const trial = await trialViewFor(env, account, resolution);
   return {
     ok: true,
     account: publicAccountFor(account, env),
@@ -206,8 +227,45 @@ export async function buildMePayload(env, account, now) {
     },
     grants: resolution.grants,
     paid: resolution.paid,
+    trialDays: trial.days,
+    trialArm: trial.arm,
     licenseId: minted ? minted.payload.sub : null,
     token: minted ? minted.token : null
+  };
+}
+
+/**
+ * The two trial facts a signed-in page needs: how long this account's trial is,
+ * and which arm of the trial-length test it belongs to.
+ *
+ * `days` is what the offer should say. Before the trial it is what the account
+ * would be given; afterwards it is the length of the trial it actually got, so
+ * the number on the screen is never a number that was never true.
+ *
+ * `arm` is null unless there is an arm. An account that trialled before the
+ * test was switched on has a trial row with no arm on it, and reporting the arm
+ * a hash would give it now would put a seven-day trial in the fourteen-day
+ * column. Before the trial starts the would-be arm is reported, because the
+ * offer itself names the length and is therefore already the treatment: the
+ * page records its exposure when it shows that offer, not when the trial
+ * begins, so that the people who saw a longer offer and did not take it stay in
+ * the arm they were offered.
+ *
+ * @param {Object} env Worker env bindings.
+ * @param {Object} account Account row.
+ * @param {Object} resolution Result of `resolveEntitlement`.
+ * @returns {Promise<{days: number, arm: string|null}>} What the page may say.
+ */
+async function trialViewFor(env, account, resolution) {
+  const plan = await trialPlanFor(env, account.id);
+  const row = ((resolution && resolution.grants) || []).find((g) => g && g.kind === "trial") || null;
+  if (!row) {
+    return { days: plan.days, arm: plan.arm };
+  }
+  const length = Math.round((Number(row.endsAt) - Number(row.startsAt)) / 86400);
+  return {
+    days: Number.isFinite(length) && length > 0 ? length : plan.days,
+    arm: trialArmFromSource(row.source)
   };
 }
 
@@ -228,8 +286,31 @@ export function authMethods(env) {
     email: emailConfigured(env),
     google: googleConfigured(env),
     googleClientId: ids[0] || null,
-    trialDays: Math.round(trialSeconds(env) / 86400)
+    trialDays: publicTrialDays(env)
   };
+}
+
+/**
+ * The trial length to name before anybody has signed in.
+ *
+ * With the length test off this is `TRIAL_DAYS`, which is what every account
+ * gets. With it on, `TRIAL_DAYS` is ignored and the length follows the
+ * account — which does not exist yet on this route — so the SHORTEST arm is
+ * named and `/v1/me` corrects it upward once there is an account to key on.
+ *
+ * This used to report `TRIAL_DAYS` either way, which with the test running is
+ * a number no arm gives (QA round 7). Naming the longest arm instead would
+ * promise fourteen days to somebody who is then given seven, and a promise
+ * broken at sign-up is worse than a pleasant surprise.
+ * @param {Object} env Worker env bindings.
+ * @returns {number} Days.
+ */
+function publicTrialDays(env) {
+  const configured = Math.round(trialSeconds(env) / 86400);
+  if (!trialExperimentOn(env)) {
+    return configured;
+  }
+  return Math.min(...TRIAL_ARMS.map((arm) => arm.days));
 }
 
 /**
@@ -437,7 +518,8 @@ export async function handleLink(request, env, deps) {
   const provider = parsed.body.provider;
   if (typeof parsed.body.licenseId === "string" && isLicenseIdShape(parsed.body.licenseId)) {
     licenseId = parsed.body.licenseId;
-  } else if ((provider === "stripe" || provider === "mercadopago") && typeof parsed.body.sessionId === "string") {
+  } else if (typeof provider === "string" && CLAIMABLE_PROVIDERS.has(provider)
+    && typeof parsed.body.sessionId === "string") {
     const sessionId = parsed.body.sessionId.trim();
     if (!sessionId || sessionId.length > 200) {
       return json({ ok: false, reason: "bad_request" }, 400, cors);
@@ -612,6 +694,31 @@ export async function handleDeleteProgress(request, env, url, deps) {
 }
 
 /**
+ * A whole number of days from a request body, or why it is not one.
+ *
+ * `undefined` means the caller did not say, and takes the default. Anything
+ * else that is not a whole number of days inside the bounds is refused, not
+ * rounded: `Number(x) || 30` turned a typed `0`, an empty field and the word
+ * "many" into a month, which is the opposite of what the operator asked for in
+ * all three cases. `createGrant` and `createGiftCode` still clamp, as the last
+ * line rather than the first.
+ *
+ * @param {unknown} value Raw `days` from the body.
+ * @param {number} fallback Days to use when the caller said nothing.
+ * @returns {{ok: boolean, days?: number}} Result.
+ */
+export function readDays(value, fallback) {
+  if (value === undefined) {
+    return { ok: true, days: Math.floor(fallback) };
+  }
+  const days = typeof value === "number" || typeof value === "string" ? Math.floor(Number(value)) : NaN;
+  if (!Number.isFinite(days) || days < 1 || days > MAX_GRANT_DAYS) {
+    return { ok: false };
+  }
+  return { ok: true, days };
+}
+
+/**
  * Require an admin session.
  * @param {Object} env Worker env bindings.
  * @param {Request} request Incoming request.
@@ -647,11 +754,15 @@ export async function handleAdminCreateGiftCode(request, env, deps) {
   if (!parsed.ok) {
     return json({ ok: false, reason: parsed.reason }, 400, cors);
   }
+  const asked = readDays(parsed.body.days, Math.floor(trialSeconds(env) / 86400));
+  if (!asked.ok) {
+    return json({ ok: false, reason: "bad_days" }, 400, cors);
+  }
   const created = await createGiftCode(
     env.DB,
     {
       plan: parsed.body.plan,
-      days: parsed.body.days || Math.floor(trialSeconds(env) / 86400),
+      days: asked.days,
       maxRedemptions: parsed.body.maxRedemptions,
       note: parsed.body.note,
       createdBy: admin.account.id,
@@ -751,10 +862,11 @@ export async function handleAdminCreateGrant(request, env, deps) {
   if (!email) {
     return json({ ok: false, reason: "bad_email" }, 400, cors);
   }
-  const days = Math.floor(Number(parsed.body.days) || 30);
-  if (!Number.isFinite(days) || days < 1) {
+  const asked = readDays(parsed.body.days, 30);
+  if (!asked.ok) {
     return json({ ok: false, reason: "bad_days" }, 400, cors);
   }
+  const days = asked.days;
   const { account } = await ensureAccount(env.DB, email, { adminEmails: adminEmails(env) }, at);
   const grant = await createGrant(
     env.DB,
@@ -770,6 +882,53 @@ export async function handleAdminCreateGrant(request, env, deps) {
     at
   );
   return json({ ok: true, account: publicAccountFor(account, env), grant: toPublicGrant(grant, at) }, 200, cors);
+}
+
+/**
+ * GET /v1/admin/grants — who holds Pro we handed out, and which kind.
+ *
+ * The account lookup answers "what does this person hold". This answers the
+ * question that had no answer: which testers are still comped, which gifts run
+ * out this week, who did we give something to and forget about. Filterable by
+ * kind and state, newest first, paged by key.
+ *
+ * @param {Request} request Incoming request.
+ * @param {Object} env Worker env bindings.
+ * @param {URL} url Parsed URL.
+ * @param {Object} deps Injectables.
+ * @returns {Promise<Response>} Response.
+ */
+export async function handleAdminListGrants(request, env, url, deps) {
+  const { json, cors } = deps;
+  const at = nowSec(deps.now);
+  const admin = await requireAdmin(env, request, at);
+  if (!admin.ok) {
+    return json({ ok: false, reason: admin.reason }, admin.status, cors);
+  }
+  const page = await listAllGrants(env.DB, {
+    kind: url.searchParams.get("kind") || "",
+    state: url.searchParams.get("state") || "",
+    limit: url.searchParams.get("limit"),
+    before: url.searchParams.get("before"),
+    beforeId: url.searchParams.get("beforeId") || "",
+    at
+  });
+  return json(
+    {
+      ok: true,
+      // `createdAt` is the paging key, and `email` is the only part of this
+      // list anybody can act on; neither belongs in the member-facing shape.
+      grants: page.grants.map((row) => ({
+        ...toPublicGrant(row, at),
+        email: row.email,
+        createdAt: Number(row.created_at)
+      })),
+      more: page.more,
+      counts: await countGrants(env.DB, at)
+    },
+    200,
+    cors
+  );
 }
 
 /**
@@ -876,6 +1035,89 @@ export async function handleAdminLookupAccount(request, env, url, deps) {
 }
 
 /**
+ * Refuse a method mismatch with the same shape everywhere.
+ * @param {Object} deps Injectables `{json, cors}`.
+ * @param {string} allow Allowed methods.
+ * @returns {Response} 405.
+ */
+function notAllowed(deps, allow) {
+  const { json, cors } = deps;
+  return json({ ok: false, reason: "method_not_allowed" }, 405, { ...cors, allow });
+}
+
+/** GET /v1/auth/methods: the sign-in methods this deployment can offer. */
+function handleAuthMethods(request, env, deps) {
+  const { json, cors } = deps;
+  return json({ ok: true, ...authMethods(env) }, 200, cors);
+}
+
+/** POST /v1/admin/sweep: an admin runs the expiry sweep now rather than waiting for the cron. */
+async function handleAdminSweep(request, env, deps) {
+  const { json, cors } = deps;
+  const admin = await requireAdmin(env, request, nowSec(deps.now));
+  if (!admin.ok) {
+    return json({ ok: false, reason: admin.reason }, admin.status, cors);
+  }
+  await sweepExpired(env.DB, nowSec(deps.now));
+  return json({ ok: true }, 200, cors);
+}
+
+/** Adapt a `(request, env, deps)` handler to the route table's `(request, env, url, deps)`. */
+function withoutUrl(handler) {
+  return (request, env, url, deps) => handler(request, env, deps);
+}
+
+/** One account route: its handlers by method, and the `allow` header a mismatch answers with. */
+function accountRoute(allow, handlers) {
+  return { allow, handlers: new Map(Object.entries(handlers)) };
+}
+
+/**
+ * Every account-layer path, in the order the router has always listed them.
+ * Paths are matched exactly, so at most one entry can answer a request and the
+ * order only keeps the table readable next to its history. Maps rather than
+ * object lookups, so a method or a path spelled like an `Object.prototype`
+ * member ("constructor", "toString") finds no handler and gets the same 405 or
+ * 404 as any other unknown one, instead of calling a builtin.
+ */
+const ACCOUNT_ROUTES = new Map([
+  ["/v1/auth/methods", accountRoute("GET", { GET: withoutUrl(handleAuthMethods) })],
+  ["/v1/auth/email/start", accountRoute("POST", { POST: withoutUrl(handleEmailStart) })],
+  ["/v1/auth/email/verify", accountRoute("POST", { POST: withoutUrl(handleEmailVerify) })],
+  ["/v1/auth/google", accountRoute("POST", { POST: withoutUrl(handleGoogleSignIn) })],
+  ["/v1/auth/logout", accountRoute("POST", { POST: withoutUrl(handleLogout) })],
+  ["/v1/me", accountRoute("GET, POST", { GET: withoutUrl(handleMe), POST: withoutUrl(handleMe) })],
+  ["/v1/me/link", accountRoute("POST", { POST: withoutUrl(handleLink) })],
+  ["/v1/me/trial", accountRoute("POST", { POST: withoutUrl(handleStartTrial) })],
+  ["/v1/me/redeem", accountRoute("POST", { POST: withoutUrl(handleRedeem) })],
+  // POST is accepted as a write too, but the 405 has only ever advertised PUT.
+  [
+    "/v1/me/progress",
+    accountRoute("GET, PUT, DELETE", {
+      GET: handleGetProgress,
+      PUT: withoutUrl(handlePutProgress),
+      POST: withoutUrl(handlePutProgress),
+      DELETE: handleDeleteProgress
+    })
+  ],
+  [
+    "/v1/admin/gift-codes",
+    accountRoute("GET, POST", {
+      POST: withoutUrl(handleAdminCreateGiftCode),
+      GET: withoutUrl(handleAdminListGiftCodes)
+    })
+  ],
+  ["/v1/admin/gift-codes/revoke", accountRoute("POST", { POST: withoutUrl(handleAdminRevokeGiftCode) })],
+  [
+    "/v1/admin/grants",
+    accountRoute("GET, POST", { POST: withoutUrl(handleAdminCreateGrant), GET: handleAdminListGrants })
+  ],
+  ["/v1/admin/grants/revoke", accountRoute("POST", { POST: withoutUrl(handleAdminRevokeGrant) })],
+  ["/v1/admin/account", accountRoute("GET", { GET: handleAdminLookupAccount })],
+  ["/v1/admin/sweep", accountRoute("POST", { POST: withoutUrl(handleAdminSweep) })]
+]);
+
+/**
  * Route one account-layer request, or return null so the caller's own router
  * keeps handling the webhook and license paths untouched.
  *
@@ -896,88 +1138,13 @@ export async function routeAccountApi(request, env, url, path, deps) {
   }
   await ensureSchema(env.DB);
 
-  const method = request.method;
-  /**
-   * Refuse a method mismatch with the same shape everywhere.
-   * @param {string} allow Allowed methods.
-   * @returns {Response} 405.
-   */
-  const notAllowed = (allow) => json({ ok: false, reason: "method_not_allowed" }, 405, { ...cors, allow });
-
-  if (path === "/v1/auth/methods") {
-    return method === "GET" ? json({ ok: true, ...authMethods(env) }, 200, cors) : notAllowed("GET");
+  const route = ACCOUNT_ROUTES.get(path);
+  if (!route) {
+    return json({ ok: false, reason: "not_found" }, 404, cors);
   }
-  if (path === "/v1/auth/email/start") {
-    return method === "POST" ? handleEmailStart(request, env, deps) : notAllowed("POST");
+  const handler = route.handlers.get(request.method);
+  if (!handler) {
+    return notAllowed(deps, route.allow);
   }
-  if (path === "/v1/auth/email/verify") {
-    return method === "POST" ? handleEmailVerify(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/auth/google") {
-    return method === "POST" ? handleGoogleSignIn(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/auth/logout") {
-    return method === "POST" ? handleLogout(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/me") {
-    if (method !== "GET" && method !== "POST") {
-      return notAllowed("GET, POST");
-    }
-    return handleMe(request, env, deps);
-  }
-  if (path === "/v1/me/link") {
-    return method === "POST" ? handleLink(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/me/trial") {
-    return method === "POST" ? handleStartTrial(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/me/redeem") {
-    return method === "POST" ? handleRedeem(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/me/progress") {
-    if (method === "GET") {
-      return handleGetProgress(request, env, url, deps);
-    }
-    if (method === "PUT" || method === "POST") {
-      return handlePutProgress(request, env, deps);
-    }
-    if (method === "DELETE") {
-      return handleDeleteProgress(request, env, url, deps);
-    }
-    return notAllowed("GET, PUT, DELETE");
-  }
-  if (path === "/v1/admin/gift-codes") {
-    if (method === "POST") {
-      return handleAdminCreateGiftCode(request, env, deps);
-    }
-    if (method === "GET") {
-      return handleAdminListGiftCodes(request, env, deps);
-    }
-    return notAllowed("GET, POST");
-  }
-  if (path === "/v1/admin/gift-codes/revoke") {
-    return method === "POST" ? handleAdminRevokeGiftCode(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/admin/grants") {
-    return method === "POST" ? handleAdminCreateGrant(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/admin/grants/revoke") {
-    return method === "POST" ? handleAdminRevokeGrant(request, env, deps) : notAllowed("POST");
-  }
-  if (path === "/v1/admin/account") {
-    return method === "GET" ? handleAdminLookupAccount(request, env, url, deps) : notAllowed("GET");
-  }
-  if (path === "/v1/admin/sweep") {
-    if (method !== "POST") {
-      return notAllowed("POST");
-    }
-    const admin = await requireAdmin(env, request, nowSec(deps.now));
-    if (!admin.ok) {
-      return json({ ok: false, reason: admin.reason }, admin.status, cors);
-    }
-    await sweepExpired(env.DB, nowSec(deps.now));
-    return json({ ok: true }, 200, cors);
-  }
-
-  return json({ ok: false, reason: "not_found" }, 404, cors);
+  return handler(request, env, url, deps);
 }

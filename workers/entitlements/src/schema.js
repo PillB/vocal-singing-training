@@ -15,8 +15,10 @@
 "use strict";
 
 /**
- * Bump when a statement is added. Stored in `schema_meta` so `ensureSchema`
- * can skip the whole batch on the overwhelming majority of requests.
+ * Bump when a statement is added. Stored in `schema_meta` for people reading
+ * the database; `ensureSchema` decides whether to run the batch by a hash of
+ * the statements themselves (db.js `schemaFingerprint`), so a forgotten bump
+ * or two branches choosing the same number cannot skip a table.
  */
 export const SCHEMA_VERSION = 6;
 

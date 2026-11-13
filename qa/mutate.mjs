@@ -938,9 +938,11 @@ export const MUTANTS = {
     ["DA18 the sweep stops after one chunk however much is left", "src/db.js", "if (n < SWEEP_CHUNK_ROWS) {", "if (n <= SWEEP_CHUNK_ROWS) {", "d1-atomicity"],
     ["DA19 a ledger key expiring this second is kept by the sweep though reads treat it as gone", "src/db.js", "[\"ledger_kv\", \"expires_at IS NOT NULL AND expires_at <= ?1\", at]", "[\"ledger_kv\", \"expires_at IS NOT NULL AND expires_at < ?1\", at]", "d1-atomicity"],
     ["DA20 the cron run passes in silence when a table was not swept", "src/index.js", "    if (report.failed.length) {\n      // Thrown after", "    if (false) {\n      // Thrown after", "d1-atomicity"],
-    ["DA21 every cold isolate reruns the whole schema batch (SC-1)", "src/db.js", "return Number(row && row.value) >= SCHEMA_VERSION;", "return false;", "d1-atomicity"],
+    ["DA21 every cold isolate reruns the whole schema batch (SC-1)", "src/db.js", "    return Boolean(row);\n", "    return false;\n", "d1-atomicity"],
     ["DA22 older code lowers a newer schema's version", "src/db.js", "ON CONFLICT(key) DO UPDATE SET value = ?1 WHERE CAST(schema_meta.value AS INTEGER) < CAST(?1 AS INTEGER)", "ON CONFLICT(key) DO UPDATE SET value = ?1", "d1-atomicity"],
-    ["DA23 a newer schema is taken for a stale one", "src/db.js", "return Number(row && row.value) >= SCHEMA_VERSION;", "return Number(row && row.value) === SCHEMA_VERSION;", "d1-atomicity"]
+    ["DA23 the schema is skipped on its version number: another branch's same number hides a missing table", "src/db.js", "db.prepare(\"SELECT 1 AS ok FROM schema_meta WHERE key = ?1\").bind(SCHEMA_KEY)", "db.prepare(\"SELECT 1 AS ok FROM schema_meta WHERE key = 'version' AND CAST(value AS INTEGER) >= ?1\").bind(SCHEMA_VERSION)", "d1-atomicity"],
+    ["DA24 the schema's record is never written: every cold isolate reruns the batch", "src/db.js", "    db.prepare(\"INSERT INTO schema_meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO NOTHING\").bind(SCHEMA_KEY, String(SCHEMA_VERSION)),\n", "", "d1-atomicity"],
+    ["DA25 the fingerprint ignores what the statements say", "src/db.js", "hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193) >>> 0;", "hash = hash >>> 0;", "d1-atomicity"]
   ].map(([name, file, from, to, test]) => ({
     name,
     file: `workers/entitlements/${file}`,

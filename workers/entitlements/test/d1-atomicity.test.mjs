@@ -28,11 +28,12 @@ import {
   ensureSchema,
   readHealthFlag,
   resetSchemaMemo,
+  schemaFingerprint,
   sweepExpired
 } from "../src/db.js";
 import { createGiftCode, createGrant, linkLicense, redeemGiftCode, revokeGiftCode, revokeGrant, startTrial } from "../src/grants.js";
 import worker, { handleRequest } from "../src/index.js";
-import { SCHEMA_VERSION } from "../src/schema.js";
+import { SCHEMA_STATEMENTS, SCHEMA_VERSION } from "../src/schema.js";
 import { TEST_ORIGIN, createAccountEnv } from "./fixtures.mjs";
 
 const STOPPED = /worker stopped/;
@@ -461,43 +462,68 @@ function countingBatches(db) {
   return { seen, db: { prepare: (sql) => db.prepare(sql), batch: (l) => ((seen.batches += 1), db.batch(l)) } };
 }
 
-test("a cold isolate reads the schema version instead of rerunning every CREATE", async () => {
+test("a cold isolate reads one row instead of rerunning every CREATE", async () => {
   resetSchemaMemo();
   const env = createAccountEnv();
   await ensureSchema(env.DB);
   resetSchemaMemo();
   const warm = countingBatches(env.DB);
   await ensureSchema(warm.db);
-  assert.equal(warm.seen.batches, 0, "the stored version is current: nothing to run");
+  assert.equal(warm.seen.batches, 0, "this schema was created here already: nothing to run");
 
-  // Control: an older stored version runs the batch and raises it.
-  await env.DB.prepare("UPDATE schema_meta SET value = ?1 WHERE key = 'version'").bind(String(SCHEMA_VERSION - 1)).run();
+  // Control: a database without this schema's record runs the batch, once.
+  await env.DB.prepare("DELETE FROM schema_meta WHERE key = ?1").bind(schemaFingerprint(SCHEMA_STATEMENTS)).run();
   resetSchemaMemo();
   const stale = countingBatches(env.DB);
   await ensureSchema(stale.db);
   assert.equal(stale.seen.batches, 1);
-  assert.equal(await count(env.DB, "SELECT value FROM schema_meta WHERE key = 'version'"), SCHEMA_VERSION);
+  resetSchemaMemo();
+  const again = countingBatches(env.DB);
+  await ensureSchema(again.db);
+  assert.equal(again.seen.batches, 0);
 });
 
-test("older code never lowers a newer schema's version, even when it runs the batch", async () => {
-  // While a deploy rolls out, an isolate on the old code whose version read
-  // failed runs the batch; writing its own number would make the new code
-  // rerun the batch on every cold start until the next one.
+test("a schema at the same version number but with other statements still gets this one's tables", async () => {
+  // Two branches each raised SCHEMA_VERSION to the same number, and the other
+  // deployed first. Skipping the batch on the number would leave this
+  // branch's tables uncreated, and the first webhook to need one would fail.
+  resetSchemaMemo();
+  const env = createAccountEnv();
+  await ensureSchema(env.DB);
+  await env.DB.exec(`DELETE FROM schema_meta; DROP TABLE ledger_tx;
+    INSERT INTO schema_meta (key, value) VALUES ('version', '${SCHEMA_VERSION}'), ('schema:1:00000000', '${SCHEMA_VERSION}')`);
+  resetSchemaMemo();
+  await ensureSchema(env.DB);
+  assert.equal(await count(env.DB, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'ledger_tx'"), 1);
+});
+
+test("the fingerprint changes with any statement, and not otherwise", () => {
+  const base = ["CREATE TABLE a (x)", "CREATE TABLE b (y)"];
+  assert.equal(schemaFingerprint(base), schemaFingerprint([...base]));
+  assert.notEqual(schemaFingerprint(base), schemaFingerprint([...base, "CREATE INDEX i ON a (x)"]));
+  assert.notEqual(schemaFingerprint(base), schemaFingerprint(["CREATE TABLE a (x)", "CREATE TABLE b (z)"]));
+});
+
+test("older code never lowers a newer schema's version number", async () => {
+  // While a deploy rolls out, an isolate on the old code may run the batch
+  // (its own schema's record is missing, or the read failed); writing its own
+  // number would tell whoever reads the database the schema went backwards.
   resetSchemaMemo();
   const env = createAccountEnv();
   await ensureSchema(env.DB);
   await env.DB.prepare("UPDATE schema_meta SET value = ?1 WHERE key = 'version'").bind(String(SCHEMA_VERSION + 1)).run();
   resetSchemaMemo();
   const flaky = {
-    prepare: (sql) => (/SELECT value FROM schema_meta/.test(sql) ? { first: async () => { throw new Error("read failed"); } } : env.DB.prepare(sql)),
+    prepare: (sql) => (/SELECT 1 AS ok FROM schema_meta/.test(sql) ? { bind: () => ({ first: async () => { throw new Error("read failed"); } }) } : env.DB.prepare(sql)),
     batch: (l) => env.DB.batch(l)
   };
   await ensureSchema(flaky);
   assert.equal(await count(env.DB, "SELECT value FROM schema_meta WHERE key = 'version'"), SCHEMA_VERSION + 1);
+  // Control: from an older number, the batch raises it.
+  await env.DB.prepare("UPDATE schema_meta SET value = ?1 WHERE key = 'version'").bind(String(SCHEMA_VERSION - 1)).run();
   resetSchemaMemo();
-  const newer = countingBatches(env.DB);
-  await ensureSchema(newer.db);
-  assert.equal(newer.seen.batches, 0, "and a newer schema serves older code without a batch");
+  await ensureSchema(flaky);
+  assert.equal(await count(env.DB, "SELECT value FROM schema_meta WHERE key = 'version'"), SCHEMA_VERSION);
 });
 
 test("a sign-in through the whole worker still works end to end", async () => {

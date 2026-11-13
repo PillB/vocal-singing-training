@@ -108,8 +108,8 @@ export async function hmacSha256Hex(key, value) {
  * Create every table and index if they are missing.
  *
  * Cheap to call: after the first success in this isolate it is a no-op, and
- * a cold call reads the stored version and stops there unless this code's
- * schema is newer, when it runs the `IF NOT EXISTS` statements in one batch.
+ * a cold call reads one row and stops there unless this exact schema was never
+ * created here, when it runs the `IF NOT EXISTS` statements in one batch.
  *
  * @param {Object} db D1 database binding.
  * @returns {Promise<void>} Resolves once the schema exists.
@@ -126,10 +126,11 @@ export async function ensureSchema(db) {
     return;
   }
   const statements = SCHEMA_STATEMENTS.map((sql) => db.prepare(sql));
-  // Only ever raised: while a deploy rolls out, an isolate still on the older
-  // code must not mark the newer schema as old, or the two would take turns
-  // rerunning the whole batch.
   statements.push(
+    db.prepare("INSERT INTO schema_meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO NOTHING").bind(SCHEMA_KEY, String(SCHEMA_VERSION)),
+    // The number is for people reading the database. Only ever raised: while
+    // a deploy rolls out, an isolate on the older code must not mark the
+    // newer schema as old.
     db
       .prepare(
         `INSERT INTO schema_meta (key, value) VALUES ('version', ?1)
@@ -142,18 +143,40 @@ export async function ensureSchema(db) {
 }
 
 /**
- * Whether the stored schema is this code's or newer, so the batch can be
- * skipped. One row read on a cold isolate, where the batch was 35 statements
- * and a row written every time (audit SC-1). The schema only ever
- * grows (every statement is `IF NOT EXISTS`), so a newer one serves older
- * code too.
+ * The `schema_meta` key that records this code's schema as created: a hash of
+ * its statements. Keyed by content rather than by SCHEMA_VERSION, because
+ * once the batch is skipped on a match the match has to be exact: two
+ * branches that each raised the version to the same number, or a statement
+ * added without raising it, would otherwise skip a table that was never
+ * created, and the first payment to need it would fail. One row per schema
+ * ever deployed, so an older and a newer isolate during a rollout each find
+ * their own and neither reruns the batch. (FNV-1a, 32 bits: this guards
+ * against accident, not an adversary.)
+ * @param {string[]} statements Schema statements.
+ * @returns {string} Key.
+ */
+export function schemaFingerprint(statements) {
+  const text = statements.join("\n");
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  }
+  return `schema:${statements.length}:${hash.toString(16).padStart(8, "0")}`;
+}
+
+const SCHEMA_KEY = schemaFingerprint(SCHEMA_STATEMENTS);
+
+/**
+ * Whether this code's schema has already been created here, so the batch can
+ * be skipped: one row read on a cold isolate, where it used to be the
+ * 35-statement batch with a row written every time (audit SC-1).
  * @param {Object} db D1 database binding.
  * @returns {Promise<boolean>} True when nothing needs creating.
  */
 async function schemaIsCurrent(db) {
   try {
-    const row = await db.prepare("SELECT value FROM schema_meta WHERE key = 'version'").first();
-    return Number(row && row.value) >= SCHEMA_VERSION;
+    const row = await db.prepare("SELECT 1 AS ok FROM schema_meta WHERE key = ?1").bind(SCHEMA_KEY).first();
+    return Boolean(row);
   } catch {
     // No schema_meta yet, a fresh database: the batch creates it. A database
     // that is down fails the batch too, and that error is the one reported.

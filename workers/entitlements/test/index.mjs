@@ -78,3 +78,6 @@ import "./grants-edges.test.mjs";
 // Sign-in through the router: refused codes write nothing, the fifth try,
 // two tabs, failed reads, session length, and what the admin sweep answers.
 import "./sign-in-edges.test.mjs";
+// Housekeeping: what the sweep keeps, how much one run does, the schema memo,
+// and the deadline each call out really gets.
+import "./housekeeping-edges.test.mjs";

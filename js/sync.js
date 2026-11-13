@@ -583,6 +583,91 @@
   }
 
   /**
+   * What a cycle stops on after reading the account's copy, or null to merge it.
+   * @param {object} pulled The GET's answer.
+   * @param {string} profileId Whose copy.
+   * @returns {{ok: false, reason: string}|null} Result.
+   */
+  function pullStop(pulled, profileId) {
+    if (pulled.status === 401) return { ok: false, reason: "signed_out" };
+    if (!pulled.ok) {
+      // Usually the whole of an offline sync: the read fails before any
+      // write is tried. Say so, or the panel keeps "saved" from last time.
+      lastError = pulled.offline ? "offline" : "error";
+      return { ok: false, reason: lastError };
+    }
+    // Deleted while the read was out: what came back is nobody's here now.
+    if (deleted(profileId)) return { ok: false, reason: "deleted" };
+    return null;
+  }
+
+  /**
+   * Merge the account's copy into this profile's bag and keep the result here.
+   * @param {string} profileId Whose bag.
+   * @param {object} pulled The GET's answer.
+   * @returns {{serverRev: number, seen: number, merged: object}} The revision
+   *   read, the local version merged, and what to push.
+   */
+  function mergePulled(profileId, pulled) {
+    const serverRev = Number(pulled.data?.rev) || 0;
+    const seen = version;
+    const local = localBag(profileId);
+    const merged = mergeBag(local, pulled.data?.doc || null);
+
+    // Write the merged result locally first: even if the push fails, this
+    // device now holds everything both sides knew.
+    global.VTStorage.writeSyncBag(merged, profileId);
+    if (recordOf(merged) !== recordOf(local)) dataChanged(profileId);
+    return { serverRev, seen, merged };
+  }
+
+  /**
+   * The account took the write: remember the revision and what it holds.
+   * @param {string} profileId Whose bag.
+   * @param {object} pushed The PUT's answer.
+   * @param {{serverRev: number, seen: number, merged: object}} step What mergePulled() returned.
+   * @returns {{ok: true, rev: number|null}} Result.
+   */
+  function pushAccepted(profileId, pushed, { serverRev, seen, merged }) {
+    noteOwner();
+    writeRev(profileId, Number(pushed.data?.rev) || serverRev + 1);
+    confirmed.set(profileId, { rev: Number(pushed.data?.rev) || serverRev + 1, doc: merged });
+    pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
+    lastError = null;
+    refusedReason = null;
+    lastSyncedAt = new Date().toISOString();
+    emit();
+    return { ok: true, rev: Number(pushed.data?.rev) || null };
+  }
+
+  /**
+   * The account did not take the write: the result, or null when somebody else
+   * wrote first and the cycle merges again.
+   * @param {object} pushed The PUT's answer.
+   * @returns {{ok: false, reason: string}|null} Result.
+   */
+  function pushFailed(pushed) {
+    if (pushed.status === 401) return { ok: false, reason: "signed_out" };
+    if (pushed.status === 409) return null; // somebody else wrote; merge again
+    if (pushed.status === 413) {
+      lastError = "too_large";
+      emit();
+      return { ok: false, reason: "too_large" };
+    }
+    if (pushed.status === 400) {
+      // Turned down for what it is (a fourth profile on the account), not
+      // for when it was sent: the same write would be turned down again.
+      lastError = "refused";
+      refusedReason = pushed.data?.reason || null;
+      emit();
+      return { ok: false, reason: "refused" };
+    }
+    lastError = pushed.offline ? "offline" : "error";
+    emit();
+    return { ok: false, reason: lastError };
+  }
+
+  /**
    * Run one read-merge-write cycle for one profile.
    *
    * The server's `409` is the whole concurrency story: it means the stored
@@ -644,61 +729,19 @@
           null,
           { timeoutMs: REQUEST_TIMEOUT_MS }
         );
-        if (pulled.status === 401) return { ok: false, reason: "signed_out" };
-        if (!pulled.ok) {
-          // Usually the whole of an offline sync: the read fails before any
-          // write is tried. Say so, or the panel keeps "saved" from last time.
-          lastError = pulled.offline ? "offline" : "error";
-          return { ok: false, reason: lastError };
-        }
-        // Deleted while the read was out: what came back is nobody's here now.
-        if (deleted(profileId)) return { ok: false, reason: "deleted" };
+        const stop = pullStop(pulled, profileId);
+        if (stop) return stop;
 
-        const serverRev = Number(pulled.data?.rev) || 0;
-        const seen = version;
-        const local = localBag(profileId);
-        const merged = mergeBag(local, pulled.data?.doc || null);
-
-        // Write the merged result locally first: even if the push fails, this
-        // device now holds everything both sides knew.
-        global.VTStorage.writeSyncBag(merged, profileId);
-        if (recordOf(merged) !== recordOf(local)) dataChanged(profileId);
-
+        const step = mergePulled(profileId, pulled);
         const pushed = await global.VTAccount.request(
           "PUT",
           "/v1/me/progress",
-          { profileId, doc: merged, baseRev: serverRev },
+          { profileId, doc: step.merged, baseRev: step.serverRev },
           { timeoutMs: REQUEST_TIMEOUT_MS }
         );
-        if (pushed.ok) {
-          noteOwner();
-          writeRev(profileId, Number(pushed.data?.rev) || serverRev + 1);
-          confirmed.set(profileId, { rev: Number(pushed.data?.rev) || serverRev + 1, doc: merged });
-          pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
-          lastError = null;
-          refusedReason = null;
-          lastSyncedAt = new Date().toISOString();
-          emit();
-          return { ok: true, rev: Number(pushed.data?.rev) || null };
-        }
-        if (pushed.status === 401) return { ok: false, reason: "signed_out" };
-        if (pushed.status === 409) continue; // somebody else wrote; merge again
-        if (pushed.status === 413) {
-          lastError = "too_large";
-          emit();
-          return { ok: false, reason: "too_large" };
-        }
-        if (pushed.status === 400) {
-          // Turned down for what it is (a fourth profile on the account), not
-          // for when it was sent: the same write would be turned down again.
-          lastError = "refused";
-          refusedReason = pushed.data?.reason || null;
-          emit();
-          return { ok: false, reason: "refused" };
-        }
-        lastError = pushed.offline ? "offline" : "error";
-        emit();
-        return { ok: false, reason: lastError };
+        if (pushed.ok) return pushAccepted(profileId, pushed, step);
+        const failed = pushFailed(pushed);
+        if (failed) return failed;
       }
       lastError = "conflict";
       emit();

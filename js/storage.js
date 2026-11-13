@@ -159,6 +159,35 @@
     };
   }
 
+  /** The local calendar day of a moment, as the day ledger names it; null for a time that is not one. */
+  function takeDayOf(when) {
+    const d = new Date(when);
+    if (!Number.isFinite(d.getTime())) return null;
+    return (
+      global.VTDays?.dayKey?.(d) ||
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+    );
+  }
+
+  /**
+   * One take as Storage.saveExerciseResult() keeps it: a new one, or `prev`
+   * rated again, which keeps its id, its time and its day.
+   */
+  function takeEntry(prev, result, now) {
+    const entry = {
+      id: prev ? prev.id : crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+      at: prev ? prev.at : now,
+      day: prev ? prev.day || takeDayOf(prev.at) : takeDayOf(now),
+      metrics: result.metrics || {},
+      score: result.score ?? null,
+      notes: result.notes || "",
+      durationSec: result.durationSec || 0
+    };
+    if (prev) entry.updatedAt = now;
+    if (result.auto) entry.auto = true;
+    return entry;
+  }
+
   const Storage = {
     MAX_PROFILES_FREE,
     MAX_PROFILES_PRO,
@@ -345,27 +374,9 @@
       }
       const row = all[exerciseId];
       const now = new Date().toISOString();
-      const dayOf = (when) => {
-        const d = new Date(when);
-        if (!Number.isFinite(d.getTime())) return null;
-        return (
-          global.VTDays?.dayKey?.(d) ||
-          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-        );
-      };
       const i = result.replaceId ? row.history.findIndex((h) => h && h.id === result.replaceId) : -1;
       const prev = i >= 0 ? row.history[i] : null;
-      const entry = {
-        id: prev ? prev.id : crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-        at: prev ? prev.at : now,
-        day: prev ? prev.day || dayOf(prev.at) : dayOf(now),
-        metrics: result.metrics || {},
-        score: result.score ?? null,
-        notes: result.notes || "",
-        durationSec: result.durationSec || 0
-      };
-      if (prev) entry.updatedAt = now;
-      if (result.auto) entry.auto = true;
+      const entry = takeEntry(prev, result, now);
       if (prev) row.history[i] = entry;
       else {
         row.history.unshift(entry);

@@ -255,6 +255,11 @@
     return bag;
   }
 
+  /** The day a record goes on: `rec.day` when it is a day key and not still to come, else today. */
+  function recordDay(rec, today) {
+    return typeof rec.day === "string" && parseDay(rec.day) && rec.day <= today ? rec.day : today;
+  }
+
   /**
    * Record practice on a day's row: today's, unless the practice belongs to an
    * earlier day. A take rated after midnight is still the take that was sung
@@ -269,7 +274,7 @@
   function record(rec = {}) {
     const bag = read();
     const today = dayKey();
-    const k = typeof rec.day === "string" && parseDay(rec.day) && rec.day <= today ? rec.day : today;
+    const k = recordDay(rec, today);
     const row = bag.days[k] || (bag.days[k] = { sec: 0, n: 0, ex: [] });
     const before = counts(row);
     row.sec = Math.round((Number(row.sec) || 0) + Math.max(0, Number(rec.sec) || 0));
@@ -308,16 +313,10 @@
   }
 
   /**
-   * The whole picture the home page and the completion card need.
+   * Current run: today counts once practised; an unpractised today is still
+   * "open", not a break. Rest days bridge the run but do not lengthen it.
    */
-  function summary(opts = {}) {
-    const bag = read(opts);
-    const today = opts.today || dayKey();
-    const practiced = Object.keys(bag.days).filter((k) => counts(bag.days[k])).sort();
-    const todayDone = counts(bag.days[today]);
-
-    // Current run: today counts once practised; an unpractised today is still
-    // "open", not a break. Rest days bridge the run but do not lengthen it.
+  function currentStreak(bag, today, todayDone) {
     let streak = 0;
     let cursor = todayDone ? today : addDays(today, -1);
     let guard = 0;
@@ -326,6 +325,19 @@
       cursor = addDays(cursor, -1);
       guard += 1;
     }
+    return streak;
+  }
+
+  /**
+   * The whole picture the home page and the completion card need.
+   */
+  function summary(opts = {}) {
+    const bag = read(opts);
+    const today = opts.today || dayKey();
+    const practiced = Object.keys(bag.days).filter((k) => counts(bag.days[k])).sort();
+    const todayDone = counts(bag.days[today]);
+
+    const streak = currentStreak(bag, today, todayDone);
 
     // Longest run ever, same rules.
     let best = 0;

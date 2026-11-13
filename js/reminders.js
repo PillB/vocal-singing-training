@@ -271,6 +271,16 @@
     );
   }
 
+  /** The first event: "HH:MM" today, or tomorrow once that time has passed. */
+  function firstStart(time) {
+    const [hh, mm] = time.split(":").map(Number);
+    const start = new Date();
+    // An hour of 0 is midnight, not "missing": `hh || 18` made 00:30 into 18:30.
+    start.setHours(Number.isFinite(hh) ? hh : 18, Number.isFinite(mm) ? mm : 0, 0, 0);
+    if (start < new Date()) start.setDate(start.getDate() + 1);
+    return start;
+  }
+
   /**
    * @param {{ time?: string, freq?: 'DAILY'|'WEEKLY', isEs?: boolean, min?: number }} opts
    *   min: minutes the event says (default: practiceMinutes())
@@ -278,11 +288,7 @@
   function buildIcs(opts = {}) {
     const isEs = !!opts.isEs;
     const time = opts.time || getConfig().times[0] || "18:00";
-    const [hh, mm] = time.split(":").map(Number);
-    const start = new Date();
-    // An hour of 0 is midnight, not "missing": `hh || 18` made 00:30 into 18:30.
-    start.setHours(Number.isFinite(hh) ? hh : 18, Number.isFinite(mm) ? mm : 0, 0, 0);
-    if (start < new Date()) start.setDate(start.getDate() + 1);
+    const start = firstStart(time);
     const end = new Date(start.getTime() + 15 * 60000);
     const freq = opts.freq === "WEEKLY" ? "WEEKLY" : "DAILY";
     const min = Number.isFinite(opts.min) && opts.min > 0 ? opts.min : practiceMinutes();

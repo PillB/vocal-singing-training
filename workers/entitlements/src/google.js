@@ -26,6 +26,9 @@ export const CLOCK_SKEW_SECONDS = 300;
 /** How long a fetched key set is reused, in seconds. */
 export const JWKS_CACHE_SECONDS = 3600;
 
+/** How long the key fetch may take before the sign-in fails instead of hanging. */
+export const GOOGLE_JWKS_TIMEOUT_MS = 5000;
+
 /** Isolate-local JWKS cache: `{fetchedAt, keys}`. */
 let jwksCache = null;
 
@@ -41,7 +44,9 @@ export async function fetchGoogleJwks(options) {
     return jwksCache.keys;
   }
   const doFetch = opts.fetchImpl || fetch;
-  const response = await doFetch(GOOGLE_JWKS_URL, { method: "GET" });
+  // A deadline, as on every call this worker makes out: a key fetch that hung
+  // held the Google sign-in open with no answer at all.
+  const response = await doFetch(GOOGLE_JWKS_URL, { method: "GET", signal: AbortSignal.timeout(GOOGLE_JWKS_TIMEOUT_MS) });
   if (!response.ok) {
     throw new Error(`google jwks fetch failed: ${response.status}`);
   }

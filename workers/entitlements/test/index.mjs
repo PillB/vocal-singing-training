@@ -63,3 +63,6 @@ import "./ledger.test.mjs";
 // The account layer's writes against a worker stopped half way and a second
 // request landing in between: trial, gift codes, revokes, links, sign-in, sweep.
 import "./d1-atomicity.test.mjs";
+// Every call out (email, Google's keys) carries a deadline, so a provider
+// that hangs cannot hold a sign-in open.
+import "./outbound-deadlines.test.mjs";

@@ -2230,9 +2230,6 @@ html[lang^="es"] .hud-bc.is-manual .mic-sens-title::after {
 .hud-bottom-rail > .hud-bc {
   overflow: hidden;
 }
-.hud-bottom-rail:has(> #piano-mini-opts.hud-br:not(.piano-opts-compact):not(.piano-opts-expanded)) > .hud-bc {
-  flex: 0 0 auto;
-}
 
 .hud-check {
   background: rgba(12, 18, 26, 0.7);
@@ -8316,5 +8313,14 @@ body.ex-ended #piano-mini-opts {
 /* An English visitor's page is held until it is translated (js/boot-head.js
    adds the class, js/i18n-early.js removes it, eight seconds at the most). */
 html.vt-i18n-pending body {
+  visibility: hidden;
+}
+/* Everything below the header is held until the app has drawn it
+   (js/boot-head.js adds the class, js/boot-ready.js removes it once the app
+   has started; on load, or after eight seconds, at the most). The markup's own
+   home, painted first, was replaced a moment later and the page under it
+   jumped. The header shows at once: the app does not redraw it. */
+html.vt-boot-pending .main,
+html.vt-boot-pending .app-footer {
   visibility: hidden;
 }

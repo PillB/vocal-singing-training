@@ -18,6 +18,14 @@
  *    when a script fails to load or throws, and after eight seconds (a first
  *    visit on a slow phone connection needs about four for the scripts
  *    alone). A page that was never translated says it is Spanish.
+ * 4. Everything below the header is held (html.vt-boot-pending) until the app
+ *    has drawn it. The markup's own home is what a page without scripts shows;
+ *    painted first, the app replaced it a moment later and the page under it
+ *    jumped (a layout shift of 0.5-0.7 on about half the desktop loads once
+ *    #21 was merged), and a tap on it landed on whatever moved under the
+ *    finger. js/boot-ready.js lets go when the app has started; this lets go
+ *    when the page has loaded (boot-ready.js missing) and after eight seconds
+ *    (a script that never arrives), whichever comes first.
  */
 (function () {
   "use strict";
@@ -73,6 +81,13 @@
     document.body.setAttribute("aria-busy", "true");
     watch.disconnect();
   }).observe(html, { childList: true });
+
+  html.classList.add("vt-boot-pending");
+  var show = function () {
+    html.classList.remove("vt-boot-pending");
+  };
+  window.addEventListener("load", show);
+  setTimeout(show, 8000);
 
   try {
     if (localStorage.getItem("vt_lang") !== "en") return;

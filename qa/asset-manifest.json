@@ -52,8 +52,8 @@
     "sha": "5a4bc220a59822b6"
   },
   "css/styles.css": {
-    "v": "20261113b",
-    "sha": "d457a0298d11a92d"
+    "v": "20261113c",
+    "sha": "f20c25e94c162dae"
   },
   "js/account.js": {
     "v": "20261113a",
@@ -80,8 +80,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261113d",
-    "sha": "3f2d061d373ac5c9"
+    "v": "20261113e",
+    "sha": "d4a73435307aa4ed"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -104,12 +104,12 @@
     "sha": "c01b6050bcbccf84"
   },
   "js/boot-head.js": {
-    "v": "20261112a",
-    "sha": "fe5ce924306fd738"
+    "v": "20261113a",
+    "sha": "e60450325bf5954a"
   },
   "js/boot-ready.js": {
-    "v": "20261112a",
-    "sha": "1ba0373c1f46a926"
+    "v": "20261113a",
+    "sha": "6482c90451727110"
   },
   "js/daily-loop.js": {
     "v": "20261113a",

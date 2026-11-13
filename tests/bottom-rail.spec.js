@@ -104,6 +104,83 @@ for (const vp of [
   });
 }
 
+/**
+ * Free room at the end of the mic box's row, in px: the rail's inner right edge
+ * minus the right edge of the last box on that row. null when there is no mic box.
+ */
+function micRowSlack() {
+  const rail = document.getElementById("hud-bottom-rail");
+  const shown = (el) => {
+    const r = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    return r.width > 1 && r.height > 1 && cs.display !== "none" && cs.visibility !== "hidden";
+  };
+  const bc = rail.querySelector(":scope > .hud-bc");
+  if (!bc || !shown(bc)) return null;
+  const b = bc.getBoundingClientRect();
+  const row = [...rail.children].filter(shown).filter((el) => {
+    const r = el.getBoundingClientRect();
+    return r.top < b.bottom - 4 && r.bottom > b.top + 4;
+  });
+  const end = Math.max(...row.map((el) => el.getBoundingClientRect().right));
+  const inner = rail.getBoundingClientRect().right - (parseFloat(getComputedStyle(rail).paddingRight) || 0);
+  return Math.round(inner - end);
+}
+
+/*
+ * The mic box grows into the room its row has left (the rail's own design:
+ * "Start | Mic (grows into free X) | Piano opts"). Wrong behaviour rejected
+ * (review AE3/AE4 of PR #39): #21 kept the mic box at its natural width beside
+ * options that wrap inside themselves, on a rail that could not wrap; main made
+ * the rail wrap instead. The merge kept both, so v12 took two rows and still
+ * had a 129 px slider, and every speech exercise, whose options box is hidden,
+ * matched the same rule: the slider ended about 500 px short of the rail's
+ * right edge on 27 of 52 exercises, at every desktop width.
+ */
+for (const vp of [
+  { width: 1280, height: 800, lang: "es" },
+  { width: 1920, height: 1080, lang: "es" },
+  { width: 1180, height: 820, lang: "en" }
+]) {
+  test(`${vp.lang} ${vp.width}x${vp.height}: the mic box takes the rest of its row in every exercise`, async ({ page }) => {
+    test.setTimeout(120000);
+    await page.setViewportSize({ width: vp.width, height: vp.height });
+    await boot(page, { lang: vp.lang });
+    await page.waitForFunction(() => !!window.VTApp?.openExercise && !!window.VT_EXERCISES);
+    const ids = await page.evaluate(() =>
+      Object.values(window.VT_EXERCISES)
+        .flat()
+        .map((e) => e.id)
+    );
+    const short = [];
+    let measured = 0;
+    for (const id of ids) {
+      await page.evaluate((x) => window.VTApp.openExercise(x), id);
+      await page.evaluate(() => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))));
+      const slack = await page.evaluate(micRowSlack);
+      if (slack === null) continue;
+      measured += 1;
+      if (slack > 20) short.push(`${id}: ${slack} px left empty`);
+    }
+    expect(measured, "control: the mic box is on screen in the exercises").toBeGreaterThan(40);
+    expect(short, short.join("\n")).toEqual([]);
+  });
+}
+
+test("control: the slack check sees a mic box held to its own width", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await boot(page);
+  await page.waitForFunction(() => !!window.VTApp?.openExercise);
+  await page.evaluate(() => window.VTApp.openExercise("v2-volume"));
+  await page.evaluate(() => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))));
+  expect(await page.evaluate(micRowSlack)).toBeLessThanOrEqual(20);
+  await page.evaluate(() => {
+    document.querySelector("#hud-bottom-rail > .hud-bc").style.flex = "0 0 auto";
+  });
+  await page.evaluate(() => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))));
+  expect(await page.evaluate(micRowSlack)).toBeGreaterThan(100);
+});
+
 test("control: the check reports a box laid over the octave buttons", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await boot(page);

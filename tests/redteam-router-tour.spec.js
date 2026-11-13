@@ -304,6 +304,44 @@ test.describe("scroll comes back", () => {
     }
   }
 
+  // RT5 on PR #39: "← Practicar" from a guided routine or a goal set shows Practicar at its top (the session
+  // banner), but the home entry kept the place the page had before the routine, so the next reload jumped
+  // 100-200 px down to it. Correct: a reload lands where the learner is. Control: the way back really did
+  // put the page somewhere other than the old place, or the case could not tell the two apart.
+  for (const [how, open] of [
+    ["a guided routine", async (page) => clickAt(page, "#btn-next-step")],
+    [
+      "a goal set",
+      async (page) => {
+        const more = page.locator("#btn-more-ways");
+        if ((await more.getAttribute("aria-expanded")) === "false") await more.click();
+        await page.locator("#btn-sets").click();
+        await page.locator('[data-set-start="s-warmup"]').click();
+      }
+    ]
+  ]) {
+    test(`phone es: back from ${how}, a reload stays where the page is, not where it was before`, async ({ page }) => {
+      await page.setViewportSize(VP.phone);
+      await boot(page, { days: RET_DAYS });
+      await settle(page, 300);
+      await toY(page, 150);
+      await settle(page, 600);
+      const before = await scrollY(page);
+      await open(page);
+      await page.waitForFunction(() => window.VTApp.getState().view === "exercise");
+      await settle(page, 800);
+      await page.click("#btn-back-home");
+      await settle(page, 900);
+      expect(await view(page)).toBe("home");
+      const y0 = await scrollY(page);
+      expect(Math.abs(y0 - before), "control: the way back did not return to the old place").toBeGreaterThan(60);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await ready(page);
+      await settle(page, 1500);
+      expect(Math.abs((await scrollY(page)) - y0)).toBeLessThanOrEqual(2);
+    });
+  }
+
   // Guard for the fix itself (it cannot fail on a page that never restores): the
   // list is slow to arrive, the learner scrolls at once, and the page must not
   // pull them back to where they were afterwards.

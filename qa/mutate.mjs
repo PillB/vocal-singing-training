@@ -413,7 +413,7 @@ export const MUTANTS = {
     ["A2 privacy's English half read with Spanish rules", "privacy.html", '<section lang="en" aria-labelledby="en">', '<section aria-labelledby="en">'],
     ["A3 privacy's English title a second h1 again", "privacy.html", '<h2 id="en" class="part-title">Privacy (English)</h2>', '<h1 id="en" class="part-title">Privacy (English)</h1>'],
     ["A4 the phone rule empties privacy's header", "privacy.html", "      body:not(.view-exercise) .app-header .brand .brand-name {\n        display: block;\n      }\n", ""],
-    ["A5 privacy's English link lands under the header", "privacy.html", "        scroll-margin-top: 6.5rem;\n", ""]
+    ["A5 privacy's English link lands under the header", "privacy.html", "        scroll-margin-top: 100px;\n", ""]
   ]
     .map(([name, file, from, to]) => ({ name, file, from, to, specs: ["tests/home-design.spec.js", "tests/page-headings.spec.js", "-g", "one h1"] }))
     .concat(
@@ -720,14 +720,17 @@ export const MUTANTS = {
   ).concat(
     // Round-4 part D: the rail on a phone on its side, the 24 px target below the fold, focus and the consent bar
     [
-      ["D1 a phone on its side keeps one rail row: the mic slider lies on the octave button (UIB-03)", "css/styles.css", "@media (max-height: 500px) and (max-width: 799.98px) {\n  .hud-bottom-rail {\n    flex-wrap: wrap;", "@media (max-height: 500px) and (max-width: 799.98px) {\n  .hud-bottom-rail {\n    flex-wrap: nowrap;", "tests/rail-small-screens.spec.js"],
+      ["D1 a phone on its side keeps one rail row: the mic slider lies on the octave button (UIB-03)", "css/styles.css", "  .hud-bottom-rail {\n    flex-wrap: wrap;\n    row-gap: 0.3rem;", "  .hud-bottom-rail {\n    flex-wrap: nowrap;\n    row-gap: 0.3rem;", "tests/rail-small-screens.spec.js"],
       ["D2 the 'Paso listo' target is 13 px again, below the fold (FAL-01)", "css/styles.css", ".review-step label {\n  min-height: 24px;", ".review-step label {\n  min-height: 0;", "tests/target-size-below-fold.spec.js"],
       ["D3 focus keeps no room above the consent bar (UIB-01)", "js/region-gate.js", '    root.style.setProperty("scroll-padding-bottom", room);\n', "", "tests/focus-consent-bar.spec.js"],
       ["D4 the page cannot scroll its last controls clear of the consent bar (UIB-01)", "js/region-gate.js", '    root.style.setProperty("padding-bottom", room);\n', "", "tests/focus-consent-bar.spec.js"],
       ["D5 the room for the consent bar stays after it is answered (UIB-01)", "js/region-gate.js", "    barWatch = null;\n    reserveBarRoom();\n  }", "    barWatch = null;\n  }", "tests/focus-consent-bar.spec.js"],
       ["D6 scroll padding forgets the exercise's Back row: Shift+Tab leaves a control under it (UIB-04)", "css/styles.css", "scroll-padding-top: calc(var(--header-h, 58px) + var(--ex-chrome-h, 0px) + 0.5rem);", "scroll-padding-top: calc(var(--header-h, 58px) + 0.5rem);", "tests/focus-reverse.spec.js"],
-      ["D7 phones 742 to 799 px wide get one rail row again: the landscape bound moved to 741 px (C1)","css/styles.css","@media (max-height: 500px) and (max-width: 799.98px)","@media (max-height: 500px) and (max-width: 741px)","tests/rail-landscape-bounds.spec.js"],
-      ["D8 phones 381 to 500 px tall get one rail row again: the height bound moved to 380 px (C2)","css/styles.css","@media (max-height: 500px) and (max-width: 799.98px)","@media (max-height: 380px) and (max-width: 799.98px)","tests/rail-landscape-bounds.spec.js"],
+      // D7 and D8 (the 800 px width bound and the 500 px height bound of the landscape rail rule moved in) are retired in
+      // the merge of #21 (PR #39): both survived as equivalent. Since #21 the landscape block wraps the rail at every width,
+      // and main's bounded copy of that rule was dropped as dead code; at 381 to 500 px tall without the landscape block the
+      // rail still wraps through the 1100 px rule, and tests/rail-landscape-bounds.spec.js finds nothing wrong (tried with
+      // the block's bound moved to 380 px). D1 above now plants the one-row rail in the rule that has the last word.
       // The merge of PR #21 (2026-11-12): the page under a language switch, and focus on the sticky rows' own controls
       ["D9 focus on a control of the sticky rows throws the page to near its top again (csswg-drafts #7930)", "css/styles.css", "  scroll-margin-top: calc(-1 * (var(--header-h, 58px) + var(--ex-chrome-h, 0px) + 0.5rem));\n", "", "tests/focus-not-obscured.spec.js", "sticky rows leaves the page"],
       ["D10 a language switch reopens the piano as if asked for: the page ends at the piano, not where the learner was", "js/app.js", 'if (keep.piano && !$("#btn-toggle-piano")?.hidden) togglePianoPanel({ reveal: false });', 'if (keep.piano && !$("#btn-toggle-piano")?.hidden) togglePianoPanel();', "tests/redteam-exercise-language.spec.js", "has not started"],
@@ -885,7 +888,7 @@ export const MUTANTS = {
     ["DS13 an old server's 404 reads as a generic error, with no word about redeploying", "js/admin-layouts.js", "    if (res.status === 404) return t(\"missing\");\n", "", "tests/admin-layouts.spec.js", "before this change"],
     ["DS14 the CSV gives design B the visits of design A", "js/admin-layouts.js", "d[ver].sessions, d[ver].seconds].join", "d.a.sessions, d[ver].seconds].join", "tests/admin-layouts.spec.js", "CSV"],
     ["DS15 the tiles show design A's visits in both", "js/admin-layouts.js", "VERSIONS.map((ver) => tile(versionOf(data, ver)))", "VERSIONS.map((ver) => tile({ ...versionOf(data, \"a\"), ver }))", "tests/admin-layouts.spec.js", "CSV"],
-    ["DS16 the design control takes focus behind the sticky header and stays there", "js/site-version.js", "    select.addEventListener(\"focus\", () => revealBelowHeader(select));\n", "", "tests/site-version.spec.js", "comes out from under it"],
+    ["DS16 the design control takes focus behind the sticky header and stays there", "js/app.js", "          window.scrollBy({ top: r.top - hdr.bottom - 8, behavior: \"instant\" });\n", "", "tests/site-version.spec.js", "comes out from under it"],
     ["DS17 high-contrast mode loses the border on the current Progreso tab", "css/site-version.css", "    outline: 2px solid Highlight;\n", "", "tests/site-version.spec.js", "high-contrast"],
     ["DS18 a tapped button stays lifted and outlined on a touch screen", "css/styles.css", "@media (hover: hover) {\n  .btn:hover {", "@media all {\n  .btn:hover {", "tests/touch-hover.spec.js"],
     ["DS19 a tapped account button keeps the accent border on a touch screen", "css/styles.css", "@media (hover: hover) {\n  .header-door:hover {", "@media all {\n  .header-door:hover {", "tests/touch-hover.spec.js"]

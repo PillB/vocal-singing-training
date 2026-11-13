@@ -7600,7 +7600,7 @@ body.view-exercise .stage-coach .mode-hud,
    A phone on its side: the site header steps aside while an exercise is open
    and the exercise header is one row, so the stage gets the height. The
    session banner stays (one line), so Pausar and Terminar are on screen.
-   The rails go back to one row each, MIC keeps its label. */
+   The rails go back to one row each where they fit, MIC keeps its label. */
 @media (max-height: 500px) {
   /* Out of the layout, the tab order and the accessibility tree, except the
      site's h1: display: none took the page's only level-1 heading with it
@@ -7684,7 +7684,11 @@ body.view-exercise .stage-coach .mode-hud,
   /* One row while Empezar, the mic and the piano options fit side by side.
      A phone on its side is 640-740px wide, where they do not (about 250 +
      250 + 330): the piano options then drop to a row of their own instead of
-     the mic box being squeezed to a sliver the neighbours paint over. */
+     the mic box being squeezed to a sliver the neighbours paint over, and the
+     slider lying on the octave "-" (UIB-03: 568x320, 640x360, 667x375,
+     740x360). The lanes end above the second row (--rail-h). This is the
+     last word on the rail's rows at this height, at any width: main's own
+     fix wrapped below 800 px only, and was dropped when this one landed. */
   .hud-bottom-rail {
     flex-wrap: wrap;
     row-gap: 0.3rem;
@@ -7732,16 +7736,6 @@ body.view-exercise .stage-coach .mode-hud,
   }
   .mode-focus.mode-focus-live .btn {
     margin-block: 0.1rem;
-  }
-}
-/* A phone on its side narrower than 800 px cannot hold Empezar, MIC and the
-   piano settings in one row: the mic box shrank under its own slider and the
-   slider lay on the octave "-" (568x320, 640x360, 667x375, 740x360). Two rows
-   there, as on a desktop at 1180-1440 px; the lanes end above them (--rail-h).
-   Costs about 42 px of a stage that is 280-330 px tall. */
-@media (max-height: 500px) and (max-width: 799.98px) {
-  .hud-bottom-rail {
-    flex-wrap: wrap;
   }
 }
 /* —— Design: sticky-bars ——

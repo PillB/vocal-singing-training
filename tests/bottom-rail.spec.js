@@ -48,16 +48,39 @@ function railClashes() {
   return out;
 }
 
+/** 1 when the rail's controls sit on more than one row, else 0. */
+function railRows() {
+  const rail = document.getElementById("hud-bottom-rail");
+  const tops = [...rail.children]
+    .filter((el) => el.getBoundingClientRect().height > 1 && getComputedStyle(el).display !== "none")
+    .map((el) => Math.round(el.getBoundingClientRect().top));
+  return new Set(tops).size > 1 && Math.max(...tops) - Math.min(...tops) > 20 ? 1 : 0;
+}
+
 for (const vp of [
   { width: 1280, height: 800, lang: "es" },
   { width: 1440, height: 900, lang: "es" },
   { width: 1180, height: 820, lang: "es" },
   // English labels are a different length
-  { width: 1180, height: 820, lang: "en" }
+  { width: 1180, height: 820, lang: "en" },
+  // A browser set to "Very large" text (24 px, Chrome's setting; WCAG 1.4.4).
+  // Since #21 the piano options sit behind "Piano ▾", so at 16 px every rail
+  // fits one row and the cases above no longer need it to wrap (A7 survived
+  // them in the #21 merge). At 24 px half the exercises need a second row.
+  // The page sets no root font size, so the browser's setting is what an
+  // inline root size stands in for.
+  { width: 1280, height: 800, lang: "es", textPx: 24 }
 ]) {
-  test(`${vp.lang} ${vp.width}x${vp.height}: no exercise's bottom rail overlaps`, async ({ page }) => {
+  test(`${vp.lang} ${vp.width}x${vp.height}${vp.textPx ? ` at ${vp.textPx} px text` : ""}: no exercise's bottom rail overlaps`, async ({ page }) => {
     test.setTimeout(120000);
     await page.setViewportSize({ width: vp.width, height: vp.height });
+    if (vp.textPx) {
+      await page.addInitScript((px) => {
+        document.addEventListener("DOMContentLoaded", () => {
+          document.documentElement.style.fontSize = `${px}px`;
+        });
+      }, vp.textPx);
+    }
     await boot(page, { lang: vp.lang });
     await page.waitForFunction(() => !!window.VTApp?.openExercise && !!window.VT_EXERCISES);
     const ids = await page.evaluate(() =>
@@ -66,14 +89,18 @@ for (const vp of [
         .map((e) => e.id)
     );
     const bad = [];
+    let twoRows = 0;
     for (const id of ids) {
       await page.evaluate((x) => window.VTApp.openExercise(x), id);
       // Two frames: the rail is laid out and the stage insets follow it
       await page.evaluate(() => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))));
       const got = await page.evaluate(railClashes);
       if (got.length) bad.push(`${id}: ${got.join("; ")}`);
+      if (vp.textPx) twoRows += await page.evaluate(railRows);
     }
     expect(bad, bad.join("\n")).toEqual([]);
+    // Control: the larger text does make rails that only fit on two rows.
+    if (vp.textPx) expect(twoRows, "rails that took a second row").toBeGreaterThan(0);
   });
 }
 

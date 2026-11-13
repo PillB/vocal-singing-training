@@ -354,20 +354,12 @@
     select.addEventListener("change", () => {
       if (!set(select.value, "menu")) syncControl();
     });
-    select.addEventListener("focus", () => revealBelowHeader(select));
-  }
-
-  /**
-   * Tab can land on the control while the page is scrolled so that it sits
-   * behind the sticky header: in the viewport as far as the browser can tell,
-   * so it does not scroll, and focused where nobody can see it (WCAG 2.4.11).
-   * @param {Element} el The control that took focus.
-   */
-  function revealBelowHeader(el) {
-    const header = doc.querySelector(".app-header");
-    if (!header) return;
-    const gap = el.getBoundingClientRect().top - header.getBoundingClientRect().bottom;
-    if (gap < 4) global.scrollBy({ top: gap - 8, behavior: "auto" });
+    // Tab can land on the control while the page is scrolled so that it sits
+    // behind the sticky header, focused where nobody can see it (WCAG 2.4.11).
+    // Its own focus listener was dropped in the merge of #21 (PR #39): #21's
+    // keepFocusClearOfHeader in js/app.js brings out any control that keyboard
+    // focus leaves under the header, this one included, so DS16 now plants
+    // its defect there.
   }
 
   /** Another tab changed the design: follow it, and count nothing twice. */

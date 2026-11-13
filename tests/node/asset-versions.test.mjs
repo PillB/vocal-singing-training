@@ -159,3 +159,113 @@ test("in a git checkout the page list comes from git: a folder page is in it, an
   // and this repository's own list holds the pages #26 added, the one in a folder included
   assert.ok(sitePages().includes("qa/index.html") && sitePages().includes("terms.html"));
 });
+
+// RT4 on PR #39: four stamps in the merged tree had once served other content. js/app.js was ?v=20261113c,
+// main's live stamp for main's app.js, over the merge's split app.js, and billing.js, ads-config.js and
+// session.js had taken #21's older stamps, each recorded on main for an older file. The tree was coherent,
+// so the check passed; a browser holding main's cached copy would have kept it. Wrong behaviours rejected
+// below: a version that once named other content passes; only the first parent of a merge is read, so the
+// side a stamp came from is never seen; a bump keeps the reused stamp; a shallow CI clone passes unverified.
+import { freeVersion, reuseProblems, stampHistory } from "../../qa/asset-versions.mjs";
+import { execFileSync as run } from "node:child_process";
+
+/** A git repo of one page and js/b.js; `commit(text, v)` writes b.js and records it at `v` with its true hash. */
+function gitSite() {
+  const dir = mkdtempSync(path.join(tmpdir(), "vt-stamps-"));
+  const git = (...args) => run("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], { cwd: dir, stdio: "pipe" }).toString();
+  git("init", "-q", "-b", "main");
+  const write = (text, v, sha = hashOf(text)) => {
+    mkdirSync(path.join(dir, "js"), { recursive: true });
+    writeFs(path.join(dir, "js/b.js"), text);
+    writeFs(path.join(dir, "index.html"), `<script src="js/b.js?v=${v}"></script>`);
+    mkdirSync(path.join(dir, "qa"), { recursive: true });
+    writeFs(path.join(dir, "qa/asset-manifest.json"), JSON.stringify({ "js/b.js": { v, sha } }));
+  };
+  const commit = (text, v, msg = v) => {
+    write(text, v);
+    git("add", "-A");
+    git("commit", "-q", "-m", msg);
+  };
+  return { dir, git, write, commit };
+}
+
+test("a version that once named other content fails, though the tree alone is coherent", () => {
+  const s = gitSite();
+  try {
+    s.commit("b(1)", "20261101a");
+    s.commit("b(2)", "20261101b");
+    assert.equal(quiet(() => main([], s.dir)), 0, "control: each version names one content");
+    // the merge-style mistake: b(2) given b(1)'s stamp, with b(2)'s hash written beside it
+    s.commit("b(2)", "20261101a", "reuse");
+    const problems = reuseProblems(JSON.parse(readFs(path.join(s.dir, "qa/asset-manifest.json"), "utf8")), stampHistory(s.dir), {});
+    assert.deepEqual(problems, [`js/b.js is ?v=20261101a, which once served other content (${hashOf("b(1)")}); a browser that cached it keeps it (run: npm run assets:bump)`]);
+    assert.equal(quiet(() => main([], s.dir)), 1);
+  } finally {
+    rmSync(s.dir, { recursive: true, force: true });
+  }
+});
+
+test("both sides of a merge are history: a stamp the second parent used for other content is caught", () => {
+  const s = gitSite();
+  try {
+    s.commit("b(0)", "20261101a");
+    s.git("checkout", "-q", "-b", "side");
+    s.commit("b(side)", "20261102a");
+    s.git("checkout", "-q", "main");
+    s.commit("b(main)", "20261102b");
+    s.git("merge", "-q", "-s", "ours", "--no-edit", "side");
+    assert.equal(quiet(() => main([], s.dir)), 0, "control: main's 20261102b was never used for anything else");
+    // the merge resolution takes the side's stamp for main's file
+    s.commit("b(main)", "20261102a", "resolve");
+    const history = stampHistory(s.dir);
+    assert.ok(history.seen.get("js/b.js").get("20261102a").has(hashOf("b(side)")), "the side branch's manifest is read");
+    assert.equal(quiet(() => main([], s.dir)), 1);
+  } finally {
+    rmSync(s.dir, { recursive: true, force: true });
+  }
+});
+
+test("a bump moves a reused stamp to one no manifest ever gave other content, and keeps one that names this content", () => {
+  const sha = "s";
+  const history = { seen: new Map([["js/b.js", new Map([["20261113c", new Set(["main"])], ["20261113d", new Set(["pr21"])], ["20261113a", new Set([sha])]])]]) };
+  assert.equal(freeVersion("20261113c", history, "js/b.js", sha, "20261113"), "20261113e");
+  assert.equal(freeVersion("20261103a", { seen: new Map([["js/b.js", new Map([["20261103a", new Set(["old"])]])]]) }, "js/b.js", sha, "20261113"), "20261113a");
+  // controls: a version that only ever named this content stays, and so does one history never saw
+  assert.equal(freeVersion("20261113a", history, "js/b.js", sha, "20261113"), "20261113a");
+  assert.equal(freeVersion("20261113b", history, "js/b.js", sha, "20261113"), "20261113b");
+  // and end to end: the reused stamp from the first test is bumped off, and the check then passes
+  const s = gitSite();
+  try {
+    s.commit("b(1)", "20261101a");
+    s.commit("b(2)", "20261101a", "reuse");
+    quiet(() => main(["--bump"], s.dir));
+    const v = JSON.parse(readFs(path.join(s.dir, "qa/asset-manifest.json"), "utf8"))["js/b.js"].v;
+    assert.notEqual(v, "20261101a");
+    assert.equal(readFs(path.join(s.dir, "index.html"), "utf8"), `<script src="js/b.js?v=${v}"></script>`);
+    assert.equal(quiet(() => main([], s.dir)), 0);
+  } finally {
+    rmSync(s.dir, { recursive: true, force: true });
+  }
+});
+
+test("a shallow clone cannot rule a reused stamp out: CI fails, a local run passes and says how much it read", () => {
+  const shallow = { seen: new Map(), commits: 1, shallow: true };
+  assert.match(reuseProblems({}, shallow, { CI: "true" }).join(), /clone is shallow/);
+  assert.deepEqual(reuseProblems({}, shallow, {}), []);
+  assert.deepEqual(reuseProblems({}, { ...shallow, shallow: false }, { CI: "true" }), [], "control: full history in CI");
+  const s = gitSite();
+  try {
+    s.commit("b(1)", "20261101a");
+    s.commit("b(2)", "20261101b");
+    const clone = mkdtempSync(path.join(tmpdir(), "vt-shallow-"));
+    run("git", ["clone", "-q", "--depth", "1", `file://${s.dir}`, clone], { stdio: "pipe" });
+    try {
+      assert.equal(stampHistory(clone).shallow, true);
+      assert.equal(stampHistory(s.dir).shallow, false, "control: the full repository is not shallow");
+    } finally {
+      rmSync(clone, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(s.dir, { recursive: true, force: true });
+  }
+});

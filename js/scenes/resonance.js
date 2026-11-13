@@ -2455,13 +2455,12 @@
     if (factsBox) abFacts(ctx, factsBox, m, { mini, compact, tiny });
   }
 
-  function takeLane(ctx, box, m, k, o) {
+  /** A lane's ground and the take's letter chip (gold once taken); returns the chip's size. */
+  function laneChip(ctx, box, m, k, live) {
     const { x, y, w, h } = box;
     ctx.fillStyle = "rgba(170, 195, 230, 0.05)";
     roundRect(ctx, x, y, w, h, 8);
     ctx.fill();
-    const live = m.recording && m.cur && m.cur.name === k;
-    const tk = live ? m.cur : m[k];
     // The take's letter, and what it is for
     const chip = Math.min(26, h - 8);
     const done = !!(m[k] && !live);
@@ -2469,112 +2468,118 @@
     roundRect(ctx, x + 6, y + 5, chip, chip, 6);
     ctx.fill();
     text(ctx, k, x + 6 + chip / 2, y + 5 + chip / 2 + 0.5, { px: Math.min(15, chip * 0.6), weight: 800, align: "center", color: done ? C.done : C.text });
-    // What the take is for, under the letter; the take's line starts after it
+    return chip;
+  }
+
+  /** What the take is for, under the letter; the take's line starts after it. Returns where (from the lane's left). */
+  function laneLead(ctx, box, k, o, chip) {
+    const { x, y, w, h } = box;
     const what = !o.tiny && h >= 54 ? (k === "A" ? L("tal cual", "as it comes") : L("colocada", "placed")) : null;
     const lead = Math.max(chip + 14, what ? Math.min(w * 0.3, widthOf(ctx, what, 9) + 16) : 0);
-    const px = x + lead;
-    const pw = w - lead - 6;
-    const py = y + 4;
-    const ph = h - 8;
     if (what) text(ctx, what, x + 6, y + chip + 16, { px: 9, color: C.faint, maxW: lead - 10, minPx: 9 });
-    const X = (t) => px + (clamp(t, 0, o.T) / o.T) * pw;
-    const R = 7;
-    const center = o.ref != null ? o.ref : tk && tk.medMidi != null ? tk.medMidi : null;
-    const Y = (mm) => py + ph / 2 - (clamp(mm - center, -R, R) / R) * (ph / 2 - 3);
-    // Take A's middle pitch, dashed, in both lanes
-    if (center != null) {
-      ctx.strokeStyle = C.gridStrong;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(px, py + ph / 2);
-      ctx.lineTo(px + pw, py + ph / 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      if (!o.tiny && k === "B" && o.ref != null) {
-        // With no take yet the centred instruction fills this lane's middle: the label rides the lane's top
-        text(ctx, L("altura de A", "A's pitch"), px + pw - 2, tk ? py + ph / 2 - 7 : py + 8, { px: 9, color: C.faint, align: "right" });
-      }
+    return lead;
+  }
+
+  /** Take A's middle pitch, dashed, in both lanes (`g`: the plot's px, pw, py, ph). */
+  function laneMiddle(ctx, g, k, o, tk) {
+    const { px, pw, py, ph } = g;
+    ctx.strokeStyle = C.gridStrong;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(px, py + ph / 2);
+    ctx.lineTo(px + pw, py + ph / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (!o.tiny && k === "B" && o.ref != null) {
+      // With no take yet the centred instruction fills this lane's middle: the label rides the lane's top
+      text(ctx, L("altura de A", "A's pitch"), px + pw - 2, tk ? py + ph / 2 - 7 : py + 8, { px: 9, color: C.faint, align: "right" });
     }
-    if (!tk) {
-      const waiting = !m.review && m.stage === k;
-      const words = waiting
-        ? [
-            L("Canta la frase: la toma empieza sola y acaba tras 2 s de silencio", "Sing the phrase: the take starts by itself and ends after 2 s of quiet"),
-            L("Canta: empieza sola y acaba tras 2 s de silencio", "Sing: it starts by itself, ends after 2 s of quiet"),
-            L("Canta la frase: empieza sola", "Sing the phrase: it starts by itself")
-          ]
-        : k === "B" && !m.review
-          ? [L("Después: la misma frase, en la misma tonalidad", "Next: the same phrase, in the same key"), L("Después: misma frase y tonalidad", "Next: same phrase, same key"), L("Después: la misma frase", "Next: the same phrase")]
-          : [L("Sin toma", "No take")];
-      const lines = ph >= 34 && !o.tiny ? 2 : 1;
-      const pxT = o.tiny ? 10 : 11;
-      textBlock(ctx, words, px + pw / 2, py + ph / 2, pw - 10, {
-        px: pxT,
-        maxLines: lines,
-        align: "center",
-        middle: true,
-        color: waiting ? C.muted : C.faint
-      });
-      return;
-    }
-    if (tk.noAudio) {
-      text(ctx, L("Toma marcada sin audio", "Take marked without audio"), px + pw / 2, py + ph / 2, { px: 11, color: C.faint, align: "center", maxW: pw - 10 });
-      return;
-    }
-    // Level as a shade from the bottom (dB against take A's level)
-    const pts = tk.pts || [];
+  }
+
+  /** A lane with no take yet: what to sing (the lane whose turn it is), what comes next, or "No take". */
+  function laneEmpty(ctx, g, m, k, o) {
+    const { px, pw, py, ph } = g;
+    const waiting = !m.review && m.stage === k;
+    const words = waiting
+      ? [
+          L("Canta la frase: la toma empieza sola y acaba tras 2 s de silencio", "Sing the phrase: the take starts by itself and ends after 2 s of quiet"),
+          L("Canta: empieza sola y acaba tras 2 s de silencio", "Sing: it starts by itself, ends after 2 s of quiet"),
+          L("Canta la frase: empieza sola", "Sing the phrase: it starts by itself")
+        ]
+      : k === "B" && !m.review
+        ? [L("Después: la misma frase, en la misma tonalidad", "Next: the same phrase, in the same key"), L("Después: misma frase y tonalidad", "Next: same phrase, same key"), L("Después: la misma frase", "Next: the same phrase")]
+        : [L("Sin toma", "No take")];
+    const lines = ph >= 34 && !o.tiny ? 2 : 1;
+    const pxT = o.tiny ? 10 : 11;
+    textBlock(ctx, words, px + pw / 2, py + ph / 2, pw - 10, {
+      px: pxT,
+      maxLines: lines,
+      align: "center",
+      middle: true,
+      color: waiting ? C.muted : C.faint
+    });
+  }
+
+  /** Level as a shade from the bottom (dB against take A's level, or the take's own without A) */
+  function laneLevel(ctx, g, tk, o, pts, X) {
+    const { px, py, ph } = g;
     const base = o.refDb != null ? o.refDb : tk.medDb != null ? tk.medDb : null;
-    if (base != null) {
-      ctx.fillStyle = "rgba(191, 230, 255, 0.13)";
-      ctx.beginPath();
-      let open = false;
-      let lastX = px;
-      pts.forEach((p) => {
-        if (p.db == null) {
-          if (open) {
-            ctx.lineTo(lastX, py + ph);
-            ctx.closePath();
-            ctx.fill();
-            ctx.beginPath();
-            open = false;
-          }
-          return;
+    if (base == null) return;
+    ctx.fillStyle = "rgba(191, 230, 255, 0.13)";
+    ctx.beginPath();
+    let open = false;
+    let lastX = px;
+    pts.forEach((p) => {
+      if (p.db == null) {
+        if (open) {
+          ctx.lineTo(lastX, py + ph);
+          ctx.closePath();
+          ctx.fill();
+          ctx.beginPath();
+          open = false;
         }
-        const lx = X(p.t);
-        const ly = py + ph - clamp((p.db - (base - 24)) / 30, 0, 1) * ph * 0.6;
-        if (!open) {
-          ctx.moveTo(lx, py + ph);
-          open = true;
-        }
-        ctx.lineTo(lx, ly);
-        lastX = lx;
-      });
-      if (open) {
-        ctx.lineTo(lastX, py + ph);
-        ctx.closePath();
-        ctx.fill();
+        return;
       }
+      const lx = X(p.t);
+      const ly = py + ph - clamp((p.db - (base - 24)) / 30, 0, 1) * ph * 0.6;
+      if (!open) {
+        ctx.moveTo(lx, py + ph);
+        open = true;
+      }
+      ctx.lineTo(lx, ly);
+      lastX = lx;
+    });
+    if (open) {
+      ctx.lineTo(lastX, py + ph);
+      ctx.closePath();
+      ctx.fill();
     }
-    // Pitch against A's middle
-    if (center != null) {
-      ctx.strokeStyle = C.you;
-      ctx.lineWidth = 2.2;
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      let prev = null;
-      pts.forEach((p) => {
-        if (p.m == null) {
-          prev = null;
-          return;
-        }
-        const lx = X(p.t);
-        const ly = Y(p.m);
-        if (prev && p.t - prev.t < 0.2) ctx.lineTo(lx, ly);
-        else ctx.moveTo(lx, ly);
-        prev = p;
-      });
-      ctx.stroke();
-    }
+  }
+
+  /** Pitch against A's middle: a line, broken at a frame with no pitch and across a gap of 0.2 s or more */
+  function lanePitch(ctx, pts, X, Y) {
+    ctx.strokeStyle = C.you;
+    ctx.lineWidth = 2.2;
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    let prev = null;
+    pts.forEach((p) => {
+      if (p.m == null) {
+        prev = null;
+        return;
+      }
+      const lx = X(p.t);
+      const ly = Y(p.m);
+      if (prev && p.t - prev.t < 0.2) ctx.lineTo(lx, ly);
+      else ctx.moveTo(lx, ly);
+      prev = p;
+    });
+    ctx.stroke();
+  }
+
+  /** The take's end: a growing line marked "recording" while it is sung, then its length. */
+  function laneEnd(ctx, g, tk, live, X) {
+    const { px, pw, py, ph } = g;
     if (live) {
       const ex = X(tk.dur);
       ctx.strokeStyle = "rgba(238, 243, 250, 0.55)";
@@ -2589,7 +2594,11 @@
     } else {
       text(ctx, V.fmtSec(tk.dur, 1), px + pw - 2, py + ph - 8, { px: 10, color: C.muted, align: "right" });
     }
-    // Playback position
+  }
+
+  /** Playback position: a moving head, or "▶ playing" when motion is reduced */
+  function lanePlayhead(ctx, g, m, k, tk, X) {
+    const { px, py, ph } = g;
     const pl = m.playing;
     if (pl && pl.which === k && !V.reducedMotion()) {
       const t = clamp((performance.now() - pl.at) / 1000, 0, pl.dur);
@@ -2603,6 +2612,37 @@
     } else if (pl && pl.which === k) {
       text(ctx, L("▶ sonando", "▶ playing"), px + 4, py + 9, { px: 10, color: C.done });
     }
+  }
+
+  function takeLane(ctx, box, m, k, o) {
+    const { x, y, w, h } = box;
+    const live = m.recording && m.cur && m.cur.name === k;
+    const tk = live ? m.cur : m[k];
+    const chip = laneChip(ctx, box, m, k, live);
+    const lead = laneLead(ctx, box, k, o, chip);
+    const px = x + lead;
+    const pw = w - lead - 6;
+    const py = y + 4;
+    const ph = h - 8;
+    const g = { px, pw, py, ph };
+    const X = (t) => px + (clamp(t, 0, o.T) / o.T) * pw;
+    const R = 7;
+    const center = o.ref != null ? o.ref : tk && tk.medMidi != null ? tk.medMidi : null;
+    const Y = (mm) => py + ph / 2 - (clamp(mm - center, -R, R) / R) * (ph / 2 - 3);
+    if (center != null) laneMiddle(ctx, g, k, o, tk);
+    if (!tk) {
+      laneEmpty(ctx, g, m, k, o);
+      return;
+    }
+    if (tk.noAudio) {
+      text(ctx, L("Toma marcada sin audio", "Take marked without audio"), px + pw / 2, py + ph / 2, { px: 11, color: C.faint, align: "center", maxW: pw - 10 });
+      return;
+    }
+    const pts = tk.pts || [];
+    laneLevel(ctx, g, tk, o, pts, X);
+    if (center != null) lanePitch(ctx, pts, X, Y);
+    laneEnd(ctx, g, tk, live, X);
+    lanePlayhead(ctx, g, m, k, tk, X);
   }
 
   function abFacts(ctx, box, m, o) {

@@ -172,12 +172,12 @@
     "sha": "010c38b7f773e094"
   },
   "js/practice-engine.js": {
-    "v": "20261112b",
-    "sha": "809a513010de780d"
+    "v": "20261113a",
+    "sha": "1155596a5c7cd831"
   },
   "js/practice-modes.js": {
-    "v": "20261112b",
-    "sha": "8fccc7f37571e768"
+    "v": "20261113a",
+    "sha": "fb906e7eb94e3b96"
   },
   "js/practice-profiles.js": {
     "v": "20261112b",
@@ -220,8 +220,8 @@
     "sha": "8a3b46978e541089"
   },
   "js/scenes/resonance.js": {
-    "v": "20261112b",
-    "sha": "a4f896ab41ab3264"
+    "v": "20261113a",
+    "sha": "b05e930b6e58eebe"
   },
   "js/scenes/speech-shape.js": {
     "v": "20261007a",

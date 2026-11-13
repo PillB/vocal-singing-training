@@ -885,6 +885,14 @@
       return measured;
     }
 
+    /**
+     * A frame's `clarity`: how periodic the mic's own samples are, 0–1, at
+     * any level (null without VTPitchUtils). The frame's own note on it, in
+     * _loop (kept as written so its legacy exemption holds), predates the
+     * NSDF detector; with it `rawFreq` says less than clarity: it is null
+     * under −40 dBFS however periodic the sound, and above it a fan or a
+     * rumble still gets a pitch on about 1 % of frames.
+     */
     _clarity(buf, sampleRate) {
       if (global.VTPitchUtils && global.VTPitchUtils.clarity) {
         return global.VTPitchUtils.clarity(buf, sampleRate);
@@ -1072,9 +1080,8 @@
           /**
            * How periodic the mic's own samples are, 0–1, at any level (null
            * without VTPitchUtils): a voice or a hum near 1, a fan or a hiss
-           * under 0.5. `rawFreq` says less: it is null under −40 dBFS
-           * however periodic the sound, and above it a fan or a rumble still
-           * gets a pitch on about 1 % of frames.
+           * under 0.5. `rawFreq` cannot tell them apart: it is null under
+           * −40 dBFS, and above it noise gets a pitch too.
            */
           clarity,
           voiceRmsThreshold: voiceRms,

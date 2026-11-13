@@ -179,6 +179,48 @@
 
   const Modes = {};
 
+  /**
+   * relabel(): each phase label that reads differently in the page's
+   * language now goes into `swap` (the text on the panel to its pair) and is
+   * rewritten on the mounted profile.
+   */
+  function relabelPhases(mode, swap) {
+    const raw = mode._rawProfile;
+    if (raw && Array.isArray(raw.phases) && mode.profile && Array.isArray(mode.profile.phases)) {
+      mode.profile.phases.forEach((p, i) => {
+        const next = phaseLabelFor(raw.phases[i]);
+        if (p.label !== next) {
+          swap.set(p.label, next);
+          p.label = next;
+        }
+      });
+    }
+  }
+
+  /**
+   * relabel(): the interface table's strings in the other language, each to
+   * its pair in the page's (`es`); a string that has two different pairs is
+   * left out. Empty without the table.
+   */
+  function tableSwaps(es) {
+    const exact = new Map();
+    const table = global.VTI18n && global.VTI18n.strings;
+    if (table && table.es && table.en) {
+      const from = table[es ? "en" : "es"];
+      const to = table[es ? "es" : "en"];
+      const clash = new Set();
+      Object.keys(from).forEach((k) => {
+        const a = from[k];
+        const b = to[k];
+        if (typeof a !== "string" || typeof b !== "string" || a === b || a.length < 4) return;
+        if (exact.has(a) && exact.get(a) !== b) clash.add(a);
+        exact.set(a, b);
+      });
+      clash.forEach((a) => exact.delete(a));
+    }
+    return exact;
+  }
+
   /** Base helpers for all modes */
   function baseMode(spec) {
     const mode = {
@@ -258,32 +300,9 @@
           if (esText !== en) swap.set(es ? en : esText, es ? esText : en);
         });
         // Phase labels were localised once, when the mode mounted
-        const raw = this._rawProfile;
-        if (raw && Array.isArray(raw.phases) && this.profile && Array.isArray(this.profile.phases)) {
-          this.profile.phases.forEach((p, i) => {
-            const next = phaseLabelFor(raw.phases[i]);
-            if (p.label !== next) {
-              swap.set(p.label, next);
-              p.label = next;
-            }
-          });
-        }
+        relabelPhases(this, swap);
         // Texts a mode took from the interface table (t("week.cta")) are matched whole
-        const exact = new Map();
-        const table = global.VTI18n && global.VTI18n.strings;
-        if (table && table.es && table.en) {
-          const from = table[es ? "en" : "es"];
-          const to = table[es ? "es" : "en"];
-          const clash = new Set();
-          Object.keys(from).forEach((k) => {
-            const a = from[k];
-            const b = to[k];
-            if (typeof a !== "string" || typeof b !== "string" || a === b || a.length < 4) return;
-            if (exact.has(a) && exact.get(a) !== b) clash.add(a);
-            exact.set(a, b);
-          });
-          clash.forEach((a) => exact.delete(a));
-        }
+        const exact = tableSwaps(es);
         if (!swap.size && !exact.size) return;
         // A text built from several pieces ("/ 60 · Tiempo") holds a recorded string as whole words
         const parts = [...swap.keys()]
@@ -6684,10 +6703,93 @@
         headPx: kit.reviewHeadPx(st.viz, kit.headPx("header"))
       });
     },
+    /**
+     * A jump or a cut between the last pitch `p` and this one `m`, both
+     * under C6 (an octave drop above it may be the detector's, see
+     * _pitchFrame), at most one every 400 ms.
+     */
+    _breakAt(m, p, now, unfoldFlip) {
+      const st = this.state;
+      if (p != null && Math.max(m, p) <= 84 && now - st.lastBreakAt > 400) {
+        // A jump: the line leapt in one step, in the middle of a glide (median
+        // of three frames, so one stray frame is not a jump; not at an onset)
+        if (now - st.prevAt < 80 && now - st.runFrom > 150 && !unfoldFlip && Math.abs(m - p) > 2.5) this._break(now, (m + p) / 2, "jump");
+        // A cut: the voice dropped out for a moment mid-glide and came back near the same note
+        else if (st.gapStart != null && now - st.gapStart >= 60 && now - st.gapStart <= 300 && Math.abs(m - p) < 4) this._break(st.gapStart, p, "cut");
+      }
+    },
+    /** The span reached in the take and in the glide under way; q = 1 marks it approximate. */
+    _extend(m, q) {
+      const st = this.state;
+      const ext = st.viz.extent;
+      if (!ext) st.viz.extent = { lo: m, hi: m, approx: q === 1 };
+      else {
+        if (m < ext.lo) ext.lo = m;
+        if (m > ext.hi) {
+          ext.hi = m;
+          if (q === 1) ext.approx = true;
+        }
+      }
+      st.runLo = st.runLo == null ? m : Math.min(st.runLo, m);
+      st.runHi = st.runHi == null ? m : Math.max(st.runHi, m);
+      if (q === 1) st.runApprox = st.legApprox = true;
+    },
+    /** A frame with a pitch `f`: returns [m, q], the line's pitch and 1 where it is approximate. */
+    _pitchFrame(f, now, dt) {
+      const st = this.state;
+      let q = 0;
+      let raw = st.kit.hzToMidi(f);
+      // From C6 (MIDI 84) up the detector still reads a frame an octave
+      // low now and then (6 % of a held C6–F6 against 1–3 % lower down):
+      // a sudden octave drop there, in the middle of a glide, is folded
+      // back up and marked "aprox.". Under C6 an octave drop is the
+      // singer's own (a baritone's E4 to E3, a soprano's A5 to A4) and is
+      // drawn where it is sung, a jump.
+      const p = st.prevM;
+      const gap = now - st.prevAt;
+      if (p != null && gap < 400 && p >= 84) {
+        // The glide can move ~10 semitones a second between two frames
+        const tol = 3 + (10 * gap) / 1000;
+        if (p - raw > 12 - tol && Math.abs(raw + 12 - p) < tol) {
+          raw += 12;
+          q = 1;
+        }
+      }
+      const unfoldFlip = q !== st.prevQ;
+      st.prevQ = q;
+      st.med.push(raw);
+      if (st.med.length > 3) st.med.shift();
+      const m = st.med.length === 3 ? pzMedian(st.med) : raw;
+      if (m > 84) q = 1;
+      if (st.gapStart != null || st.runFrom == null) st.runFrom = now;
+      this._breakAt(m, p, now, unfoldFlip);
+      st.gapStart = null;
+      st.prevM = m;
+      st.prevAt = now;
+      st.lastPitchAt = now;
+      this._extend(m, q);
+      this._legs(m, dt, now);
+      return [m, q];
+    },
+    /** A frame with no pitch: a gap opens, a ceiling may be marked, a breath ends the glide. */
+    _noPitch(snd, now) {
+      const st = this.state;
+      st.med.length = 0;
+      if (st.prevM != null && st.gapStart == null) st.gapStart = now;
+      // Sound, but no pitch, right after a high note: above what the mic can measure
+      if (snd && st.prevM != null && st.prevM >= 84 && now - st.lastPitchAt > 150 && now - st.lastPitchAt < 1500 && now - st.lastCeilAt > 1000) {
+        st.lastCeilAt = now;
+        st.viz.ceil.push(now);
+        if (st.viz.ceil.length > 30) st.viz.ceil.shift();
+        if (st.viz.extent) st.viz.extent.approx = true;
+        st.runApprox = st.legApprox = true;
+      }
+      // A breath ends the glide: the leg in progress counts, then a new siren starts
+      if (st.turn != null && now - st.lastPitchAt > 400) this._endGlide(now);
+    },
     onFrame(frame) {
       const st = this.state;
       if (!st.viz || !st.kit) return;
-      const kit = st.kit;
       const now = performance.now();
       const dt = clamp(frame.dtMs || 16, 0, 100);
       const rel = st.level ? st.level.feed(frame) : null;
@@ -6695,69 +6797,8 @@
       const snd = !!frame.sounding || !!f;
       let m = null;
       let q = 0;
-      if (f) {
-        let raw = kit.hzToMidi(f);
-        // From C6 (MIDI 84) up the detector still reads a frame an octave
-        // low now and then (6 % of a held C6–F6 against 1–3 % lower down):
-        // a sudden octave drop there, in the middle of a glide, is folded
-        // back up and marked "aprox.". Under C6 an octave drop is the
-        // singer's own (a baritone's E4 to E3, a soprano's A5 to A4) and is
-        // drawn where it is sung, a jump.
-        const p = st.prevM;
-        const gap = now - st.prevAt;
-        if (p != null && gap < 400 && p >= 84) {
-          // The glide can move ~10 semitones a second between two frames
-          const tol = 3 + (10 * gap) / 1000;
-          if (p - raw > 12 - tol && Math.abs(raw + 12 - p) < tol) {
-            raw += 12;
-            q = 1;
-          }
-        }
-        const unfoldFlip = q !== st.prevQ;
-        st.prevQ = q;
-        st.med.push(raw);
-        if (st.med.length > 3) st.med.shift();
-        m = st.med.length === 3 ? pzMedian(st.med) : raw;
-        if (m > 84) q = 1;
-        if (st.gapStart != null || st.runFrom == null) st.runFrom = now;
-        if (p != null && Math.max(m, p) <= 84 && now - st.lastBreakAt > 400) {
-          // A jump: the line leapt in one step, in the middle of a glide (median
-          // of three frames, so one stray frame is not a jump; not at an onset)
-          if (now - st.prevAt < 80 && now - st.runFrom > 150 && !unfoldFlip && Math.abs(m - p) > 2.5) this._break(now, (m + p) / 2, "jump");
-          // A cut: the voice dropped out for a moment mid-glide and came back near the same note
-          else if (st.gapStart != null && now - st.gapStart >= 60 && now - st.gapStart <= 300 && Math.abs(m - p) < 4) this._break(st.gapStart, p, "cut");
-        }
-        st.gapStart = null;
-        st.prevM = m;
-        st.prevAt = now;
-        st.lastPitchAt = now;
-        const ext = st.viz.extent;
-        if (!ext) st.viz.extent = { lo: m, hi: m, approx: q === 1 };
-        else {
-          if (m < ext.lo) ext.lo = m;
-          if (m > ext.hi) {
-            ext.hi = m;
-            if (q === 1) ext.approx = true;
-          }
-        }
-        st.runLo = st.runLo == null ? m : Math.min(st.runLo, m);
-        st.runHi = st.runHi == null ? m : Math.max(st.runHi, m);
-        if (q === 1) st.runApprox = st.legApprox = true;
-        this._legs(m, dt, now);
-      } else {
-        st.med.length = 0;
-        if (st.prevM != null && st.gapStart == null) st.gapStart = now;
-        // Sound, but no pitch, right after a high note: above what the mic can measure
-        if (snd && st.prevM != null && st.prevM >= 84 && now - st.lastPitchAt > 150 && now - st.lastPitchAt < 1500 && now - st.lastCeilAt > 1000) {
-          st.lastCeilAt = now;
-          st.viz.ceil.push(now);
-          if (st.viz.ceil.length > 30) st.viz.ceil.shift();
-          if (st.viz.extent) st.viz.extent.approx = true;
-          st.runApprox = st.legApprox = true;
-        }
-        // A breath ends the glide: the leg in progress counts, then a new siren starts
-        if (st.turn != null && now - st.lastPitchAt > 400) this._endGlide(now);
-      }
+      if (f) [m, q] = this._pitchFrame(f, now, dt);
+      else this._noPitch(snd, now);
       st.trace.push(now, m, rel, q);
       pzFollowVoice(st, frame, now);
       st.viz.run = st.runLo != null ? { lo: st.runLo, hi: st.runHi, approx: st.runApprox } : null;
@@ -8173,6 +8214,106 @@
       st.lastNow = null;
       this.viz?.draw();
     },
+    /**
+     * The envelope blocks this frame pushed (`pushed` of them), oldest first.
+     * A frame's level spans 43 ms, so a short gap barely shows in it: the
+     * fast envelope cuts the run where it stays 15 dB under its peak for
+     * 50 ms (about 65 ms of real gap once its 12,5 ms smoothing is counted),
+     * and the next run waits until the sound is clearly back. Returns the
+     * block where it came back (null when it did not).
+     */
+    _envCut(pushed) {
+      const st = this.state;
+      let loudAt = null;
+      const E = st.env;
+      const seg = E.window(pushed / E.rate);
+      const base = E.total - seg.length;
+      for (let i = 0; i < seg.length; i++) {
+        const v = seg[i];
+        const run = st.open;
+        if (run) {
+          if (v > run.peakEnv) run.peakEnv = v;
+          if (v < run.peakEnv * 0.178) {
+            if (run.qStart == null) run.qStart = base + i;
+            const quietMs = (base + i - run.qStart + 1) * E.blockMs;
+            if (quietMs >= 50 && (run.qStart - run.startTotal) * E.blockMs > 60) {
+              const peak = run.peakEnv;
+              this._closeRun(run, st.lastSnd, this._tOfIdx(run.qStart));
+              st.waitLoud = peak * 0.25;
+            }
+          } else run.qStart = null;
+        } else if (st.waitLoud != null && v >= st.waitLoud && loudAt == null) {
+          loudAt = base + i;
+        }
+      }
+      return loudAt;
+    },
+    /** A new run, from the block where the sound came back (`loudAt`) or half a frame ago. */
+    _openRun(loudAt, dtMs) {
+      const st = this.state;
+      st.waitLoud = null;
+      const prev = st.runs[st.runs.length - 1];
+      const kind = st.phases[st.phaseIdx].kind;
+      const t0 = loudAt != null ? this._tOfIdx(loudAt) : st.t - dtMs / 2000;
+      const run = {
+        t0,
+        t1: null,
+        phaseIdx: st.phaseIdx,
+        kind,
+        samples: [],
+        startTotal: loudAt != null ? loudAt : st.env ? st.env.total : 0,
+        attackDone: false,
+        hammer: null,
+        maxDt: 0,
+        peakRms: 0,
+        peakEnv: 0,
+        qStart: null,
+        dip: null,
+        notes: null,
+        // A legato line that stopped for a moment, not a breath between phrases
+        breakBefore:
+          kind === "legato" &&
+          !!prev &&
+          prev.phaseIdx === st.phaseIdx &&
+          prev.t1 != null &&
+          prev.t1 - prev.t0 >= 0.25 &&
+          t0 - prev.t1 < 0.35
+      };
+      st.runs.push(run);
+      st.open = run;
+      if (st.runs.length > 600) st.runs.splice(0, st.runs.length - 600);
+      return run;
+    },
+    /** A sounding frame's level and pitch, added to the run under way. */
+    _runSample(run, frame, dtMs) {
+      const st = this.state;
+      const age = st.t - run.t0;
+      if (age < 0.2) run.maxDt = Math.max(run.maxDt, dtMs);
+      const rms = frame.rms || 0;
+      run.peakRms = Math.max(run.peakRms, rms);
+      const f = frame.rawFreq;
+      const midi = f && f >= 60 && f <= 1600 ? 69 + 12 * Math.log2(f / 440) : null;
+      const db = rms > 0 ? Math.max(-100, 20 * Math.log10(rms / (frame.inputGain || 1))) : -100;
+      run.samples.push({ t: st.t, midi, db });
+      if (st.medMidi == null && midi != null) st.medMidi = midi;
+      if (!run.attackDone && age >= 0.13) this._attack(run);
+      st.lastSnd = st.t;
+    },
+    /** Runs: one opens or grows while the voice sounds, and closes at a gap. */
+    _runFrame(frame, dtMs, pushed) {
+      const st = this.state;
+      const snd = !!frame.sounding && !frame.manualSound;
+      let loudAt = null;
+      if (st.env && pushed) loudAt = this._envCut(pushed);
+      if (!snd) st.waitLoud = null;
+      if (snd && (st.waitLoud == null || loudAt != null)) {
+        let run = st.open;
+        if (!run) run = this._openRun(loudAt, dtMs);
+        this._runSample(run, frame, dtMs);
+      } else if (st.open && st.t - st.lastSnd > 0.04) {
+        this._closeRun(st.open, st.lastSnd);
+      }
+    },
     onFrame(frame) {
       const st = this.state;
       if (st.review || !frame) return;
@@ -8189,85 +8330,7 @@
         st.remaining -= wall;
         if (st.remaining <= 0) this._nextPhase();
       }
-      const snd = !!frame.sounding && !frame.manualSound;
-      // A frame's level spans 43 ms, so a short gap barely shows in it: the
-      // fast envelope cuts the run where it stays 15 dB under its peak for
-      // 50 ms (about 65 ms of real gap once its 12,5 ms smoothing is counted),
-      // and the next run waits until the sound is clearly back.
-      let loudAt = null;
-      if (st.env && pushed) {
-        const E = st.env;
-        const seg = E.window(pushed / E.rate);
-        const base = E.total - seg.length;
-        for (let i = 0; i < seg.length; i++) {
-          const v = seg[i];
-          const run = st.open;
-          if (run) {
-            if (v > run.peakEnv) run.peakEnv = v;
-            if (v < run.peakEnv * 0.178) {
-              if (run.qStart == null) run.qStart = base + i;
-              const quietMs = (base + i - run.qStart + 1) * E.blockMs;
-              if (quietMs >= 50 && (run.qStart - run.startTotal) * E.blockMs > 60) {
-                const peak = run.peakEnv;
-                this._closeRun(run, st.lastSnd, this._tOfIdx(run.qStart));
-                st.waitLoud = peak * 0.25;
-              }
-            } else run.qStart = null;
-          } else if (st.waitLoud != null && v >= st.waitLoud && loudAt == null) {
-            loudAt = base + i;
-          }
-        }
-      }
-      if (!snd) st.waitLoud = null;
-      if (snd && (st.waitLoud == null || loudAt != null)) {
-        let run = st.open;
-        if (!run) {
-          st.waitLoud = null;
-          const prev = st.runs[st.runs.length - 1];
-          const kind = st.phases[st.phaseIdx].kind;
-          const t0 = loudAt != null ? this._tOfIdx(loudAt) : st.t - dtMs / 2000;
-          run = {
-            t0,
-            t1: null,
-            phaseIdx: st.phaseIdx,
-            kind,
-            samples: [],
-            startTotal: loudAt != null ? loudAt : st.env ? st.env.total : 0,
-            attackDone: false,
-            hammer: null,
-            maxDt: 0,
-            peakRms: 0,
-            peakEnv: 0,
-            qStart: null,
-            dip: null,
-            notes: null,
-            // A legato line that stopped for a moment, not a breath between phrases
-            breakBefore:
-              kind === "legato" &&
-              !!prev &&
-              prev.phaseIdx === st.phaseIdx &&
-              prev.t1 != null &&
-              prev.t1 - prev.t0 >= 0.25 &&
-              t0 - prev.t1 < 0.35
-          };
-          st.runs.push(run);
-          st.open = run;
-          if (st.runs.length > 600) st.runs.splice(0, st.runs.length - 600);
-        }
-        const age = st.t - run.t0;
-        if (age < 0.2) run.maxDt = Math.max(run.maxDt, dtMs);
-        const rms = frame.rms || 0;
-        run.peakRms = Math.max(run.peakRms, rms);
-        const f = frame.rawFreq;
-        const midi = f && f >= 60 && f <= 1600 ? 69 + 12 * Math.log2(f / 440) : null;
-        const db = rms > 0 ? Math.max(-100, 20 * Math.log10(rms / (frame.inputGain || 1))) : -100;
-        run.samples.push({ t: st.t, midi, db });
-        if (st.medMidi == null && midi != null) st.medMidi = midi;
-        if (!run.attackDone && age >= 0.13) this._attack(run);
-        st.lastSnd = st.t;
-      } else if (st.open && st.t - st.lastSnd > 0.04) {
-        this._closeRun(st.open, st.lastSnd);
-      }
+      this._runFrame(frame, dtMs, pushed);
       const rem = this.$("[data-remain]");
       if (rem) {
         const s = st.allDone ? "✓" : `${Math.ceil(Math.max(0, st.remaining))}s`;
@@ -9090,6 +9153,14 @@
       st.hold = null;
       st.gap = 0;
     },
+    /** A frame's level and pitch, added to the phrase under way. */
+    _abSample(frame) {
+      const st = this.state;
+      const rms = frame.rms || 0;
+      if (rms > 0) st.phrase.dbs.push(20 * Math.log10(rms));
+      const f = frame.rawFreq || frame.voiceFreq || 0;
+      if (f > 60 && f < 1600) st.phrase.midis.push(69 + 12 * Math.log2(f / 440));
+    },
     /** Closed, then open: the first two phrases of 1 s or more in the step. */
     _abFrame(frame, on, dt, run) {
       const st = this.state;
@@ -9106,12 +9177,7 @@
           st.phrase = { start: run.clock - dt, r0: run.rec - dt, end: null, r1: null, dbs: [], midis: [], db: null, midi: null };
           st.ab.push(st.phrase);
         }
-        if (st.phrase) {
-          const rms = frame.rms || 0;
-          if (rms > 0) st.phrase.dbs.push(20 * Math.log10(rms));
-          const f = frame.rawFreq || frame.voiceFreq || 0;
-          if (f > 60 && f < 1600) st.phrase.midis.push(69 + 12 * Math.log2(f / 440));
-        }
+        if (st.phrase) this._abSample(frame);
       } else if (st.phrase) {
         st.pgap += dt;
         if (st.pgap > 0.35) this._endPhrase(run);

@@ -13,6 +13,7 @@
 
 "use strict";
 
+import { deadlineMs } from "./deadline.js";
 import { hmacSha256Hex, timingSafeEqual } from "./license.js";
 import { normalizePlanId } from "./stripe.js";
 
@@ -179,7 +180,7 @@ export function apiFailureReason(status) {
  * @param {string} kind Notification kind (key of RESOURCE_ENDPOINTS).
  * @param {string} id Resource id.
  * @param {Object} env Worker env bindings (needs MP_ACCESS_TOKEN).
- * @param {{fetchImpl?: function}} [options] Injectable fetch for tests.
+ * @param {{fetchImpl?: function, timeoutMs?: number}} [options] Injectable fetch and deadline, for tests.
  * @returns {Promise<{ok: boolean, status: number, body?: Object, reason?: string}>} API result.
  */
 export async function fetchMercadoPagoResource(kind, id, env, options) {
@@ -205,7 +206,7 @@ export async function fetchMercadoPagoResource(kind, id, env, options) {
       // leave the outcome to whatever the runtime does with a request whose
       // caller has gone. Past this, the read is "api_unreachable", which is
       // answered 500 inside Mercado Pago's window so it retries cleanly.
-      signal: AbortSignal.timeout(MP_API_TIMEOUT_MS)
+      signal: AbortSignal.timeout(deadlineMs(options, MP_API_TIMEOUT_MS))
     });
   } catch {
     return { ok: false, status: 0, reason: "api_unreachable" };

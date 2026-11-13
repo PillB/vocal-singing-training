@@ -13,7 +13,7 @@
 "use strict";
 
 import { base64UrlToBytes, base64UrlToString } from "./license.js";
-import { deadlineMs } from "./email.js";
+import { deadlineMs } from "./deadline.js";
 
 /** Where Google publishes the public keys its ID tokens are signed with. */
 export const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";

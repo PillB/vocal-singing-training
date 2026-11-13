@@ -18,21 +18,10 @@
 
 "use strict";
 
+import { deadlineMs } from "./deadline.js";
+
 /** How long a send may take before it counts as failed. */
 export const EMAIL_SEND_TIMEOUT_MS = 10000;
-
-/**
- * The deadline for one call out: the caller's `timeoutMs` when a test sets
- * one (so a test can watch a real deadline fire without waiting seconds),
- * else the default.
- * @param {{timeoutMs?: number}|undefined} options Injectables.
- * @param {number} fallback Default milliseconds.
- * @returns {number} Milliseconds.
- */
-export function deadlineMs(options, fallback) {
-  const ms = Number(options && options.timeoutMs);
-  return Number.isFinite(ms) && ms > 0 ? ms : fallback;
-}
 
 /** Providers this module knows how to talk to. */
 export const EMAIL_PROVIDERS = ["resend", "brevo", "mailersend"];

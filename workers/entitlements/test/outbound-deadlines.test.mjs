@@ -1,10 +1,11 @@
 /**
  * Every call the worker makes to another service carries a deadline.
  *
- * Mercado Pago's read already did (MP_API_TIMEOUT_MS). The login-code email
- * and Google's signing keys did not, and nothing else bounds those waits: the
- * sign-in page sends its request with no timeout of its own, so a provider
- * that hung kept the person's button spinning with no answer.
+ * The login-code email and Google's signing keys had none, and nothing else
+ * bounds those waits: the sign-in page sends its request with no timeout of
+ * its own, so a provider that hung kept the person's button spinning with no
+ * answer. Mercado Pago's API read had one (MP_API_TIMEOUT_MS) that no test
+ * watched fire.
  *
  * The provider here behaves as `fetch` does against a server that never
  * answers: it settles only when its signal aborts, with the signal's reason.
@@ -18,9 +19,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { EMAIL_SEND_TIMEOUT_MS, deadlineMs, sendLoginCode } from "../src/email.js";
+import { deadlineMs } from "../src/deadline.js";
+import { EMAIL_SEND_TIMEOUT_MS, sendLoginCode } from "../src/email.js";
 import { GOOGLE_JWKS_TIMEOUT_MS, clearGoogleJwksCache, fetchGoogleJwks, verifyGoogleIdToken } from "../src/google.js";
-import { createAccountEnv } from "./fixtures.mjs";
+import { MP_API_TIMEOUT_MS, fetchMercadoPagoResource } from "../src/mercadopago.js";
+import { createAccountEnv, createTestEnv } from "./fixtures.mjs";
 
 const HUNG = "hung";
 const DEADLINE_MS = 50;
@@ -116,6 +119,20 @@ test("Google's key fetch is cut off when its deadline fires, so a sign-in waitin
   assert.deepEqual(refused, { ok: false, reason: "jwks_unavailable" });
 });
 
+test("a Mercado Pago API read that hangs is cut off when its deadline fires, and reported as unreachable", async () => {
+  // Mercado Pago waits about 22 s for the webhook's answer and then counts the
+  // delivery as failed. "api_unreachable" is answered 500 inside that window,
+  // so it retries cleanly instead of leaving the outcome to the runtime.
+  const seen = [];
+  const answer = await within(
+    fetchMercadoPagoResource("payment", "4242", createTestEnv(), { fetchImpl: hungProvider(seen), timeoutMs: DEADLINE_MS })
+  );
+  assert.notEqual(answer, HUNG, "the read has a deadline that fires");
+  assert.deepEqual(answer, { ok: false, status: 0, reason: "api_unreachable" });
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].reason && seen[0].reason.name, "TimeoutError", "it was the deadline, not something else");
+});
+
 test("without a test deadline, each call uses its own default, and the defaults are ones a person would wait for", () => {
   assert.equal(deadlineMs(undefined, EMAIL_SEND_TIMEOUT_MS), EMAIL_SEND_TIMEOUT_MS);
   assert.equal(deadlineMs({ timeoutMs: 0 }, GOOGLE_JWKS_TIMEOUT_MS), GOOGLE_JWKS_TIMEOUT_MS);
@@ -127,4 +144,7 @@ test("without a test deadline, each call uses its own default, and the defaults 
   // gives up on it.
   assert.ok(EMAIL_SEND_TIMEOUT_MS >= 3000 && EMAIL_SEND_TIMEOUT_MS <= 15000);
   assert.ok(GOOGLE_JWKS_TIMEOUT_MS >= 2000 && GOOGLE_JWKS_TIMEOUT_MS <= 10000);
+  // Mercado Pago's API answers in well under a second; the webhook has about
+  // 22 s in all, and the ledger's own work has to fit after the read.
+  assert.ok(MP_API_TIMEOUT_MS >= 2000 && MP_API_TIMEOUT_MS <= 15000);
 });

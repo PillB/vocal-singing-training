@@ -66,3 +66,9 @@ import "./d1-atomicity.test.mjs";
 // Every call out (email, Google's keys) carries a deadline, so a provider
 // that hangs cannot hold a sign-in open.
 import "./outbound-deadlines.test.mjs";
+// The ledger's edges: validation chunks and D1's parameter limit, TTLs,
+// expired rows and tombstones, and the backoff between attempts.
+import "./ledger-boundaries.test.mjs";
+// Every rail (Stripe, Creem, Mercado Pago) on the D1 ledger while KV refuses
+// writes, every route that reads what they wrote, and the health flag's copy in KV.
+import "./d1-rails.test.mjs";

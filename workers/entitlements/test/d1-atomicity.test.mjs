@@ -434,6 +434,7 @@ test("a backlog is swept a bounded chunk at a time and finished by the next run"
   const first = await sweepExpired(counting, at);
   assert.equal(first.deleted.events, SWEEP_CHUNK_ROWS * SWEEP_MAX_CHUNKS, "a full run's worth");
   assert.deepEqual(first.unfinished, ["events"]);
+  assert.deepEqual(first.failed, [], "every table's statement runs");
   assert.ok(statements <= 8 * SWEEP_MAX_CHUNKS, `${statements} statements, inside the free plan's 50 a run`);
   const second = await sweepExpired(env.DB, at);
   assert.equal(second.deleted.events, 7);

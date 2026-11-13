@@ -79,8 +79,9 @@
         "Esto va con el reporte para poder reproducir el problema. No adjuntamos tu nombre, tu grabación ni tu progreso.",
       envPage: "La página en la que estás",
       envBuild: "La versión del sitio",
-      envBrowser: "Tu navegador y sistema (la línea que tu navegador envía a cualquier web)",
-      envScreen: "El tamaño de tu pantalla y ventana",
+      envBrowser: "Tu navegador y sistema (la línea que tu navegador envía a cualquier web, y la plataforma que declara)",
+      envScreen: "El tamaño de tu pantalla y ventana, y su densidad de píxeles",
+      envClock: "Tu zona horaria (solo la diferencia con UTC) y si tenías conexión",
       envLang: "El idioma en el que ves el sitio",
       envAccount: "Si estás con sesión iniciada, tu cuenta (para poder responderte)",
       send: "Enviar",
@@ -107,12 +108,15 @@
       failUnconfigured: "Este sitio todavía no tiene servidor donde guardar reportes.",
       failDisabled: "Los reportes están apagados en el servidor ahora mismo.",
       failOffline: "No se pudo contactar al servidor. Revisa tu conexión.",
+      failNoTransport: "Esta página no puede enviar reportes. Cópialo y pégalo en GitHub, o envíalo desde la app.",
       failBusy: "Hoy ya recibimos muchos reportes. Inténtalo mañana o pégalo en GitHub.",
       failRateLimited: "Enviaste varios reportes seguidos. Espera un rato e inténtalo otra vez.",
       failGeneric: "Algo falló al enviarlo ({reason}).",
       failLede: "Para que no pierdas lo que escribiste, aquí está tu reporte listo para copiar:",
+      failPublic:
+        "Ojo: lo que pegues en GitHub lo ve cualquiera. Por eso tu correo no va en este texto; no lo añadas ahí.",
       copyReport: "Copiar el reporte",
-      openIssues: "Pegarlo en GitHub",
+      openIssues: "Abrir una incidencia pública en GitHub",
       retry: "Intentar enviarlo otra vez",
       labelKind: "Tipo",
       labelArea: "Parte",
@@ -160,8 +164,9 @@
         "This goes with the report so we can reproduce the problem. We do not attach your name, your recordings or your progress.",
       envPage: "The page you are on",
       envBuild: "The version of the site",
-      envBrowser: "Your browser and system (the line your browser sends to any website)",
-      envScreen: "Your screen and window size",
+      envBrowser: "Your browser and system (the line your browser sends to any website, and the platform it declares)",
+      envScreen: "Your screen and window size, and their pixel density",
+      envClock: "Your time zone (only its offset from UTC) and whether you were online",
       envLang: "The language you are reading the site in",
       envAccount: "If you are signed in, your account (so we can reply)",
       send: "Send",
@@ -188,12 +193,15 @@
       failUnconfigured: "This site has no server to keep reports in yet.",
       failDisabled: "Reports are switched off on the server right now.",
       failOffline: "Could not reach the server. Check your connection.",
+      failNoTransport: "This page cannot send reports. Copy it and paste it on GitHub, or send it from the app.",
       failBusy: "We have had a lot of reports today. Try tomorrow, or paste it on GitHub.",
       failRateLimited: "You sent several reports in a row. Wait a while and try again.",
       failGeneric: "Something went wrong sending it ({reason}).",
       failLede: "So you do not lose what you wrote, here is your report ready to copy:",
+      failPublic:
+        "Note: anything you paste on GitHub is public. That is why your email is not in this text; do not add it there.",
       copyReport: "Copy the report",
-      openIssues: "Paste it on GitHub",
+      openIssues: "Open a public issue on GitHub",
       retry: "Try sending it again",
       labelKind: "Kind",
       labelArea: "Area",
@@ -208,8 +216,17 @@
     }
   };
 
+  /**
+   * The language of the part of the page whose button opened the dialog, when
+   * that part declares one (the guide's English half is a `<section lang="en">`
+   * inside a Spanish page). Without it, the guide's "Report a problem" opened a
+   * Spanish dialog.
+   */
+  let partLang = null;
+
   /** Which language to draw in, read fresh so a switch in the app is honoured. */
   function lang() {
+    if (partLang) return partLang;
     try {
       if (global.VTI18n && (global.VTI18n.lang === "en" || global.VTI18n.lang === "es")) {
         return global.VTI18n.lang;
@@ -339,48 +356,65 @@
 
   /**
    * The styles the dialog needs that css/styles.css does not already have.
-   * Injected once, scoped to `.vt-report`, so no page's stylesheet changes and
-   * a page without styles.css (none today, but the terms page nearly was) is
-   * still readable.
+   * Injected once, scoped to `.vt-report`, so no page's stylesheet changes.
+   *
+   * Every colour is a site token, with the token's own value as the fallback
+   * so a page without styles.css is still readable. The dialog used to bring a
+   * private slate palette and a `prefers-color-scheme: light` branch that
+   * turned only its own card white: the site is dark-only, so the buttons,
+   * focus ring and messages it borrows from styles.css went to about 1:1 on a
+   * light-mode device (the default on most phones). `color-scheme: dark` keeps
+   * the radios and fields dark on a page that does not declare it (qa/).
+   * Targets and disclosures follow the site: 44px, and a caret on a summary.
    */
   function injectStyles() {
     if (document.getElementById("vt-report-styles")) return;
     const css = `
-.vt-report-overlay{position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;
-  padding:1rem;background:rgba(2,6,23,.72);overflow:auto;-webkit-overflow-scrolling:touch}
+.vt-report-overlay{position:fixed;inset:0;z-index:130;display:flex;align-items:flex-start;justify-content:center;
+  padding:1rem;background:rgba(6,10,16,.72);backdrop-filter:blur(6px);overflow:auto;-webkit-overflow-scrolling:touch}
 .vt-report-overlay[hidden]{display:none}
-.vt-report{width:min(40rem,100%);max-height:calc(100vh - 2rem);overflow:auto;background:#0f172a;color:#e2e8f0;
-  border:1px solid rgba(148,163,184,.28);border-radius:.9rem;padding:1.25rem;box-shadow:0 18px 48px rgba(2,6,23,.55)}
-@media (prefers-color-scheme: light){.vt-report{background:#fff;color:#0f172a}}
+.vt-report{width:min(40rem,100%);margin:auto;max-height:calc(100vh - 2rem);max-height:calc(100dvh - 2rem);overflow:auto;
+  color-scheme:dark;background:var(--bg-card,#1a2433);color:var(--text,#f5f8fd);
+  border:1px solid var(--border,#3d4f68);border-radius:var(--radius,14px);padding:1.25rem;
+  box-shadow:var(--shadow,0 12px 40px rgba(0,0,0,.35))}
 .vt-report h2{margin:0 0 .25rem;font-size:1.15rem}
-.vt-report .vt-report-lede{margin:0 0 1rem;opacity:.75;font-size:.9rem}
-.vt-report fieldset{border:1px solid rgba(148,163,184,.25);border-radius:.6rem;margin:0 0 .85rem;padding:.6rem .75rem}
-.vt-report legend{padding:0 .35rem;font-size:.82rem;opacity:.8}
+.vt-report .vt-report-lede{margin:0 0 1rem;color:var(--text-muted,#c5d2e4);font-size:.9rem}
+.vt-report fieldset{border:1px solid var(--border,#3d4f68);border-radius:var(--radius-sm,10px);margin:0 0 .85rem;
+  padding:.6rem .75rem}
+.vt-report legend{padding:0 .35rem;font-size:.82rem;color:var(--text-muted,#c5d2e4)}
 .vt-report .vt-report-choices{display:flex;flex-wrap:wrap;gap:.5rem}
-.vt-report .vt-report-choices label{display:inline-flex;align-items:center;gap:.4rem;min-height:2.4rem;
-  padding:.3rem .6rem;border:1px solid rgba(148,163,184,.3);border-radius:2rem;cursor:pointer;font-size:.9rem}
+.vt-report .vt-report-choices label{display:inline-flex;align-items:center;gap:.4rem;min-height:var(--min-tap,44px);
+  box-sizing:border-box;padding:.3rem .7rem;border:1px solid var(--border,#3d4f68);border-radius:2rem;
+  cursor:pointer;font-size:.9rem}
 .vt-report .vt-report-choices input{margin:0}
 .vt-report label.vt-report-field{display:block;margin:0 0 .85rem;font-size:.9rem}
 .vt-report label.vt-report-field > span{display:block;margin-bottom:.3rem}
 .vt-report input[type=text],.vt-report input[type=email],.vt-report select,.vt-report textarea{
-  width:100%;box-sizing:border-box;min-height:2.6rem;padding:.5rem .6rem;font:inherit;color:inherit;
-  background:rgba(148,163,184,.12);border:1px solid rgba(148,163,184,.35);border-radius:.5rem}
+  width:100%;box-sizing:border-box;min-height:var(--min-tap,44px);padding:.5rem .6rem;font:inherit;
+  font-size:max(16px,1rem);color:inherit;
+  background:var(--bg-elevated,#161e2a);border:1px solid var(--border,#3d4f68);border-radius:var(--radius-sm,10px)}
 .vt-report textarea{min-height:6rem;resize:vertical}
-.vt-report .vt-report-hint{display:block;margin-top:.25rem;font-size:.78rem;opacity:.7}
+.vt-report .vt-report-hint{display:block;margin-top:.25rem;font-size:.78rem;color:var(--text-muted,#c5d2e4)}
 .vt-report details{margin:0 0 .9rem;font-size:.85rem}
-.vt-report details summary{cursor:pointer;min-height:2.2rem;display:flex;align-items:center}
-.vt-report details ul{margin:.4rem 0 0;padding-left:1.1rem;opacity:.8}
+.vt-report details summary{cursor:pointer;min-height:var(--min-tap,44px);display:flex;align-items:center;gap:.4rem;
+  list-style:none}
+.vt-report details summary::-webkit-details-marker{display:none}
+.vt-report details summary::before{content:"▸";color:var(--accent,#6eb4e8)}
+.vt-report details[open] summary::before{content:"▾"}
+.vt-report details ul{margin:.4rem 0 0;padding-left:1.1rem;color:var(--text-muted,#c5d2e4)}
 .vt-report .vt-report-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem}
-.vt-report .vt-report-actions button,.vt-report .vt-report-actions a{min-height:2.6rem}
+.vt-report .vt-report-actions button,.vt-report .vt-report-actions a{min-height:var(--min-tap,44px)}
 .vt-report .vt-report-msg{margin:.6rem 0 0;font-size:.88rem;min-height:1.2rem}
-.vt-report .vt-report-msg[data-tone=error]{color:#fca5a5}
-.vt-report .vt-report-msg[data-tone=ok]{color:#86efac}
+.vt-report .vt-report-msg[data-tone=error]{color:var(--danger,#f07a82)}
+.vt-report .vt-report-msg[data-tone=ok]{color:var(--success,#4fd492)}
 .vt-report code.vt-report-ref{display:inline-block;padding:.3rem .5rem;font-size:1.05rem;letter-spacing:.08em;
-  background:rgba(148,163,184,.16);border-radius:.4rem;user-select:all}
+  background:var(--bg-soft,#243041);border-radius:.4rem;user-select:all}
 .vt-report .vt-report-mine{list-style:none;margin:.5rem 0 0;padding:0;font-size:.88rem}
-.vt-report .vt-report-mine li{padding:.45rem 0;border-top:1px solid rgba(148,163,184,.2)}
+.vt-report .vt-report-mine li{padding:.45rem 0;border-top:1px solid var(--border,#3d4f68)}
+.vt-report-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);
+  white-space:nowrap;border:0}
 .vt-report .vt-report-pill{display:inline-block;margin-left:.4rem;padding:.1rem .45rem;border-radius:1rem;
-  font-size:.72rem;background:rgba(148,163,184,.2)}
+  font-size:.75rem;background:var(--bg-soft,#243041)}
 /* The entry point reads as a link in a line of footer text, but it is a real
    control, so it gets the site's 44px floor rather than the height of its own
    type. inline-flex keeps it in the sentence it sits in. */
@@ -428,13 +462,26 @@
       hidden: true
     });
     const card = el("div", { className: "modal-card vt-report" });
-    overlay.appendChild(card);
+    // One status node that outlives every redraw of the card. The thanks and
+    // failure panels replace the card wholesale and move focus to a button, so
+    // a screen reader heard "Enviando…" and then "Cerrar, botón": never whether
+    // it was saved, its reference, or why it was not.
+    const status = el("p", { className: "vt-report-sr", role: "status", "aria-live": "polite" });
+    overlay.append(card, status);
     document.body.appendChild(overlay);
     overlay.addEventListener("click", (event) => {
       if (event.target === overlay) close();
     });
-    ui = { overlay, card, kind: "bug", severity: "annoying", area: "practice" };
+    ui = { overlay, card, status, kind: "bug", severity: "annoying", area: "practice" };
     return ui;
+  }
+
+  /** Say `text` once through the dialog's status node (emptied first, so a repeat is spoken again). */
+  function announce(text) {
+    ui.status.textContent = "";
+    setTimeout(() => {
+      ui.status.textContent = text;
+    }, 50);
   }
 
   /** Close on Escape, while the dialog is open. */
@@ -503,7 +550,8 @@
     if (form.environment.viewport) {
       lines.push(`${t("labelScreen")}: ${form.environment.viewport}${form.environment.screen ? ` (${form.environment.screen})` : ""}`);
     }
-    if (form.contact) lines.push(`${t("labelContact")}: ${form.contact}`);
+    // No contact line: the way out this text is for is a public GitHub issue,
+    // and the contact is prefilled with a signed-in reporter's own address.
     return lines.join("\n");
   }
 
@@ -527,8 +575,12 @@
   /** The sentence for a refusal, by the worker's reason code. */
   function failureText(res) {
     const reason = (res && res.data && res.data.reason) || "";
+    // No transport on this page is not the visitor's connection: blaming it
+    // sent a reader to check a network that was fine (the guide, before it
+    // loaded account.js).
+    if (!global.VTAccount || !global.VTAccount.request) return t("failNoTransport");
     if (!res || res.status === 0) {
-      return global.VTAccount && !global.VTAccount.isConfigured() ? t("failUnconfigured") : t("failOffline");
+      return global.VTAccount.isConfigured() ? t("failOffline") : t("failUnconfigured");
     }
     if (reason === "reports_disabled" || reason === "accounts_not_configured") return t("failDisabled");
     if (reason === "too_busy") return t("failBusy");
@@ -647,6 +699,7 @@
       BUILD ? el("li", { text: t("envBuild") }) : null,
       el("li", { text: t("envBrowser") }),
       el("li", { text: t("envScreen") }),
+      el("li", { text: t("envClock") }),
       el("li", { text: t("envLang") }),
       el("li", { text: t("envAccount") })
     ]);
@@ -727,7 +780,9 @@
       const res = await global.VTAccount.request("GET", "/v1/reports/mine", null, { timeoutMs: 8000 });
       load.disabled = false;
       if (!res || !res.ok) {
-        message.textContent = failureText(res);
+        // A session that ran out is not a failed send: it used to read
+        // "Algo falló al enviarlo (no_session)" on a list nobody was sending.
+        message.textContent = res && res.status === 401 ? t("mineNeedsAccount") : failureText(res);
         message.dataset.tone = "error";
         return;
       }
@@ -796,6 +851,7 @@
     again.addEventListener("click", () => drawForm());
     const done = el("button", { type: "button", className: "btn btn-primary", text: t("close") });
     done.addEventListener("click", () => close());
+    announce(`${t("thanksTitle")}. ${reference}`);
     ui.card.replaceChildren(
       el("h2", { id: "vt-report-title", text: t("thanksTitle") }),
       el("p", { text: t("thanksBody") }),
@@ -833,11 +889,13 @@
     retry.addEventListener("click", () => drawForm());
     const back = el("button", { type: "button", className: "btn btn-ghost btn-sm", text: t("close") });
     back.addEventListener("click", () => close());
+    announce(`${t("failTitle")}. ${failureText(res)}`);
     ui.card.replaceChildren(
       el("h2", { id: "vt-report-title", text: t("failTitle") }),
       el("p", { text: failureText(res) }),
       el("p", { className: "vt-report-lede", text: t("failLede") }),
       area,
+      el("p", { className: "vt-report-hint", text: t("failPublic") }),
       el("div", { className: "vt-report-actions" }, [copy, issues, retry, back]),
       message
     );
@@ -861,23 +919,29 @@
   function open(options) {
     if (!ui) build();
     opener = document.activeElement;
-    const draft = readDraft() || {};
-    if (options && (options.kind || options.area || options.summary)) {
-      writeDraft({
-        ...draft,
-        ...(options.kind ? { kind: options.kind } : {}),
-        ...(options.area ? { area: options.area } : {}),
-        // Only when there is nothing typed yet: a suggestion must never
-        // overwrite somebody's own words.
-        ...(options.summary && !draft.summary ? { summary: String(options.summary).slice(0, LIMITS.summary) } : {})
-      });
-    }
+    partLang = options && (options.lang === "en" || options.lang === "es") ? options.lang : null;
+    ui.overlay.lang = lang();
+    if (options) seedDraft(options);
     ui.overlay.hidden = false;
     drawForm();
     document.addEventListener("keydown", onKeyDown, true);
     if (global.VTFocusTrap && global.VTFocusTrap.activate) {
       global.VTFocusTrap.activate(ui.overlay, { initialFocus: "#vt-report-summary" });
     }
+  }
+
+  /** Put what the opener suggested (kind, area, a first summary) into the draft. */
+  function seedDraft(options) {
+    if (!options.kind && !options.area && !options.summary) return;
+    const draft = readDraft() || {};
+    writeDraft({
+      ...draft,
+      ...(options.kind ? { kind: options.kind } : {}),
+      ...(options.area ? { area: options.area } : {}),
+      // Only when there is nothing typed yet: a suggestion must never
+      // overwrite somebody's own words.
+      ...(options.summary && !draft.summary ? { summary: String(options.summary).slice(0, LIMITS.summary) } : {})
+    });
   }
 
   /** Close the dialog, keeping whatever is typed as a draft. */
@@ -902,6 +966,14 @@
    * any that is empty — a page without js/i18n.js has nothing else to put it
    * there.
    */
+  /** "en" or "es" when the node sits in a part of the page that declares its language, else undefined. */
+  function partLanguage(node) {
+    const part = node.parentElement && node.parentElement.closest("[lang]");
+    if (!part || part === document.documentElement) return undefined;
+    const code = String(part.getAttribute("lang") || "").slice(0, 2).toLowerCase();
+    return code === "en" || code === "es" ? code : undefined;
+  }
+
   function wire() {
     // Before the first click, not on first open: the entry point in the footer
     // is styled from the same block, and a page where nothing is ever opened
@@ -914,7 +986,11 @@
       node.addEventListener("click", (event) => {
         event.preventDefault();
         const kind = node.getAttribute("data-vt-report");
-        open({ kind: kind === "idea" || kind === "bug" ? kind : undefined, area: node.getAttribute("data-vt-report-area") || undefined });
+        open({
+          kind: kind === "idea" || kind === "bug" ? kind : undefined,
+          area: node.getAttribute("data-vt-report-area") || undefined,
+          lang: partLanguage(node)
+        });
       });
     });
   }

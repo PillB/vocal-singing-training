@@ -8075,12 +8075,14 @@
     const es = isEsLang();
     const region = B.detectRegion();
     const market = B.marketFor(region);
-    if (!pricingRail) pricingRail = B.preferredRail(region);
+    const rails = B.checkoutRails(region);
+    pricingRail = choosePricingRail(rails);
+    const priceRegion = priceRegionFor(B, region);
     const cfg = B.cfg() || {};
     const prelaunch = isCheckoutPrelaunch();
     const regionEl = $("#pricing-region-label");
     if (regionEl) {
-      regionEl.textContent = `${tt("pricing.region")}: ${market.name} · ${market.currency}`;
+      regionEl.textContent = `${tt("pricing.region")}: ${market.name} · ${B.marketFor(priceRegion).currency}`;
     }
     const status = $("#pricing-status");
     if (status) {
@@ -8093,7 +8095,7 @@
       status.textContent = pricingStatusLine(plan, ent, B, prelaunch);
     }
     paintPricingPersonal();
-    paintPricingRails(cfg, es, prelaunch);
+    paintPricingRails(cfg, es, prelaunch, rails);
     const grid = $("#pricing-grid");
     if (grid) {
       const plans = cfg.plans || [];
@@ -8105,70 +8107,9 @@
       const held = headerPlanState().kind;
       // Computed from the two prices on the cards, so the badge can never
       // disagree with the numbers printed next to it.
-      const savingPct = B.annualSavingPct(plans, region);
-      grid.innerHTML = plans
-        .map((p) => {
-          const price = B.formatPrice(p, region);
-          const interval =
-            p.interval === "month" ? tt("pricing.month") : p.interval === "year" ? tt("pricing.year") : "";
-          const name = es ? p.nameEs || p.name : p.name;
-          // Eleven bullets pushed every plan's button off the modal. Show the
-          // five that decide the purchase, keep the rest one click away.
-          const featList = p.features || [];
-          const FEAT_MAX = 5;
-          const feats = featList
-            .slice(0, FEAT_MAX)
-            .map((f) => `<li>${tt("pricing.feat." + f)}</li>`)
-            .join("");
-          const restFeats = featList
-            .slice(FEAT_MAX)
-            .map((f) => `<li>${tt("pricing.feat." + f)}</li>`)
-            .join("");
-          const moreFeats = restFeats
-            ? `<details class="plan-more"><summary>${tt("pricing.moreFeatures", { n: featList.length - FEAT_MAX })}</summary><ul class="plan-features">${restFeats}</ul></details>`
-            : "";
-          const badge =
-            p.badge === "saveAnnual" && savingPct
-              ? `<span class="plan-badge">${tt("pricing.savePct", { n: String(savingPct) })}</span>`
-              : p.popular
-                ? `<span class="plan-badge">★</span>`
-                : "";
-          let ctaLabel = tt("pricing.subscribe");
-          let disabled = false;
-          let notYet = false;
-          if (p.id === "free") {
-            ctaLabel = held === "free" ? tt("pricing.current") : tt("pricing.freeAlways");
-            disabled = true;
-          } else if (held === "trialAccount" || held === "gift") {
-            // Pro is held, but not by buying this card: leave it as an offer.
-          } else if (ent.pro && (ent.plan === p.id || (ent.plan === "trial" && p.id !== "free"))) {
-            if (ent.plan === p.id || ent.source === "demo") {
-              ctaLabel = tt("pricing.current");
-              disabled = ent.plan === p.id || ent.source === "paid";
-            }
-          }
-          // A Subscribe button that can only answer with a toast is a dead end;
-          // say it on the button instead, and keep it out of the Tab order.
-          if (prelaunch && !disabled) {
-            ctaLabel = tt("pricing.notYet");
-            disabled = true;
-            notYet = true;
-          }
-          const ctaClass = p.id === "free" ? "btn-ghost" : notYet ? "btn-ghost plan-cta-not-yet" : "btn-primary";
-          const hero = p.hero || p.id === "pro_yearly" ? " is-hero" : "";
-          return `
-            <article class="plan-card${p.popular ? " is-popular" : ""}${hero}" data-plan="${p.id}">
-              ${badge}
-              <h4>${name}</h4>
-              <div class="plan-price">${price.text}<span>${interval}</span></div>
-              <ul class="plan-features">${feats}</ul>
-              ${moreFeats}
-              <button type="button" class="btn ${ctaClass} btn-sm plan-cta" data-plan="${p.id}" ${disabled ? 'disabled aria-disabled="true"' : ""}>
-                ${ctaLabel}
-              </button>
-            </article>`;
-        })
-        .join("");
+      const savingPct = B.annualSavingPct(plans, priceRegion);
+      const ctx = { B, es, held, ent, prelaunch, savingPct, priceRegion };
+      grid.innerHTML = plans.map((p) => planCardHtml(p, ctx)).join("");
       $$(".plan-cta", grid).forEach((btn) => {
         btn.addEventListener("click", () => {
           const planId = btn.dataset.plan;
@@ -8199,6 +8140,80 @@
       });
     }
     updateBillingChrome();
+  }
+
+  /**
+   * One plan card of the Pro dialog, as HTML. Split out of renderPricingModal's
+   * map callback (complexity 29) when its price started following the rail.
+   * @param {object} p A plan from the billing config.
+   * @param {{B: object, es: boolean, held: string, ent: object, prelaunch: boolean, savingPct: number, priceRegion: string}} ctx
+   * @returns {string}
+   */
+  function planCardHtml(p, ctx) {
+    const price = ctx.B.formatPrice(p, ctx.priceRegion);
+    const interval =
+      p.interval === "month" ? tt("pricing.month") : p.interval === "year" ? tt("pricing.year") : "";
+    const name = ctx.es ? p.nameEs || p.name : p.name;
+    const { feats, moreFeats } = planFeaturesHtml(p);
+    const cta = planCta(p, ctx);
+    const ctaClass = p.id === "free" ? "btn-ghost" : cta.notYet ? "btn-ghost plan-cta-not-yet" : "btn-primary";
+    const hero = p.hero || p.id === "pro_yearly" ? " is-hero" : "";
+    return `
+            <article class="plan-card${p.popular ? " is-popular" : ""}${hero}" data-plan="${p.id}">
+              ${planBadgeHtml(p, ctx.savingPct)}
+              <h4>${name}</h4>
+              <div class="plan-price">${price.text}<span>${interval}</span></div>
+              <ul class="plan-features">${feats}</ul>
+              ${moreFeats}
+              <button type="button" class="btn ${ctaClass} btn-sm plan-cta" data-plan="${p.id}" ${cta.disabled ? 'disabled aria-disabled="true"' : ""}>
+                ${cta.label}
+              </button>
+            </article>`;
+  }
+
+  /** A plan card's feature bullets: the first five, and the rest behind a disclosure. */
+  function planFeaturesHtml(p) {
+    // Eleven bullets pushed every plan's button off the modal. Show the
+    // five that decide the purchase, keep the rest one click away.
+    const featList = p.features || [];
+    const FEAT_MAX = 5;
+    const item = (f) => `<li>${tt("pricing.feat." + f)}</li>`;
+    const feats = featList.slice(0, FEAT_MAX).map(item).join("");
+    const restFeats = featList.slice(FEAT_MAX).map(item).join("");
+    const moreFeats = restFeats
+      ? `<details class="plan-more"><summary>${tt("pricing.moreFeatures", { n: featList.length - FEAT_MAX })}</summary><ul class="plan-features">${restFeats}</ul></details>`
+      : "";
+    return { feats, moreFeats };
+  }
+
+  /** A plan card's badge: the annual saving where the plan claims one, a star on the popular plan. */
+  function planBadgeHtml(p, savingPct) {
+    if (p.badge === "saveAnnual" && savingPct) {
+      return `<span class="plan-badge">${tt("pricing.savePct", { n: String(savingPct) })}</span>`;
+    }
+    return p.popular ? `<span class="plan-badge">★</span>` : "";
+  }
+
+  /** A plan card's button: what it says, whether it can be pressed, and whether that is only for now. */
+  function planCta(p, ctx) {
+    const own = heldPlanCta(p, ctx.held, ctx.ent);
+    // A Subscribe button that can only answer with a toast is a dead end;
+    // say it on the button instead, and keep it out of the Tab order.
+    if (ctx.prelaunch && !own.disabled) return { label: tt("pricing.notYet"), disabled: true, notYet: true };
+    return { label: own.label, disabled: own.disabled, notYet: false };
+  }
+
+  /** A plan card's button as the plan held makes it, before pre-launch is considered. */
+  function heldPlanCta(p, held, ent) {
+    if (p.id === "free") {
+      return { label: held === "free" ? tt("pricing.current") : tt("pricing.freeAlways"), disabled: true };
+    }
+    const offer = { label: tt("pricing.subscribe"), disabled: false };
+    // Pro is held, but not by buying this card: leave it as an offer.
+    if (held === "trialAccount" || held === "gift") return offer;
+    const holdsThis = ent.pro && (ent.plan === p.id || ent.plan === "trial");
+    if (!holdsThis || !(ent.plan === p.id || ent.source === "demo")) return offer;
+    return { label: tt("pricing.current"), disabled: ent.plan === p.id || ent.source === "paid" };
   }
 
   /** The Pro dialog's status line for a plan held, in words; anything else falls to unheldPricingStatus. */
@@ -8263,25 +8278,58 @@
     }
   }
 
-  /** The Pro dialog's choice of payment rail; pressing one redraws the dialog for it. */
-  function paintPricingRails(cfg, es, prelaunch) {
-    const rails = $("#pricing-rails");
-    if (rails) {
-      // Choosing how to pay means nothing while nobody can pay.
-      rails.hidden = prelaunch;
-      const stripeLab = railLabel(cfg, es, "stripe", "pricing.railStripe");
-      const mpLab = railLabel(cfg, es, "mercadopago", "pricing.railMp");
-      rails.innerHTML = `
-        <button type="button" class="rail-btn${pricingRail === "stripe" ? " active" : ""}" data-rail="stripe">${stripeLab}</button>
-        <button type="button" class="rail-btn${pricingRail === "mercadopago" ? " active" : ""}" data-rail="mercadopago">${mpLab}</button>
-      `;
-      $$(".rail-btn", rails).forEach((b) => {
-        b.addEventListener("click", () => {
-          pricingRail = b.dataset.rail;
-          renderPricingModal();
-        });
-      });
-    }
+  /**
+   * The region whose prices the cards show: the visitor's own on the visitor's
+   * own rail, the worldwide (dollar) one on any other. The money follows the
+   * rail: a Peruvian who picks the card rail pays Creem, which cannot charge
+   * soles, so showing S/ 19.90 there promised a price nobody would charge.
+   * Whether the euro markets' Creem products are priced in euros is the
+   * operator's to say (docs/VALUE-GAP-REGISTRY.md VG-85).
+   */
+  function priceRegionFor(B, region) {
+    return pricingRail === B.preferredRail(region) ? region : "WW";
+  }
+
+  /**
+   * The rail the dialog sells on: the one the buyer chose while it can sell,
+   * else the region's own when it can, else the first that can. With nothing
+   * sellable yet (pre-launch) it stays on the region's own.
+   * @param {{rail: string, sellable: boolean}[]} rails From VTBilling.checkoutRails, region's own first.
+   * @returns {string} Provider id.
+   */
+  function choosePricingRail(rails) {
+    const sellable = rails.filter((r) => r.sellable).map((r) => r.rail);
+    if (pricingRail && (sellable.includes(pricingRail) || !sellable.length)) return pricingRail;
+    return sellable[0] || rails[0].rail;
+  }
+
+  /**
+   * The Pro dialog's choice of payment rail: one button per rail a market sells
+   * on that has a checkout link, the one in use marked; pressing one redraws
+   * the dialog for it. Before any rail can sell, every market rail is drawn and
+   * the row is hidden: choosing how to pay means nothing while nobody can pay.
+   */
+  function paintPricingRails(cfg, es, prelaunch, rails) {
+    const row = $("#pricing-rails");
+    if (!row) return;
+    row.hidden = prelaunch;
+    const live = rails.filter((r) => r.sellable);
+    row.replaceChildren(...(live.length ? live : rails).map(({ rail }) => railButton(cfg, es, rail)));
+  }
+
+  /** One rail's button in the Pro dialog. */
+  function railButton(cfg, es, rail) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "rail-btn" + (rail === pricingRail ? " active" : "");
+    b.dataset.rail = rail;
+    b.setAttribute("aria-pressed", rail === pricingRail ? "true" : "false");
+    b.textContent = railLabel(cfg, es, rail, rail === "mercadopago" ? "pricing.railMp" : "pricing.railStripe");
+    b.addEventListener("click", () => {
+      pricingRail = rail;
+      renderPricingModal();
+    });
+    return b;
   }
 
   /** A payment rail's button label: the operator's own wording from the config, else ours. */

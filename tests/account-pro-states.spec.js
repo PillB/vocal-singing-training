@@ -1170,16 +1170,18 @@ test.describe("What the split of the account panel and the Pro dialog must keep"
     await install(page, {}, license);
     await boot(page);
     await page.click("#btn-pricing");
-    const stripe = page.locator('#pricing-rails [data-rail="stripe"]');
+    // The card rail is Creem's: no market sells on Stripe since #26.
+    const card = page.locator('#pricing-rails [data-rail="creem"]');
     const mp = page.locator('#pricing-rails [data-rail="mercadopago"]');
-    await expect(stripe).toHaveText("Tarjeta internacional");
+    await expect(page.locator('#pricing-rails [data-rail="stripe"]')).toHaveCount(0);
+    await expect(card).toHaveText("Tarjeta internacional");
     await expect(mp).toHaveText("Mercado Pago (Perú / LATAM)");
     await page.keyboard.press("Escape");
     await expect(page.locator("#pricing-modal")).toBeHidden();
     await page.click("#btn-lang");
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await page.click("#btn-pricing");
-    await expect(stripe).toHaveText("International card");
+    await expect(card).toHaveText("International card");
     await expect(mp).toHaveText("Mercado Pago");
   });
 

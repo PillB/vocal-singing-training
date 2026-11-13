@@ -128,6 +128,27 @@
     return CHECKOUT_RAILS.has(m.rail) ? m.rail : "creem";
   }
 
+  /**
+   * The rails the Pro dialog offers, the region's own first: every rail a
+   * market sells on, each marked sellable when a paid plan has a checkout link
+   * on it. Read from the markets rather than drawn as a fixed pair, because the
+   * pair the dialog used to draw (Stripe and Mercado Pago) outlived the move to
+   * Creem: its card button still chose "stripe", which no market sells on, so
+   * pressing it turned a working checkout into "payments are not public yet",
+   * and outside Peru neither button showed as the one in use.
+   * @param {string} region Two-letter region code.
+   * @returns {{rail: string, sellable: boolean}[]} In the order to draw them.
+   */
+  function checkoutRails(region) {
+    const c = cfg();
+    const named = (c.markets || []).map((m) => m.rail).filter((r) => CHECKOUT_RAILS.has(r));
+    const paid = (c.plans || []).filter((p) => p.interval).map((p) => p.id);
+    return [...new Set([preferredRail(region), ...named])].map((rail) => ({
+      rail,
+      sellable: paid.some((id) => !!checkoutUrl(id, rail))
+    }));
+  }
+
   function nowMs() {
     return Date.now();
   }
@@ -1123,6 +1144,7 @@
     detectRegion,
     marketFor,
     preferredRail,
+    checkoutRails,
     getEntitlement,
     isPro,
     can,

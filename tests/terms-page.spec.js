@@ -48,6 +48,19 @@ test.describe("terms of use", () => {
     }
   });
 
+  // Found by the copy pass on the merge of #26: "Haces falta tener 13 años"
+  // says "you are needed", and the free plan was "the body of the exercises"
+  // where the offer it describes says every exercise is free.
+  test("the age line is grammatical and the free plan is every exercise, as the offer says", async ({ page }) => {
+    await page.goto(BASE + "/terms.html", { waitUntil: "domcontentloaded" });
+    const text = (await page.locator("main").textContent()).replace(/\s+/g, " ");
+    expect(text).toContain("Hace falta tener 13 años");
+    expect(text).not.toContain("Haces falta");
+    expect(text).toContain("da acceso a todos los ejercicios");
+    expect(text).toContain("gives you every exercise");
+    expect(text).not.toMatch(/cuerpo de los ejercicios|body of the exercises/);
+  });
+
   test("the prices on the page are the prices in the config", async ({ page }) => {
     await page.goto(BASE + "/terms.html", { waitUntil: "domcontentloaded" });
     const body = await page.locator("main").textContent();

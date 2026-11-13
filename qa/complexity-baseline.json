@@ -27,12 +27,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "032893ceec6a0a6241a81176c8e39cd83b2fcc03e309bd4f38c0a5ceb90c1e40",
-      "complexity": 29,
-      "name": "Arrow function"
-    },
-    {
-      "file": "js/app.js",
       "sha": "0f5d1758f58f917a6edc23a78c1ca64d20ab9af35fa8a178de0d457a96aed292",
       "complexity": 18,
       "name": "Arrow function"

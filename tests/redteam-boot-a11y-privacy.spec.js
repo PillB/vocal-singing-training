@@ -488,6 +488,125 @@ test.describe("cross-12: the first seconds", () => {
   });
 });
 
+/* ------------------------------------------------------- the first paint */
+
+/**
+ * The markup's own home (the hero a page without scripts shows) is not the home
+ * the app draws. Painted first, it was swapped a moment later and everything
+ * under it jumped: #catalog-panel 287 -> 444 px and the footer off the screen,
+ * a layout shift of 0.54-0.67 on about half the desktop loads after PR #39
+ * merged #21, against 1 in 18 on main before (review AE3, AE4). A tap on the
+ * stale hero also landed on whatever moved under the finger.
+ *
+ * Correct: until the app has drawn the page, nothing below the header is shown,
+ * so the first view of the content is the app's own and nothing moves. The hold
+ * must also end when the app cannot: at DOMContentLoaded (the app's own start),
+ * on load when js/boot-ready.js is missing, and after eight seconds when a
+ * script never arrives. A page without scripts is never held.
+ */
+const shiftWatch = () => {
+  window.__shifts = [];
+  new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) {
+      if (e.hadRecentInput) continue;
+      const src = e.sources.map((s) => (s.node && (s.node.id || s.node.className || s.node.nodeName)) || "?");
+      window.__shifts.push({ value: e.value, src: src.join(",") });
+    }
+  }).observe({ type: "layout-shift", buffered: true });
+};
+const heldNow = () => ({
+  app: !!window.VTApp,
+  main: getComputedStyle(document.querySelector("main")).visibility,
+  footer: getComputedStyle(document.querySelector(".app-footer")).visibility,
+  header: getComputedStyle(document.querySelector(".app-header")).visibility
+});
+
+test.describe("the first paint is the app's own home", () => {
+  for (const [lang, vp, days] of [
+    ["es", LAPTOP, [-3, -2, -1]],
+    ["en", LAPTOP, null],
+    ["es", PHONE, null]
+  ]) {
+    test(`${lang} ${vp.width}px${days ? ", returning" : ", first visit"}: the markup's hero is never shown, so the page does not jump when the app draws it`, async ({ browser }) => {
+      const { ctx, page } = await open(browser, { vp, lang, days });
+      await page.addInitScript(shiftWatch);
+      // app.js held back, so the page is certainly painted before the app can draw the home:
+      // the race the review lost on half its loads, made certain
+      await page.route("**/js/app.js*", async (route) => {
+        await new Promise((r) => setTimeout(r, 900));
+        await route.continue();
+      });
+      await page.goto(BASE + "/", { waitUntil: "commit" });
+      await page.waitForSelector(".app-footer", { state: "attached" });
+      await page.waitForTimeout(350);
+      const during = await page.evaluate(heldNow);
+      expect(during.app, "control: the app has not started yet").toBe(false);
+      expect(during.main, "the markup's home is not on screen").toBe("hidden");
+      expect(during.footer).toBe("hidden");
+      if (lang === "es") expect(during.header, "the header is, at once").toBe("visible");
+      await page.waitForFunction(() => !!window.VTApp && document.readyState !== "loading");
+      await page.waitForTimeout(1200);
+      const after = { ...(await page.evaluate(heldNow)), shifts: await page.evaluate(() => window.__shifts) };
+      expect(after.main, "shown once the app has drawn it").toBe("visible");
+      expect(after.footer).toBe("visible");
+      const cls = after.shifts.reduce((n, s) => n + s.value, 0);
+      expect(cls, `layout shifts: ${JSON.stringify(after.shifts)}`).toBeLessThan(0.1);
+      await ctx.close();
+    });
+  }
+
+  test("released when the app has started, not when the last image has loaded", async ({ browser }) => {
+    const { ctx, page } = await open(browser, { vp: LAPTOP, lang: "es" });
+    // An image added as the page is read and never answered: the load event waits for it
+    await page.route("**/never-loads.png", () => {});
+    await page.addInitScript(() => {
+      document.addEventListener("DOMContentLoaded", () => {
+        const img = new Image();
+        img.src = "/never-loads.png";
+        img.alt = "";
+        document.body.appendChild(img);
+      });
+    });
+    await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => !!window.VTApp);
+    await expect.poll(() => page.evaluate(heldNow).then((r) => r.main), { timeout: 2000, intervals: [100] }).toBe("visible");
+    expect(await page.evaluate(() => document.readyState), "control: the page has not finished loading").toBe("interactive");
+    await ctx.close();
+  });
+
+  test("released when the page has loaded, if the script that ends it is missing", async ({ browser }) => {
+    const { ctx, page } = await open(browser, { vp: LAPTOP, lang: "es" });
+    await page.route("**/js/boot-ready.js*", (route) => route.abort("failed"));
+    await page.goto(BASE + "/", { waitUntil: "load" });
+    await expect.poll(() => page.evaluate(heldNow).then((r) => r.main), { timeout: 3000, intervals: [100] }).toBe("visible");
+    await ctx.close();
+  });
+
+  test("[L] released after eight seconds at the most, when a script never arrives", async ({ browser }) => {
+    test.setTimeout(60000);
+    const { ctx, page } = await open(browser, { vp: LAPTOP, lang: "es" });
+    // The last script is asked for and never answered: the page is never read to the end
+    await page.route("**/js/boot-ready.js*", () => {});
+    await page.goto(BASE + "/", { waitUntil: "commit" });
+    await page.waitForSelector(".app-footer", { state: "attached" });
+    await page.waitForTimeout(1500);
+    const early = await page.evaluate(() => ({ main: getComputedStyle(document.querySelector("main")).visibility, ready: document.readyState }));
+    expect(early.ready, "control: the page is still being read").toBe("loading");
+    expect(early.main, "held while the app could still start").toBe("hidden");
+    await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector("main")).visibility), { timeout: 10000, intervals: [250] }).toBe("visible");
+    await ctx.close();
+  });
+
+  test("a page without scripts is never held: the markup's home is what it shows", async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: LAPTOP, javaScriptEnabled: false });
+    const page = await ctx.newPage();
+    await page.goto(BASE + "/", { waitUntil: "load" });
+    const r = await page.evaluate(() => ({ main: getComputedStyle(document.querySelector("main")).visibility, cls: document.documentElement.className }));
+    expect(r).toEqual({ main: "visible", cls: expect.not.stringContaining("vt-boot-pending") });
+    await ctx.close();
+  });
+});
+
 /* ------------------------------------------------------------- the EEA bar */
 
 test.describe("the EEA statistics question", () => {

@@ -754,7 +754,18 @@ export const MUTANTS = {
       ["D19 a page whose storage throws gets no store in memory: the boot runs on storage.js's guards alone", "js/boot-head.js", "      Object.defineProperty(window, name, { value: memoryStore(), configurable: true });", "      void memoryStore;", "tests/redteam-boot-a11y-privacy.spec.js", "cross-04"],
       // PR #39 review (RT4): the guide's report paragraph ran on from section 15, after the ENT red flags
       ["D20 the Spanish report paragraph loses its heading: \u00bfAlgo sigue roto? reads as part of Cuida tu voz", "guide.html", '      <h2 id="reportar">Fallos e ideas</h2>\n', "", "tests/redteam-content-specs.spec.js", "heading of its own"],
-      ["D21 the English report paragraph loses its heading: Still broken? reads as part of Look after your voice", "guide.html", '      <h2 id="reportar-en">Bugs and ideas</h2>\n', "", "tests/redteam-content-specs.spec.js", "heading of its own"]
+      ["D21 the English report paragraph loses its heading: Still broken? reads as part of Look after your voice", "guide.html", '      <h2 id="reportar-en">Bugs and ideas</h2>\n', "", "tests/redteam-content-specs.spec.js", "heading of its own"],
+      // After the merge (review AE3/AE4): the markup's home painted first, then the app's, and the page jumped
+      ["D22 nothing is held below the header: the markup's hero is painted, then replaced, and the page under it jumps", "css/styles.css", "html.vt-boot-pending .main,\nhtml.vt-boot-pending .app-footer {\n  visibility: hidden;\n}\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "first paint"],
+      ["D23 the hold ends only when the last image has loaded, not when the app has started", "js/boot-ready.js", "    document.documentElement.classList.remove(\"vt-boot-pending\");\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "first paint"],
+      ["D24 with js/boot-ready.js missing the page stays blank for eight seconds after it has loaded", "js/boot-head.js", "  window.addEventListener(\"load\", show);\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "first paint"],
+      ["D25 a script that never arrives leaves the page blank for good", "js/boot-head.js", "  setTimeout(show, 8000);\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "first paint"],
+      // After the merge (review AE3/AE4): #21's no-grow mic box on main's wrapping rail
+      ["D26 the mic box is held to its own width beside hidden options: half the rail empty on every speech exercise", "css/styles.css", ".hud-bottom-rail > .hud-bc {\n  overflow: hidden;\n}\n", ".hud-bottom-rail > .hud-bc {\n  overflow: hidden;\n}\n.hud-bottom-rail:has(> #piano-mini-opts.hud-br:not(.piano-opts-compact):not(.piano-opts-expanded)) > .hud-bc {\n  flex: 0 0 auto;\n}\n", "tests/bottom-rail.spec.js", "takes the rest of its row"],
+      // After the merge (review RT4): main's relabel of the trial banner without #21's one-day line
+      ["D27 the trial banner relabelled after a language switch says 1 days / 1 d\u00edas", "js/app.js", "    text.textContent = tt(valueMomentKey(id, vars.n), vars);", "    text.textContent = tt(\"value.moment.\" + id, vars);", "tests/redteam-accounts-profiles.spec.js", "through language switches"],
+      // After the merge (review RT5): back from a routine, the home entry kept the place from before it
+      ["D28 back from a routine the entry keeps the old place, and a reload jumps down to it", "js/app.js", "    else if (state.view !== \"exercise\" && !route.restoring) {", "    else if (false) {", "tests/redteam-router-tour.spec.js", "a reload stays where the page is"]
     ].map(([name, file, from, to, spec, grep]) => ({
       name,
       file,

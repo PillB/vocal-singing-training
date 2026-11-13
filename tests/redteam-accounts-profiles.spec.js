@@ -1137,6 +1137,32 @@ test.describe("Copy that says only what is true", () => {
     expect(s.en[1]).toContain("1 day.");
     for (const line of [...s.es, ...s.en]) expect(line).not.toContain("(s)");
   });
+
+  // RT4 on PR #39: the banner follows a language switch (main's relabel), and that relabel never learned #21's
+  // one-day line, so the last day read "1 día", then "1 days" in English, then "1 días" back in Spanish. Correct:
+  // the singular in either language however often it changes. Control: two days left keeps the plural throughout.
+  for (const [n, ago, es, en, wrong] of [
+    [1, 6.5, "1 día.", "1 day.", /\b1 (días|days)\b/],
+    [2, 5.5, "2 días", "2 days", /\b2 (día|day)\./]
+  ]) {
+    test(`the trial-ending banner keeps the right form for ${n} day${n === 1 ? "" : "s"} through language switches`, async ({ page }) => {
+      await bootPro(page, { lang: "es", trialDaysAgo: ago, e2e: false });
+      expect(await page.evaluate(() => window.VTBilling.trialDaysLeft()), "control: days left on the trial").toBe(n);
+      await page.evaluate(() => window.VTApp.showValueMoment("trial_ending"));
+      const banner = page.locator("#value-banner-text");
+      await expect(banner, "control: the banner is up").toBeVisible();
+      const seen = [await banner.textContent()];
+      for (const lang of ["en", "es", "en"]) {
+        await page.evaluate((l) => window.VTI18n.setLang(l), lang);
+        seen.push(await banner.textContent());
+      }
+      expect(seen[0]).toContain(es);
+      expect(seen[1]).toContain(en);
+      expect(seen[2]).toContain(es);
+      expect(seen[3]).toContain(en);
+      for (const line of seen) expect(line).not.toMatch(wrong);
+    });
+  }
 });
 
 test.describe("Admin tools: Borrar progreso local", () => {

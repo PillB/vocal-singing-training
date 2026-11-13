@@ -4,10 +4,13 @@
  * registered before this one), so by the time this runs it is wired. Busy
  * ends then, or when the page has loaded, whichever comes first, so a script
  * that fails cannot leave it busy. (An inline script on PR #21's branch.)
+ * The hold on everything below the header (html.vt-boot-pending) ends at the
+ * same moment, so the first view of the page is the one the app has drawn.
  */
 (function () {
   "use strict";
   var ready = function () {
+    document.documentElement.classList.remove("vt-boot-pending");
     if (document.body) document.body.removeAttribute("aria-busy");
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready);

@@ -384,13 +384,35 @@ export const WEBHOOK_FAILED_FLAG = "webhook_failed";
  * @param {string} name Flag name, a fixed string from the code.
  * @param {string} detail Short operator-facing note; never published.
  * @param {number} [now] Injected clock.
+ * @param {Object} [kv] KV namespace, written instead when D1 refuses.
  * @returns {Promise<void>} Resolves whether or not it was recorded.
  */
-export async function noteHealthFlag(db, name, detail, now) {
-  if (!db || !name) {
+export async function noteHealthFlag(db, name, detail, now, kv) {
+  if (!name) {
     return;
   }
   const at = Number.isFinite(now) ? Math.floor(now) : Math.floor(Date.now() / 1000);
+  if (db && (await writeFlagRow(db, name, detail, at))) {
+    return;
+  }
+  // D1 itself refused, which is now the failure that matters most: the payment
+  // ledger lives there, and D1's free plan refuses writes past 100,000 rows a
+  // day while it keeps answering reads, so the probe's `SELECT 1` says "ok".
+  // KV is a different service with a different budget, and the probe already
+  // spends one KV read; the flag goes there instead, and the probe reads it.
+  await writeFlagKey(kv, name, at);
+}
+
+/** KV key a health flag is kept under when D1 would not take it. */
+export function healthFlagKey(name) {
+  return `health:flag:${name}`;
+}
+
+/**
+ * Write a flag row in D1. Never throws.
+ * @returns {Promise<boolean>} Whether it was written.
+ */
+async function writeFlagRow(db, name, detail, at) {
   try {
     // The schema may never have been created: a deployment whose first webhook
     // is also its first use of D1 is exactly the deployment most likely to have
@@ -404,8 +426,25 @@ export async function noteHealthFlag(db, name, detail, now) {
       )
       .bind(name, at, String(detail || "").slice(0, 200))
       .run();
+    return true;
   } catch {
-    // Nothing to do and nothing to say: the caller is mid-failure already.
+    return false;
+  }
+}
+
+/**
+ * Write a flag's time in KV, for when D1 refused it. Never throws. A day's
+ * TTL: the probe reports it for an hour, and the row is no record to keep.
+ * @returns {Promise<void>} Resolves whether or not it was written.
+ */
+async function writeFlagKey(kv, name, at) {
+  if (!kv || typeof kv.put !== "function") {
+    return;
+  }
+  try {
+    await kv.put(healthFlagKey(name), String(at), { expirationTtl: 86400 });
+  } catch {
+    // Both stores refusing: the probe sees D1 or KV failing directly instead.
   }
 }
 

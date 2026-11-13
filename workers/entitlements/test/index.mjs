@@ -57,3 +57,6 @@ import "./split-stripe-mp.test.mjs";
 import "./split-creem.test.mjs";
 import "./split-routes.test.mjs";
 import "./split-reports.test.mjs";
+// The payment ledger in D1: one transaction per webhook, every race forced by
+// a barrier and checked against the KV store it replaced.
+import "./ledger.test.mjs";

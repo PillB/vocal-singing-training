@@ -56,6 +56,7 @@ import { buildTokenPayload, isLicenseIdShape, signPayload } from "./license.js";
 import { CLAIMABLE_PROVIDERS } from "./limits.js";
 import { deleteProgress, getProgress, listProgress, putProgress } from "./progress.js";
 import { getEntitlement, getLicenseIdForClaim } from "./store.js";
+import { ledgerReader } from "./ledger.js";
 
 /** Largest JSON body any account route accepts (progress documents dominate). */
 export const MAX_API_BODY_BYTES = 1048576;
@@ -211,7 +212,7 @@ export async function licenseTokenForResolution(resolution, account, env, now) {
  * @returns {Promise<Object>} `{account, entitlement, token, grants}`.
  */
 export async function buildMePayload(env, account, now) {
-  const resolution = await resolveEntitlement(env.DB, env.ENTITLEMENTS, account.id, now);
+  const resolution = await resolveEntitlement(env.DB, ledgerReader(env), account.id, now);
   const minted = await licenseTokenForResolution(resolution, account, env, now).catch(() => null);
   const trial = await trialViewFor(env, account, resolution);
   return {
@@ -524,7 +525,7 @@ export async function handleLink(request, env, deps) {
     if (!sessionId || sessionId.length > 200) {
       return json({ ok: false, reason: "bad_request" }, 400, cors);
     }
-    licenseId = await getLicenseIdForClaim(env.ENTITLEMENTS, provider, sessionId);
+    licenseId = await getLicenseIdForClaim(ledgerReader(env), provider, sessionId);
     if (!licenseId) {
       // The webhook has not landed yet; the browser retries, same as /v1/claim.
       return json({ ok: false, reason: "pending" }, 202, cors);
@@ -533,7 +534,7 @@ export async function handleLink(request, env, deps) {
     return json({ ok: false, reason: "bad_request" }, 400, cors);
   }
 
-  const record = await getEntitlement(env.ENTITLEMENTS, licenseId);
+  const record = await getEntitlement(ledgerReader(env), licenseId);
   if (!record) {
     return json({ ok: false, reason: "not_found" }, 404, cors);
   }
@@ -1012,7 +1013,7 @@ export async function handleAdminLookupAccount(request, env, url, deps) {
   if (!account) {
     return json({ ok: false, reason: "not_found" }, 404, cors);
   }
-  const resolution = await resolveEntitlement(env.DB, env.ENTITLEMENTS, account.id, at);
+  const resolution = await resolveEntitlement(env.DB, ledgerReader(env), account.id, at);
   const grants = await listGrants(env.DB, account.id, { includeRevoked: true, limit: 200 });
   return json(
     {

@@ -49,6 +49,8 @@ import { readJsonBody, requireSession, routeAccountApi, authMethods, requireAdmi
 import { asksFirst, callerCountry, routeEventsApi } from "./events.js";
 import {
   ensureSchema,
+  HEALTH_FLAG_WINDOW_SECONDS,
+  healthFlagKey,
   noteHealthFlag,
   readHealthFlag,
   sweepExpired,
@@ -77,6 +79,7 @@ import {
   toPublicEntitlement,
   upsertEntitlement
 } from "./store.js";
+import { ledgerReader, runLedgerTransaction } from "./ledger.js";
 
 /**
  * Mercado Pago API failures retried for as long as Mercado Pago keeps trying:
@@ -223,7 +226,7 @@ async function recordingFailure(env, rail, options, run) {
   try {
     return await run();
   } catch (error) {
-    await noteHealthFlag(env.DB, WEBHOOK_FAILED_FLAG, `${rail}: ${error && error.message}`, clockSeconds(options));
+    await noteHealthFlag(env.DB, WEBHOOK_FAILED_FLAG, `${rail}: ${error && error.message}`, clockSeconds(options), env.ENTITLEMENTS);
     throw error;
   }
 }
@@ -253,7 +256,59 @@ async function handleStripeWebhook(request, env, options) {
   if (!event || typeof event.id !== "string") {
     return json({ ok: false, reason: "malformed_event" }, 400);
   }
-  const fresh = await markEventSeen(env.ENTITLEMENTS, "stripe", event.id);
+  return runLedgerTransaction(env, (kv) => applyStripeEvent(kv, event, env, options), ledgerOptions(options));
+}
+
+/**
+ * Options for a ledger transaction from the router's: its clock, and any
+ * test injectables (sleep, randomness, attempts) under `ledger`.
+ * @param {Object} [options] Router options.
+ * @returns {Object} Ledger options.
+ */
+function ledgerOptions(options) {
+  return { now: options && options.now, ...((options && options.ledger) || {}) };
+}
+
+/**
+ * Money went back on a payment this worker has never heard of. Usually that is
+ * a payment taken outside this product, on the same account, which will never
+ * match and must not be retried for ever. But it is also what an out-of-order
+ * delivery looks like — a refund ahead of the checkout that paid — so it is
+ * retried for a day from the first attempt, the same window a resource Mercado
+ * Pago's API has not caught up on gets (and the whole of Creem's own 24 hours
+ * of retries), and then acknowledged.
+ * @param {Object} kv The ledger (or KV) the event is being applied to.
+ * @param {string} provider "stripe" | "creem".
+ * @param {string} eventId Provider event id.
+ * @param {string} label Event type, for the log.
+ * @param {{now?: number}} [options] Injectable clock.
+ * @returns {Promise<Response>} 500 while worth retrying, then 200.
+ */
+async function answerUnknownLicense(kv, provider, eventId, label, options) {
+  const waitedFor = await noteRefusal(kv, provider, eventId, clockSeconds(options));
+  console.warn(`${provider} event names a license we do not know`, label, waitedFor);
+  if (waitedFor < RETRY_REFUSED_SECONDS) {
+    await clearEventSeen(kv, provider, eventId);
+    return json({ ok: false, reason: "unknown_license" }, 500);
+  }
+  return json({ ok: true, reason: "unknown_license" }, 200);
+}
+
+/**
+ * Apply one verified Stripe event to the ledger.
+ *
+ * With D1 this runs inside one ledger transaction, so the event's marker is
+ * written with its effect or not at all, and a delivery that dies half way
+ * leaves nothing for its retry to be dismissed by. Without D1 it runs against
+ * KV as before, and the marker is dropped again if the apply throws.
+ * @param {Object} kv The ledger transaction, or the KV namespace.
+ * @param {Object} event Parsed Stripe event.
+ * @param {Object} env Worker env bindings.
+ * @param {{now?: number}} [options] Injectable clock.
+ * @returns {Promise<Response>} Response for Stripe.
+ */
+async function applyStripeEvent(kv, event, env, options) {
+  const fresh = await markEventSeen(kv, "stripe", event.id);
   if (!fresh) {
     return json({ ok: true, reason: "duplicate" }, 200);
   }
@@ -262,28 +317,14 @@ async function handleStripeWebhook(request, env, options) {
     return json({ ok: true, reason: mapped.reason }, 200);
   }
   try {
-    const { record, missing } = await upsertEntitlement(env.ENTITLEMENTS, mapped.update, { idSecret: licenseIdSecret(env) });
+    const { record, missing } = await upsertEntitlement(kv, mapped.update, { idSecret: licenseIdSecret(env) });
     if (missing) {
-      // Money went back on a payment this worker has never heard of. Usually
-      // that is a payment taken outside this product, on the same Stripe
-      // account, which will never match and must not be retried for ever.
-      // But it is also what an out-of-order delivery looks like — a refund
-      // ahead of the checkout that paid — so it is retried for a day from the
-      // first attempt, the same window a resource Mercado Pago's API has not
-      // caught up on gets, and then acknowledged.
-      const now = options && Number.isFinite(options.now) ? Math.floor(options.now) : Math.floor(Date.now() / 1000);
-      const waitedFor = await noteRefusal(env.ENTITLEMENTS, "stripe", event.id, now);
-      console.warn("stripe event names a license we do not know", event.type, waitedFor);
-      if (waitedFor < RETRY_REFUSED_SECONDS) {
-        await clearEventSeen(env.ENTITLEMENTS, "stripe", event.id);
-        return json({ ok: false, reason: "unknown_license" }, 500);
-      }
-      return json({ ok: true, reason: "unknown_license" }, 200);
+      return await answerUnknownLicense(kv, "stripe", event.id, event.type, options);
     }
     console.log("stripe entitlement updated", event.type, record.status, record.plan);
   } catch (error) {
     // The marker is already set; drop it so Stripe's retry is not dismissed.
-    await clearEventSeen(env.ENTITLEMENTS, "stripe", event.id);
+    await clearEventSeen(kv, "stripe", event.id);
     throw error;
   }
   return json({ ok: true }, 200);
@@ -324,7 +365,19 @@ async function handleCreemWebhook(request, env, options) {
   if (!event || typeof event.id !== "string") {
     return json({ ok: false, reason: "malformed_event" }, 400);
   }
-  const fresh = await markEventSeen(env.ENTITLEMENTS, "creem", event.id);
+  return runLedgerTransaction(env, (kv) => applyCreemEvent(kv, event, env, options), ledgerOptions(options));
+}
+
+/**
+ * Apply one verified Creem event to the ledger (see `applyStripeEvent`).
+ * @param {Object} kv The ledger transaction, or the KV namespace.
+ * @param {Object} event Parsed Creem event.
+ * @param {Object} env Worker env bindings.
+ * @param {{now?: number}} [options] Injectable clock.
+ * @returns {Promise<Response>} Response for Creem.
+ */
+async function applyCreemEvent(kv, event, env, options) {
+  const fresh = await markEventSeen(kv, "creem", event.id);
   if (!fresh) {
     return json({ ok: true, reason: "duplicate" }, 200);
   }
@@ -333,34 +386,28 @@ async function handleCreemWebhook(request, env, options) {
     return json({ ok: true, reason: mapped.reason }, 200);
   }
   try {
-    const { record, missing } = await upsertEntitlement(env.ENTITLEMENTS, mapped.update, { idSecret: licenseIdSecret(env) });
+    const { record, missing } = await upsertEntitlement(kv, mapped.update, { idSecret: licenseIdSecret(env) });
     if (missing) {
-      // Money went back on a transaction this worker has never heard of:
-      // usually something else sold from the same Creem account, which will
-      // never match and must not be retried for ever. It is also what an
-      // out-of-order delivery looks like, so it is retried for a day from the
-      // first attempt — the same window the other rails get, and the whole of
-      // Creem's own 24 hours of retries — and then acknowledged.
-      const now = options && Number.isFinite(options.now) ? Math.floor(options.now) : Math.floor(Date.now() / 1000);
-      const waitedFor = await noteRefusal(env.ENTITLEMENTS, "creem", event.id, now);
-      console.warn("creem event names a license we do not know", event.eventType, waitedFor);
-      if (waitedFor < RETRY_REFUSED_SECONDS) {
-        await clearEventSeen(env.ENTITLEMENTS, "creem", event.id);
-        return json({ ok: false, reason: "unknown_license" }, 500);
-      }
-      return json({ ok: true, reason: "unknown_license" }, 200);
+      return await answerUnknownLicense(kv, "creem", event.id, event.eventType, options);
     }
     console.log("creem entitlement updated", event.eventType, record.status, record.plan);
   } catch (error) {
-    await clearEventSeen(env.ENTITLEMENTS, "creem", event.id);
+    await clearEventSeen(kv, "creem", event.id);
     throw error;
   }
   return json({ ok: true }, 200);
 }
 
 /** Answer a Mercado Pago notification that was not applied: 500 and the marker dropped while it is worth retrying, 200 once it is not. */
-async function answerUnappliedNotification(env, target, mapped, options) {
+async function answerUnappliedNotification(kv, target, mapped, options) {
   console.warn("mercadopago notification not applied", target.kind, mapped.reason, mapped.status || "");
+  // No access token is the operator's fault, not the notification's: thrown,
+  // so nothing is kept, the health probe hears of it, and Mercado Pago keeps
+  // retrying until the token is there. It used to be answered 200 with the
+  // marker kept, which lost every notification sent while it was missing.
+  if (mapped.reason === "access_token_not_configured") {
+    throw new Error("MP_ACCESS_TOKEN is not configured");
+  }
   // 500 so Mercado Pago retries when the API itself failed; 200 when we
   // simply do not care about this notification kind. A resource the API
   // refuses (not found, forbidden) is retried for a day from the first
@@ -370,11 +417,11 @@ async function answerUnappliedNotification(env, target, mapped, options) {
   let retry = RETRY_ALWAYS.has(mapped.reason);
   if (!retry && (mapped.reason === "not_found" || mapped.reason === "api_refused")) {
     const now = options && Number.isFinite(options.now) ? Math.floor(options.now) : Math.floor(Date.now() / 1000);
-    const refusedFor = await noteRefusal(env.ENTITLEMENTS, "mercadopago", target.eventId, now);
+    const refusedFor = await noteRefusal(kv, "mercadopago", target.eventId, now);
     retry = refusedFor < RETRY_REFUSED_SECONDS;
   }
   if (retry) {
-    await clearEventSeen(env.ENTITLEMENTS, "mercadopago", target.eventId);
+    await clearEventSeen(kv, "mercadopago", target.eventId);
     return json({ ok: false, reason: mapped.reason }, 500);
   }
   return json({ ok: true, reason: mapped.reason }, 200);
@@ -408,7 +455,21 @@ async function handleMercadoPagoWebhook(request, env, url, options) {
   if (!target.kind || !target.id) {
     return json({ ok: true, reason: "missing_target" }, 200);
   }
-  const fresh = await markEventSeen(env.ENTITLEMENTS, "mercadopago", target.eventId);
+  return runLedgerTransaction(env, (kv) => applyMercadoPagoNotification(kv, target, env, options), ledgerOptions(options));
+}
+
+/**
+ * Confirm one Mercado Pago notification against the API and apply it to the
+ * ledger (see `applyStripeEvent`). The API read is repeated if the ledger
+ * transaction has to run again, which is safe: it is a read.
+ * @param {Object} kv The ledger transaction, or the KV namespace.
+ * @param {Object} target What the notification names.
+ * @param {Object} env Worker env bindings.
+ * @param {{fetchImpl?: function, now?: number}} [options] Injectables.
+ * @returns {Promise<Response>} Response for Mercado Pago.
+ */
+async function applyMercadoPagoNotification(kv, target, env, options) {
+  const fresh = await markEventSeen(kv, "mercadopago", target.eventId);
   if (!fresh) {
     return json({ ok: true, reason: "duplicate" }, 200);
   }
@@ -417,12 +478,12 @@ async function handleMercadoPagoWebhook(request, env, url, options) {
     if (!mapped.handled) {
       // Awaited here, not returned bare: a KV call that throws in there must
       // still reach the catch below and drop the marker.
-      return await answerUnappliedNotification(env, target, mapped, options);
+      return await answerUnappliedNotification(kv, target, mapped, options);
     }
-    const { record } = await upsertEntitlement(env.ENTITLEMENTS, mapped.update, { idSecret: licenseIdSecret(env) });
+    const { record } = await upsertEntitlement(kv, mapped.update, { idSecret: licenseIdSecret(env) });
     console.log("mercadopago entitlement updated", target.kind, record.status, record.plan);
   } catch (error) {
-    await clearEventSeen(env.ENTITLEMENTS, "mercadopago", target.eventId);
+    await clearEventSeen(kv, "mercadopago", target.eventId);
     throw error;
   }
   return json({ ok: true }, 200);
@@ -449,12 +510,13 @@ async function handleClaim(request, env, cors) {
   if (typeof sessionId !== "string" || !sessionId || sessionId.length > MAX_SESSION_ID_LENGTH) {
     return json({ ok: false, reason: "bad_request" }, 400, cors);
   }
-  const licenseId = await getLicenseIdForClaim(env.ENTITLEMENTS, provider, sessionId);
+  const ledger = ledgerReader(env);
+  const licenseId = await getLicenseIdForClaim(ledger, provider, sessionId);
   if (!licenseId) {
     // The webhook may simply not have landed yet; the client retries on 202.
     return json({ ok: false, reason: "pending" }, 202, cors);
   }
-  const record = await getEntitlement(env.ENTITLEMENTS, licenseId);
+  const record = await getEntitlement(ledger, licenseId);
   if (!record) {
     return json({ ok: false, reason: "not_found" }, 404, cors);
   }
@@ -478,7 +540,7 @@ async function handleLicense(request, env, cors) {
   if (!isLicenseIdShape(licenseId)) {
     return json({ ok: false, reason: "not_found" }, 404, cors);
   }
-  const record = await getEntitlement(env.ENTITLEMENTS, licenseId);
+  const record = await getEntitlement(ledgerReader(env), licenseId);
   if (!record) {
     return json({ ok: false, reason: "not_found" }, 404, cors);
   }
@@ -505,11 +567,19 @@ async function probeDatabase(env, deps, checks) {
   }
 }
 
-/** One KV read, recorded in `checks.kv` as "ok" or "error". */
-async function probeKv(env, checks) {
+/**
+ * One KV read, recorded in `checks.kv` as "ok" or "error". The key it reads is
+ * the webhook-failure flag a webhook leaves when D1 would not take its row
+ * (see `noteHealthFlag`), so the read that proves KV answers also tells the
+ * probe about a write D1 refused.
+ */
+async function probeKv(env, checks, deps) {
   try {
-    await env.ENTITLEMENTS.get("health:probe");
+    const stamp = Number(await env.ENTITLEMENTS.get(healthFlagKey(WEBHOOK_FAILED_FLAG)));
     checks.kv = "ok";
+    if (Number.isFinite(stamp) && stamp > 0 && clockSeconds(deps) - stamp < HEALTH_FLAG_WINDOW_SECONDS) {
+      checks.writes = "failing";
+    }
   } catch {
     checks.kv = "error";
   }
@@ -522,7 +592,7 @@ async function runHealthProbe(env, deps) {
     await probeDatabase(env, deps, checks);
   }
   if (env.ENTITLEMENTS) {
-    await probeKv(env, checks);
+    await probeKv(env, checks, deps);
   }
   return checks;
 }

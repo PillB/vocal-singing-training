@@ -153,6 +153,15 @@ class FakeD1PreparedStatement {
    * @returns {Promise<{success: boolean, meta: {changes: number, last_row_id: number}}>} D1-shaped result.
    */
   async run() {
+    return this.runSync();
+  }
+
+  /**
+   * Execute a write now, without yielding: what `batch` uses so that no other
+   * caller's statement can run in the middle of a batch.
+   * @returns {{success: boolean, meta: {changes: number, last_row_id: number}}} D1-shaped result.
+   */
+  runSync() {
     const { statement, params } = this.prepared();
     const info = statement.run(...params);
     return {
@@ -194,11 +203,19 @@ export class FakeD1Database {
    * @returns {Promise<Object[]>} Per-statement results.
    */
   async batch(statements) {
+    // D1 runs a batch on its single writer with nothing else in between, so
+    // the fake must too: it yields once before the batch (the network round
+    // trip) and never inside it. Awaiting each statement used to let another
+    // request's statements run inside this transaction, and two concurrent
+    // batches threw "cannot start a transaction within a transaction", which
+    // production never does. A statement a test has replaced with a plain
+    // object (fault injection) has no `runSync` and is still awaited.
+    await Promise.resolve();
     this.db.exec("BEGIN");
     try {
       const out = [];
       for (const statement of statements) {
-        out.push(await statement.run());
+        out.push(typeof statement.runSync === "function" ? statement.runSync() : await statement.run());
       }
       this.db.exec("COMMIT");
       return out;

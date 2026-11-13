@@ -943,8 +943,10 @@ export const MUTANTS = {
     ["DA23 the schema is skipped on its version number: another branch's same number hides a missing table", "src/db.js", "db.prepare(\"SELECT 1 AS ok FROM schema_meta WHERE key = ?1\").bind(SCHEMA_KEY)", "db.prepare(\"SELECT 1 AS ok FROM schema_meta WHERE key = 'version' AND CAST(value AS INTEGER) >= ?1\").bind(SCHEMA_VERSION)", "d1-atomicity"],
     ["DA24 the schema's record is never written: every cold isolate reruns the batch", "src/db.js", "    db.prepare(\"INSERT INTO schema_meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO NOTHING\").bind(SCHEMA_KEY, String(SCHEMA_VERSION)),\n", "", "d1-atomicity"],
     ["DA25 the fingerprint ignores what the statements say", "src/db.js", "hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193) >>> 0;", "hash = hash >>> 0;", "d1-atomicity"],
-    ["DL1 the login-code email has no deadline: a hung provider keeps the page spinning", "src/email.js", "response = await doFetch(url, { ...init, signal: AbortSignal.timeout(EMAIL_SEND_TIMEOUT_MS) });", "response = await doFetch(url, init);", "outbound-deadlines"],
-    ["DL2 Google's key fetch has no deadline: a hung fetch holds the sign-in open", "src/google.js", "{ method: \"GET\", signal: AbortSignal.timeout(GOOGLE_JWKS_TIMEOUT_MS) }", "{ method: \"GET\" }", "outbound-deadlines"]
+    ["DL1 the login-code email has no deadline: a hung provider keeps the page spinning", "src/email.js", "response = await doFetch(url, { ...init, signal: AbortSignal.timeout(deadlineMs(options, EMAIL_SEND_TIMEOUT_MS)) });", "response = await doFetch(url, init);", "outbound-deadlines"],
+    ["DL2 Google's key fetch has no deadline: a hung fetch holds the sign-in open", "src/google.js", "{ method: \"GET\", signal: AbortSignal.timeout(deadlineMs(opts, GOOGLE_JWKS_TIMEOUT_MS)) }", "{ method: \"GET\" }", "outbound-deadlines"],
+    ["DL3 the login-code email carries a signal that never fires (Codex on PR #38)", "src/email.js", "signal: AbortSignal.timeout(deadlineMs(options, EMAIL_SEND_TIMEOUT_MS))", "signal: new AbortController().signal", "outbound-deadlines"],
+    ["DL4 Google's key fetch carries a signal that never fires (Codex on PR #38)", "src/google.js", "signal: AbortSignal.timeout(deadlineMs(opts, GOOGLE_JWKS_TIMEOUT_MS))", "signal: new AbortController().signal", "outbound-deadlines"]
   ].map(([name, file, from, to, test]) => ({
     name,
     file: `workers/entitlements/${file}`,

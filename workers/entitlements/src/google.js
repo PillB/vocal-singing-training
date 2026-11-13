@@ -13,6 +13,7 @@
 "use strict";
 
 import { base64UrlToBytes, base64UrlToString } from "./license.js";
+import { deadlineMs } from "./email.js";
 
 /** Where Google publishes the public keys its ID tokens are signed with. */
 export const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
@@ -34,7 +35,7 @@ let jwksCache = null;
 
 /**
  * Fetch (and cache) Google's signing keys.
- * @param {{fetchImpl?: function, now?: number}} [options] Injectables, for tests.
+ * @param {{fetchImpl?: function, now?: number, timeoutMs?: number}} [options] Injectables, for tests.
  * @returns {Promise<Object[]>} JWK entries.
  */
 export async function fetchGoogleJwks(options) {
@@ -46,7 +47,7 @@ export async function fetchGoogleJwks(options) {
   const doFetch = opts.fetchImpl || fetch;
   // A deadline, as on every call this worker makes out: a key fetch that hung
   // held the Google sign-in open with no answer at all.
-  const response = await doFetch(GOOGLE_JWKS_URL, { method: "GET", signal: AbortSignal.timeout(GOOGLE_JWKS_TIMEOUT_MS) });
+  const response = await doFetch(GOOGLE_JWKS_URL, { method: "GET", signal: AbortSignal.timeout(deadlineMs(opts, GOOGLE_JWKS_TIMEOUT_MS)) });
   if (!response.ok) {
     throw new Error(`google jwks fetch failed: ${response.status}`);
   }
@@ -102,7 +103,7 @@ export function googleConfigured(env) {
  *
  * @param {string} idToken Compact JWT from Google Identity Services.
  * @param {Object} env Worker env bindings.
- * @param {{fetchImpl?: function, now?: number}} [options] Injectables, for tests.
+ * @param {{fetchImpl?: function, now?: number, timeoutMs?: number}} [options] Injectables, for tests.
  * @returns {Promise<{ok: boolean, reason?: string, identity?: {subject: string, email: string,
  *                    emailVerified: boolean, name: string|null, locale: string|null}}>} Result.
  */
@@ -136,7 +137,7 @@ export async function verifyGoogleIdToken(idToken, env, options) {
 
   let keys;
   try {
-    keys = await fetchGoogleJwks({ fetchImpl: opts.fetchImpl, now });
+    keys = await fetchGoogleJwks({ fetchImpl: opts.fetchImpl, now, timeoutMs: opts.timeoutMs });
   } catch {
     return { ok: false, reason: "jwks_unavailable" };
   }

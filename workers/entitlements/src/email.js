@@ -21,6 +21,19 @@
 /** How long a send may take before it counts as failed. */
 export const EMAIL_SEND_TIMEOUT_MS = 10000;
 
+/**
+ * The deadline for one call out: the caller's `timeoutMs` when a test sets
+ * one (so a test can watch a real deadline fire without waiting seconds),
+ * else the default.
+ * @param {{timeoutMs?: number}|undefined} options Injectables.
+ * @param {number} fallback Default milliseconds.
+ * @returns {number} Milliseconds.
+ */
+export function deadlineMs(options, fallback) {
+  const ms = Number(options && options.timeoutMs);
+  return Number.isFinite(ms) && ms > 0 ? ms : fallback;
+}
+
 /** Providers this module knows how to talk to. */
 export const EMAIL_PROVIDERS = ["resend", "brevo", "mailersend"];
 
@@ -168,7 +181,8 @@ export function buildSendRequest(provider, config, message) {
  * @param {string} to Recipient email.
  * @param {string} code Login code.
  * @param {number} minutes Validity in minutes.
- * @param {{fetchImpl?: function}} [options] Injectable fetch, for tests.
+ * @param {{fetchImpl?: function, timeoutMs?: number}} [options] Injectable
+ *   fetch and deadline, for tests.
  * @returns {Promise<{ok: boolean, reason?: string, provider?: string, status?: number}>} Result.
  */
 export async function sendLoginCode(env, to, code, minutes, options) {
@@ -189,7 +203,7 @@ export async function sendLoginCode(env, to, code, minutes, options) {
     // code" button spinning for as long as the connection stayed open. Past
     // it the person is told the email could not be sent and can ask again.
     // (A send that was slow but went through still delivers a working code.)
-    response = await doFetch(url, { ...init, signal: AbortSignal.timeout(EMAIL_SEND_TIMEOUT_MS) });
+    response = await doFetch(url, { ...init, signal: AbortSignal.timeout(deadlineMs(options, EMAIL_SEND_TIMEOUT_MS)) });
   } catch {
     return { ok: false, reason: "email_transport_error", provider: config.provider };
   }

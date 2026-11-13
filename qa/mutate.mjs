@@ -6,7 +6,7 @@
  * suite that stays green on a mutant is not testing that behaviour, however
  * high its coverage. Ported from the QA thread's mutate.py (2026-11-01).
  *
- *   node qa/mutate.mjs            # the Node sets (audio, lint, coaching, sets)
+ *   node qa/mutate.mjs            # the Node sets (audio, lint, coaching, sets, ledger)
  *   node qa/mutate.mjs audio      # one set
  *   node qa/mutate.mjs stage a11y flows regress billing scoring controls audit toast designs splits  # browser sets: need Playwright's Chromium
  *
@@ -41,6 +41,8 @@ const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs
 // is empty; Node 24 (CI) waits on it until runTests' 5-minute timeout, so two of those ran the
 // contracts job out of time. Each test gets 30 s, ten times the slowest unmutated one.
 const node = (tests) => [process.execPath, "--test", "--test-timeout=30000", ...tests];
+// A D1 batch (one transaction) replaced by the same statements run one by one, for the ledger set.
+const SEQUENTIAL = "(async (list) => { const out = []; for (const s of list) out.push(await s.run()); return out; })([";
 const PIANO_SPEC = [
   process.execPath,
   "node_modules/@playwright/test/cli.js",
@@ -896,10 +898,59 @@ export const MUTANTS = {
     cmd: spec.startsWith("workers/")
       ? node([spec])
       : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
+  })),
+  // The payment ledger in D1 (one optimistic transaction per webhook) and the account layer's
+  // multi-step writes made single batches (audit WH-*, KV-*, D1-*, SW-1, SC-1). Node only, so it
+  // runs in the contracts job with the default sets. "Sequential" mutants replace a D1 batch (one
+  // transaction) with the same statements run one by one, which is what the code did before.
+  ledger: [
+    ["LG1 the first validation chunk always passes: a stale read commits", "src/ledger.js", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed})", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed}) OR 1", "ledger"],
+    ["LG2 later validation chunks are ignored", "src/ledger.js", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed})", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed}) AND 0", "ledger"],
+    ["LG3 a transaction that failed validation still writes", "src/ledger.js", "SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM ledger_tx WHERE tx_id = ?3)", "SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM ledger_tx WHERE tx_id = ?3) OR 1", "ledger"],
+    ["LG4 a conflict is taken for a commit", "src/ledger.js", "return Number(last && last.meta && last.meta.changes) === 1;", "return true;", "ledger"],
+    ["LG5 one attempt only: a conflict is never retried", "src/ledger.js", "export const LEDGER_MAX_ATTEMPTS = 4;", "export const LEDGER_MAX_ATTEMPTS = 1;", "ledger"],
+    ["LG6 a tombstone lets the old KV copy show through", "src/ledger.js", "const missing = keys.filter((key) => !rows.has(key));", "const missing = keys.filter((key) => !rows.has(key) || rows.get(key).value === null);\n  missing.forEach((key) => rows.delete(key));", "ledger"],
+    ["LG7 an expired ledger key reads as live", "src/ledger.js", "return row.expires_at === null || row.expires_at === undefined || Number(row.expires_at) > at;", "return true;", "ledger"],
+    ["LG8 the ledger never uses D1", "src/ledger.js", "return Boolean(env && env.DB && typeof env.DB.prepare === \"function\" && typeof env.DB.batch === \"function\");", "return false;", "ledger"],
+    ["LG9 a transaction does not read its own writes", "src/ledger.js", "    if (this.writes.has(key)) {\n      return this.writes.get(key).value;\n    }\n", "", "ledger"],
+    ["LG10 deletes are never written: no tombstone", "src/ledger.js", "return !(seen && seen.version === null && seen.value === null);", "return false;", "ledger"],
+    ["LG11 the KV path reads the stored record only by the claim's id, not the derived one (KV-1)", "src/store.js", "const existing = await getEntitlement(kv, existingId || derived);", "const existing = await getEntitlement(kv, existingId);", "ledger"],
+    ["LG12 a Mercado Pago notification without the access token is acknowledged and lost", "src/index.js", "  if (mapped.reason === \"access_token_not_configured\") {\n    throw new Error(\"MP_ACCESS_TOKEN is not configured\");\n  }\n", "", "ledger"],
+    ["LG13 a D1 that refuses the flag leaves no trace for the probe", "src/db.js", "  await writeFlagKey(kv, name, at);\n", "", "cost"],
+    ["LG14 the probe ignores the webhook-failed flag", "src/index.js", "      checks.writes = \"failing\";", "      checks.writes = \"ok\";", "cost"],
+    ["DA1 the trial's grant and claim are two writes again (D1-5)", "src/grants.js", "const [granted] = await db.batch([", "const [granted] = await SEQ", "d1-atomicity"],
+    ["DA2 the trial grant is written whether or not the trial is claimed", "src/grants.js", "insertGrant(db, row, \"EXISTS (SELECT 1 FROM accounts WHERE id = ?2 AND trial_used_at IS NULL)\")", "insertGrant(db, row)", "grants"],
+    ["DA3 a gift redemption's three writes are separate again (D1-1)", "src/grants.js", "[claimed] = await db.batch([", "[claimed] = await SEQ", "d1-atomicity"],
+    ["DA4 a code revoked after the first read still pays out", "src/grants.js", "WHERE code_normalized = ?5 AND revoked_at IS NULL AND redeemed_count < max_redemptions", "WHERE code_normalized = ?5 AND redeemed_count < max_redemptions", "d1-atomicity"],
+    ["DA5 the last use of a code is given twice", "src/grants.js", "WHERE code_normalized = ?5 AND revoked_at IS NULL AND redeemed_count < max_redemptions", "WHERE code_normalized = ?5 AND revoked_at IS NULL", "grants"],
+    ["DA6 a refused redemption still spends a use", "src/grants.js", "WHERE code_normalized = ?1 AND EXISTS (SELECT 1 FROM gift_redemptions WHERE id = ?2)", "WHERE code_normalized = ?1 AND ?2 = ?2", "grants"],
+    ["DA7 a refused redemption still writes a grant", "src/grants.js", "insertGrant(db, grant, \"EXISTS (SELECT 1 FROM gift_redemptions WHERE id = ?11)\", [redemptionId])", "insertGrant(db, grant, \"?11 = ?11\", [redemptionId])", "grants"],
+    ["DA8 any D1 failure is answered 'already redeemed'", "src/grants.js", "if (/UNIQUE/i.test(String(error && error.message))) {", "if (/UNIQUE/i.test(String(error && error.message)) || error) {", "d1-atomicity"],
+    ["DA9 two admins revoking a grant: the second overwrites who did it", "src/grants.js", "WHERE id = ?1 AND revoked_at IS NULL\")\n    .bind(grantId, at, revokedBy || null)", "WHERE id = ?1\")\n    .bind(grantId, at, revokedBy || null)", "d1-atomicity"],
+    ["DA10 two admins revoking a gift code: the second moves the time", "src/grants.js", "UPDATE gift_codes SET revoked_at = ?2 WHERE code_normalized = ?1 AND revoked_at IS NULL", "UPDATE gift_codes SET revoked_at = ?2 WHERE code_normalized = ?1", "d1-atomicity"],
+    ["DA11 two tabs linking one license: the second hits the key and answers 500 (D1-3)", "src/grants.js", "VALUES (?1, ?2, ?3, ?4)\n       ON CONFLICT(license_id) DO NOTHING`", "VALUES (?1, ?2, ?3, ?4)`", "d1-atomicity"],
+    ["DA12 a spent code still opens a session", "src/accounts.js", "\"EXISTS (SELECT 1 FROM login_codes WHERE id = ?6 AND consumed_at IS NULL)\"", "\"EXISTS (SELECT 1 FROM login_codes WHERE id = ?6)\"", "d1-atomicity"],
+    ["DA13 the session and the spend are two writes again (D1-2)", "src/accounts.js", "const [opened] = await db.batch([", "const [opened] = await SEQ", "d1-atomicity"],
+    ["DA14 retiring old codes and storing the new one are two writes again (D1-4)", "src/accounts.js", "  await db.batch([\n    db\n      .prepare(\"UPDATE login_codes SET consumed_at = ?2 WHERE email_normalized = ?1 AND consumed_at IS NULL\")", "  await SEQ\n    db\n      .prepare(\"UPDATE login_codes SET consumed_at = ?2 WHERE email_normalized = ?1 AND consumed_at IS NULL\")", "d1-atomicity"],
+    ["DA15 the top-level 500 has no CORS headers (D1-8)", "src/index.js", "return json({ ok: false, reason: \"internal_error\" }, 500, corsHeaders(request, env));", "return json({ ok: false, reason: \"internal_error\" }, 500);", "d1-atomicity"],
+    ["DA16 one table that fails stops the sweep (SW-1)", "src/db.js", "      report.failed.push(target[0]);\n", "      report.failed.push(target[0]);\n      break;\n", "d1-atomicity"],
+    ["DA17 a failed sweep raises no flag", "src/db.js", "    await noteHealthFlag(db, SWEEP_FAILED_FLAG, report.failed.join(\",\"), at, kv);\n", "", "d1-atomicity"],
+    ["DA18 the sweep stops after one chunk however much is left", "src/db.js", "if (n < SWEEP_CHUNK_ROWS) {", "if (n <= SWEEP_CHUNK_ROWS) {", "d1-atomicity"],
+    ["DA19 a ledger key expiring this second is kept by the sweep though reads treat it as gone", "src/db.js", "[\"ledger_kv\", \"expires_at IS NOT NULL AND expires_at <= ?1\", at]", "[\"ledger_kv\", \"expires_at IS NOT NULL AND expires_at < ?1\", at]", "d1-atomicity"],
+    ["DA20 the cron run passes in silence when a table was not swept", "src/index.js", "    if (report.failed.length) {\n      // Thrown after", "    if (false) {\n      // Thrown after", "d1-atomicity"],
+    ["DA21 every cold isolate reruns the whole schema batch (SC-1)", "src/db.js", "return Number(row && row.value) >= SCHEMA_VERSION;", "return false;", "d1-atomicity"],
+    ["DA22 older code lowers a newer schema's version", "src/db.js", "ON CONFLICT(key) DO UPDATE SET value = ?1 WHERE CAST(schema_meta.value AS INTEGER) < CAST(?1 AS INTEGER)", "ON CONFLICT(key) DO UPDATE SET value = ?1", "d1-atomicity"],
+    ["DA23 a newer schema is taken for a stale one", "src/db.js", "return Number(row && row.value) >= SCHEMA_VERSION;", "return Number(row && row.value) === SCHEMA_VERSION;", "d1-atomicity"]
+  ].map(([name, file, from, to, test]) => ({
+    name,
+    file: `workers/entitlements/${file}`,
+    from,
+    to: to.replace("SEQ", SEQUENTIAL),
+    cmd: node([`workers/entitlements/test/${test}.test.mjs`])
   }))
 };
 
-export const DEFAULT_SETS = ["audio", "lint", "coaching", "sets"];
+export const DEFAULT_SETS = ["audio", "lint", "coaching", "sets", "ledger"];
 
 /** What the last failing command printed, so a red baseline in CI says which test failed. */
 let lastFailure = "";

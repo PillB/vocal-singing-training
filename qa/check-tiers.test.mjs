@@ -82,7 +82,9 @@ const MUTANTS = [
   ["a Pro card stops promising a capability can() still answers", ["js/billing-config.js", '          "extra_reminders",\n          "extra_freezes"\n', '          "extra_reminders"\n']],
   ["the Free card promises a capability the free table refuses", ["js/billing-config.js", '          "value_pulse"\n        ],\n        cta: "current"', '          "value_pulse",\n          "coach_pack"\n        ],\n        cta: "current"']],
   ["the yearly card stops naming the monthly card", ["js/billing-config.js", '          "all_pro_monthly",\n', ""]],
-  ["a Pro override names a key the free table does not", ["js/billing.js", "      ad_free: pro\n    };", "      ad_free: pro,\n      invented_key: pro\n    };"]]
+  ["a Pro override names a key the free table does not", ["js/billing.js", "      ad_free: pro\n    };", "      ad_free: pro,\n      invented_key: pro\n    };"]],
+  ["the pricing doc loses the free-tier comparison the panel rests on", ["docs/35-PRICING.md", "**Every competitor in this table caps free practice. We do not.** ", ""]],
+  ["the pricing doc widens the claim to every verified app, which Nail the Pitch disproves", ["docs/35-PRICING.md", "**Every competitor in this table caps free practice.", "**Every verified competitor caps free practice."]]
 ];
 for (const [name, m] of MUTANTS) {
   test(`mutant: ${name}`, () => {

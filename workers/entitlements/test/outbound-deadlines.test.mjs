@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { EMAIL_SEND_TIMEOUT_MS, deadlineMs, sendLoginCode } from "../src/email.js";
-import { GOOGLE_JWKS_TIMEOUT_MS, clearGoogleJwksCache, verifyGoogleIdToken } from "../src/google.js";
+import { GOOGLE_JWKS_TIMEOUT_MS, clearGoogleJwksCache, fetchGoogleJwks, verifyGoogleIdToken } from "../src/google.js";
 import { createAccountEnv } from "./fixtures.mjs";
 
 const HUNG = "hung";
@@ -96,18 +96,24 @@ test("control: a provider that answers is not cut off by the deadline", async ()
   assert.equal(given.aborted, false, "the deadline had not fired");
 });
 
-test("a Google sign-in whose key fetch hangs is refused when its deadline fires, not left open", async () => {
+test("Google's key fetch is cut off when its deadline fires, so a sign-in waiting on it is refused, not left open", async () => {
+  // verifyGoogleIdToken answers any failure of this fetch with
+  // "jwks_unavailable"; what it needed was for the fetch to fail at all.
   clearGoogleJwksCache();
   const seen = [];
-  const env = createAccountEnv();
   const answer = await within(
-    verifyGoogleIdToken(tokenWithKid(), env, { fetchImpl: hungProvider(seen), now: 1800000000, timeoutMs: DEADLINE_MS })
+    fetchGoogleJwks({ fetchImpl: hungProvider(seen), now: 1800000000, timeoutMs: DEADLINE_MS }).catch((error) => error)
   );
   clearGoogleJwksCache();
   assert.notEqual(answer, HUNG, "the key fetch has a deadline that fires");
-  assert.deepEqual(answer, { ok: false, reason: "jwks_unavailable" });
+  assert.equal(answer && answer.name, "TimeoutError");
   assert.equal(seen.length, 1);
-  assert.equal(seen[0].reason && seen[0].reason.name, "TimeoutError");
+  const refused = await verifyGoogleIdToken(tokenWithKid(), createAccountEnv(), {
+    fetchImpl: async () => Promise.reject(answer),
+    now: 1800000000
+  });
+  clearGoogleJwksCache();
+  assert.deepEqual(refused, { ok: false, reason: "jwks_unavailable" });
 });
 
 test("without a test deadline, each call uses its own default, and the defaults are ones a person would wait for", () => {

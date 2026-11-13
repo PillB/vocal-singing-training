@@ -103,7 +103,7 @@ export function googleConfigured(env) {
  *
  * @param {string} idToken Compact JWT from Google Identity Services.
  * @param {Object} env Worker env bindings.
- * @param {{fetchImpl?: function, now?: number, timeoutMs?: number}} [options] Injectables, for tests.
+ * @param {{fetchImpl?: function, now?: number}} [options] Injectables, for tests.
  * @returns {Promise<{ok: boolean, reason?: string, identity?: {subject: string, email: string,
  *                    emailVerified: boolean, name: string|null, locale: string|null}}>} Result.
  */
@@ -137,7 +137,7 @@ export async function verifyGoogleIdToken(idToken, env, options) {
 
   let keys;
   try {
-    keys = await fetchGoogleJwks({ fetchImpl: opts.fetchImpl, now, timeoutMs: opts.timeoutMs });
+    keys = await fetchGoogleJwks({ fetchImpl: opts.fetchImpl, now });
   } catch {
     return { ok: false, reason: "jwks_unavailable" };
   }

@@ -73,7 +73,10 @@ test("storage switched off (localStorage itself throws): saving and then clearin
 });
 
 // The test above no longer reaches storage.js's own guards: js/boot-head.js (PR #21) gives a page whose storage
-// throws a store in memory before any other script reads it, so remove() there talks to that store. Its guard
+// throws a store in memory before any other script reads it, so remove() there talks to that store. Nor is it a
+// test of that swap: it holds while either the swap or the guards work, and with the swap removed it still passes
+// (RT3 on PR #39), so it checks "swap or guard", belt and braces. The swap's own judges are the cross-04 tests in
+// tests/redteam-boot-a11y-privacy.spec.js, two of which fail without it. remove()'s guard
 // is still the one line between "storage switched off" and an exception wherever the swap could not happen
 // (boot-head.js failed to load, or the browser would not let the name be redefined), and while the page is
 // open, which is where this test switches storage off. Correct: no throw, nothing read back.

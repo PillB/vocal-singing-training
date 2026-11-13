@@ -154,16 +154,23 @@ async function boot(page, hash = "") {
 }
 
 /**
- * The exercise list against the open tab's catalogue. The count comes from the
- * catalogue, not a number: main's voice drills (#35) took the first tab from 20
- * exercises to 24, and a fixed 20 then failed a boot that was whole. 20 stays
- * as the floor, so an empty catalogue cannot pass for a whole list.
+ * The first tab's whole exercise list. The count comes from the catalogue, not
+ * a number: main's voice drills (#35) took the first tab from 20 exercises to
+ * 24, and a fixed 20 then failed a boot that was whole. 20 stays as the floor,
+ * so an empty catalogue cannot pass for a whole list.
+ *
+ * The tab is pinned too. A browser that blocks site data can only ever get the
+ * default settings, so a boot here opens the first tab or it is wrong; #21's
+ * fixed 20 caught a default that opened the singing tab (27 cards then), and a
+ * count against "whichever tab is open" let it pass (RT3 on #39, mutant D18).
  */
 async function expectWholeList(page) {
   const list = await page.evaluate(() => ({
+    tab: window.VTApp?.getState?.().tab,
     shown: document.querySelectorAll("#exercise-list .card-ex").length,
-    all: (window.VT_EXERCISES?.[window.VTApp?.getState?.().tab] || []).length
+    all: (window.VT_EXERCISES?.vocal || []).length
   }));
+  expect(list.tab, "a boot with no stored settings opens the first tab").toBe("vocal");
   expect(list.all).toBeGreaterThanOrEqual(20);
   expect(list.shown).toBe(list.all);
 }

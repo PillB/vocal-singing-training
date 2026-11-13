@@ -184,6 +184,32 @@ test.describe("Voice-safety section in the guide", () => {
     });
   }
 
+  // RT4 on PR #39: the merge put main's closing "report a problem" paragraph straight after #21's new
+  // section 15, so "Still broken?" followed the ENT red flags and a reader moving by headings found the report
+  // button only under "Look after your voice". Correct: the button sits under a heading of its own, after
+  // section 15, and section 15's text ends with the guideline it cites. Wrong: no heading between them.
+  for (const [lang, voz, own, broken] of [
+    ["es", "voz", "reportar", /sigue roto/],
+    ["en", "voz-en", "reportar-en", /still broken/i]
+  ]) {
+    test(`${lang}: the report button is not part of section 15, it has a heading of its own after it`, async ({ page }) => {
+      await page.goto(BASE + "/guide.html", { waitUntil: "domcontentloaded" });
+      const r = await page.evaluate(([vozId, ownId, l]) => {
+        const en = document.querySelector("section[lang='en']");
+        const btn = [...document.querySelectorAll("[data-vt-report]")].find((b) => (l === "en" ? en.contains(b) : !en.contains(b)));
+        const before = [...document.querySelectorAll("main h2")].filter((h) => h.compareDocumentPosition(btn) & Node.DOCUMENT_POSITION_FOLLOWING);
+        let voice = "";
+        for (let el = document.getElementById(vozId).nextElementSibling; el && el.tagName !== "H2" && !el.classList.contains("guide-back"); el = el.nextElementSibling) voice += ` ${el.textContent}`;
+        return { found: !!btn, heading: before.at(-1)?.id, headingBeforeIt: before.at(-2)?.id, voice };
+      }, [voz, own, lang]);
+      expect(r.found, "control: this half has a report button").toBe(true);
+      expect(r.heading, "the nearest heading above the button is its own").toBe(own);
+      expect(r.headingBeforeIt, "and it comes straight after section 15").toBe(voz);
+      expect(r.voice, "section 15 does not run on into the report paragraph").not.toMatch(broken);
+      expect(r.voice, "control: section 15 is read, up to the guideline it cites").toMatch(/AAO-HNS, 2018/);
+    });
+  }
+
   test("the privacy section still ends where the privacy cases read it", async ({ page }) => {
     // ab-events reads #privacidad up to the next H2 or the back link
     await page.goto(BASE + "/guide.html", { waitUntil: "domcontentloaded" });

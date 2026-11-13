@@ -287,6 +287,10 @@ export const MUTANTS = {
     ["L6 misplaced wait options not flagged", "qa/lint-playwright-waits.mjs", "if (node.arguments.length !== 2) return false;", "if (node.arguments.length !== 99) return false;"],
     ["L11 an edited asset keeps its cached version", "qa/asset-versions.mjs", "else if (rec.sha !== hashOf(text) && rec.v === v) {", "else if (false) {"],
     ["L12 pages may disagree on an asset's version", "qa/asset-versions.mjs", "if (seen && seen.v !== v) problems.push", "if (false) problems.push"],
+    ["L44 a ?v= that once served other content passes (RT4 on #39: app.js at main's live stamp)", "qa/asset-versions.mjs", "    if (other.length) {\n      problems.push(`${file} is ?v=${v}, which once", "    if (false) {\n      problems.push(`${file} is ?v=${v}, which once"],
+    ["L45 a merge's discarded side is not history (path-limited log simplifies merges)", "qa/asset-versions.mjs", "[\"log\", \"--full-history\", \"--format=%H\"", "[\"log\", \"--format=%H\""],
+    ["L46 a bump keeps a stamp that once served other content", "qa/asset-versions.mjs", "const nv = freeVersion(targetVersion(seen, manifest[file], sha, today), history, file, sha, today);", "const nv = targetVersion(seen, manifest[file], sha, today);"],
+    ["L47 a shallow CI clone passes the reuse check unverified", "qa/asset-versions.mjs", "if (history.shallow && env.CI) {", "if (false) {"],
     ["L13 an inline script without its CSP hash passes", "tests/node/csp.test.mjs", "    if (!scripts.includes(sha256(body))) problems.push", "    if (false) problems.push"],
     ["L14 a failed load from any host is ignored (QA-14, QA-16 N1)", "qa/env-noise.cjs", "if (/Failed to load resource: net::ERR_FAILED\\b/.test(line)) return local && host === WORKER_HOST;", "if (/Failed to load resource: net::ERR_FAILED\\b/.test(line)) return true;"],
     ["L15 a failed load of the app's own file counts as offline noise", "qa/env-noise.cjs", "return host !== \"\" && !LOCAL_HOSTS.has(host) &&", "return host !== \"\" &&"],
@@ -744,7 +748,13 @@ export const MUTANTS = {
       ["D15 the exercise list leaves one exercise out: a boot with site data blocked shows 23 of 24", "js/app.js", "const exercises = catalogOrder(filteredExercises());", "const exercises = catalogOrder(filteredExercises()).slice(1);", "tests/redteam-boot-a11y-privacy.spec.js", "cross-04"],
       // PR #39 review (Codex, P1): "Usar solo la de mi cuenta" on the returning account's own browser
       ["D16 the returning account's put-aside takes are restored before its pull, which overwrites them: a take that never reached the account is lost", "js/sync.js", "    let result = { ok: true };\n    for (const id of ids) {\n      const res = await pullOverwrite(id);", "    restoreAside(me);\n    let result = { ok: true };\n    for (const id of ids) {\n      const res = await pullOverwrite(id);", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"],
-      ["D17 the put-aside takes are restored but nothing sends them: they wait on this shared browser for the account's next save", "js/sync.js", "    if (restoreAside(me)) schedule();\n", "    restoreAside(me);\n", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"]
+      ["D17 the put-aside takes are restored but nothing sends them: they wait on this shared browser for the account's next save", "js/sync.js", "    if (restoreAside(me)) schedule();\n", "    restoreAside(me);\n", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"],
+      // PR #39 review (RT3): a count against whichever tab is open let a blocked boot land on the wrong tab
+      ["D18 a browser with no stored settings opens the singing tab: a blocked boot shows the wrong list, whole", "js/storage.js", '      return read(LS.settings, { lastTab: "vocal", maleRange: true });', '      return read(LS.settings, { lastTab: "singing", maleRange: true });', "tests/redteam-boot-a11y-privacy.spec.js", "cross-04"],
+      ["D19 a page whose storage throws gets no store in memory: the boot runs on storage.js's guards alone", "js/boot-head.js", "      Object.defineProperty(window, name, { value: memoryStore(), configurable: true });", "      void memoryStore;", "tests/redteam-boot-a11y-privacy.spec.js", "cross-04"],
+      // PR #39 review (RT4): the guide's report paragraph ran on from section 15, after the ENT red flags
+      ["D20 the Spanish report paragraph loses its heading: \u00bfAlgo sigue roto? reads as part of Cuida tu voz", "guide.html", '      <h2 id="reportar">Fallos e ideas</h2>\n', "", "tests/redteam-content-specs.spec.js", "heading of its own"],
+      ["D21 the English report paragraph loses its heading: Still broken? reads as part of Look after your voice", "guide.html", '      <h2 id="reportar-en">Bugs and ideas</h2>\n', "", "tests/redteam-content-specs.spec.js", "heading of its own"]
     ].map(([name, file, from, to, spec, grep]) => ({
       name,
       file,

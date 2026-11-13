@@ -347,12 +347,14 @@
    * Merge back whatever was put aside for this account on this browser, and
    * mark it to be pushed: it is that account's own practice.
    * @param {string} me Signed-in account id.
+   * @returns {boolean} Whether any profile got practice back.
    */
   function restoreAside(me) {
     const list = readAside();
     const entry = list.find((e) => e.owner === me);
-    if (!entry) return;
+    if (!entry) return false;
     const left = {};
+    let restored = false;
     for (const [profileId, bag] of Object.entries(entry.bags)) {
       // A profile no longer on this browser keeps its copy aside.
       if (deleted(profileId)) {
@@ -364,10 +366,12 @@
       version += 1;
       changedAt.set(profileId, version);
       dataChanged(profileId);
+      restored = true;
     }
     const rest = list.filter((e) => e !== entry);
     if (Object.keys(left).length) rest.push({ ...entry, bags: left });
     writeAside(rest);
+    return restored;
   }
 
   /**
@@ -973,7 +977,8 @@
   /**
    * "Usar solo la de mi cuenta": this browser's practice is put aside, on this
    * browser, under the account that last synced it, and the signed-in
-   * account's own copy is brought down in its place. Nothing is cleared unless
+   * account's own copy is brought down in its place, with whatever this
+   * account itself had put aside here merged back in. Nothing is cleared unless
    * the copy put aside was stored first.
    * @returns {Promise<{ok: boolean, reason?: string}>} Result.
    */
@@ -1002,12 +1007,15 @@
     }
     writeOwner(me);
     if (lastError === "other_owner") lastError = null;
-    restoreAside(me);
     let result = { ok: true };
     for (const id of ids) {
       const res = await pullOverwrite(id);
       if (!res.ok && res.reason !== "empty" && result.ok) result = res;
     }
+    // After the pull, never before: a pull overwrites, and what this account
+    // left here may hold takes that never reached it. Restoring merges them
+    // into the account's copy, and they are sent without waiting for a save.
+    if (restoreAside(me)) schedule();
     dataChanged(global.VTStorage.getActiveProfileId());
     emit();
     return result;

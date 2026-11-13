@@ -310,6 +310,70 @@ test.describe("A shared browser: one account's practice never goes to the next",
     expect(await accountHas(worker, b.accountId, marker)).toBe(false);
   });
 
+  // PR #39 review (Codex, P1): A's practice is put aside while B uses this
+  // browser, and part of it never reached A's account. When B leaves practice
+  // behind and A comes back and answers "Usar solo la de mi cuenta", A's
+  // put-aside copy was restored first and then overwritten by the older copy
+  // pulled from A's account, and the copy put aside was already deleted. The
+  // earlier case passes either way: there B leaves nothing behind, so A's sync
+  // merges instead of asking.
+  test("'Usar solo la de mi cuenta' on A's return keeps A's takes that never reached A's account", async ({ page }) => {
+    const worker = await startWorker();
+    const a = await worker.signIn("ana@example.com", { displayName: "Ana" });
+    const b = await worker.signIn("bruno@example.com", { displayName: "Bruno" });
+    const synced = "ana-synced-7";
+    const unsent = "ana-unsent-7";
+    const bruno = "bruno-take-7";
+    let offline = false;
+    await wire(page, worker);
+    // Registered after wire(), so it is asked first: while `offline`, no
+    // practice reaches the worker (Ana signs out with a take still unsent).
+    await page.route(`${API}/v1/me/progress`, (route) =>
+      offline && route.request().method() === "PUT" ? route.abort("internetdisconnected") : route.fallback()
+    );
+    await seed(page, { session: a });
+    await openApp(page);
+    await signedInAs(page, "ana@example.com");
+    await saveTake(page, synced);
+    expect((await page.evaluate(() => window.VTSync.syncNow())).ok).toBe(true);
+    offline = true;
+    await saveTake(page, unsent, "v1-diction");
+    await signOutFromPanel(page);
+    expect(await accountHas(worker, a.accountId, unsent)).toBe(false);
+    offline = false;
+
+    // Bruno keeps only Bruno's: Ana's two takes go aside, the new take is Bruno's.
+    await switchSession(page, b);
+    await signedInAs(page, "bruno@example.com");
+    expect((await page.evaluate(() => window.VTSync.useAccountOnly())).ok).toBe(true);
+    expect(await deviceHas(page, unsent)).toBe(false);
+    await saveTake(page, bruno);
+    expect((await page.evaluate(() => window.VTSync.syncNow())).ok).toBe(true);
+    expect(await accountHas(worker, b.accountId, bruno)).toBe(true);
+    await signOutFromPanel(page);
+
+    // Ana is back, and this browser now holds Bruno's practice: Ana is asked,
+    // and answers with Ana's own account's copy.
+    const a2 = await worker.signIn("ana@example.com", { displayName: "Ana" });
+    await switchSession(page, a2);
+    await signedInAs(page, "ana@example.com");
+    expect((await page.evaluate(() => window.VTSync.syncNow())).reason).toBe("other_owner");
+    // Nothing left waiting from the page load: the flush below can only send
+    // what the answer itself scheduled.
+    await page.evaluate(() => window.VTSync.flush());
+    expect((await page.evaluate(() => window.VTSync.useAccountOnly())).ok).toBe(true);
+    // Both of Ana's takes are on this browser, none of Bruno's...
+    expect(await deviceHas(page, synced)).toBe(true);
+    expect(await deviceHas(page, unsent)).toBe(true);
+    expect(await deviceHas(page, bruno)).toBe(false);
+    // ...and the one that never left is on its way to Ana's account without
+    // waiting for a next save (flush sends only a sync already scheduled).
+    await page.evaluate(() => window.VTSync.flush());
+    expect(await accountHas(worker, a.accountId, unsent)).toBe(true);
+    expect(await accountHas(worker, b.accountId, unsent)).toBe(false);
+    expect(await accountHas(worker, a.accountId, bruno)).toBe(false);
+  });
+
   test("'Añadir' adds this browser's practice to B's account", async ({ page }) => {
     const worker = await startWorker();
     const a = await worker.signIn("ana@example.com", { displayName: "Ana" });

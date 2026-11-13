@@ -738,7 +738,10 @@ export const MUTANTS = {
       ["D13 \u21bb Otra vez keeps the last take's answer: the new take's card comes pre-answered", "js/app.js", "      resetSessionPractice();\n      resetRating();\n      const scored", "      resetSessionPractice();\n      const scored", "tests/redteam-exercise-take.spec.js", "Otra vez"],
       ["D14 \u21bb Otra vez keeps the saved flag: the second take is never recorded", "js/app.js", "    if (state.sessionPractice.saved) {\n      resetSessionPractice();\n", "    if (state.sessionPractice.saved) {\n", "tests/redteam-exercise-take.spec.js", "Otra vez"],
       // Site data blocked (cross-04): the boot shows the open tab's whole catalogue, counted from the catalogue (main's voice drills made it 24, not 20)
-      ["D15 the exercise list leaves one exercise out: a boot with site data blocked shows 23 of 24", "js/app.js", "const exercises = catalogOrder(filteredExercises());", "const exercises = catalogOrder(filteredExercises()).slice(1);", "tests/redteam-boot-a11y-privacy.spec.js", "cross-04"]
+      ["D15 the exercise list leaves one exercise out: a boot with site data blocked shows 23 of 24", "js/app.js", "const exercises = catalogOrder(filteredExercises());", "const exercises = catalogOrder(filteredExercises()).slice(1);", "tests/redteam-boot-a11y-privacy.spec.js", "cross-04"],
+      // PR #39 review (Codex, P1): "Usar solo la de mi cuenta" on the returning account's own browser
+      ["D16 the returning account's put-aside takes are restored before its pull, which overwrites them: a take that never reached the account is lost", "js/sync.js", "    let result = { ok: true };\n    for (const id of ids) {\n      const res = await pullOverwrite(id);", "    restoreAside(me);\n    let result = { ok: true };\n    for (const id of ids) {\n      const res = await pullOverwrite(id);", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"],
+      ["D17 the put-aside takes are restored but nothing sends them: they wait on this shared browser for the account's next save", "js/sync.js", "    if (restoreAside(me)) schedule();\n", "    restoreAside(me);\n", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"]
     ].map(([name, file, from, to, spec, grep]) => ({
       name,
       file,

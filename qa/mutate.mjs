@@ -763,13 +763,44 @@ export const MUTANTS = {
     ["B23 the report limits name their buckets by the reporter's raw address, which the privacy page says is never stored","workers/entitlements/src/reports.js","await ipBucketKey(env, request, at, \"reports\")","request.headers.get(\"cf-connecting-ip\")",["workers/entitlements/test/reports.test.mjs"]],
     ["B24 a deployment with no key to pseudonymise addresses under still takes reports","workers/entitlements/src/reports.js","    ipKeyConfigured(env) &&\n","",["workers/entitlements/test/reports.test.mjs"]],
     ["B25 a full day of events still costs every request its per-address and per-browser writes","workers/entitlements/src/events.js","  if (shed) {\n    return shed;\n  }\n","",["workers/entitlements/test/events.test.mjs"]],
-    ["B26 the events cap is read for one event, so a batch too big for what is left still writes its buckets","workers/entitlements/src/events.js","EVENTS_DAILY_CAP[1], at, clean.length);\n  if (room.ok) {","EVENTS_DAILY_CAP[1], at, 1);\n  if (room.ok) {",["workers/entitlements/test/events.test.mjs"]]
+    ["B26 the events cap is read for one event, so a batch too big for what is left still writes its buckets","workers/entitlements/src/events.js","EVENTS_DAILY_CAP[1], at, clean.length);\n  if (room.ok) {","EVENTS_DAILY_CAP[1], at, 1);\n  if (room.ok) {",["workers/entitlements/test/events.test.mjs"]],
+    // The #26 merge review, last passes: the report dialog as it would have gone live.
+    ["B27 the guide loads no transport for the report dialog, so every report from it fails", "guide.html", "    <script src=\"js/account.js?v=20261112a\"></script>\n", "", ["tests/reports.spec.js"]],
+    ["B28 a page with no way to send a report tells the visitor to check their connection", "js/reports.js", "return t(\"failNoTransport\");", "return t(\"failOffline\");", ["tests/reports.spec.js"]],
+    ["B29 the report dialog's card turns white on a light-mode device while its buttons and focus ring stay tuned for dark", "js/reports.js", "  box-shadow:var(--shadow,0 12px 40px rgba(0,0,0,.35))}\n", "  box-shadow:var(--shadow,0 12px 40px rgba(0,0,0,.35))}\n@media (prefers-color-scheme: light){.vt-report{background:#fff;color:#0f172a}}\n", ["tests/reports.spec.js"]],
+    ["B30 the report dialog's disclosures fall under the 44px floor", "js/reports.js", ".vt-report details summary{cursor:pointer;min-height:var(--min-tap,44px);", ".vt-report details summary{cursor:pointer;min-height:2.2rem;", ["tests/reports.spec.js"]],
+    ["B31 the report dialog's choice pills fall under the 44px floor", "js/reports.js", "gap:.4rem;min-height:var(--min-tap,44px);\n  box-sizing:border-box;", "gap:.4rem;min-height:2.4rem;\n  box-sizing:border-box;", ["tests/reports.spec.js"]],
+    ["B32 a disclosure in the report dialog shows no caret, so it reads as a line of text", "js/reports.js", ".vt-report details summary::before{content:\"▸\";color:var(--accent,#6eb4e8)}\n", "", ["tests/reports.spec.js"]],
+    // The card button that still chose Stripe after #26 moved the markets to Creem.
+    ["B33 the Pro dialog draws the retired Stripe and Mercado Pago pair, so its card button dead-ends on a rail no market sells on", "js/billing.js", "[...new Set([preferredRail(region), ...named])]", "[...new Set([\"stripe\", \"mercadopago\"])]", ["tests/checkout-rail.spec.js"]],
+    ["B34 the Pro dialog marks no rail as the one in use", "js/app.js", "b.className = \"rail-btn\" + (rail === pricingRail ? \" active\" : \"\");", "b.className = \"rail-btn\";", ["tests/checkout-rail.spec.js"]],
+    ["B35 the Pro dialog offers a rail with no checkout link once another can sell", "js/app.js", "row.replaceChildren(...(live.length ? live : rails).map(", "row.replaceChildren(...(rails).map(", ["tests/checkout-rail.spec.js"]],
+    ["B36 the Pro dialog stays on the region's rail when it cannot sell and another can", "js/app.js", "    return sellable[0] || rails[0].rail;\n", "    return rails[0].rail;\n", ["tests/checkout-rail.spec.js"]],
+    ["B37 the region's own rail is not drawn first", "js/billing.js", "[...new Set([preferredRail(region), ...named])]", "[...new Set([...named, preferredRail(region)])]", ["tests/checkout-rail.spec.js"]],
+    // The copy pass on the merge: what the report dialog, the privacy page and the terms said.
+    ["B38 the guide's English report button opens a Spanish dialog", "js/reports.js", "          lang: partLanguage(node)\n", "          lang: undefined\n", ["tests/reports.spec.js"]],
+    ["B39 the report dialog does not say which language it is in", "js/reports.js", "    ui.overlay.lang = lang();\n", "", ["tests/reports.spec.js"]],
+    ["B40 the text to paste on a public GitHub issue carries the reporter's address", "js/reports.js", "    // No contact line: the way out this text is for is a public GitHub issue,\n    // and the contact is prefilled with a signed-in reporter's own address.\n", "    if (form.contact) lines.push(`${t(\"labelContact\")}: ${form.contact}`);\n", ["tests/reports.spec.js"]],
+    ["B41 the GitHub way out does not say GitHub is public", "js/reports.js", "      el(\"p\", { className: \"vt-report-hint\", text: t(\"failPublic\") }),\n", "", ["tests/reports.spec.js"]],
+    ["B42 the dialog's list of what it attaches leaves out the time zone and the connection", "js/reports.js", "      el(\"li\", { text: t(\"envClock\") }),\n", "", ["tests/reports.spec.js"]],
+    ["B43 a session that ran out while listing your reports reads as a failed send", "js/reports.js", "res && res.status === 401 ? t(\"mineNeedsAccount\") : failureText(res)", "failureText(res)", ["tests/reports.spec.js"]],
+    ["B44 the report dialog's fields are under 16px, so an iPhone zooms into them", "js/reports.js", "\n  font-size:max(16px,1rem);color:inherit;", "\n  color:inherit;", ["tests/reports.spec.js"]],
+    ["B45 the privacy page's list of what a report keeps leaves out the time zone", "privacy.html", "        <strong>zona horaria</strong> (solo la diferencia con UTC), si tu navegador\n", "        si tu navegador\n", ["tests/reports.spec.js"]],
+    ["B46 the privacy page names Stripe, which no market sells on, instead of Creem", "privacy.html", "o, con tarjeta internacional, <strong>Creem</strong>", "o, con tarjeta internacional, <strong>Stripe</strong>", ["tests/node/privacy-rails.test.mjs"]],
+    ["B47 the terms say \"Haces falta tener 13 años\"", "terms.html", "Hace falta tener 13 años", "Haces falta tener 13 años", ["tests/terms-page.spec.js"]],
+    // The accessibility pass on the merge: what a keyboard and a screen reader got from the report dialog.
+    ["B48 a screen reader is not told the report was saved, or its reference", "js/reports.js", "    announce(`${t(\"thanksTitle\")}. ${reference}`);\n", "", ["tests/reports.spec.js"]],
+    ["B49 a screen reader is not told why the report was not saved", "js/reports.js", "    announce(`${t(\"failTitle\")}. ${failureText(res)}`);\n", "", ["tests/reports.spec.js"]],
+    ["B50 the guide's report dialog lets Tab walk out to the page under it", "guide.html", "    <script src=\"js/focus-trap.js?v=20260924c\"></script>\n", "", ["tests/reports.spec.js"]],
+    ["B51 the QA page's report dialog lets Tab walk out to the page under it", "qa/index.html", "    <script src=\"../js/focus-trap.js?v=20260924c\"></script>\n", "", ["tests/reports.spec.js"]],
+    // The price follows the rail: a Peruvian on the card rail pays Creem, which cannot charge soles.
+    ["B52 the card rail shows a Peruvian soles that Creem never charges", "js/app.js", "return pricingRail === B.preferredRail(region) ? region : \"WW\";", "return region;", ["tests/checkout-rail.spec.js"]]
   ].map(([name, file, from, to, only]) => ({
     name,
     file,
     from,
     to,
-    cmd: only && only[0].startsWith("workers/")
+    cmd: only && /^(workers|tests\/node)\//.test(only[0])
       ? node(only)
       : [...PIANO_SPEC.slice(0, 3), ...(only || ["tests/console-unlock.spec.js", "tests/trust-console-gaps.spec.js"]), "--project=chromium", "--workers=4", "--reporter=dot"]
   })),
@@ -831,7 +862,9 @@ export const MUTANTS = {
   // split was checked by planting defects back into the logic it moved; these are the ones that lived through the
   // existing suites, each now killed by a test written for it. The ids are the ones the tests carry: SP for the page
   // splits (a browser spec, with a title filter), and for the worker WC Creem, WR reports, WT Stripe and Mercado
-  // Pago, WS the store, WRT the router and RG3 the progress race (a Node test file). CI runs this set as its own job.
+  // Pago, WS the store, WRT the router and RG3 the progress race (a Node test file). PC, the Pro dialog's plan card,
+  // is the exception: the specs that already pinned it kill all five, so they keep their own titles. CI runs this set
+  // as its own job.
   splits: [
     ["SP1 the home ad slot is never throttled, so it shows again inside its minimum interval", "js/ads.js", "    if (slotThrottled(slotId, c.frequency || {})) return", "    if (false) return", "tests/ads.spec.js", "SP1 "],
     ["SP2 in preview, the line for a slot no card names is English on a Spanish page", "js/ads.js", "        es ? \"Ninguna tarjeta nombra este espacio.\" : \"No card names this slot.\"", "        \"No card names this slot.\"", "tests/ads.spec.js", "SP2 "],
@@ -889,7 +922,13 @@ export const MUTANTS = {
     ["WRT1 POST to /v1/me/progress is answered 405: the route table takes only PUT as a write, so a POST save is lost", "workers/entitlements/src/api.js", "      PUT: withoutUrl(handlePutProgress),\n      POST: withoutUrl(handlePutProgress),\n", "      PUT: withoutUrl(handlePutProgress),\n", "workers/entitlements/test/split-routes.test.mjs"],
     ["WRT2 a refused method on /v1/me is told GET only, though POST works too", "workers/entitlements/src/api.js", "[\"/v1/me\", accountRoute(\"GET, POST\", {", "[\"/v1/me\", accountRoute(\"GET\", {", "workers/entitlements/test/split-routes.test.mjs"],
     ["WRT3 a refused method on /v1/me/progress is told GET, PUT only: DELETE is dropped from its allow", "workers/entitlements/src/api.js", "accountRoute(\"GET, PUT, DELETE\", {", "accountRoute(\"GET, PUT\", {", "workers/entitlements/test/split-routes.test.mjs"],
-    ["RG3 the progress UPDATE loses its rev = ?5 compare-and-swap: two devices writing from the same revision both win", "workers/entitlements/src/progress.js", "       WHERE account_id = ?1 AND profile_id = ?2 AND rev = ?5`", "       WHERE account_id = ?1 AND profile_id = ?2`", "workers/entitlements/test/progress-race.test.mjs"]
+    ["RG3 the progress UPDATE loses its rev = ?5 compare-and-swap: two devices writing from the same revision both win", "workers/entitlements/src/progress.js", "       WHERE account_id = ?1 AND profile_id = ?2 AND rev = ?5`", "       WHERE account_id = ?1 AND profile_id = ?2`", "workers/entitlements/test/progress-race.test.mjs"],
+    // The Pro dialog's plan card, split out of a map callback of complexity 29 in the merge of #26.
+    ["PC1 a trial holder's monthly card says it is the plan they hold, as if they had paid", "js/app.js", "    if (held === \"trialAccount\" || held === \"gift\") return offer;\n", "", "tests/account-pro-states.spec.js", "and the Pro dialog calls it a free trial"],
+    ["PC2 the free card says it is the plan a trial holder holds", "js/app.js", "label: held === \"free\" ? tt(\"pricing.current\")", "label: true ? tt(\"pricing.current\")", "tests/account-pro-states.spec.js", "and the Pro dialog calls it a free trial"],
+    ["PC3 before launch the plan buttons say Subscribe and answer with a toast", "js/app.js", "    if (ctx.prelaunch && !own.disabled) return", "    if (false) return", "tests/pricing-prelaunch.spec.js", "plan buttons say not available yet"],
+    ["PC4 the annual card loses the saving its two prices give", "js/app.js", "    if (p.badge === \"saveAnnual\" && savingPct) {", "    if (false) {", "tests/billing.spec.js", "the annual badge states the saving"],
+    ["PC5 the benefits past the first five are dropped, with no way to see them", "js/app.js", "    const restFeats = featList.slice(FEAT_MAX).map(item).join(\"\");", "    const restFeats = \"\";", "tests/pricing-prelaunch.spec.js", "benefit copy carries no internal jargon"],
   ].map(([name, file, from, to, spec, grep]) => ({
     name,
     file,

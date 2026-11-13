@@ -393,6 +393,75 @@ test("control: a link for a rail the config has loads quietly", async ({ page })
 
 // ----- coming back from Creem
 
+// ----- the Pro dialog's choice of how to pay
+
+/**
+ * The go-live config: Creem and Mercado Pago linked, Stripe empty, as gate
+ * steps 5 and 6 leave it. `mp: false` is the week between them.
+ */
+async function liveRails(page, { mp = true } = {}) {
+  const booted = await boot(page, {
+    health: healthBody({ mercadopagoConfigured: true, creemConfigured: true, stripeConfigured: false }),
+    links: { stripe: { pro_monthly: "" }, ...(mp ? {} : { mercadopago: { pro_monthly: "" } }) }
+  });
+  await askTheWorker(page);
+  await page.click("#btn-pricing");
+  await expect(page.locator("#pricing-modal")).toBeVisible();
+  return booted;
+}
+
+/** The dialog's rail buttons, in order, the one in use starred. */
+function railRow(page) {
+  return page.locator("#pricing-rails .rail-btn").evaluateAll((bs) =>
+    bs.map((b) => b.dataset.rail + (b.classList.contains("active") ? "*" : "")));
+}
+
+// Found merging #26 into main: the dialog still drew a fixed Stripe /
+// Mercado Pago pair after #26 moved every international market to Creem. So
+// outside Peru neither button was marked as the one in use, and pressing
+// "Tarjeta internacional" switched a working Creem checkout to the empty
+// Stripe rail, which answers "payments are not public yet".
+test.describe("the Pro dialog's choice of how to pay, outside Peru", () => {
+  test.use({ locale: "en-US", timezoneId: "America/New_York" });
+
+  test("offers the rails the markets sell on, marks the region's own, and its card button reaches Creem", async ({ page }) => {
+    const { navigations } = await liveRails(page);
+    expect(await page.evaluate(() => window.VTBilling.preferredRail(window.VTBilling.detectRegion()))).toBe("creem");
+    expect(await railRow(page)).toEqual(["creem*", "mercadopago"]);
+    await page.locator('#pricing-rails [data-rail="creem"]').click();
+    await page.locator('#pricing-modal .plan-cta[data-plan="pro_monthly"]').click();
+    await expect.poll(() => navigations.join(" ")).toContain("checkout.creem.io");
+    expect(navigations.join(" ")).not.toContain("stripe");
+  });
+});
+
+test.describe("the Pro dialog's choice of how to pay, in Peru", () => {
+  test.use({ locale: "es-PE", timezoneId: "America/Lima" });
+
+  test("starts on Mercado Pago, and the card button pays by card on Creem", async ({ page }) => {
+    const { navigations } = await liveRails(page);
+    expect(await railRow(page)).toEqual(["mercadopago*", "creem"]);
+    const monthly = page.locator('#pricing-grid .plan-card:has([data-plan="pro_monthly"]) .plan-price');
+    await expect(monthly, "on Mercado Pago a Peruvian is shown soles").toContainText("S/");
+    await expect(page.locator('#pricing-rails [data-rail="creem"]')).toHaveText("Tarjeta internacional");
+    await page.locator('#pricing-rails [data-rail="creem"]').click();
+    expect(await railRow(page)).toEqual(["mercadopago", "creem*"]);
+    // Creem cannot charge soles: the card rail shows the price it charges.
+    await expect(monthly).toContainText("$");
+    await expect(monthly).not.toContainText("S/");
+    await expect(page.locator("#pricing-region-label")).toContainText("USD");
+    await page.locator('#pricing-modal .plan-cta[data-plan="pro_monthly"]').click();
+    await expect.poll(() => navigations.join(" ")).toContain("checkout.creem.io");
+  });
+
+  test("control: with Mercado Pago not linked yet, the one rail that can sell is the one offered and used", async ({ page }) => {
+    const { navigations } = await liveRails(page, { mp: false });
+    expect(await railRow(page)).toEqual(["creem*"]);
+    await page.locator('#pricing-modal .plan-cta[data-plan="pro_monthly"]').click();
+    await expect.poll(() => navigations.join(" ")).toContain("checkout.creem.io");
+  });
+});
+
 test.describe("coming back from a Creem checkout", () => {
   // A Peruvian browser, whose own rail is Mercado Pago: so a Creem return read
   // as "the region's rail" is visibly wrong, not right by coincidence.

@@ -97,6 +97,14 @@ guess and yours to state:
    subscription. An email address you will read is enough.
 3. **The refund window.** The page says 14 days. Say if you want another number.
 
+**The same edit has to fix the cancelling section** (`docs/VALUE-GAP-REGISTRY.md`
+VG-86). It tells a subscriber to cancel "from the management link that will
+appear in the Pro window", and that link can never appear on Creem or Mercado
+Pago. The section should name the three real routes: the link in Creem's own
+emails, *pagos recurrentes* in the payer's Mercado Pago account, and the
+contact address in point 2. While you are there, the trial is worded as "7
+days" in both halves; step 8's test gives half of new accounts 14.
+
 **Undo:** it is a committed file. Edit and push.
 
 ### Step 3 — Open the Creem account. Cost: nothing to open; 3.9% + $0.40 per sale.
@@ -195,6 +203,20 @@ providers.creem.links = {
 panel says nothing is on sale; after it, a stranger can pay. Everything in
 steps 1 to 4 exists so that this commit is boring.
 
+> **Not yet: one fault stands in front of this step, and one decision.** Both
+> were found reviewing the merge of #26 into `main` and are written up in
+> `docs/VALUE-GAP-REGISTRY.md`.
+>
+> - **VG-83 (P0).** Every purchase now goes through sign-in, and a buyer whose
+>   payment webhook arrives after the page's one attempt to link it to their
+>   account loses the Pro they paid for on the next page load. Stripe and
+>   Creem both say the webhook can arrive after the buyer is back, so this is
+>   the ordinary case. It is code, with the test to write first in the row.
+> - **VG-85 (decision).** Say what currency the Creem products are priced in.
+>   A Peruvian paying by card is now shown the dollar price Creem charges; the
+>   euro markets are still shown euros on Creem, which is right only if the
+>   Creem products are priced in euros.
+
 The site's own validation refuses anything that is not an allowed checkout
 host, so a mistyped link fails closed rather than sending somebody somewhere
 else. A test fails if the terms page still claims nothing is on sale once a
@@ -223,6 +245,13 @@ wrangler secret put MP_ACCESS_TOKEN
 
 Then the preapproval link into `js/billing-config.js`, exactly as step 5.
 
+> **Not yet: VG-84 (P0) stands in front of this step.** The worker grants Pro
+> when a Mercado Pago subscription is *authorised*, before the first charge
+> (which Mercado Pago makes about an hour later), and keeps it through declined
+> instalments until Mercado Pago cancels the subscription itself — up to about
+> three months on a card that never pays, against what the terms say. It is on
+> `main`, older than #26, and the fix and its test are in the registry row.
+
 **What proves it worked:** `/v1/health` reports `mercadopagoConfigured: true`.
 Until it does, the site refuses to send a Peruvian buyer down this rail at all,
 rather than taking money it cannot turn into a licence.
@@ -250,6 +279,12 @@ looks like the product being broken.
 **What proves it worked:** the account panel offers an address field, and a
 code arrives. `/v1/auth/methods` is what the page reads.
 
+**And name the provider on the privacy page** in the same commit, in both
+halves: it receives every address that asks for a code, and the page's list
+of who receives what ends "Nadie más recibe nada" / "Nobody else receives
+anything". `tests/node/privacy-rails.test.mjs` checks this for payment rails
+only.
+
 **Undo:** clear `EMAIL_PROVIDER`, redeploy. Addresses already stored stay
 stored; the privacy page says what is kept and the nightly cron sweeps codes
 and sessions.
@@ -269,6 +304,12 @@ and 14-day arms) fourteen days was no better than thirty. That test never
 compared seven with fourteen; seeing the gap its own counts imply would need
 about 136,000 accounts per arm. At a few hundred users this spends Pro and
 returns noise.
+
+**Before switching anything here on, read VG-89** in
+`docs/VALUE-GAP-REGISTRY.md`: the events cap counts events while D1 bills
+rows, the layouts panel can spend a day's D1 reads in one press of "180", and
+an idle tab reports time indefinitely. None of them costs money on the free
+plan; each of them can make sign-in refuse until midnight UTC.
 
 **Undo:** `EVENTS_ENABLED = "false"`, or a one-off
 `wrangler deploy --var EVENTS_ENABLED:false`, which the next plain deploy
@@ -328,10 +369,38 @@ this step used to name — rendered a card in the home slot whose button called
 nothing and recorded a click for the press. If you want to see those cards before
 you have links, that is what 9a is for.
 
-#### 9c. If you want AdSense — the account is the whole of the work
+#### 9c. If you want AdSense — the account is not the whole of the work any more
 
-This is the only part of this step that needs an account, and the account is
-yours alone:
+> **Read this first: the site's security policy blocks AdSense today, and the
+> fix is a security decision, not a paste.** Every page carries a Content
+> Security Policy (`index.html` and the five others, pinned by
+> `tests/node/csp-pins.test.mjs`) whose `script-src` allows only this site and
+> Google sign-in. With the ids below pasted in, the page adds the AdSense tag,
+> the browser refuses it (`script-src-elem …pagead2.googlesyndication.com…`),
+> no ad is ever requested, and the slot stays an empty labelled box that is
+> neither filled nor marked unfilled — so neither `ad_impression` nor
+> `ad_unfilled` is ever counted. Measured on the merge of #26 into `main`.
+>
+> Google says what it supports, and it is not a list of hosts: *"Because the
+> domains that the AdSense ad code uses change over time, we only support
+> strict CSP"* — a policy built on a fresh random nonce for every response
+> (support.google.com/adsense/answer/16283098). GitHub Pages serves the same
+> bytes to everyone and cannot mint a nonce per response, so the policy Google
+> supports cannot be served from here. That leaves two honest choices:
+>
+> - **Stay on `mode: "native"`** (9b), which loads no third-party script and
+>   needs no change to the policy. This is the recommendation.
+> - **Loosen `script-src` on every page** to what Google's example allows
+>   (`'unsafe-inline' 'unsafe-eval' https:` without the nonce that makes it
+>   safe), and change the six pages' policy and `EXPECTED` in
+>   `tests/node/csp-pins.test.mjs` together. That gives up most of what the
+>   policy protects — it exists because sign-in and the licence check run in
+>   these pages — and Google warns that policies other than its own "may break
+>   without notice". Moving the site to a host that can set a per-response
+>   header (a Cloudflare Worker in front of Pages, for example) is the way to
+>   have both, and it is a project of its own.
+
+The rest of this step is what the account involves once that is settled:
 
 1. **Open an AdSense account** at `adsense.google.com` and add this site to it.
 2. **Let Google review the site.** It decides whether to approve, on criteria

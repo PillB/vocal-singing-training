@@ -359,18 +359,225 @@ test.describe("reporting a problem", () => {
     await expect(page.locator("#vt-report-overlay")).toBeVisible();
   });
 
-  test("the privacy page says what a report keeps, in both languages", async ({ page }) => {
+  // Found merging #26 into main: the guide drew both report buttons and never
+  // loaded the dialog's transport (account.js), so every report from it failed
+  // and the failure told the reader to check a connection that was fine. The
+  // case above opens the dialog and stops, so it stayed green. This one sends.
+  test("a report sent from the guide reaches the worker", async ({ page }) => {
+    const { posted } = await boot(page, { url: "/guide.html" });
+    await page.locator("[data-vt-report]").first().click();
+    await fill(page, { summary: "desde la guía" });
+    await page.locator("#vt-report-form button[type=submit]").click();
+    await expect(page.locator("#vt-report-title")).toHaveText(/Gracias/);
+    expect(posted).toHaveLength(1);
+    expect(posted[0].summary).toBe("desde la guía");
+  });
+
+  test("control: a page with no way to send says so, and a dead network is still called a dead network", async ({ page }) => {
+    await page.route("**/js/account.js*", (route) => route.fulfill({ status: 404, body: "" }));
+    const { posted } = await boot(page, { url: "/guide.html" });
+    expect(await page.evaluate(() => typeof window.VTAccount), "the transport really is missing").toBe("undefined");
+    await page.locator("[data-vt-report]").first().click();
+    await fill(page, { summary: "sin transporte" });
+    await page.locator("#vt-report-form button[type=submit]").click();
+    await expect(page.locator("#vt-report-overlay p").nth(0)).toContainText(/Esta página no puede enviar/);
+    expect(posted).toHaveLength(0);
+
+    const other = await page.context().newPage();
+    await boot(other, { reports: "dead" });
+    await other.locator(".app-footer [data-vt-report]").click();
+    await fill(other, { summary: "sin red" });
+    await other.locator("#vt-report-form button[type=submit]").click();
+    await expect(other.locator("#vt-report-overlay p").nth(0)).toContainText(/Revisa tu conexión/);
+  });
+
+  // The guide is a Spanish page with an English half: its English button
+  // opened a Spanish dialog, and an English one sat unmarked in a lang="es"
+  // page, so a screen reader spoke it with Spanish sounds (WCAG 3.1.2).
+  test("the guide's English button opens an English dialog marked as English, and its Spanish one a Spanish dialog", async ({ page }) => {
+    await boot(page, { url: "/guide.html" });
+    await page.evaluate(() => localStorage.removeItem("vt_lang"));
+    const entries = page.locator("[data-vt-report]");
+    await entries.nth(1).click();
+    await expect(page.locator("#vt-report-title")).toHaveText(/Tell us what happened/);
+    await expect(page.locator("#vt-report-overlay")).toHaveAttribute("lang", "en");
+    await page.keyboard.press("Escape");
+    await entries.nth(0).click();
+    await expect(page.locator("#vt-report-title")).toHaveText(/Cuéntanos qué pasó/);
+    await expect(page.locator("#vt-report-overlay")).toHaveAttribute("lang", "es");
+  });
+
+  // The way out when our route refuses is a public GitHub issue, and the
+  // contact field is prefilled with a signed-in reporter's own address: the
+  // text to paste used to carry it, with no word that GitHub is public.
+  test("the text to paste on GitHub leaves the reporter's address out, and says GitHub is public", async ({ page }) => {
+    await boot(page, { reports: "off" });
+    await page.locator(".app-footer [data-vt-report]").click();
+    await fill(page, { summary: "no se guarda", contact: "ana@example.test" });
+    await page.locator("#vt-report-form button[type=submit]").click();
+    await expect(page.locator("#vt-report-title")).toHaveText(/No pudimos guardarlo/);
+    const text = await page.locator("#vt-report-overlay textarea").inputValue();
+    expect(text, "control: the report itself is in the text").toContain("no se guarda");
+    expect(text).not.toContain("ana@example.test");
+    await expect(page.locator("#vt-report-overlay")).toContainText(/lo ve cualquiera/);
+    await expect(page.locator('#vt-report-overlay a[href*="github.com"]')).toHaveText(/pública/);
+  });
+
+  test("a session that ran out while listing your reports says to sign in again, not that a send failed", async ({ page }) => {
+    await boot(page);
+    await page.route("**/v1/reports/mine", (route) =>
+      route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ ok: false, reason: "no_session" }) })
+    );
+    await page.evaluate(() => {
+      const real = window.VTAccount;
+      window.VTAccount = { ...real, getState: () => ({ configured: true, signedIn: true, account: { email: "a@example.test" } }) };
+    });
+    await page.locator(".app-footer [data-vt-report]").click();
+    await page.locator("#vt-report-overlay summary", { hasText: /Lo que ya nos contaste/ }).click();
+    const load = page.locator("#vt-report-overlay button", { hasText: /Ver mis reportes/ });
+    await expect(load, "the signed-in reporter is offered the list").toHaveCount(1);
+    await load.click();
+    const msg = page.locator("#vt-report-overlay .vt-report-msg[data-tone=error]");
+    await expect(msg).toHaveText(/Entra en tu cuenta/);
+    await expect(msg).not.toContainText("no_session");
+  });
+
+  // The thanks and failure panels replace the card and move focus to a
+  // button, so a screen reader heard "Enviando…" and then a button's name:
+  // never whether the report was saved, its reference, or why it was not.
+  for (const [mode, said] of [["ok", /VS-7F3KQ2MXNP/], ["off", /apagados en el servidor/]]) {
+    test(`a screen reader is told how the send ended (${mode})`, async ({ page }) => {
+      await boot(page, { reports: mode });
+      await page.locator(".app-footer [data-vt-report]").click();
+      await fill(page, { summary: "se oye" });
+      await page.locator("#vt-report-form button[type=submit]").click();
+      await expect(page.locator("#vt-report-overlay > [role=status]")).toHaveText(said);
+    });
+  }
+
+  // guide.html and qa/index.html loaded the dialog without js/focus-trap.js,
+  // so the aria-modal dialog let Tab walk out to the page under its overlay.
+  for (const url of ["/guide.html", "/qa/index.html"]) {
+    test(`on ${url} Tab stays inside the open dialog`, async ({ page }) => {
+      await boot(page, { url });
+      await page.locator("[data-vt-report]").first().focus();
+      await page.keyboard.press("Enter");
+      await expect(page.locator("#vt-report-overlay")).toBeVisible();
+      const outside = [];
+      for (let i = 0; i < 30; i++) {
+        await page.keyboard.press("Tab");
+        const inside = await page.evaluate(() => !!document.activeElement?.closest("#vt-report-overlay"));
+        if (!inside) outside.push(i);
+      }
+      expect(outside, "Tab presses that left the dialog").toEqual([]);
+    });
+  }
+
+  // The dialog used to bring its own slate palette and flip only its card to
+  // white under prefers-color-scheme: light, while every button, the focus ring
+  // and the messages it borrows from the site are tuned for dark: about 1:1 on
+  // a light-mode phone, which is most of them. WCAG 1.4.3 asks 4.5:1 of text,
+  // 1.4.11 asks 3:1 of a focus indicator. Measured in both schemes, since
+  // Playwright's default (light) is the one that hid this.
+  for (const scheme of ["light", "dark"]) {
+    test(`in ${scheme} mode the dialog is the site's card, and its text and focus ring read on it`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await boot(page);
+      await page.locator(".app-footer [data-vt-report]").click();
+      await page.locator("#vt-report-form button[type=submit]").click();
+      await expect(page.locator("#vt-report-form .vt-report-msg")).toHaveText(/al menos una línea/);
+      await page.locator("#vt-report-summary").focus();
+      const m = await page.evaluate(() => {
+        const rgb = (c) => (c.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+        const lum = (c) => {
+          const [r, g, b] = rgb(c).map((v) => {
+            const x = v / 255;
+            return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        const ratio = (a, b) => {
+          const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+          return (hi + 0.05) / (lo + 0.05);
+        };
+        const card = getComputedStyle(document.querySelector("#vt-report-overlay .vt-report")).backgroundColor;
+        const token = getComputedStyle(document.documentElement).getPropertyValue("--bg-card").trim();
+        const probe = document.createElement("div");
+        probe.style.background = token;
+        document.body.appendChild(probe);
+        const tokenRgb = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        const ghost = getComputedStyle(document.querySelector("#vt-report-form .btn-ghost")).color;
+        const msg = getComputedStyle(document.querySelector("#vt-report-form .vt-report-msg")).color;
+        const ring = getComputedStyle(document.querySelector("#vt-report-summary")).outlineColor;
+        return { card, tokenRgb, ghost: ratio(ghost, card), msg: ratio(msg, card), ring: ratio(ring, card) };
+      });
+      expect(m.card, "the card is the site's --bg-card in either scheme").toBe(m.tokenRgb);
+      expect(m.ghost, "a ghost button's text on the card").toBeGreaterThanOrEqual(4.5);
+      expect(m.msg, "the error message on the card").toBeGreaterThanOrEqual(4.5);
+      expect(m.ring, "the focus ring on the card").toBeGreaterThanOrEqual(3);
+    });
+  }
+
+  test("every control in the dialog is a 44px target, and its disclosures show a caret", async ({ page }) => {
+    await boot(page);
+    await page.locator(".app-footer [data-vt-report]").click();
+    const r = await page.evaluate(() => {
+      const sel = ".vt-report-choices label, details summary, input[type=text], input[type=email], select, textarea, button, a";
+      const short = [...document.querySelectorAll("#vt-report-overlay " + sel.split(", ").join(", #vt-report-overlay "))]
+        .filter((n) => n.getClientRects().length && n.getBoundingClientRect().height < 43.5)
+        .map((n) => `${n.tagName.toLowerCase()} "${(n.textContent || n.id || "").trim().slice(0, 30)}" ${n.getBoundingClientRect().height.toFixed(1)}px`);
+      const summaries = [...document.querySelectorAll("#vt-report-overlay details summary")];
+      const carets = summaries.map((n) => getComputedStyle(n, "::before").content);
+      // WebKit zooms the page into a focused field under 16px.
+      const small = [...document.querySelectorAll("#vt-report-overlay input[type=text], #vt-report-overlay input[type=email], #vt-report-overlay select, #vt-report-overlay textarea")]
+        .filter((n) => parseFloat(getComputedStyle(n).fontSize) < 16).map((n) => n.id || n.tagName);
+      return { short, carets, small, checked: document.querySelectorAll("#vt-report-overlay .vt-report-choices label").length };
+    });
+    expect(r.checked, "the radio pills are among what was measured").toBeGreaterThan(3);
+    expect(r.short, "controls under the 44px floor").toEqual([]);
+    expect(r.small, "fields an iPhone zooms into when they take focus").toEqual([]);
+    expect(r.carets.length).toBeGreaterThanOrEqual(2);
+    for (const c of r.carets) expect(c, "a summary shows the site's caret").toBe('"▸"');
+  });
+
+  // Driven by what the client really attaches: privacy.html says "Guardamos
+  // exactamente esto", and the list used to leave out four keys the browser
+  // sends and the worker stores (time zone, online state, pixel density,
+  // platform). A key added to environment() without a phrase here turns red.
+  const ATTACHED = {
+    ua: { es: "user-agent", en: "user-agent", dialog: "navegador" },
+    platform: { es: "plataforma", en: "platform", dialog: "plataforma" },
+    viewport: { es: "pantalla y ventana", en: "window size", dialog: "pantalla y ventana" },
+    screen: { es: "pantalla y ventana", en: "screen", dialog: "pantalla y ventana" },
+    dpr: { es: "densidad de píxeles", en: "pixel density", dialog: "densidad de píxeles" },
+    tz: { es: "zona horaria", en: "time zone", dialog: "zona horaria" },
+    net: { es: "conectado", en: "online", dialog: "conexión" },
+    lang: { es: "idioma", en: "language you read", dialog: "idioma" },
+    signedIn: { es: "qué cuenta", en: "which account", dialog: "tu cuenta" }
+  };
+
+  test("the privacy page and the dialog name every field a report attaches, in both languages", async ({ page }) => {
+    await boot(page);
+    const keys = await page.evaluate(() => Object.keys(window.VTReports.environment()));
+    expect(keys.length, "the client attaches something, or this checks nothing").toBeGreaterThan(5);
+    expect(keys.filter((k) => !ATTACHED[k]), "attached keys with no phrase to look for").toEqual([]);
+    await page.locator(".app-footer [data-vt-report]").click();
+    const dialog = (await page.locator("#vt-report-form details").first().textContent()).replace(/\s+/g, " ");
     await page.goto(BASE + "/privacy.html", { waitUntil: "domcontentloaded" });
-    const body = await page.locator("body").textContent();
-    // Every field the client actually sends has to be named on this page.
-    for (const phrase of ["página", "versión", "user-agent", "pantalla", "idioma", "cuenta"]) {
-      expect(body, `privacy.html must say a report keeps: ${phrase}`).toContain(phrase);
+    const es = await page.locator("h2", { hasText: "Si nos reportas un problema" }).locator("xpath=following-sibling::p[1]").textContent();
+    const en = await page.locator("p", { hasText: "If you report a problem" }).textContent();
+    const missing = [];
+    for (const k of keys) {
+      if (!es.replace(/\s+/g, " ").includes(ATTACHED[k].es)) missing.push(`es:${k}`);
+      if (!en.replace(/\s+/g, " ").includes(ATTACHED[k].en)) missing.push(`en:${k}`);
+      if (!dialog.includes(ATTACHED[k].dialog)) missing.push(`dialog:${k}`);
     }
+    expect(missing, "attached, but not said where the reporter reads what is attached").toEqual([]);
+    const body = await page.locator("body").textContent();
     expect(body).toMatch(/No guardamos tu dirección IP con el reporte/);
     expect(body).toMatch(/180 días/);
     expect(body).toMatch(/number of a card|número de tarjeta/);
-    expect(body).toMatch(/If you report a problem/);
-    expect(body).toMatch(/user-agent/);
   });
 });
 

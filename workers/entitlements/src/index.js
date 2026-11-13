@@ -853,7 +853,12 @@ export default {
       return;
     }
     await ensureSchema(env.DB);
-    await sweepExpired(env.DB);
+    const report = await sweepExpired(env.DB, undefined, env.ENTITLEMENTS);
+    if (report.failed.length) {
+      // Thrown after every other table was swept, so the cron run shows as
+      // failed in the dashboard rather than passing in silence.
+      throw new Error(`sweep failed: ${report.failed.join(", ")}`);
+    }
   },
 
   /**
@@ -868,7 +873,10 @@ export default {
     } catch (error) {
       // Message only — never the request body, headers or any secret.
       console.error("unhandled error", error && error.message);
-      return json({ ok: false, reason: "internal_error" }, 500);
+      // With the site's CORS headers, as every other answer has, so the page
+      // reads a 500 it can retry or explain; without them the browser hides
+      // the response and the page can only report a network failure (audit D1-8).
+      return json({ ok: false, reason: "internal_error" }, 500, corsHeaders(request, env));
     }
   }
 };

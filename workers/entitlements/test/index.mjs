@@ -60,3 +60,6 @@ import "./split-reports.test.mjs";
 // The payment ledger in D1: one transaction per webhook, every race forced by
 // a barrier and checked against the KV store it replaced.
 import "./ledger.test.mjs";
+// The account layer's writes against a worker stopped half way and a second
+// request landing in between: trial, gift codes, revokes, links, sign-in, sweep.
+import "./d1-atomicity.test.mjs";

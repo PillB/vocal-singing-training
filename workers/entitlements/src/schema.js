@@ -182,6 +182,9 @@ export const SCHEMA_STATEMENTS = [
    )`,
   `CREATE INDEX IF NOT EXISTS idx_exposures_arm ON exposures (experiment, variant, first_at)`,
   `CREATE INDEX IF NOT EXISTS idx_exposures_cid ON exposures (cid)`,
+  // The daily sweep deletes by age; without this each of its chunks read the
+  // whole table to find rows past 180 days.
+  `CREATE INDEX IF NOT EXISTS idx_exposures_first ON exposures (first_at)`,
 
   // Version 3: how the event route is doing, per UTC day — what arrived and
   // why anything was turned away (events.js INGEST_REASONS). A day, a reason

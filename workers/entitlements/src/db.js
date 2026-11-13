@@ -108,7 +108,8 @@ export async function hmacSha256Hex(key, value) {
  * Create every table and index if they are missing.
  *
  * Cheap to call: after the first success in this isolate it is a no-op, and
- * even a cold call is a handful of `IF NOT EXISTS` statements in one batch.
+ * a cold call reads the stored version and stops there unless this code's
+ * schema is newer, when it runs the `IF NOT EXISTS` statements in one batch.
  *
  * @param {Object} db D1 database binding.
  * @returns {Promise<void>} Resolves once the schema exists.
@@ -120,14 +121,44 @@ export async function ensureSchema(db) {
   if (schemaReady.has(db)) {
     return;
   }
+  if (await schemaIsCurrent(db)) {
+    schemaReady.add(db);
+    return;
+  }
   const statements = SCHEMA_STATEMENTS.map((sql) => db.prepare(sql));
+  // Only ever raised: while a deploy rolls out, an isolate still on the older
+  // code must not mark the newer schema as old, or the two would take turns
+  // rerunning the whole batch.
   statements.push(
     db
-      .prepare("INSERT INTO schema_meta (key, value) VALUES ('version', ?1)\n         ON CONFLICT(key) DO UPDATE SET value = ?1")
+      .prepare(
+        `INSERT INTO schema_meta (key, value) VALUES ('version', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = ?1 WHERE CAST(schema_meta.value AS INTEGER) < CAST(?1 AS INTEGER)`
+      )
       .bind(String(SCHEMA_VERSION))
   );
   await db.batch(statements);
   schemaReady.add(db);
+}
+
+/**
+ * Whether the stored schema is this code's or newer, so the batch can be
+ * skipped. One row read on a cold isolate, where the batch was 35 statements
+ * and a row written every time (audit SC-1). The schema only ever
+ * grows (every statement is `IF NOT EXISTS`), so a newer one serves older
+ * code too.
+ * @param {Object} db D1 database binding.
+ * @returns {Promise<boolean>} True when nothing needs creating.
+ */
+async function schemaIsCurrent(db) {
+  try {
+    const row = await db.prepare("SELECT value FROM schema_meta WHERE key = 'version'").first();
+    return Number(row && row.value) >= SCHEMA_VERSION;
+  } catch {
+    // No schema_meta yet, a fresh database: the batch creates it. A database
+    // that is down fails the batch too, and that error is the one reported.
+    return false;
+  }
 }
 
 /**
@@ -322,39 +353,112 @@ export function callerIp(request) {
   }
 }
 
+/** Rows one sweep statement deletes at most. */
+export const SWEEP_CHUNK_ROWS = 5000;
+
 /**
- * Delete rows that have aged out: consumed or expired login codes, dead
- * sessions, stale rate-limit buckets, usage events, exposures and ingest
- * counters past their retention, and reports we have closed and kept long
- * enough.
- *
- * Called opportunistically (never on the hot path of a login) so the free tier
- * is not slowly filled with garbage.
- *
- * @param {Object} db D1 database binding.
- * @param {number} [now] Injected clock.
- * @returns {Promise<void>} Resolves when done.
+ * Statements one table gets per sweep. Three of 5,000 rows is 15,000 a day,
+ * above the events table's 10,000-a-day intake cap (events.js
+ * EVENTS_DAILY_CAP), so the daily cron keeps up with the busiest table, and
+ * eight tables at three each stay inside the free plan's 50 queries an
+ * invocation.
  */
-export async function sweepExpired(db, now) {
-  const at = nowSec(now);
-  await db.batch([
-    db.prepare("DELETE FROM login_codes WHERE expires_at < ?1 OR consumed_at IS NOT NULL").bind(at - 3600),
-    db.prepare("DELETE FROM sessions WHERE expires_at < ?1").bind(at - 86400),
-    db.prepare("DELETE FROM rate_limits WHERE window_start < ?1").bind(at - 86400),
+export const SWEEP_MAX_CHUNKS = 3;
+
+/** The flag a sweep sets when a table could not be swept. */
+export const SWEEP_FAILED_FLAG = "sweep_failed";
+
+/**
+ * What the sweep deletes, table by table: the condition and its one value.
+ * @param {number} at Unix seconds.
+ * @returns {Array<[string, string, number|string]>} [table, condition, ?1].
+ */
+function sweepTargets(at) {
+  return [
+    ["login_codes", "expires_at < ?1 OR consumed_at IS NOT NULL", at - 3600],
+    ["sessions", "expires_at < ?1", at - 86400],
+    ["rate_limits", "window_start < ?1", at - 86400],
     // Everything the statistics keep goes at the same age, exposures too:
     // the privacy page says 180 days, and an exposure holds the browser id.
-    db.prepare("DELETE FROM events WHERE received_at < ?1").bind(at - EVENT_RETENTION_SECONDS),
-    db.prepare("DELETE FROM exposures WHERE first_at < ?1").bind(at - EVENT_RETENTION_SECONDS),
-    db
-      .prepare("DELETE FROM ingest_daily WHERE day < ?1")
-      .bind(new Date((at - EVENT_RETENTION_SECONDS) * 1000).toISOString().slice(0, 10)),
+    ["events", "received_at < ?1", at - EVENT_RETENTION_SECONDS],
+    ["exposures", "first_at < ?1", at - EVENT_RETENTION_SECONDS],
+    ["ingest_daily", "day < ?1", new Date((at - EVENT_RETENTION_SECONDS) * 1000).toISOString().slice(0, 10)],
     // Closed reports only, by `updated_at`: the clock starts when we finished
     // with it, not when it arrived, so a bug that took four months to fix is
     // not deleted two months later.
-    db
-      .prepare("DELETE FROM reports WHERE status IN ('fixed', 'wontfix', 'duplicate') AND updated_at < ?1")
-      .bind(at - CLOSED_REPORT_RETENTION_SECONDS)
-  ]);
+    ["reports", "status IN ('fixed', 'wontfix', 'duplicate') AND updated_at < ?1", at - CLOSED_REPORT_RETENTION_SECONDS],
+    // Payment-ledger keys past their time to live (event markers, claim and
+    // payment indexes); reads already treat them as gone. Tombstones and
+    // license records have no expiry and are never swept. A KV copy of the
+    // same key, from before the ledger moved, was written earlier with the
+    // same TTL, so it has expired too and cannot show through.
+    ["ledger_kv", "expires_at IS NOT NULL AND expires_at <= ?1", at]
+  ];
+}
+
+/**
+ * Delete one table's expired rows, a chunk at a time.
+ * @param {Object} db D1 database binding.
+ * @param {[string, string, number|string]} target From `sweepTargets`.
+ * @returns {Promise<{deleted: number, done: boolean}>} Rows deleted, and
+ *   whether the table has none left to delete.
+ */
+async function sweepTable(db, [table, where, bound]) {
+  let deleted = 0;
+  for (let chunk = 0; chunk < SWEEP_MAX_CHUNKS; chunk += 1) {
+    const result = await db
+      .prepare(
+        `DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE ${where} LIMIT ${SWEEP_CHUNK_ROWS})`
+      )
+      .bind(bound)
+      .run();
+    const n = changedRows(result);
+    deleted += n;
+    if (n < SWEEP_CHUNK_ROWS) {
+      return { deleted, done: true };
+    }
+  }
+  return { deleted, done: false };
+}
+
+/**
+ * Delete rows that have aged out: consumed or expired login codes, dead
+ * sessions, stale rate-limit buckets, usage events, exposures and ingest
+ * counters past their retention, reports we have closed and kept long
+ * enough, and payment-ledger keys past their time to live.
+ *
+ * Each table is swept on its own, in chunks of `SWEEP_CHUNK_ROWS`. It used to
+ * be one batch, which D1 runs as one transaction: one table that failed or ran
+ * past the 30-second limit rolled every table back, every day, and the backlog
+ * that caused it only grew (audit SW-1). A table that fails now leaves the
+ * others swept and raises the `sweep_failed` health flag, and a backlog bigger
+ * than one run's chunks is finished by the next runs.
+ *
+ * @param {Object} db D1 database binding.
+ * @param {number} [now] Injected clock.
+ * @param {Object} [kv] KV namespace, for the flag when D1 refuses it.
+ * @returns {Promise<{deleted: Object<string, number>, failed: string[], unfinished: string[]}>}
+ *   Rows deleted by table, the tables that failed, and those with rows left.
+ */
+export async function sweepExpired(db, now, kv) {
+  const at = nowSec(now);
+  const report = { deleted: {}, failed: [], unfinished: [] };
+  for (const target of sweepTargets(at)) {
+    try {
+      const { deleted, done } = await sweepTable(db, target);
+      report.deleted[target[0]] = deleted;
+      if (!done) {
+        report.unfinished.push(target[0]);
+      }
+    } catch (error) {
+      console.error("sweep failed", target[0], error && error.message);
+      report.failed.push(target[0]);
+    }
+  }
+  if (report.failed.length) {
+    await noteHealthFlag(db, SWEEP_FAILED_FLAG, report.failed.join(","), at, kv);
+  }
+  return report;
 }
 
 /**

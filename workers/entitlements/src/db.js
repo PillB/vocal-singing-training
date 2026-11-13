@@ -108,7 +108,8 @@ export async function hmacSha256Hex(key, value) {
  * Create every table and index if they are missing.
  *
  * Cheap to call: after the first success in this isolate it is a no-op, and
- * even a cold call is a handful of `IF NOT EXISTS` statements in one batch.
+ * a cold call reads one row and stops there unless this exact schema was never
+ * created here, when it runs the `IF NOT EXISTS` statements in one batch.
  *
  * @param {Object} db D1 database binding.
  * @returns {Promise<void>} Resolves once the schema exists.
@@ -120,14 +121,67 @@ export async function ensureSchema(db) {
   if (schemaReady.has(db)) {
     return;
   }
+  if (await schemaIsCurrent(db)) {
+    schemaReady.add(db);
+    return;
+  }
   const statements = SCHEMA_STATEMENTS.map((sql) => db.prepare(sql));
   statements.push(
+    db.prepare("INSERT INTO schema_meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO NOTHING").bind(SCHEMA_KEY, String(SCHEMA_VERSION)),
+    // The number is for people reading the database. Only ever raised: while
+    // a deploy rolls out, an isolate on the older code must not mark the
+    // newer schema as old.
     db
-      .prepare("INSERT INTO schema_meta (key, value) VALUES ('version', ?1)\n         ON CONFLICT(key) DO UPDATE SET value = ?1")
+      .prepare(
+        `INSERT INTO schema_meta (key, value) VALUES ('version', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = ?1 WHERE CAST(schema_meta.value AS INTEGER) < CAST(?1 AS INTEGER)`
+      )
       .bind(String(SCHEMA_VERSION))
   );
   await db.batch(statements);
   schemaReady.add(db);
+}
+
+/**
+ * The `schema_meta` key that records this code's schema as created: a hash of
+ * its statements. Keyed by content rather than by SCHEMA_VERSION, because
+ * once the batch is skipped on a match the match has to be exact: two
+ * branches that each raised the version to the same number, or a statement
+ * added without raising it, would otherwise skip a table that was never
+ * created, and the first payment to need it would fail. One row per schema
+ * ever deployed, so an older and a newer isolate during a rollout each find
+ * their own and neither reruns the batch. (FNV-1a, 32 bits: this guards
+ * against accident, not an adversary.)
+ * @param {string[]} statements Schema statements.
+ * @returns {string} Key.
+ */
+export function schemaFingerprint(statements) {
+  const text = statements.join("\n");
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  }
+  return `schema:${statements.length}:${hash.toString(16).padStart(8, "0")}`;
+}
+
+const SCHEMA_KEY = schemaFingerprint(SCHEMA_STATEMENTS);
+
+/**
+ * Whether this code's schema has already been created here, so the batch can
+ * be skipped: one row read on a cold isolate, where it used to be the
+ * 35-statement batch with a row written every time (audit SC-1).
+ * @param {Object} db D1 database binding.
+ * @returns {Promise<boolean>} True when nothing needs creating.
+ */
+async function schemaIsCurrent(db) {
+  try {
+    const row = await db.prepare("SELECT 1 AS ok FROM schema_meta WHERE key = ?1").bind(SCHEMA_KEY).first();
+    return Boolean(row);
+  } catch {
+    // No schema_meta yet, a fresh database: the batch creates it. A database
+    // that is down fails the batch too, and that error is the one reported.
+    return false;
+  }
 }
 
 /**
@@ -322,39 +376,112 @@ export function callerIp(request) {
   }
 }
 
+/** Rows one sweep statement deletes at most. */
+export const SWEEP_CHUNK_ROWS = 5000;
+
 /**
- * Delete rows that have aged out: consumed or expired login codes, dead
- * sessions, stale rate-limit buckets, usage events, exposures and ingest
- * counters past their retention, and reports we have closed and kept long
- * enough.
- *
- * Called opportunistically (never on the hot path of a login) so the free tier
- * is not slowly filled with garbage.
- *
- * @param {Object} db D1 database binding.
- * @param {number} [now] Injected clock.
- * @returns {Promise<void>} Resolves when done.
+ * Statements one table gets per sweep. Three of 5,000 rows is 15,000 a day,
+ * above the events table's 10,000-a-day intake cap (events.js
+ * EVENTS_DAILY_CAP), so the daily cron keeps up with the busiest table, and
+ * eight tables at three each stay inside the free plan's 50 queries an
+ * invocation.
  */
-export async function sweepExpired(db, now) {
-  const at = nowSec(now);
-  await db.batch([
-    db.prepare("DELETE FROM login_codes WHERE expires_at < ?1 OR consumed_at IS NOT NULL").bind(at - 3600),
-    db.prepare("DELETE FROM sessions WHERE expires_at < ?1").bind(at - 86400),
-    db.prepare("DELETE FROM rate_limits WHERE window_start < ?1").bind(at - 86400),
+export const SWEEP_MAX_CHUNKS = 3;
+
+/** The flag a sweep sets when a table could not be swept. */
+export const SWEEP_FAILED_FLAG = "sweep_failed";
+
+/**
+ * What the sweep deletes, table by table: the condition and its one value.
+ * @param {number} at Unix seconds.
+ * @returns {Array<[string, string, number|string]>} [table, condition, ?1].
+ */
+function sweepTargets(at) {
+  return [
+    ["login_codes", "expires_at < ?1 OR consumed_at IS NOT NULL", at - 3600],
+    ["sessions", "expires_at < ?1", at - 86400],
+    ["rate_limits", "window_start < ?1", at - 86400],
     // Everything the statistics keep goes at the same age, exposures too:
     // the privacy page says 180 days, and an exposure holds the browser id.
-    db.prepare("DELETE FROM events WHERE received_at < ?1").bind(at - EVENT_RETENTION_SECONDS),
-    db.prepare("DELETE FROM exposures WHERE first_at < ?1").bind(at - EVENT_RETENTION_SECONDS),
-    db
-      .prepare("DELETE FROM ingest_daily WHERE day < ?1")
-      .bind(new Date((at - EVENT_RETENTION_SECONDS) * 1000).toISOString().slice(0, 10)),
+    ["events", "received_at < ?1", at - EVENT_RETENTION_SECONDS],
+    ["exposures", "first_at < ?1", at - EVENT_RETENTION_SECONDS],
+    ["ingest_daily", "day < ?1", new Date((at - EVENT_RETENTION_SECONDS) * 1000).toISOString().slice(0, 10)],
     // Closed reports only, by `updated_at`: the clock starts when we finished
     // with it, not when it arrived, so a bug that took four months to fix is
     // not deleted two months later.
-    db
-      .prepare("DELETE FROM reports WHERE status IN ('fixed', 'wontfix', 'duplicate') AND updated_at < ?1")
-      .bind(at - CLOSED_REPORT_RETENTION_SECONDS)
-  ]);
+    ["reports", "status IN ('fixed', 'wontfix', 'duplicate') AND updated_at < ?1", at - CLOSED_REPORT_RETENTION_SECONDS],
+    // Payment-ledger keys past their time to live (event markers, claim and
+    // payment indexes); reads already treat them as gone. Tombstones and
+    // license records have no expiry and are never swept. A KV copy of the
+    // same key, from before the ledger moved, was written earlier with the
+    // same TTL, so it has expired too and cannot show through.
+    ["ledger_kv", "expires_at IS NOT NULL AND expires_at <= ?1", at]
+  ];
+}
+
+/**
+ * Delete one table's expired rows, a chunk at a time.
+ * @param {Object} db D1 database binding.
+ * @param {[string, string, number|string]} target From `sweepTargets`.
+ * @returns {Promise<{deleted: number, done: boolean}>} Rows deleted, and
+ *   whether the table has none left to delete.
+ */
+async function sweepTable(db, [table, where, bound]) {
+  let deleted = 0;
+  for (let chunk = 0; chunk < SWEEP_MAX_CHUNKS; chunk += 1) {
+    const result = await db
+      .prepare(
+        `DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE ${where} LIMIT ${SWEEP_CHUNK_ROWS})`
+      )
+      .bind(bound)
+      .run();
+    const n = changedRows(result);
+    deleted += n;
+    if (n < SWEEP_CHUNK_ROWS) {
+      return { deleted, done: true };
+    }
+  }
+  return { deleted, done: false };
+}
+
+/**
+ * Delete rows that have aged out: consumed or expired login codes, dead
+ * sessions, stale rate-limit buckets, usage events, exposures and ingest
+ * counters past their retention, reports we have closed and kept long
+ * enough, and payment-ledger keys past their time to live.
+ *
+ * Each table is swept on its own, in chunks of `SWEEP_CHUNK_ROWS`. It used to
+ * be one batch, which D1 runs as one transaction: one table that failed or ran
+ * past the 30-second limit rolled every table back, every day, and the backlog
+ * that caused it only grew (audit SW-1). A table that fails now leaves the
+ * others swept and raises the `sweep_failed` health flag, and a backlog bigger
+ * than one run's chunks is finished by the next runs.
+ *
+ * @param {Object} db D1 database binding.
+ * @param {number} [now] Injected clock.
+ * @param {Object} [kv] KV namespace, for the flag when D1 refuses it.
+ * @returns {Promise<{deleted: Object<string, number>, failed: string[], unfinished: string[]}>}
+ *   Rows deleted by table, the tables that failed, and those with rows left.
+ */
+export async function sweepExpired(db, now, kv) {
+  const at = nowSec(now);
+  const report = { deleted: {}, failed: [], unfinished: [] };
+  for (const target of sweepTargets(at)) {
+    try {
+      const { deleted, done } = await sweepTable(db, target);
+      report.deleted[target[0]] = deleted;
+      if (!done) {
+        report.unfinished.push(target[0]);
+      }
+    } catch (error) {
+      console.error("sweep failed", target[0], error && error.message);
+      report.failed.push(target[0]);
+    }
+  }
+  if (report.failed.length) {
+    await noteHealthFlag(db, SWEEP_FAILED_FLAG, report.failed.join(","), at, kv);
+  }
+  return report;
 }
 
 /**
@@ -384,13 +511,35 @@ export const WEBHOOK_FAILED_FLAG = "webhook_failed";
  * @param {string} name Flag name, a fixed string from the code.
  * @param {string} detail Short operator-facing note; never published.
  * @param {number} [now] Injected clock.
+ * @param {Object} [kv] KV namespace, written instead when D1 refuses.
  * @returns {Promise<void>} Resolves whether or not it was recorded.
  */
-export async function noteHealthFlag(db, name, detail, now) {
-  if (!db || !name) {
+export async function noteHealthFlag(db, name, detail, now, kv) {
+  if (!name) {
     return;
   }
   const at = Number.isFinite(now) ? Math.floor(now) : Math.floor(Date.now() / 1000);
+  if (db && (await writeFlagRow(db, name, detail, at))) {
+    return;
+  }
+  // D1 itself refused, which is now the failure that matters most: the payment
+  // ledger lives there, and D1's free plan refuses writes past 100,000 rows a
+  // day while it keeps answering reads, so the probe's `SELECT 1` says "ok".
+  // KV is a different service with a different budget, and the probe already
+  // spends one KV read; the flag goes there instead, and the probe reads it.
+  await writeFlagKey(kv, name, at);
+}
+
+/** KV key a health flag is kept under when D1 would not take it. */
+export function healthFlagKey(name) {
+  return `health:flag:${name}`;
+}
+
+/**
+ * Write a flag row in D1. Never throws.
+ * @returns {Promise<boolean>} Whether it was written.
+ */
+async function writeFlagRow(db, name, detail, at) {
   try {
     // The schema may never have been created: a deployment whose first webhook
     // is also its first use of D1 is exactly the deployment most likely to have
@@ -404,8 +553,25 @@ export async function noteHealthFlag(db, name, detail, now) {
       )
       .bind(name, at, String(detail || "").slice(0, 200))
       .run();
+    return true;
   } catch {
-    // Nothing to do and nothing to say: the caller is mid-failure already.
+    return false;
+  }
+}
+
+/**
+ * Write a flag's time in KV, for when D1 refused it. Never throws. A day's
+ * TTL: the probe reports it for an hour, and the row is no record to keep.
+ * @returns {Promise<void>} Resolves whether or not it was written.
+ */
+async function writeFlagKey(kv, name, at) {
+  if (!kv || typeof kv.put !== "function") {
+    return;
+  }
+  try {
+    await kv.put(healthFlagKey(name), String(at), { expirationTtl: 86400 });
+  } catch {
+    // Both stores refusing: the probe sees D1 or KV failing directly instead.
   }
 }
 

@@ -18,6 +18,11 @@
 
 "use strict";
 
+import { deadlineMs } from "./deadline.js";
+
+/** How long a send may take before it counts as failed. */
+export const EMAIL_SEND_TIMEOUT_MS = 10000;
+
 /** Providers this module knows how to talk to. */
 export const EMAIL_PROVIDERS = ["resend", "brevo", "mailersend"];
 
@@ -165,7 +170,8 @@ export function buildSendRequest(provider, config, message) {
  * @param {string} to Recipient email.
  * @param {string} code Login code.
  * @param {number} minutes Validity in minutes.
- * @param {{fetchImpl?: function}} [options] Injectable fetch, for tests.
+ * @param {{fetchImpl?: function, timeoutMs?: number}} [options] Injectable
+ *   fetch and deadline, for tests.
  * @returns {Promise<{ok: boolean, reason?: string, provider?: string, status?: number}>} Result.
  */
 export async function sendLoginCode(env, to, code, minutes, options) {
@@ -181,7 +187,12 @@ export async function sendLoginCode(env, to, code, minutes, options) {
   const doFetch = (options && options.fetchImpl) || fetch;
   let response;
   try {
-    response = await doFetch(url, init);
+    // A deadline, because nothing else bounds this wait: the sign-in page
+    // sends the request with none, so a provider that hung kept the "Send
+    // code" button spinning for as long as the connection stayed open. Past
+    // it the person is told the email could not be sent and can ask again.
+    // (A send that was slow but went through still delivers a working code.)
+    response = await doFetch(url, { ...init, signal: AbortSignal.timeout(deadlineMs(options, EMAIL_SEND_TIMEOUT_MS)) });
   } catch {
     return { ok: false, reason: "email_transport_error", provider: config.provider };
   }

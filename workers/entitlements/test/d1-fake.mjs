@@ -15,6 +15,15 @@
 import { DatabaseSync } from "node:sqlite";
 
 /**
+ * D1 refuses a statement with more than 100 bound parameters ("Maximum bound
+ * parameters per query: 100", developers.cloudflare.com/d1/platform/limits,
+ * read 13 November 2026), each statement of a batch included. SQLite's own
+ * limit is far higher, so without this a statement that can never run on D1
+ * would pass every test here.
+ */
+export const D1_MAX_BOUND_PARAMETERS = 100;
+
+/**
  * SQLite cannot bind a JS boolean, undefined, or a bigint from `crypto`.
  * D1 coerces these itself, so the adapter has to as well or a test would fail
  * on something production never sees.
@@ -115,10 +124,13 @@ class FakeD1PreparedStatement {
 
   /**
    * The statement as `node:sqlite` takes it on any Node 22.13 or later, with
-   * its values.
+   * its values. Refused, as D1 refuses it, past D1's bound-parameter limit.
    * @returns {{statement: import('node:sqlite').StatementSync, params: unknown[]}} Statement and values.
    */
   prepared() {
+    if (this.params.length > D1_MAX_BOUND_PARAMETERS) {
+      throw new RangeError(`too many SQL variables: ${this.params.length} bound, and D1 binds at most ${D1_MAX_BOUND_PARAMETERS}`);
+    }
     const { sql, params } = expandNumberedParameters(this.sql, this.params);
     return { statement: this.db.prepare(sql), params };
   }
@@ -153,6 +165,15 @@ class FakeD1PreparedStatement {
    * @returns {Promise<{success: boolean, meta: {changes: number, last_row_id: number}}>} D1-shaped result.
    */
   async run() {
+    return this.runSync();
+  }
+
+  /**
+   * Execute a write now, without yielding: what `batch` uses so that no other
+   * caller's statement can run in the middle of a batch.
+   * @returns {{success: boolean, meta: {changes: number, last_row_id: number}}} D1-shaped result.
+   */
+  runSync() {
     const { statement, params } = this.prepared();
     const info = statement.run(...params);
     return {
@@ -194,11 +215,19 @@ export class FakeD1Database {
    * @returns {Promise<Object[]>} Per-statement results.
    */
   async batch(statements) {
+    // D1 runs a batch on its single writer with nothing else in between, so
+    // the fake must too: it yields once before the batch (the network round
+    // trip) and never inside it. Awaiting each statement used to let another
+    // request's statements run inside this transaction, and two concurrent
+    // batches threw "cannot start a transaction within a transaction", which
+    // production never does. A statement a test has replaced with a plain
+    // object (fault injection) has no `runSync` and is still awaited.
+    await Promise.resolve();
     this.db.exec("BEGIN");
     try {
       const out = [];
       for (const statement of statements) {
-        out.push(await statement.run());
+        out.push(typeof statement.runSync === "function" ? statement.runSync() : await statement.run());
       }
       this.db.exec("COMMIT");
       return out;

@@ -453,6 +453,22 @@ test("/v1/health answers without touching either binding, and ?probe=1 reads one
   assert.equal(m.kvWrites, 0, "a probe a minute would be 144% of KV's daily write allowance");
 });
 
+/** A signed Stripe checkout, posted through `worker.fetch` as Cloudflare calls it. */
+async function postSale(env, id) {
+  const raw = JSON.stringify({
+    id,
+    type: "checkout.session.completed",
+    created: T,
+    data: { object: checkoutSession }
+  });
+  const ts = Math.floor(Date.now() / 1000);
+  return worker.fetch(new Request("https://w.test/v1/webhooks/stripe", {
+    method: "POST",
+    body: raw,
+    headers: { "Stripe-Signature": `t=${ts},v1=${hmacHex(env.STRIPE_WEBHOOK_SECRET, `${ts}.${raw}`)}` }
+  }), env);
+}
+
 /**
  * The failure the probe could not see, which is the failure this whole file is
  * about.
@@ -461,55 +477,71 @@ test("/v1/health answers without touching either binding, and ?probe=1 reads one
  * day `kv.put` throws while `kv.get` keeps answering, so a purchase that cannot
  * be recorded left `?probe=1` answering a cheerful 200 — and `docs/43` §4.1
  * claimed the free pinger catches "KV refusing" when what it caught was KV
- * *reads* refusing. QA found it on 2026-11-04 and left the case below as a
- * `todo`; this is it, passing.
+ * *reads* refusing. QA found it on 2026-11-04.
+ *
+ * With D1 bound the payment ledger is in D1 (ledger.js), so KV refusing writes
+ * no longer stops a sale at all. The same blindness moved with it: D1's free
+ * plan refuses writes past 100,000 rows a day while `SELECT 1` keeps working.
+ * Both halves are pinned here.
  */
+test("a sale is recorded while KV refuses writes, once the ledger is in D1", async () => {
+  const env = createAccountEnv({ ENTITLEMENTS: createFakeKv() });
+  env.ENTITLEMENTS.put = async () => {
+    throw new Error("KV PUT failed: 429 Too Many Requests");
+  };
+  const sale = await postSale(env, "e1");
+  assert.equal(sale.status, 200, "KV's write ceiling is no longer on the path of a purchase");
+  const claim = await call(req("POST", "/v1/claim", { body: { provider: "stripe", sessionId: "cs" } }), env, { now: NOW });
+  assert.equal(claim.status, 200, "and the buyer's browser can claim it");
+  assert.equal(claim.body.entitlement.status, "active");
+});
+
 test("a webhook that cannot write is visible to the read-only probe", async () => {
   const env = createAccountEnv({ ENTITLEMENTS: createFakeKv() });
   const m = meter(env);
-  // Reads work, writes do not: exactly what the daily write ceiling looks like.
-  const kv = env.ENTITLEMENTS;
-  kv.put = async () => {
-    throw new Error("KV PUT failed: 429 Too Many Requests");
-  };
 
   // Deliberately a worker whose schema has never been created, which is the
-  // harder case: `noteHealthFlag` has to build the table on the failure path.
+  // harder case for the flag.
   const before = await call(req("GET", "/v1/health?probe=1"), env, { now: NOW });
   assert.equal(before.status, 200, "a deployment nobody has used yet is not broken");
   assert.equal(before.body.probe.writes, "unknown", "and it does not claim to know about writes");
 
+  // Reads work, writes do not: exactly what D1's daily write ceiling looks
+  // like. Every batch (the ledger's commit, the schema's CREATEs) and every
+  // single write (the flag's row) is refused; SELECTs still answer.
+  const db = env.DB;
+  const refuse = () => {
+    throw new Error("D1_ERROR: daily rows written limit exceeded");
+  };
+  db.batch = async () => refuse();
+  const prepare = db.prepare;
+  db.prepare = (sql) => {
+    const statement = prepare(sql);
+    if (/^\s*(INSERT|UPDATE|DELETE|CREATE)/i.test(sql)) {
+      return { bind: () => ({ run: async () => refuse(), first: async () => refuse(), all: async () => refuse() }), run: async () => refuse() };
+    }
+    return statement;
+  };
+
   // Through `worker.fetch`, which is what Cloudflare calls: the handlers rethrow
   // on purpose and the entry point is what turns that into the 500 the provider
-  // needs in order to retry. The failure happens in `markEventSeen`, the first
-  // KV write of the request and the one outside the handler's own try block.
-  const raw = JSON.stringify({
-    id: "e1",
-    type: "checkout.session.completed",
-    created: T,
-    data: { object: checkoutSession }
-  });
-  const ts = Math.floor(Date.now() / 1000);
-  const sale = await worker.fetch(new Request("https://w.test/v1/webhooks/stripe", {
-    method: "POST",
-    body: raw,
-    headers: { "Stripe-Signature": `t=${ts},v1=${hmacHex(env.STRIPE_WEBHOOK_SECRET, `${ts}.${raw}`)}` }
-  }), env);
+  // needs in order to retry.
+  const sale = await postSale(env, "e1");
   assert.equal(sale.status, 500, "the webhook has to fail, or there is nothing to see");
 
-  // No injected clock from here on: `worker.fetch` takes none, so the row was
+  // No injected clock from here on: `worker.fetch` takes none, so the flag was
   // stamped with the real one and the probe has to be read against the same.
   m.reset();
   const after = await call(req("GET", "/v1/health?probe=1"), env);
   assert.equal(after.status, 503, "and now the probe says so");
   assert.equal(after.body.ok, false);
   assert.equal(after.body.probe.writes, "failing");
-  assert.equal(after.body.probe.kv, "ok", "KV reads are fine, which is why this needed its own signal");
-  assert.equal(after.body.probe.db, "ok");
-  assert.equal(m.statements, 2, "liveness plus the flag, and no writes at all");
+  assert.equal(after.body.probe.db, "ok", "D1 reads are fine, which is why this needed its own signal");
+  assert.equal(after.body.probe.kv, "ok");
+  assert.equal(m.kvReads, 1, "the one KV read the probe always spent, now on the flag D1 refused");
   assert.equal(m.kvWrites, 0);
   assert.ok(
-    !JSON.stringify(after.body).includes("429") && !JSON.stringify(after.body).includes("KV PUT"),
+    !JSON.stringify(after.body).includes("rows written") && !JSON.stringify(after.body).includes("D1_ERROR"),
     "this route is public; the provider's error text is not ours to publish"
   );
 
@@ -518,7 +550,7 @@ test("a webhook that cannot write is visible to the read-only probe", async () =
     now: Math.floor(Date.now() / 1000) + 3700
   });
   assert.equal(later.status, 200);
-  assert.equal(later.body.probe.writes, "ok");
+  assert.notEqual(later.body.probe.writes, "failing");
 });
 
 test("a probe that cannot reach the database does not claim writes are fine", async () => {

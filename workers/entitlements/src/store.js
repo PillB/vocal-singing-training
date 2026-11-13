@@ -1076,7 +1076,6 @@ export async function upsertEntitlement(kv, update, options) {
   if (!existingId && update.requireExisting === true) {
     return { record: null, created: false, stale: true, missing: true };
   }
-  const existing = existingId ? await getEntitlement(kv, existingId) : null;
   // Found through an index when there is one. Otherwise derived from the thing
   // the provider will keep naming — the subscription, or the one-off payment —
   // so two webhooks for a brand-new customer that cannot see each other's
@@ -1085,6 +1084,12 @@ export async function upsertEntitlement(kv, update, options) {
   const derived = opts.idSecret
     ? await deriveLicenseId(opts.idSecret, update.provider, update.subscriptionId || update.claimId || "")
     : null;
+  // A missing index is not proof that the license is missing: the index is
+  // written after the record, and may not be visible yet. So the record kept
+  // under the derived id is read too, and merged into rather than replaced by
+  // a fresh one, which used to reset a yearly plan to monthly or an active
+  // subscription to pending when its first events were processed together.
+  const existing = await getEntitlement(kv, existingId || derived);
   const licenseId = pickLicenseId(existing, existingId, derived, mintId);
 
   // A license first heard of through an update that carries no status (a

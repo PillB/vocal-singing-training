@@ -1229,6 +1229,13 @@
     const title = $("#brand-title");
     if (!header || !title) return;
     const was = header.classList.contains("help-fold");
+    // Unfolded before measuring, always. Deleting this line survives the suite
+    // on purpose: measuring while folded only disagrees with measuring unfolded
+    // for titles in the narrow band where the room the two links vacate decides
+    // the wrap, and the width of that band is a property of the browser's text
+    // metrics rather than of this code. A case pinned to it would pass on one
+    // machine and fail on another, which is the exact fault that got the test
+    // above rewritten, so the redundancy is left unasserted and recorded here.
     header.classList.remove("help-fold");
     let fold = false;
     if (window.matchMedia?.("(min-width: 1100px)")?.matches) {
@@ -7840,36 +7847,61 @@
     const prelaunch = isCheckoutPrelaunch();
     const btn = $("#btn-pricing");
     const plan = headerPlanState();
-    if (btn) {
-      // One element about Pro, never two. It used to be a status pill beside a
-      // button (on main, a "Pro" button beside a "PRO" badge; after that, a
-      // "Prueba · 5 d" pill beside "Suscripción"): two things about one plan,
-      // side by side, one pressable and one not, and on a phone the pair pushed
-      // "Historial" off the row. Now the button is the plan. With nothing held
-      // it is the offer, in words that say it is one; with something held its
-      // label is what you hold, and pressing it opens that plan, which is also
-      // where cancelling lives. Four kinds of access, four different words, so
-      // colour is never the only thing that tells them apart.
-      const label = planLabel(plan);
-      // Inside an exercise on a phone the header row has room for "Pro" but
-      // not "Probar Pro", so the verb sits in its own span that the stylesheet
-      // drops there. Everywhere else the button reads, and is named, in full.
-      const cut = plan.kind === "free" ? label.text.lastIndexOf("Pro") : -1;
-      if (cut > 0) {
-        const verb = document.createElement("span");
-        verb.className = "pro-verb";
-        verb.textContent = label.text.slice(0, cut);
-        btn.replaceChildren(verb, label.text.slice(cut));
-      } else {
-        btn.textContent = label.text;
-      }
-      btn.title = label.title;
-      // The accessible name is the visible label; the title says what opens.
-      btn.removeAttribute("aria-label");
-      btn.classList.remove("btn-pro", "btn-ghost", "plan-trial", "plan-gift", "plan-paid", "plan-ending");
-      btn.classList.add(label.cls);
-      btn.dataset.plan = plan.kind;
+    if (btn) paintPlanButton(btn, plan);
+    paintPlanSideButtons(B, ent, cfg, plan);
+    paintRecheckButton(B, ent);
+    // Free trial is opt-in. Once accounts exist the trial belongs to the
+    // account, not the browser — one per person rather than one per cleared
+    // localStorage — so the button leads to sign-in when nobody is signed in.
+    const trialBtn = $("#btn-start-trial");
+    if (trialBtn) paintPricingTrial(trialBtn, B, ent, cfg, prelaunch);
+    paintPayNote(prelaunch, trialBtn);
+    paintCancelNote(ent);
+    paintManageBilling(B, ent, cfg);
+    // Ads: Pro suppresses; free may refresh home slot
+    try {
+      window.VTAds?.refreshAllSafe?.();
+    } catch {
+      /* ignore */
     }
+    const healthNote = paintHealthNote(B);
+    paintPrelaunchStanding(ent, prelaunch, healthNote, trialBtn);
+  }
+
+  /** The header's one Pro element: the offer while nothing is held, the plan held once something is. */
+  function paintPlanButton(btn, plan) {
+    // One element about Pro, never two. It used to be a status pill beside a
+    // button (on main, a "Pro" button beside a "PRO" badge; after that, a
+    // "Prueba · 5 d" pill beside "Suscripción"): two things about one plan,
+    // side by side, one pressable and one not, and on a phone the pair pushed
+    // "Historial" off the row. Now the button is the plan. With nothing held
+    // it is the offer, in words that say it is one; with something held its
+    // label is what you hold, and pressing it opens that plan, which is also
+    // where cancelling lives. Four kinds of access, four different words, so
+    // colour is never the only thing that tells them apart.
+    const label = planLabel(plan);
+    // Inside an exercise on a phone the header row has room for "Pro" but
+    // not "Probar Pro", so the verb sits in its own span that the stylesheet
+    // drops there. Everywhere else the button reads, and is named, in full.
+    const cut = plan.kind === "free" ? label.text.lastIndexOf("Pro") : -1;
+    if (cut > 0) {
+      const verb = document.createElement("span");
+      verb.className = "pro-verb";
+      verb.textContent = label.text.slice(0, cut);
+      btn.replaceChildren(verb, label.text.slice(cut));
+    } else {
+      btn.textContent = label.text;
+    }
+    btn.title = label.title;
+    // The accessible name is the visible label; the title says what opens.
+    btn.removeAttribute("aria-label");
+    btn.classList.remove("btn-pro", "btn-ghost", "plan-trial", "plan-gift", "plan-paid", "plan-ending");
+    btn.classList.add(label.cls);
+    btn.dataset.plan = plan.kind;
+  }
+
+  /** The account panel's Pro link, the progress export and the demo unlock, for the plan held. */
+  function paintPlanSideButtons(B, ent, cfg, plan) {
     const acctPricing = $("#btn-account-pricing");
     if (acctPricing) {
       acctPricing.textContent = plan.kind === "free" ? tt("nav.proSee") : tt("nav.planOpen");
@@ -7880,6 +7912,10 @@
     if (demo) {
       demo.hidden = !cfg.demoUnlockEnabled || ent.source === "demo" || (ent.pro && ent.source === "paid");
     }
+  }
+
+  /** "Ya pagué": shown only while a checkout's licence is awaited and the worker can verify it. */
+  function paintRecheckButton(B, ent) {
     // Recovery for a checkout whose license never arrived.
     const recheck = $("#btn-recheck-payment");
     if (recheck) {
@@ -7889,50 +7925,66 @@
         !!B.verificationConfigured?.()
       );
     }
-    // Free trial is opt-in. Once accounts exist the trial belongs to the
-    // account, not the browser — one per person rather than one per cleared
-    // localStorage — so the button leads to sign-in when nobody is signed in.
-    const trialBtn = $("#btn-start-trial");
-    if (trialBtn) {
-      const acct = window.VTAccount?.getState?.() || null;
-      // A worker URL is not enough: the button has to name the length of the
-      // trial the press will actually start, and the press only goes to the
-      // account layer once the worker has said it can sign somebody in. Anything
-      // short of that — still asking, unreachable, no method wired up — is the
-      // browser-local trial, so the button says the browser-local length.
-      const accounts = accountSignIn().offered;
-      const canTrial = accounts
-        ? !ent.pro && !(acct.signedIn && acct.account?.trialUsed)
-        : !!B.canStartTrial?.() && !ent.pro;
-      trialBtn.hidden = !canTrial;
-      // Pre-launch the trial is the one thing this dialog can really do, so it
-      // moves up beside the payments note as the primary; once checkout is live
-      // it goes back to the foot. One element, so its id and listener stay.
-      const slot = prelaunch ? $("#pricing-launch") : $("#pricing-modal .pricing-foot");
-      if (slot && trialBtn.parentElement !== slot) {
-        // Once checkout is live the plan cards carry the primary action, so this
-        // goes back to being a secondary — but first in its row, not fourth
-        // behind export, manage and recheck. "Visual or language steering toward
-        // subscriptions" was the most common finding in the EU's 2023 sweep of
-        // 399 shops (54 shops, more than fake countdowns), and a trial buried
-        // under three controls that only Pro users ever see is that shape.
-        slot.insertBefore(trialBtn, prelaunch ? null : slot.firstElementChild);
-      }
-      trialBtn.classList.toggle("btn-primary", prelaunch);
-      trialBtn.classList.toggle("btn-sm", !prelaunch);
-      // Once per load, not once per render: this sits in a path that re-runs on
-      // every entitlement change and every language switch. The dialog's own
-      // visibility is the gate — see noteTrialCtaView.
-      noteTrialCtaView("pricing");
-      if (canTrial) {
-        const days = accounts
-          ? Number(acct.methods?.trialDays || 7) // the worker's TRIAL_DAYS, whose default is also 7
-          : Number(cfg.freeTrialDays || 0);
-        trialBtn.textContent = tt(prelaunch ? "pricing.startTrialFree" : "pricing.startTrial", {
-          n: String(days)
-        });
-      }
+  }
+
+  /** The Pro dialog's trial button: whether it is offered, where it sits and the length it names. */
+  function paintPricingTrial(trialBtn, B, ent, cfg, prelaunch) {
+    const acct = window.VTAccount?.getState?.() || null;
+    // A worker URL is not enough: the button has to name the length of the
+    // trial the press will actually start, and the press only goes to the
+    // account layer once the worker has said it can sign somebody in. Anything
+    // short of that — still asking, unreachable, no method wired up — is the
+    // browser-local trial, so the button says the browser-local length.
+    const accounts = accountSignIn().offered;
+    const canTrial = accounts
+      ? !ent.pro && !(acct.signedIn && acct.account?.trialUsed)
+      : !!B.canStartTrial?.() && !ent.pro;
+    trialBtn.hidden = !canTrial;
+    placePricingTrial(trialBtn, prelaunch);
+    // Once per load, not once per render: this sits in a path that re-runs on
+    // every entitlement change and every language switch. The dialog's own
+    // visibility is the gate — see noteTrialCtaView.
+    noteTrialCtaView("pricing");
+    if (canTrial) {
+      const days = pricingTrialDays(accounts, acct, cfg);
+      trialBtn.textContent = tt(prelaunch ? "pricing.startTrialFree" : "pricing.startTrial", {
+        n: String(days)
+      });
     }
+  }
+
+  /** Where the Pro dialog's trial button sits: the primary beside the payments note pre-launch, a secondary in the foot after. */
+  function placePricingTrial(trialBtn, prelaunch) {
+    // Pre-launch the trial is the one thing this dialog can really do, so it
+    // moves up beside the payments note as the primary; once checkout is live
+    // it goes back to the foot. One element, so its id and listener stay.
+    const slot = prelaunch ? $("#pricing-launch") : $("#pricing-modal .pricing-foot");
+    if (slot && trialBtn.parentElement !== slot) {
+      // Once checkout is live the plan cards carry the primary action, so this
+      // goes back to being a secondary — but first in its row, not fourth
+      // behind export, manage and recheck. "Visual or language steering toward
+      // subscriptions" was the most common finding in the EU's 2023 sweep of
+      // 399 shops (54 shops, more than fake countdowns), and a trial buried
+      // under three controls that only Pro users ever see is that shape.
+      slot.insertBefore(trialBtn, prelaunch ? null : slot.firstElementChild);
+    }
+    trialBtn.classList.toggle("btn-primary", prelaunch);
+    trialBtn.classList.toggle("btn-sm", !prelaunch);
+  }
+
+  /** How many days the Pro dialog's trial button promises: the account's own length, else this browser's. */
+  function pricingTrialDays(accounts, acct, cfg) {
+    return accounts
+      // This account's own length: TRIAL_DAYS normally, its arm's length
+      // while the trial-length test runs. Seven is the fallback for a
+      // worker that has not answered yet, and is also the default it would
+      // have given.
+      ? Number(acct.trialDays || 7)
+      : Number(cfg.freeTrialDays || 0);
+  }
+
+  /** The Pro dialog's foot note: how paying works, or pre-launch what the trial costs, and only while it is offered. */
+  function paintPayNote(prelaunch, trialBtn) {
     // The foot promised secure checkout and cancelling "the same way you
     // subscribed" while nobody can subscribe. Pre-launch it answers the
     // question the trial raises instead, and only while the trial is offered.
@@ -7943,6 +7995,46 @@
       payNote.textContent = tt(key);
       payNote.hidden = prelaunch && (!trialBtn || trialBtn.hidden);
     }
+  }
+
+  /** How to cancel, for the rail this person actually paid on; no line for a trial or a gift. */
+  function paintCancelNote(ent) {
+    // How to cancel, for the rail this person actually paid on.
+    //
+    // `pricing.note` used to end "Cancela cuando quieras desde el mismo sitio
+    // donde te suscribiste", which reads as a promise that this page can take
+    // you there. It cannot, on either rail that will ever be live: the only
+    // self-service control here is the Stripe Customer Portal button, and
+    // `isPortalUrl` accepts Stripe hosts only — on a product whose own
+    // conclusion (VG-19) is that a Peru-registered seller cannot be a Stripe
+    // merchant at all. Creem's portal link is generated per customer and
+    // emailed after each payment, so no single URL could be configured here,
+    // and Mercado Pago's recurring payments are managed inside the payer's own
+    // Mercado Pago account. Three rails, three different routes, and only one
+    // of them a button.
+    //
+    // So the page names the route instead of implying one. A trial or a gift
+    // gets no line at all, because there is nothing to cancel.
+    const cancelNote = $("#pricing-cancel-note");
+    if (cancelNote) {
+      const rail = String(ent.provider || "").toLowerCase();
+      const key = ent.pro && ["stripe", "creem", "mercadopago"].includes(rail)
+        ? "pricing.cancel." + rail
+        : "";
+      if (key) {
+        cancelNote.setAttribute("data-i18n", key);
+        cancelNote.textContent = tt(key);
+        cancelNote.hidden = false;
+      } else {
+        cancelNote.removeAttribute("data-i18n");
+        cancelNote.textContent = "";
+        cancelNote.hidden = true;
+      }
+    }
+  }
+
+  /** The Customer Portal button: for Pro or a trial, and only when a valid portal URL is configured. */
+  function paintManageBilling(B, ent, cfg) {
     // Customer Portal: show for Pro/trial when a valid portal URL is configured
     const manage = $("#btn-manage-billing");
     if (manage) {
@@ -7950,12 +8042,10 @@
       const portalOk = portalRaw && (B.isPortalUrl ? B.isPortalUrl(portalRaw) : true);
       manage.hidden = !(portalOk && (ent.pro || ent.status === "trial"));
     }
-    // Ads: Pro suppresses; free may refresh home slot
-    try {
-      window.VTAds?.refreshAllSafe?.();
-    } catch {
-      /* ignore */
-    }
+  }
+
+  /** The Pro dialog's checkout-health line, for free users only; returns the element so the launch box can read it. */
+  function paintHealthNote(B) {
     // Soft note for free users when checkout not live (no developer/issue jargon).
     // Only for free users: "Sigue practicando gratis; Pro se activará cuando
     // estén listos" was also told to people already holding Pro.
@@ -7981,6 +8071,11 @@
         healthNote.hidden = true;
       }
     }
+    return healthNote;
+  }
+
+  /** Pre-launch, the line for somebody whose trial is spent, and the launch box hidden once it holds nothing. */
+  function paintPrelaunchStanding(ent, prelaunch, healthNote, trialBtn) {
     // Somebody who has already spent their free trial while checkout is still
     // closed is the most interested person in the product, and the dialog used
     // to show them nothing at all: no plan they could buy, no explanation and
@@ -8818,12 +8913,14 @@
     const es = isEsLang();
     const region = B.detectRegion();
     const market = B.marketFor(region);
-    if (!pricingRail) pricingRail = B.preferredRail(region);
+    const rails = B.checkoutRails(region);
+    pricingRail = choosePricingRail(rails);
+    const priceRegion = priceRegionFor(B, region);
     const cfg = B.cfg() || {};
     const prelaunch = isCheckoutPrelaunch();
     const regionEl = $("#pricing-region-label");
     if (regionEl) {
-      regionEl.textContent = `${tt("pricing.region")}: ${market.name} · ${market.currency}`;
+      regionEl.textContent = `${tt("pricing.region")}: ${market.name} · ${B.marketFor(priceRegion).currency}`;
     }
     const status = $("#pricing-status");
     if (status) {
@@ -8833,42 +8930,181 @@
       // shown to a reader, and a free trial described as a monthly
       // subscription. It now says which kind of access this is, in words, and it
       // reads the same source as the header so the two cannot disagree.
-      // "1 día" and "7 días": the line used to say "día(s)" for both.
-      const daysLeft = (n) => tt(n === 1 ? "pricing.trialLeftOne" : "pricing.trialLeft", { n: String(n) });
-      if (plan.kind === "trialAccount") {
-        status.textContent = plan.days === null
+      status.textContent = pricingStatusLine(plan, ent, B, prelaunch);
+    }
+    paintPricingPersonal();
+    paintPricingRails(cfg, es, prelaunch, rails);
+    const grid = $("#pricing-grid");
+    if (grid) {
+      const plans = cfg.plans || [];
+      const ent = B.getEntitlement();
+      // Which card is "Plan actual" follows the same reading as the header. The
+      // licence alone cannot tell a trial or a gift from a payment (both carry
+      // plan "pro_monthly"), so trial and gift holders were told the paid
+      // monthly card was their current plan, while the free card said so too.
+      const held = headerPlanState().kind;
+      // Computed from the two prices on the cards, so the badge can never
+      // disagree with the numbers printed next to it.
+      const savingPct = B.annualSavingPct(plans, priceRegion);
+      const ctx = { B, es, held, ent, prelaunch, savingPct, priceRegion };
+      grid.innerHTML = plans.map((p) => planCardHtml(p, ctx)).join("");
+      $$(".plan-cta", grid).forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const planId = btn.dataset.plan;
+          if (!planId || planId === "free") return;
+          const res = B.startCheckout(planId, pricingRail);
+          if (res.mode === "demo") {
+            toast(tt("pricing.toast.demo"));
+            updateBillingChrome();
+            renderPricingModal();
+          } else if (res.mode === "signin_required") {
+            // Same handling as the trial's needs_account branch below: the press
+            // worked, and it sent them one step back rather than nowhere.
+            toast(tt("pricing.checkoutNeedsAccount"), { durationMs: 4600 });
+            closePricing();
+            openAccount();
+          } else if (res.mode === "provider_unavailable") {
+            // The worker said it cannot honour this rail, so the press stops
+            // here rather than sending them to pay for something we could not
+            // then switch on.
+            toast(tt("pricing.toast.railUnavailable"), { durationMs: 6000 });
+          } else if (res.mode === "verification_unavailable") {
+            toast(tt("pricing.toast.verifyUnavailable"), { durationMs: 5200 });
+          } else if (res.mode === "unconfigured") {
+            toast(tt("pricing.toast.unconfigured"));
+          }
+          // redirect mode navigates away
+        });
+      });
+    }
+    updateBillingChrome();
+  }
+
+  /**
+   * One plan card of the Pro dialog, as HTML. Split out of renderPricingModal's
+   * map callback (complexity 29) when its price started following the rail.
+   * @param {object} p A plan from the billing config.
+   * @param {{B: object, es: boolean, held: string, ent: object, prelaunch: boolean, savingPct: number, priceRegion: string}} ctx
+   * @returns {string}
+   */
+  function planCardHtml(p, ctx) {
+    const price = ctx.B.formatPrice(p, ctx.priceRegion);
+    const interval =
+      p.interval === "month" ? tt("pricing.month") : p.interval === "year" ? tt("pricing.year") : "";
+    const name = ctx.es ? p.nameEs || p.name : p.name;
+    const { feats, moreFeats } = planFeaturesHtml(p);
+    const cta = planCta(p, ctx);
+    const ctaClass = p.id === "free" ? "btn-ghost" : cta.notYet ? "btn-ghost plan-cta-not-yet" : "btn-primary";
+    const hero = p.hero || p.id === "pro_yearly" ? " is-hero" : "";
+    return `
+            <article class="plan-card${p.popular ? " is-popular" : ""}${hero}" data-plan="${p.id}">
+              ${planBadgeHtml(p, ctx.savingPct)}
+              <h4>${name}</h4>
+              <div class="plan-price">${price.text}<span>${interval}</span></div>
+              <ul class="plan-features">${feats}</ul>
+              ${moreFeats}
+              <button type="button" class="btn ${ctaClass} btn-sm plan-cta" data-plan="${p.id}" ${cta.disabled ? 'disabled aria-disabled="true"' : ""}>
+                ${cta.label}
+              </button>
+            </article>`;
+  }
+
+  /** A plan card's feature bullets: the first five, and the rest behind a disclosure. */
+  function planFeaturesHtml(p) {
+    // Eleven bullets pushed every plan's button off the modal. Show the
+    // five that decide the purchase, keep the rest one click away.
+    const featList = p.features || [];
+    const FEAT_MAX = 5;
+    const item = (f) => `<li>${tt("pricing.feat." + f)}</li>`;
+    const feats = featList.slice(0, FEAT_MAX).map(item).join("");
+    const restFeats = featList.slice(FEAT_MAX).map(item).join("");
+    const moreFeats = restFeats
+      ? `<details class="plan-more"><summary>${tt("pricing.moreFeatures", { n: featList.length - FEAT_MAX })}</summary><ul class="plan-features">${restFeats}</ul></details>`
+      : "";
+    return { feats, moreFeats };
+  }
+
+  /** A plan card's badge: the annual saving where the plan claims one, a star on the popular plan. */
+  function planBadgeHtml(p, savingPct) {
+    if (p.badge === "saveAnnual" && savingPct) {
+      return `<span class="plan-badge">${tt("pricing.savePct", { n: String(savingPct) })}</span>`;
+    }
+    return p.popular ? `<span class="plan-badge">★</span>` : "";
+  }
+
+  /** A plan card's button: what it says, whether it can be pressed, and whether that is only for now. */
+  function planCta(p, ctx) {
+    const own = heldPlanCta(p, ctx.held, ctx.ent);
+    // A Subscribe button that can only answer with a toast is a dead end;
+    // say it on the button instead, and keep it out of the Tab order.
+    if (ctx.prelaunch && !own.disabled) return { label: tt("pricing.notYet"), disabled: true, notYet: true };
+    return { label: own.label, disabled: own.disabled, notYet: false };
+  }
+
+  /** A plan card's button as the plan held makes it, before pre-launch is considered. */
+  function heldPlanCta(p, held, ent) {
+    if (p.id === "free") {
+      return { label: held === "free" ? tt("pricing.current") : tt("pricing.freeAlways"), disabled: true };
+    }
+    const offer = { label: tt("pricing.subscribe"), disabled: false };
+    // Pro is held, but not by buying this card: leave it as an offer.
+    if (held === "trialAccount" || held === "gift") return offer;
+    const holdsThis = ent.pro && (ent.plan === p.id || ent.plan === "trial");
+    if (!holdsThis || !(ent.plan === p.id || ent.source === "demo")) return offer;
+    return { label: tt("pricing.current"), disabled: ent.plan === p.id || ent.source === "paid" };
+  }
+
+  /** "1 día" and "7 días": the line used to say "día(s)" for both. */
+  function trialDaysLeftText(n) {
+    return tt(n === 1 ? "pricing.trialLeftOne" : "pricing.trialLeft", { n: String(n) });
+  }
+
+  /** The Pro dialog's status line for a plan held, in words; anything else falls to unheldPricingStatus. */
+  function pricingStatusLine(plan, ent, B, prelaunch) {
+    switch (plan.kind) {
+      case "trialAccount":
+        return plan.days === null
           ? tt("pricing.statusTrial")
-          : `${tt("pricing.statusTrial")} · ${daysLeft(plan.days)}`;
-      } else if (plan.kind === "trialLocal") {
+          : `${tt("pricing.statusTrial")} · ${trialDaysLeftText(plan.days)}`;
+      case "trialLocal": {
         const left = plan.days === null ? (B.trialDaysLeft?.() ?? 0) : plan.days;
-        status.textContent = `${tt("pricing.trial")} · ${daysLeft(left)}`;
-      } else if (plan.kind === "gift") {
-        status.textContent = plan.until
+        return `${tt("pricing.trial")} · ${trialDaysLeftText(left)}`;
+      }
+      case "gift":
+        return plan.until
           ? tt("pricing.statusGiftUntil", { date: plan.until })
           : tt("pricing.statusGift");
-      } else if (plan.kind === "canceled") {
-        status.textContent = plan.until
+      case "canceled":
+        return plan.until
           ? tt("pricing.statusCanceled", { date: plan.until })
           : tt("pricing.statusCanceledNoDate");
-      } else if (plan.kind === "paid" && plan.pastDue) {
-        status.textContent = tt("pricing.statusPastDue");
-      } else if (plan.kind === "paid") {
+      case "paid": {
+        // A renewal that failed: still Pro, but say so rather than "active".
+        if (plan.pastDue) return tt("pricing.statusPastDue");
         const demo = ent.source === "demo" ? ` (${tt("pricing.statusDemo")})` : "";
-        status.textContent = (plan.until
+        return (plan.until
           ? tt("pricing.statusPaidUntil", { date: plan.until })
           : tt("pricing.proActive")) + demo;
-      } else if (ent.status === "pending") {
-        status.textContent = tt("pricing.verifying");
-      } else if (ent.status === "unverified") {
-        status.textContent = tt("pricing.unverified");
-      } else if (ent.status === "expired" || (!prelaunch && trialSpent())) {
-        // A month that has run out is not the same state as never having had
-        // one, and "Plan gratis" told those two people the same thing.
-        status.textContent = tt("pricing.statusEnded");
-      } else {
-        status.textContent = tt("pricing.free");
       }
+      default:
+        return unheldPricingStatus(ent, prelaunch);
     }
+  }
+
+  /** The Pro dialog's status line for somebody holding no plan: verifying, unverified, ended or free. */
+  function unheldPricingStatus(ent, prelaunch) {
+    if (ent.status === "pending") return tt("pricing.verifying");
+    if (ent.status === "unverified") return tt("pricing.unverified");
+    if (ent.status === "expired" || (!prelaunch && trialSpent())) {
+      // A month that has run out is not the same state as never having had
+      // one, and "Plan gratis" told those two people the same thing.
+      return tt("pricing.statusEnded");
+    }
+    return tt("pricing.free");
+  }
+
+  /** The Pro dialog's personal proof line: what this learner has already put in. */
+  function paintPricingPersonal() {
     // Personal proof line (Hormozi likelihood × investment)
     const personal = $("#pricing-personal");
     if (personal && window.VTValuePulse?.compute) {
@@ -8885,117 +9121,67 @@
         });
       }
     }
-    const rails = $("#pricing-rails");
-    if (rails) {
-      // Choosing how to pay means nothing while nobody can pay.
-      rails.hidden = prelaunch;
-      const stripeLab = es ? (cfg.providers?.stripe?.labelEs || tt("pricing.railStripe")) : (cfg.providers?.stripe?.label || tt("pricing.railStripe"));
-      const mpLab = es ? (cfg.providers?.mercadopago?.labelEs || tt("pricing.railMp")) : (cfg.providers?.mercadopago?.label || tt("pricing.railMp"));
-      rails.innerHTML = `
-        <button type="button" class="rail-btn${pricingRail === "stripe" ? " active" : ""}" data-rail="stripe">${stripeLab}</button>
-        <button type="button" class="rail-btn${pricingRail === "mercadopago" ? " active" : ""}" data-rail="mercadopago">${mpLab}</button>
-      `;
-      $$(".rail-btn", rails).forEach((b) => {
-        b.addEventListener("click", () => {
-          pricingRail = b.dataset.rail;
-          renderPricingModal();
-        });
-      });
-    }
-    const grid = $("#pricing-grid");
-    if (grid) {
-      const plans = cfg.plans || [];
-      const ent = B.getEntitlement();
-      // Which card is "Plan actual" follows the same reading as the header. The
-      // licence alone cannot tell a trial or a gift from a payment (both carry
-      // plan "pro_monthly"), so trial and gift holders were told the paid
-      // monthly card was their current plan, while the free card said so too.
-      const held = headerPlanState().kind;
-      // Computed from the two prices on the cards, so the badge can never
-      // disagree with the numbers printed next to it.
-      const savingPct = B.annualSavingPct(plans, region);
-      grid.innerHTML = plans
-        .map((p) => {
-          const price = B.formatPrice(p, region);
-          const interval =
-            p.interval === "month" ? tt("pricing.month") : p.interval === "year" ? tt("pricing.year") : "";
-          const name = es ? p.nameEs || p.name : p.name;
-          // Eleven bullets pushed every plan's button off the modal. Show the
-          // five that decide the purchase, keep the rest one click away.
-          const featList = p.features || [];
-          const FEAT_MAX = 5;
-          const feats = featList
-            .slice(0, FEAT_MAX)
-            .map((f) => `<li>${tt("pricing.feat." + f)}</li>`)
-            .join("");
-          const restFeats = featList
-            .slice(FEAT_MAX)
-            .map((f) => `<li>${tt("pricing.feat." + f)}</li>`)
-            .join("");
-          const moreFeats = restFeats
-            ? `<details class="plan-more"><summary>${tt("pricing.moreFeatures", { n: featList.length - FEAT_MAX })}</summary><ul class="plan-features">${restFeats}</ul></details>`
-            : "";
-          const badge =
-            p.badge === "saveAnnual" && savingPct
-              ? `<span class="plan-badge">${tt("pricing.savePct", { n: String(savingPct) })}</span>`
-              : p.popular
-                ? `<span class="plan-badge">★</span>`
-                : "";
-          let ctaLabel = tt("pricing.subscribe");
-          let disabled = false;
-          let notYet = false;
-          if (p.id === "free") {
-            ctaLabel = held === "free" ? tt("pricing.current") : tt("pricing.freeAlways");
-            disabled = true;
-          } else if (held === "trialAccount" || held === "gift") {
-            // Pro is held, but not by buying this card: leave it as an offer.
-          } else if (ent.pro && (ent.plan === p.id || (ent.plan === "trial" && p.id !== "free"))) {
-            if (ent.plan === p.id || ent.source === "demo") {
-              ctaLabel = tt("pricing.current");
-              disabled = ent.plan === p.id || ent.source === "paid";
-            }
-          }
-          // A Subscribe button that can only answer with a toast is a dead end;
-          // say it on the button instead, and keep it out of the Tab order.
-          if (prelaunch && !disabled) {
-            ctaLabel = tt("pricing.notYet");
-            disabled = true;
-            notYet = true;
-          }
-          const ctaClass = p.id === "free" ? "btn-ghost" : notYet ? "btn-ghost plan-cta-not-yet" : "btn-primary";
-          const hero = p.hero || p.id === "pro_yearly" ? " is-hero" : "";
-          return `
-            <article class="plan-card${p.popular ? " is-popular" : ""}${hero}" data-plan="${p.id}">
-              ${badge}
-              <h4>${name}</h4>
-              <div class="plan-price">${price.text}<span>${interval}</span></div>
-              <ul class="plan-features">${feats}</ul>
-              ${moreFeats}
-              <button type="button" class="btn ${ctaClass} btn-sm plan-cta" data-plan="${p.id}" ${disabled ? 'disabled aria-disabled="true"' : ""}>
-                ${ctaLabel}
-              </button>
-            </article>`;
-        })
-        .join("");
-      $$(".plan-cta", grid).forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const planId = btn.dataset.plan;
-          if (!planId || planId === "free") return;
-          const res = B.startCheckout(planId, pricingRail);
-          if (res.mode === "demo") {
-            toast(tt("pricing.toast.demo"));
-            updateBillingChrome();
-            renderPricingModal();
-          } else if (res.mode === "verification_unavailable") {
-            toast(tt("pricing.toast.verifyUnavailable"), { durationMs: 5200 });
-          } else if (res.mode === "unconfigured") {
-            toast(tt("pricing.toast.unconfigured"));
-          }
-          // redirect mode navigates away
-        });
-      });
-    }
-    updateBillingChrome();
+  }
+
+  /**
+   * The region whose prices the cards show: the visitor's own on the visitor's
+   * own rail, the worldwide (dollar) one on any other. The money follows the
+   * rail: a Peruvian who picks the card rail pays Creem, which cannot charge
+   * soles, so showing S/ 19.90 there promised a price nobody would charge.
+   * Whether the euro markets' Creem products are priced in euros is the
+   * operator's to say (docs/VALUE-GAP-REGISTRY.md VG-85).
+   */
+  function priceRegionFor(B, region) {
+    return pricingRail === B.preferredRail(region) ? region : "WW";
+  }
+
+  /**
+   * The rail the dialog sells on: the one the buyer chose while it can sell,
+   * else the region's own when it can, else the first that can. With nothing
+   * sellable yet (pre-launch) it stays on the region's own.
+   * @param {{rail: string, sellable: boolean}[]} rails From VTBilling.checkoutRails, region's own first.
+   * @returns {string} Provider id.
+   */
+  function choosePricingRail(rails) {
+    const sellable = rails.filter((r) => r.sellable).map((r) => r.rail);
+    if (pricingRail && (sellable.includes(pricingRail) || !sellable.length)) return pricingRail;
+    return sellable[0] || rails[0].rail;
+  }
+
+  /**
+   * The Pro dialog's choice of payment rail: one button per rail a market sells
+   * on that has a checkout link, the one in use marked; pressing one redraws
+   * the dialog for it. Before any rail can sell, every market rail is drawn and
+   * the row is hidden: choosing how to pay means nothing while nobody can pay.
+   */
+  function paintPricingRails(cfg, es, prelaunch, rails) {
+    const row = $("#pricing-rails");
+    if (!row) return;
+    row.hidden = prelaunch;
+    const live = rails.filter((r) => r.sellable);
+    row.replaceChildren(...(live.length ? live : rails).map(({ rail }) => railButton(cfg, es, rail)));
+  }
+
+  /** One rail's button in the Pro dialog. */
+  function railButton(cfg, es, rail) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "rail-btn" + (rail === pricingRail ? " active" : "");
+    b.dataset.rail = rail;
+    b.setAttribute("aria-pressed", rail === pricingRail ? "true" : "false");
+    b.textContent = railLabel(cfg, es, rail, rail === "mercadopago" ? "pricing.railMp" : "pricing.railStripe");
+    b.addEventListener("click", () => {
+      pricingRail = rail;
+      renderPricingModal();
+    });
+    return b;
+  }
+
+  /** A payment rail's button label: the operator's own wording from the config, else ours. */
+  function railLabel(cfg, es, rail, fallbackKey) {
+    return es
+      ? (cfg.providers?.[rail]?.labelEs || tt(fallbackKey))
+      : (cfg.providers?.[rail]?.label || tt(fallbackKey));
   }
 
   function openPricing() {
@@ -9005,6 +9191,10 @@
     // means the card is right by the time anyone reads it, and — as with the
     // account panel — only because somebody opened the panel.
     window.VTAccount?.ensureMethods?.();
+    // And which rails it can honour, for the same reason: asked when the panel
+    // opens, so the answer is there by the time a plan is pressed, and never
+    // asked of somebody who never looks at the prices.
+    window.VTAccount?.ensureRails?.();
     // Remember the trigger before renderPricingModal() rebuilds the card.
     const opener = document.activeElement;
     renderPricingModal();
@@ -9112,6 +9302,36 @@
     const btn = $(sel.btn);
     if (!modal || modal.hidden || !btn || btn.hidden) return;
     trackFunnel("trial_cta_view", { where }, `cta:${where}`);
+    noteTrialArmExposure();
+  }
+
+  /** The trial-length test. Same key in the worker and in js/experiments-config.js. */
+  const TRIAL_LEN_EXPERIMENT = "trial_len_2026_11";
+
+  /**
+   * Where the trial-length test is exposed: the offer now on screen names the
+   * number of free days, so this is the moment the treatment is applied.
+   *
+   * Not when the trial starts, which would be the easier hook. Starting is
+   * something the treatment itself can move — a longer offer may well be taken
+   * up more often — so counting only the people who went on to start would
+   * compare two groups the test had already sorted, and a difference in paid
+   * conversion could be that sorting rather than the length. Everybody shown an
+   * offer belongs to the arm they were shown.
+   *
+   * The arm is the worker's, because it decides how much Pro is given away, and
+   * it is null while the test is off; this does nothing at all until then.
+   */
+  function noteTrialArmExposure() {
+    const acct = window.VTAccount?.getState?.() || null;
+    if (!acct || !acct.signedIn) return;
+    const arm = typeof acct.trialArm === "string" ? acct.trialArm : "";
+    if (!arm) return;
+    try {
+      window.VTExperiments?.exposeServerArm?.(TRIAL_LEN_EXPERIMENT, arm);
+    } catch {
+      /* analytics never breaks the page */
+    }
   }
 
   const ACCOUNT_ERROR_KEYS = {
@@ -9323,6 +9543,40 @@
     const signedIn = !!(account && account.signedIn) || !!session;
     const out = $("#account-logged-out");
     const inn = $("#account-logged-in");
+    paintAccountLedes(signedIn);
+    const admin = $("#admin-panel");
+    const who = $("#account-who");
+    const btnAcc = $("#btn-account");
+
+    if (btnAcc) paintAccountDoor(btnAcc, account, session);
+    if (!out || !inn) return;
+
+    // Signed out: offer real sign-in when an operator has wired the worker up,
+    // and say so plainly when they have not, rather than showing a form that
+    // cannot work.
+    const offer = accountSignIn();
+    paintSignInStates(offer);
+    paintSignInControls(offer);
+    paintAccountOffer(account, offer, signedIn);
+    paintStaffLogin(offer);
+
+    if (!signedIn) {
+      showSignedOutPanel(out, inn, admin);
+      return;
+    }
+
+    out.hidden = true;
+    inn.hidden = false;
+    paintAccountWho(who, account, session);
+    paintAccountPlanAndSync(account);
+    paintOwnerQuestion(account);
+    paintAccountTrial(account);
+    paintAccountTools(account);
+    paintStaffAdmin(A, session, admin);
+  }
+
+  /** The account panel's lede and title, Start's step 3 and Historial's lede, each worded for signed in or out. */
+  function paintAccountLedes(signedIn) {
     // "Entra para guardar tu progreso" stayed on screen after signing in, so the
     // panel asked for something already done.
     const sub = $("#account-sub");
@@ -9352,63 +9606,64 @@
     // layer down: a room, not a reason. Signed out it names what you get.
     const title = $("#account-title");
     if (title) title.textContent = signedIn ? tt("auth.title") : tt("auth.titleOut");
-    const admin = $("#admin-panel");
-    const who = $("#account-who");
-    const btnAcc = $("#btn-account");
+  }
 
-    if (btnAcc) {
-      // Signed out, this is the only door into accounts, so it is named for the
-      // act and not for the room: "Cuenta" is a destination nobody who has no
-      // account has a reason to press. Signed in it becomes who you are, which
-      // is what tells you at a glance that you are.
-      //
-      // Signed in, a bare name read as a label rather than a button, and it
-      // could be any length ("pablo.illescas.buendia") on a phone row that has
-      // none to spare. So it is drawn as an account button everywhere: your
-      // initial in a circle, the name beside it where there is room (CSS hides
-      // the name on phones). The accessible name starts with the name.
-      // A Google name is a full name ("Maria Fernanda de la Torre"); the
-      // header only needs the given name. Without one, the address's local part.
-      const acc = account && account.signedIn && account.account ? account.account : null;
-      const who = acc
-        ? ((acc.displayName || "").trim().split(/\s+/)[0] || (acc.email || "").split("@")[0])
-        : session
-          ? session.username.split(".")[0]
-          : "";
-      btnAcc.classList.toggle("is-signed-in", !!(who || (account && account.signedIn)));
-      if (who || (account && account.signedIn) || session) {
-        const name = who || tt("nav.account");
-        const initial = (name.trim()[0] || "?").toLocaleUpperCase();
-        btnAcc.replaceChildren();
-        const dot = document.createElement("span");
-        dot.className = "door-avatar";
-        dot.setAttribute("aria-hidden", "true");
-        dot.textContent = initial;
-        const label = document.createElement("span");
-        label.className = "door-name";
-        label.textContent = name;
-        btnAcc.append(dot, label);
-        btnAcc.title = tt("nav.accountTitle");
-        btnAcc.setAttribute("aria-label", tt("nav.accountNamed", { name }));
-      } else {
-        btnAcc.textContent = tt("nav.signIn");
-        btnAcc.title = tt("nav.signInTitle");
-        // The visible word leads the accessible name (WCAG 2.5.3).
-        btnAcc.setAttribute("aria-label", btnAcc.title);
-      }
+  /** The header's account button: "Entrar" signed out; signed in, your initial in a circle and your name. */
+  function paintAccountDoor(btnAcc, account, session) {
+    // Signed out, this is the only door into accounts, so it is named for the
+    // act and not for the room: "Cuenta" is a destination nobody who has no
+    // account has a reason to press. Signed in it becomes who you are, which
+    // is what tells you at a glance that you are.
+    //
+    // Signed in, a bare name read as a label rather than a button, and it
+    // could be any length ("pablo.illescas.buendia") on a phone row that has
+    // none to spare. So it is drawn as an account button everywhere: your
+    // initial in a circle, the name beside it where there is room (CSS hides
+    // the name on phones). The accessible name starts with the name.
+    const who = accountDoorName(account, session);
+    btnAcc.classList.toggle("is-signed-in", !!(who || (account && account.signedIn)));
+    if (who || (account && account.signedIn) || session) {
+      const name = who || tt("nav.account");
+      const initial = (name.trim()[0] || "?").toLocaleUpperCase();
+      btnAcc.replaceChildren();
+      const dot = document.createElement("span");
+      dot.className = "door-avatar";
+      dot.setAttribute("aria-hidden", "true");
+      dot.textContent = initial;
+      const label = document.createElement("span");
+      label.className = "door-name";
+      label.textContent = name;
+      btnAcc.append(dot, label);
+      btnAcc.title = tt("nav.accountTitle");
+      btnAcc.setAttribute("aria-label", tt("nav.accountNamed", { name }));
+    } else {
+      btnAcc.textContent = tt("nav.signIn");
+      btnAcc.title = tt("nav.signInTitle");
+      // The visible word leads the accessible name (WCAG 2.5.3).
+      btnAcc.setAttribute("aria-label", btnAcc.title);
     }
-    if (!out || !inn) return;
+  }
 
-    // Signed out: offer real sign-in when an operator has wired the worker up,
-    // and say so plainly when they have not, rather than showing a form that
-    // cannot work.
+  /** The name the account button shows: the given name, else the address's local part, else the staff username. */
+  function accountDoorName(account, session) {
+    // A Google name is a full name ("Maria Fernanda de la Torre"); the
+    // header only needs the given name. Without one, the address's local part.
+    const acc = account && account.signedIn && account.account ? account.account : null;
+    return acc
+      ? ((acc.displayName || "").trim().split(/\s+/)[0] || (acc.email || "").split("@")[0])
+      : session
+        ? session.username.split(".")[0]
+        : "";
+  }
+
+  /** Which signed-out state the account panel draws: the sign-in, checking, offline, blocked or switched off. */
+  function paintSignInStates(offer) {
     const signIn = $("#account-signin");
     const unconfigured = $("#account-unconfigured");
     // Exactly one of the four states is drawn, and which one is the whole point
     // of accountSignIn(): a deploy with neither an email provider nor a Google
     // client can take nobody's sign-in, and showing the form anyway means
     // typing an address and being told afterwards that it cannot be sent.
-    const offer = accountSignIn();
     const hasRealSignIn = offer.offered;
     if (signIn) signIn.hidden = !hasRealSignIn;
     const checking = $("#account-checking");
@@ -9421,6 +9676,10 @@
       unconfigured.hidden =
         hasRealSignIn || offer.checking || offer.unreachable || offer.blocked;
     }
+  }
+
+  /** The sign-in controls: the email form, the "or" divider between two methods and the retry row. */
+  function paintSignInControls(offer) {
     const emailForm = $("#account-email-form");
     if (emailForm) emailForm.hidden = !offer.canEmail;
     // The divider only separates two things. On a Google-only deploy — which is
@@ -9434,21 +9693,29 @@
     // all there is nothing to ask, so it stays hidden there.
     const retryRow = $("#account-retry-row");
     if (retryRow) {
-      retryRow.hidden = !offer.configured || hasRealSignIn || offer.checking;
+      retryRow.hidden = !offer.configured || offer.offered || offer.checking;
     }
+  }
+
+  /** What the account is for, above the button that makes one, with the trial length the worker names. */
+  function paintAccountOffer(account, offer, signedIn) {
     // What the account is for, above the button that makes one. Only where a
     // sign-in can really be performed: promising a free trial beside a notice
     // saying sign-in is off would be the worst of both.
     const offerLine = $("#account-offer");
     if (offerLine) {
-      offerLine.hidden = !hasRealSignIn || signedIn;
+      offerLine.hidden = !offer.offered || signedIn;
       if (!offerLine.hidden) {
-        const days = Number(account && account.methods && account.methods.trialDays);
+        const days = Number(account && account.trialDays);
         offerLine.textContent = days > 0
           ? tt("auth.offer", { n: String(days) })
           : tt("auth.offerNoTrial");
       }
     }
+  }
+
+  /** The internal staff login: never opened for anybody, and on a deploy with accounts shown only to staff who ask. */
+  function paintStaffLogin(offer) {
     // The internal staff login is never opened for anybody. It used to expand
     // itself whenever no public sign-in could be offered, on the reasoning that
     // it was then the only way in — but it is not a way in for the person
@@ -9476,19 +9743,19 @@
       }
       internal.hidden = offer.configured && !staffAsked;
     }
+  }
 
-    if (!signedIn) {
-      out.hidden = false;
-      inn.hidden = true;
-      if (admin) admin.hidden = true;
-      const serverAdmin = $("#account-admin");
-      if (serverAdmin) serverAdmin.hidden = true;
-      return;
-    }
+  /** Signed out: the sign-in half of the panel, with both admin tools hidden. */
+  function showSignedOutPanel(out, inn, admin) {
+    out.hidden = false;
+    inn.hidden = true;
+    if (admin) admin.hidden = true;
+    const serverAdmin = $("#account-admin");
+    if (serverAdmin) serverAdmin.hidden = true;
+  }
 
-    out.hidden = true;
-    inn.hidden = false;
-
+  /** Who is signed in: the account's address, or the staff session's name and role. */
+  function paintAccountWho(who, account, session) {
     if (who) {
       if (account && account.signedIn && account.account) {
         who.textContent = tt("auth.signedInAs", { email: account.account.email });
@@ -9504,7 +9771,10 @@
       }
       who.hidden = !who.textContent;
     }
+  }
 
+  /** The signed-in account's plan line and the line saying when its progress last synced. */
+  function paintAccountPlanAndSync(account) {
     const planEl = $("#account-plan");
     if (planEl) {
       planEl.hidden = !(account && account.signedIn);
@@ -9517,15 +9787,22 @@
       syncEl.hidden = !line;
       syncEl.textContent = line;
     }
+  }
 
-    // This browser holds practice another account saved here: one question,
-    // asked before anything is merged or sent (VTSync decides, see ownerState).
+  /**
+   * This browser holds practice another account saved here: one question,
+   * asked before anything is merged or sent (VTSync decides, see ownerState).
+   */
+  function paintOwnerQuestion(account) {
     const ownerBox = $("#account-other-owner");
     if (ownerBox) {
       const status = window.VTSync?.getStatus?.();
       ownerBox.hidden = !(account && account.signedIn && status && status.otherOwner);
     }
+  }
 
+  /** The panel's trial button: only for an account that has never used it, naming the length the worker will give. */
+  function paintAccountTrial(account) {
     // The trial is offered only to a signed-in account that has never used it.
     const trialBtn = $("#btn-account-trial");
     if (trialBtn) {
@@ -9540,7 +9817,13 @@
       // same way the Pro dialog's button does. The neutral label is the fallback
       // for a worker that has not said yet; no label may name a month, because
       // the trial is seven days.
-      const trialDays = Number(account && account.methods && account.methods.trialDays);
+      //
+      // `account.trialDays` and not `account.methods.trialDays`: the public
+      // route answers before anybody signs in and can only report the
+      // configured default, while the trial-length test gives this account
+      // either seven days or fourteen. The button is where the number is
+      // promised, so the promise has to be the one that will be kept.
+      const trialDays = Number(account && account.trialDays);
       noteTrialCtaView("panel");
       if (trialDays > 0) {
         // The generic [data-i18n] applier calls t(key) with no params, so a key
@@ -9554,6 +9837,10 @@
         trialBtn.textContent = tt("auth.startTrial");
       }
     }
+  }
+
+  /** The redeem form and sync button for a signed-in account, and the studio's gifting tools for one the worker calls an admin. */
+  function paintAccountTools(account) {
     const redeemForm = $("#account-redeem-form");
     if (redeemForm) redeemForm.hidden = !(account && account.signedIn);
     const syncBtn = $("#btn-account-sync");
@@ -9564,7 +9851,10 @@
     if (serverAdmin) {
       serverAdmin.hidden = !(account && account.account && account.account.role === "admin");
     }
+  }
 
+  /** The staff admin panel and its user list, for a staff session with the admin role. */
+  function paintStaffAdmin(A, session, admin) {
     if (admin) {
       admin.hidden = !session || session.role !== "admin";
       if (session && session.role === "admin") {
@@ -9928,6 +10218,10 @@
       const res = await window.VTAccount?.startTrial?.();
       if (res && res.ok) {
         trackFunnel("trial_result", { outcome: "started", where: "panel", kind: "account" });
+        // `trial_result` fires on every outcome and a metric counts an event
+        // rather than reading its props, so "started" needs an event of its
+        // own to be measurable. It is a guardrail of the trial-length test.
+        trackFunnel("trial_started", { where: "panel", kind: "account" });
         toast(tt("pricing.toast.trialStarted", { n: res.days ?? "" }));
         refreshAccountUI();
         updateBillingChrome();
@@ -10204,6 +10498,14 @@
       const t = ingest.totals || {};
       const sum = (keys) => keys.reduce((n, k) => n + (Number(t[k]) || 0), 0);
       const dropped = sum(["unknown_event", "bad_cid", "not_an_object"]);
+      // `daily_capped` is an event-level reason too, and it is deliberately NOT
+      // in that sum: those three are events this worker could not read, and a
+      // capped one is an event it could read and chose not to store because the
+      // day's D1 write allowance was nearly gone. Summing them would put the
+      // one condition an operator has to act on inside a number labelled "mal
+      // formados", which sends them hunting a client bug. It is counted and
+      // named on its own below, and it colours the line.
+      const capped = Number(t.daily_capped) || 0;
       // Every request-level reason the worker counts (INGEST_REASONS.request in
       // workers/entitlements/src/events.js) except "forget", which is a deletion
       // asked for rather than a batch turned away. eu_no_consent was missing
@@ -10221,7 +10523,7 @@
         "eu_no_consent"
       ];
       const refused = sum(refusedKeys);
-      if (!t.accepted && !dropped && !refused) return `<p class="muted ab-ingest">${esc(tt("ab.ingestNone"))}</p>`;
+      if (!t.accepted && !dropped && !refused && !capped) return `<p class="muted ab-ingest">${esc(tt("ab.ingestNone"))}</p>`;
       let line = tt("ab.ingest", { accepted: count(t.accepted), dropped: count(dropped), refused: count(refused) });
       const reasons = refusedKeys.filter((k) => t[k]).map((k) => `${k} ${count(t[k])}`);
       if (reasons.length) line += ` ${tt("ab.ingestReasons", { list: reasons.join(", ") })}`;
@@ -10232,6 +10534,7 @@
         .filter((k) => t[k])
         .map((k) => `${k} ${count(t[k])}`);
       if (exposures.length) line += ` ${tt("ab.ingestExposures", { list: exposures.join(", ") })}`;
+      if (capped) line += ` ${tt("ab.ingestCapped", { n: count(capped) })}`;
       if (ingest.lastAcceptedAt) line += ` ${tt("ab.ingestLast", { when: date(ingest.lastAcceptedAt) })}`;
       // A wrong origin or a stuck limit is a broken pipeline; opted-out,
       // automated and eu_no_consent refusals are the system working, so they are
@@ -10241,11 +10544,19 @@
       // only recorded if that browser comes back another day, so it can skew
       // who is counted. An unregistered one is forged traffic or a site and
       // worker deployed out of step, the registry doing its job, so it is named
-      // but not coloured.
-      const broken = sum(["origin_not_allowed", "rate_limited", "exposure_capped"]) > 0;
+      // but not coloured. A capped *event* does colour it: unlike the others it
+      // is data already lost, and the remedy is Pablo's (raise EVENTS_DAILY_CAP
+      // on the paid plan, or send fewer events), so a quiet readout would be a
+      // decision taken by silence.
+      const broken = sum(["origin_not_allowed", "rate_limited", "exposure_capped"]) > 0 || capped > 0;
       return `<p class="${broken ? "ab-warn" : "muted"} ab-ingest">${esc(line)}</p>`;
     }
 
+    watchAccountChanges();
+  }
+
+  /** Redraw the panel, the header and the home card whenever the account or its synced record changes. */
+  function watchAccountChanges() {
     window.VTAccount?.onChange?.(() => {
       refreshAccountUI();
       updateBillingChrome();
@@ -10255,7 +10566,7 @@
       renderValuePulse();
     });
     window.VTSync?.onChange?.(() => refreshAccountUI());
-    // Whatever started the sync: signing in, a save, the button above.
+    // Whatever started the sync: signing in, a save, the panel's sync button.
     window.VTSync?.onDataChange?.(() => showSyncedRecord());
   }
 
@@ -10315,6 +10626,7 @@
     const res = await window.VTAccount.startTrial();
     if (res && res.ok) {
       trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "account" });
+      trackFunnel("trial_started", { where: "pricing", kind: "account" });
       toast(tt("pricing.toast.trialStarted", { n: String(res.days ?? "") }));
     } else {
       trackFunnel("trial_result", { outcome: funnelReason(res && res.reason), where: "pricing", kind: "account" });
@@ -10333,6 +10645,7 @@
       toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
     } else {
       trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "local" });
+      trackFunnel("trial_started", { where: "pricing", kind: "local" });
       toast(tt("pricing.toast.trialStarted", { n: String(VTBilling.trialDaysLeft?.() ?? 0) }));
     }
     updateBillingChrome();

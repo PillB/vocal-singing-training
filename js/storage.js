@@ -200,13 +200,22 @@
     },
 
     /**
-     * Create profile. Caller must check Pro limit.
+     * Create profile. The caller says how many slots the plan allows; left
+     * unsaid it is the free allowance, not the Pro one.
+     *
+     * This default used to be `MAX_PROFILES_PRO`, so a caller that forgot to
+     * ask what the plan allows handed a free browser the Pro allowance. Only
+     * one call site ever existed and it did ask, so nothing gave anything away
+     * — but a gate whose default is open is how an accidental giveaway happens,
+     * and the fix costs a word. (The limit that actually holds is the worker's
+     * `MAX_PROFILES`, which is 3 for everybody: this one is a product
+     * convention in a browser the reader owns, not a boundary.)
      * @param {string} name
      * @param {{ maxSlots?: number }} opts
      */
     createProfile(name, opts = {}) {
       const bag = ensureProfiles();
-      const max = opts.maxSlots != null ? opts.maxSlots : MAX_PROFILES_PRO;
+      const max = opts.maxSlots != null ? opts.maxSlots : MAX_PROFILES_FREE;
       const count = Object.keys(bag.profiles).length;
       if (count >= max) return { ok: false, reason: "limit", count, max };
       // A blank name is refused rather than replaced: the fallback used to be

@@ -8,24 +8,6 @@
       "name": "Async function 'request'"
     },
     {
-      "file": "js/admin.js",
-      "sha": "7b66ba3d42222f0172f76eba82add87f8ec6435372e2a031643e861d6749ae67",
-      "complexity": 18,
-      "name": "Async function 'createCode'"
-    },
-    {
-      "file": "js/admin.js",
-      "sha": "9928b935363c2ea92e59ab3b26ca218a4300feb9ad3eb6db6bfc179c1cd16dce",
-      "complexity": 25,
-      "name": "Async function 'give'"
-    },
-    {
-      "file": "js/admin.js",
-      "sha": "058ab5be1ced3ee8fdf443f7ceb09195779749f19696f797c66af179dc055e83",
-      "complexity": 17,
-      "name": "Function 'renderAccount'"
-    },
-    {
       "file": "js/ads.js",
       "sha": "6208f27fdba0726d3c57031523d70c615b089695fbd739317cc7b8511982ce6f",
       "complexity": 28,
@@ -38,21 +20,9 @@
       "name": "Function 'renderNativeCard'"
     },
     {
-      "file": "js/ads.js",
-      "sha": "2c3b26208db80f6134c669f5348e2915dca8026f1d1e9ebd233e4cdad6c0f623",
-      "complexity": 25,
-      "name": "Function 'renderSlot'"
-    },
-    {
       "file": "js/app.js",
       "sha": "01bd593544595b77e5dce1ae912d43f3f52f9b96607876fd0366d50d25c23f16",
       "complexity": 22,
-      "name": "Arrow function"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "032893ceec6a0a6241a81176c8e39cd83b2fcc03e309bd4f38c0a5ceb90c1e40",
-      "complexity": 29,
       "name": "Arrow function"
     },
     {
@@ -111,12 +81,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "42d729c956e6e6511e5cc34bae2eb5f25dfceb4cf87b86ca8708ebeaaf898272",
-      "complexity": 17,
-      "name": "Function 'bindAccount'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "d2d03cf0b93c8d1382f81f390124901c8cb478ff828052e3421c2e495cc3ac9c",
       "complexity": 73,
       "name": "Function 'completeExercise'"
@@ -159,12 +123,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "2ca4665cfed876be7caaecc8dff63a14a22d65299f97b9682f44799ced1ef881",
-      "complexity": 100,
-      "name": "Function 'refreshAccountUI'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "fbb8ec646f08ff6216065e4617a3577ef3611798d937498d15fdb01ea8973e48",
       "complexity": 27,
       "name": "Function 'relabelExercise'"
@@ -186,12 +144,6 @@
       "sha": "0636d3a9e22d47c3b6413275baa1e5b99e78c2d6ad54683b8b72ff0bd98a74ea",
       "complexity": 16,
       "name": "Function 'renderNextStepCard'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "537b4038077ec7aaa77ad9dba10af71cca800286d1c5c587c25a94e50a3f51b5",
-      "complexity": 52,
-      "name": "Function 'renderPricingModal'"
     },
     {
       "file": "js/app.js",
@@ -255,12 +207,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "837df8f538d25821da2c6020611afe2a59ceeb50bcd253a49b1516186f1b1e0a",
-      "complexity": 74,
-      "name": "Function 'updateBillingChrome'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "4ca0bfd69bbf8652a2cbae02af14b91e4b2ab4d289814af809bde67d72b263b6",
       "complexity": 102,
       "name": "Function 'updatePitchStatsLabel'"
@@ -306,12 +252,6 @@
       "sha": "37f0a9aaa920f5e11863722f4c44f1ef5b4a21e28ddde3b90e51cb16e1a5d086",
       "complexity": 53,
       "name": "Function 'getEntitlement'"
-    },
-    {
-      "file": "js/billing.js",
-      "sha": "7b0557c1b8f890cf0082994ba8eeb562a05edadcd3e25a1338d4a6eb09950c9d",
-      "complexity": 27,
-      "name": "Function 'handleReturnFromCheckout'"
     },
     {
       "file": "js/daily-loop.js",
@@ -1868,12 +1808,6 @@
       "name": "Arrow function"
     },
     {
-      "file": "workers/entitlements/src/api.js",
-      "sha": "af11785b7b3085e9ac13eb88d5db70bf9fffb5db683a802940c9d29bc2192aa4",
-      "complexity": 43,
-      "name": "Async function 'routeAccountApi'"
-    },
-    {
       "file": "workers/entitlements/src/email.js",
       "sha": "f73a861675119d69a84a4ebce79a0fe5eb3e7c6bbe0e2bc54ef4e4b5e98c57b7",
       "complexity": 17,
@@ -1893,12 +1827,6 @@
     },
     {
       "file": "workers/entitlements/src/events.js",
-      "sha": "95e3244be09be5e9855fd6c73c06bf8712732541370550b8357cb2544788989e",
-      "complexity": 27,
-      "name": "Async function 'handleIngest'"
-    },
-    {
-      "file": "workers/entitlements/src/events.js",
       "sha": "c5cbc93c7aec15290dff685b9cb2dce90953a4fa56195881a3189626bac9ff4a",
       "complexity": 16,
       "name": "Function 'presetProblems'"
@@ -1914,18 +1842,6 @@
       "sha": "d95a3c2cf6d44e0c54ca09ef94d0e310dcbd838d18d8a700b1ea3a6e14ad5a61",
       "complexity": 30,
       "name": "Async function 'verifyGoogleIdToken'"
-    },
-    {
-      "file": "workers/entitlements/src/index.js",
-      "sha": "dbc20b029d7f4dd86272736eb51e0f5816da17604a695b3e09d29069165005eb",
-      "complexity": 18,
-      "name": "Async function 'handleMercadoPagoWebhook'"
-    },
-    {
-      "file": "workers/entitlements/src/index.js",
-      "sha": "20ec875999e4fad117053c57d9b27ae09fd3698bf0a7b7f23a72d7e6b3645353",
-      "complexity": 23,
-      "name": "Async function 'handleRequest'"
     },
     {
       "file": "workers/entitlements/src/license.js",
@@ -1947,51 +1863,9 @@
     },
     {
       "file": "workers/entitlements/src/mercadopago.js",
-      "sha": "094565eb51a23a4b0692e479984860dbf432793c2a53f1f4c174f740530d6ef8",
-      "complexity": 20,
-      "name": "Function 'planForPreapproval'"
-    },
-    {
-      "file": "workers/entitlements/src/mercadopago.js",
       "sha": "522dfe9f13f3894baa07a4ba9acb371be9bf5554bc7ad46bbd8da4b975372c93",
       "complexity": 28,
       "name": "Function 'resolveNotificationTarget'"
-    },
-    {
-      "file": "workers/entitlements/src/progress.js",
-      "sha": "c61ecfbe0cfe18f85d3f9c55f1a05c19c8f74441c836974f2cff4f2a0e1e754d",
-      "complexity": 18,
-      "name": "Async function 'putProgress'"
-    },
-    {
-      "file": "workers/entitlements/src/store.js",
-      "sha": "fb27ec81eb80757593ad551c33e981b4dd9d37494f5b0ec2007c767a8ef74625",
-      "complexity": 28,
-      "name": "Async function 'getEntitlement'"
-    },
-    {
-      "file": "workers/entitlements/src/store.js",
-      "sha": "5b4c1256427451131879e5ecc2338037d72e5cbe002f3698c8b48f88704a1b34",
-      "complexity": 68,
-      "name": "Async function 'upsertEntitlement'"
-    },
-    {
-      "file": "workers/entitlements/src/stripe.js",
-      "sha": "8670f1af64e3b4d532d14f387019311c2fa0f6f307ca7665093b6967f0bf9b96",
-      "complexity": 23,
-      "name": "Function 'mapCheckoutSession'"
-    },
-    {
-      "file": "workers/entitlements/src/stripe.js",
-      "sha": "bd70abe906e022a06a5f50a52e6cc31592912acac9a6f36dad88991067136674",
-      "complexity": 23,
-      "name": "Function 'mapInvoice'"
-    },
-    {
-      "file": "workers/entitlements/src/stripe.js",
-      "sha": "249f9e25b5cef80b12921feaa78338e2f81e51d263aeadfcaf8d9ea169855aa3",
-      "complexity": 16,
-      "name": "Function 'mapStripeEvent'"
     },
     {
       "file": "workers/entitlements/test/d1-fake.mjs",

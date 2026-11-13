@@ -8,7 +8,7 @@
  *
  *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets)
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage a11y flows regress billing scoring controls audit toast designs  # browser sets: need Playwright's Chromium
+ *   node qa/mutate.mjs stage a11y flows regress billing scoring controls audit toast designs splits  # browser sets: need Playwright's Chromium
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -16,6 +16,10 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+// The pages the gates themselves check (every .html the site serves), so a defect made "on every page" is made on
+// all of them: a hard-coded four missed #26's terms.html and qa/index.html, and a defect on four of six pages dies
+// to the "pages agree" test instead of proving that csp-pins can see it on its own.
+import { PAGES } from "./asset-versions.mjs";
 
 const AUDIO_TESTS = [
   "tests/node/audio-contract.test.mjs",
@@ -36,7 +40,6 @@ const AUDIO_TESTS = [
 // The pitch set's tests: the detector on synthetic voices, its band contracts, and the engine's level gate
 const PITCH_TESTS = ["tests/node/pitch-voices.test.mjs", "tests/node/audio-contract.test.mjs", "tests/node/audio-mutant-killers.test.mjs"];
 const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs", "tests/node/csp.test.mjs", "tests/node/env-noise.test.mjs", "tests/node/env-noise-killers.test.mjs", "tests/node/inline-script-pin.test.mjs", "tests/node/csp-pins.test.mjs", "tests/node/i18n-duplicate-keys.test.mjs", "tests/node/exercise-parity.test.mjs", "tests/node/playwright-projects.test.mjs"];
-const PAGES = ["index.html", "guide.html", "privacy.html", "admin.html"];
 // A mutant can leave a promise that never settles. Node 22 cancels such a test once the event loop
 // is empty; Node 24 (CI) waits on it until runTests' 5-minute timeout, so two of those ran the
 // contracts job out of time. Each test gets 30 s, ten times the slowest unmutated one.
@@ -782,13 +785,59 @@ export const MUTANTS = {
     // QA round 9 (trust): what no test observed, each judged by the spec written for it
     ["B15 the invoking primitive is looked up per call again: a console `Reflect.apply = ...` reaches the signature check and the key import (A1)","js/license.js","const APPLY = Reflect.apply;","const APPLY = (f, t, a) => Reflect.apply(f, t, a);",["tests/trust-reflect-apply.spec.js"]],
     ["B16 an exception in the signature check is read as 'valid' (fail open) (A2)","js/license.js","    } catch {\n      return false;\n    }\n  }\n\n  /** Issuer, audience, validity window","    } catch {\n      return true;\n    }\n  }\n\n  /** Issuer, audience, validity window",["tests/trust-fail-closed.spec.js"]],
-    ["B17 a token verified at boot grants Pro for ever in an open tab: the in-session expiry test is gone (A3)","js/license.js","if (typeof verified.exp === \"number\" && verified.exp + CLOCK_SKEW_S < now) {","if (false) {",["tests/trust-claims-expire.spec.js"]]
+    ["B17 a token verified at boot grants Pro for ever in an open tab: the in-session expiry test is gone (A3)","js/license.js","if (typeof verified.exp === \"number\" && verified.exp + CLOCK_SKEW_S < now) {","if (false) {",["tests/trust-claims-expire.spec.js"]],
+    // Merging #26 into main: its attacker-link test edited the config after main's freeze (QA-05), so the edit never
+    // landed and the test passed with the allow-list matching by prefix. It now edits the config as it is assigned.
+    ["B18 a checkout host is allowed by prefix, so creem.io.attacker.test passes as creem.io (#26 merge)","js/billing.js","      (h) => host === h || host.endsWith(\".\" + h)","      (h) => host === h || host.startsWith(h)",["tests/checkout-rail.spec.js"]],
+    // The #26 merge review: three seams between the branch and main, each pinned by the test written for it.
+    // A path under workers/ is a Node test.
+    ["B19 Creem's return checkout_id is not read: every Creem buyer coming back is told the session is missing","js/billing.js","      params.get(\"checkout_id\") ||\n","",["tests/checkout-rail.spec.js"]],
+    ["B20 a Creem return with no remembered intent is claimed on the region's rail","js/billing.js","(params.get(\"checkout_id\") ? \"creem\" : \"\")","\"\"",["tests/checkout-rail.spec.js"]],
+    ["B21 Creem's return signature is left in the address bar","js/billing.js","        \"request_id\",\n        \"signature\"\n","        \"request_id\"\n",["tests/checkout-rail.spec.js"]],
+    ["B22 a buyer's metadata[plan] on a Creem payment link gets a product that is not ours past the allow-list","workers/entitlements/src/creem.js","  if (productVerdict(productId, env) === \"unlisted\") {","  if (productVerdict(productId, env) === \"unlisted\" && !normalizePlanId(metadata && metadata.plan)) {",["workers/entitlements/test/creem.test.mjs"]],
+    ["B23 the report limits name their buckets by the reporter's raw address, which the privacy page says is never stored","workers/entitlements/src/reports.js","await ipBucketKey(env, request, at, \"reports\")","request.headers.get(\"cf-connecting-ip\")",["workers/entitlements/test/reports.test.mjs"]],
+    ["B24 a deployment with no key to pseudonymise addresses under still takes reports","workers/entitlements/src/reports.js","    ipKeyConfigured(env) &&\n","",["workers/entitlements/test/reports.test.mjs"]],
+    ["B25 a full day of events still costs every request its per-address and per-browser writes","workers/entitlements/src/events.js","  if (shed) {\n    return shed;\n  }\n","",["workers/entitlements/test/events.test.mjs"]],
+    ["B26 the events cap is read for one event, so a batch too big for what is left still writes its buckets","workers/entitlements/src/events.js","EVENTS_DAILY_CAP[1], at, clean.length);\n  if (room.ok) {","EVENTS_DAILY_CAP[1], at, 1);\n  if (room.ok) {",["workers/entitlements/test/events.test.mjs"]],
+    // The #26 merge review, last passes: the report dialog as it would have gone live.
+    ["B27 the guide loads no transport for the report dialog, so every report from it fails", "guide.html", "<script src=\"js/account.js?v=", "<script src=\"js/account-not-loaded.js?v=", ["tests/reports.spec.js"]],
+    ["B28 a page with no way to send a report tells the visitor to check their connection", "js/reports.js", "return t(\"failNoTransport\");", "return t(\"failOffline\");", ["tests/reports.spec.js"]],
+    ["B29 the report dialog's card turns white on a light-mode device while its buttons and focus ring stay tuned for dark", "js/reports.js", "  box-shadow:var(--shadow,0 12px 40px rgba(0,0,0,.35))}\n", "  box-shadow:var(--shadow,0 12px 40px rgba(0,0,0,.35))}\n@media (prefers-color-scheme: light){.vt-report{background:#fff;color:#0f172a}}\n", ["tests/reports.spec.js"]],
+    ["B30 the report dialog's disclosures fall under the 44px floor", "js/reports.js", ".vt-report details summary{cursor:pointer;min-height:var(--min-tap,44px);", ".vt-report details summary{cursor:pointer;min-height:2.2rem;", ["tests/reports.spec.js"]],
+    ["B31 the report dialog's choice pills fall under the 44px floor", "js/reports.js", "gap:.4rem;min-height:var(--min-tap,44px);\n  box-sizing:border-box;", "gap:.4rem;min-height:2.4rem;\n  box-sizing:border-box;", ["tests/reports.spec.js"]],
+    ["B32 a disclosure in the report dialog shows no caret, so it reads as a line of text", "js/reports.js", ".vt-report details summary::before{content:\"▸\";color:var(--accent,#6eb4e8)}\n", "", ["tests/reports.spec.js"]],
+    // The card button that still chose Stripe after #26 moved the markets to Creem.
+    ["B33 the Pro dialog draws the retired Stripe and Mercado Pago pair, so its card button dead-ends on a rail no market sells on", "js/billing.js", "[...new Set([preferredRail(region), ...named])]", "[...new Set([\"stripe\", \"mercadopago\"])]", ["tests/checkout-rail.spec.js"]],
+    ["B34 the Pro dialog marks no rail as the one in use", "js/app.js", "b.className = \"rail-btn\" + (rail === pricingRail ? \" active\" : \"\");", "b.className = \"rail-btn\";", ["tests/checkout-rail.spec.js"]],
+    ["B35 the Pro dialog offers a rail with no checkout link once another can sell", "js/app.js", "row.replaceChildren(...(live.length ? live : rails).map(", "row.replaceChildren(...(rails).map(", ["tests/checkout-rail.spec.js"]],
+    ["B36 the Pro dialog stays on the region's rail when it cannot sell and another can", "js/app.js", "    return sellable[0] || rails[0].rail;\n", "    return rails[0].rail;\n", ["tests/checkout-rail.spec.js"]],
+    ["B37 the region's own rail is not drawn first", "js/billing.js", "[...new Set([preferredRail(region), ...named])]", "[...new Set([...named, preferredRail(region)])]", ["tests/checkout-rail.spec.js"]],
+    // The copy pass on the merge: what the report dialog, the privacy page and the terms said.
+    ["B38 the guide's English report button opens a Spanish dialog", "js/reports.js", "          lang: partLanguage(node)\n", "          lang: undefined\n", ["tests/reports.spec.js"]],
+    ["B39 the report dialog does not say which language it is in", "js/reports.js", "    ui.overlay.lang = lang();\n", "", ["tests/reports.spec.js"]],
+    ["B40 the text to paste on a public GitHub issue carries the reporter's address", "js/reports.js", "    // No contact line: the way out this text is for is a public GitHub issue,\n    // and the contact is prefilled with a signed-in reporter's own address.\n", "    if (form.contact) lines.push(`${t(\"labelContact\")}: ${form.contact}`);\n", ["tests/reports.spec.js"]],
+    ["B41 the GitHub way out does not say GitHub is public", "js/reports.js", "      el(\"p\", { className: \"vt-report-hint\", text: t(\"failPublic\") }),\n", "", ["tests/reports.spec.js"]],
+    ["B42 the dialog's list of what it attaches leaves out the time zone and the connection", "js/reports.js", "      el(\"li\", { text: t(\"envClock\") }),\n", "", ["tests/reports.spec.js"]],
+    ["B43 a session that ran out while listing your reports reads as a failed send", "js/reports.js", "res && res.status === 401 ? t(\"mineNeedsAccount\") : failureText(res)", "failureText(res)", ["tests/reports.spec.js"]],
+    ["B44 the report dialog's fields are under 16px, so an iPhone zooms into them", "js/reports.js", "\n  font-size:max(16px,1rem);color:inherit;", "\n  color:inherit;", ["tests/reports.spec.js"]],
+    ["B45 the privacy page's list of what a report keeps leaves out the time zone", "privacy.html", "        <strong>zona horaria</strong> (solo la diferencia con UTC), si tu navegador\n", "        si tu navegador\n", ["tests/reports.spec.js"]],
+    ["B46 the privacy page names Stripe, which no market sells on, instead of Creem", "privacy.html", "o, con tarjeta internacional, <strong>Creem</strong>", "o, con tarjeta internacional, <strong>Stripe</strong>", ["tests/node/privacy-rails.test.mjs"]],
+    ["B47 the terms say \"Haces falta tener 13 años\"", "terms.html", "Hace falta tener 13 años", "Haces falta tener 13 años", ["tests/terms-page.spec.js"]],
+    // The accessibility pass on the merge: what a keyboard and a screen reader got from the report dialog.
+    ["B48 a screen reader is not told the report was saved, or its reference", "js/reports.js", "    announce(`${t(\"thanksTitle\")}. ${reference}`);\n", "", ["tests/reports.spec.js"]],
+    ["B49 a screen reader is not told why the report was not saved", "js/reports.js", "    announce(`${t(\"failTitle\")}. ${failureText(res)}`);\n", "", ["tests/reports.spec.js"]],
+    ["B50 the guide's report dialog lets Tab walk out to the page under it", "guide.html", "<script src=\"js/focus-trap.js?v=", "<script src=\"js/focus-trap-not-loaded.js?v=", ["tests/reports.spec.js"]],
+    ["B51 the QA page's report dialog lets Tab walk out to the page under it", "qa/index.html", "<script src=\"../js/focus-trap.js?v=", "<script src=\"../js/focus-trap-not-loaded.js?v=", ["tests/reports.spec.js"]],
+    // The price follows the rail: a Peruvian on the card rail pays Creem, which cannot charge soles.
+    ["B52 the card rail shows a Peruvian soles that Creem never charges", "js/app.js", "return pricingRail === B.preferredRail(region) ? region : \"WW\";", "return region;", ["tests/checkout-rail.spec.js"]]
   ].map(([name, file, from, to, only]) => ({
     name,
     file,
     from,
     to,
-    cmd: [...PIANO_SPEC.slice(0, 3), ...(only || ["tests/console-unlock.spec.js", "tests/trust-console-gaps.spec.js"]), "--project=chromium", "--workers=4", "--reporter=dot"]
+    cmd: only && /^(workers|tests\/node)\//.test(only[0])
+      ? node(only)
+      : [...PIANO_SPEC.slice(0, 3), ...(only || ["tests/console-unlock.spec.js", "tests/trust-console-gaps.spec.js"]), "--project=chromium", "--workers=4", "--reporter=dot"]
   })),
   // QA round 9 (toast): twelve behaviours of the message that appears over the page, each pinned by the one spec written for it.
   // Its own set so that the longer sets (a11y, regress) do not grow: CI runs it as a seventh job.
@@ -827,7 +876,7 @@ export const MUTANTS = {
     ["DS9 a phone's Progreso tabs keep the wide padding: the last tab hides behind a swipe", "css/site-version.css", "    padding-inline: 0.45rem;\n    font-size: 0.82rem;", "    padding-inline: 1.3rem;", "tests/site-version-devices.spec.js", "iPhone SE 2nd-3rd gen"],
     ["DS10 the worker counts a switch from a design to itself", "workers/entitlements/src/layouts.js", " || row.src === row.dst) continue;", ") continue;", "workers/entitlements/test/layouts.test.mjs"],
     ["DS11 the worker's cap on one time report is a hundred hours", "workers/entitlements/src/layouts.js", "export const MAX_REPORT_SECONDS = 3600;", "export const MAX_REPORT_SECONDS = 360000;", "workers/entitlements/test/layouts.test.mjs"],
-    ["DS12 the worker drops the design events as unknown names", "workers/entitlements/src/events.js", "  ...LAYOUT_EVENTS\n", "\n", "workers/entitlements/test/layouts.test.mjs"],
+    ["DS12 the worker drops the design events as unknown names", "workers/entitlements/src/events.js", "  ...LAYOUT_EVENTS,\n", "", "workers/entitlements/test/layouts.test.mjs"],
     ["DS13 an old server's 404 reads as a generic error, with no word about redeploying", "js/admin-layouts.js", "    if (res.status === 404) return t(\"missing\");\n", "", "tests/admin-layouts.spec.js", "before this change"],
     ["DS14 the CSV gives design B the visits of design A", "js/admin-layouts.js", "d[ver].sessions, d[ver].seconds].join", "d.a.sessions, d[ver].seconds].join", "tests/admin-layouts.spec.js", "CSV"],
     ["DS15 the tiles show design A's visits in both", "js/admin-layouts.js", "VERSIONS.map((ver) => tile(versionOf(data, ver)))", "VERSIONS.map((ver) => tile({ ...versionOf(data, \"a\"), ver }))", "tests/admin-layouts.spec.js", "CSV"],
@@ -835,6 +884,86 @@ export const MUTANTS = {
     ["DS17 high-contrast mode loses the border on the current Progreso tab", "css/site-version.css", "    outline: 2px solid Highlight;\n", "", "tests/site-version.spec.js", "high-contrast"],
     ["DS18 a tapped button stays lifted and outlined on a touch screen", "css/styles.css", "@media (hover: hover) {\n  .btn:hover {", "@media all {\n  .btn:hover {", "tests/touch-hover.spec.js"],
     ["DS19 a tapped account button keeps the accent border on a touch screen", "css/styles.css", "@media (hover: hover) {\n  .header-door:hover {", "@media all {\n  .header-door:hover {", "tests/touch-hover.spec.js"]
+  ].map(([name, file, from, to, spec, grep]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: spec.startsWith("workers/")
+      ? node([spec])
+      : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
+  })),
+  // Merging #26 into main split some forty functions under the complexity ceiling (qa/lint-complexity.mjs). Each
+  // split was checked by planting defects back into the logic it moved; these are the ones that lived through the
+  // existing suites, each now killed by a test written for it. The ids are the ones the tests carry: SP for the page
+  // splits (a browser spec, with a title filter), and for the worker WC Creem, WR reports, WT Stripe and Mercado
+  // Pago, WS the store, WRT the router and RG3 the progress race (a Node test file). PC, the Pro dialog's plan card,
+  // is the exception: the specs that already pinned it kill all five, so they keep their own titles. CI runs this set
+  // as its own job.
+  splits: [
+    ["SP1 the home ad slot is never throttled, so it shows again inside its minimum interval", "js/ads.js", "    if (slotThrottled(slotId, c.frequency || {})) return", "    if (false) return", "tests/ads.spec.js", "SP1 "],
+    ["SP2 in preview, the line for a slot no card names is English on a Spanish page", "js/ads.js", "        es ? \"Ninguna tarjeta nombra este espacio.\" : \"No card names this slot.\"", "        \"No card names this slot.\"", "tests/ads.spec.js", "SP2 "],
+    ["SP3 the post-session slot asks AdSense for a unit of its own, which does not exist", "js/ads.js", "      const unit = c.adsense.slots?.[slotId === \"post-session\" ? \"home\" : slotId];", "      const unit = c.adsense.slots?.[slotId];", "tests/ads.spec.js", "SP3 "],
+    ["SP4 the plan and rail chosen are not remembered across the trip to the checkout", "js/billing.js", "      rememberCheckoutIntent(planId, providerId);\n", "", "tests/checkout-rail.spec.js", "SP4 "],
+    ["SP5 the QA page calls an older worker's missing report route 'off'", "qa/qa.js", "      h.reportsEnabled === undefined\n        ? inLang(", "      false\n        ? inLang(", "tests/reports.spec.js", "SP5 "],
+    ["SP6 the QA page's pasted state leaves out what the worker said", "qa/qa.js", "    return lines.concat(healthLines(health)).join", "    return lines.join", "tests/reports.spec.js", "SP6 "],
+    ["SP7 the QA page does not list the emailed code as a way in", "qa/qa.js", "    if (methods.email) ways.push(", "    if (false) ways.push(", "tests/reports.spec.js", "SP7 "],
+    ["SP8 the admin page sends a gift code with any number of uses (0, 1001) to the worker", "js/admin.js", "    if (!Number.isInteger(uses) || uses < 1 || uses > 1000) return \"badUses\";", "    if (false) return \"badUses\";", "tests/admin.spec.js", "gift codes: create, redeem"],
+    ["SP9 the admin report card does not show which build the reporter was on", "js/admin.js", "    if (report.build) where.push(", "    if (false) where.push(", "tests/admin.spec.js", "reports: read what somebody sent"],
+    ["SP10 a drafted idea comes back as a bug when the dialog is opened without a kind", "js/reports.js", "    ui.kind = draft.kind === \"idea\" ? \"idea\" : \"bug\";", "    ui.kind = \"bug\";", "tests/reports.spec.js", "SP10 "],
+    ["SP11 a signed-in reporter's address is not offered as the contact", "js/reports.js", "    return (account && account.account && account.account.email) || \"\";", "    return \"\";", "tests/reports.spec.js", "SP11 "],
+    ["SP12 back from the copy panel, the cursor is lost on the page instead of in the summary", "js/reports.js", "    focusSummary();\n", "", "tests/reports.spec.js", "SP12 "],
+    ["SP13 once checkout is live, an account whose trial is spent reads as plain free", "js/app.js", "    if (ent.status === \"expired\" || (!prelaunch && trialSpent())) {", "    if (false) {", "tests/account-pro-states.spec.js", "SP13 "],
+    ["SP14 the header door shows a Google account's full name instead of the given name", "js/app.js", "    ? ((acc.displayName || \"\").trim().split(/\\s+/)[0] || (acc.email || \"\").split(\"@\")[0])", "    ? ((acc.displayName || \"\").trim() || (acc.email || \"\").split(\"@\")[0])", "tests/account-pro-states.spec.js", "SP14 "],
+    ["SP15 the sign-in retry row shows beside a sign-in that works", "js/app.js", "      retryRow.hidden = !offer.configured || offer.offered || offer.checking;", "      retryRow.hidden = !offer.configured || offer.checking;", "tests/account-pro-states.spec.js", "SP15 "],
+    ["SP16 the payment rails are named in the config's default language, whatever the page's", "js/app.js", "    return es\n      ? (cfg.providers?.[rail]?.labelEs || tt(fallbackKey))", "    return false\n      ? (cfg.providers?.[rail]?.labelEs || tt(fallbackKey))", "tests/account-pro-states.spec.js", "SP16 "],
+    ["WC1 a transaction whose amount_paid is null reads as paid nothing, so a full refund of it keeps Pro", "workers/entitlements/src/creem.js", "transaction && transaction.amount_paid !== undefined && transaction.amount_paid !== null\n      ? transaction.amount_paid", "transaction && transaction.amount_paid !== undefined\n      ? transaction.amount_paid", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC2 any order status but \"pending\" reads as paid, a refunded order included", "workers/entitlements/src/creem.js", "(orderStatus === \"\" || orderStatus === \"paid\")", "(orderStatus !== \"pending\")", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC3 a checkout with no status of its own reads as completed", "workers/entitlements/src/creem.js", "String((checkout && checkout.status) || \"\") === \"completed\"", "String((checkout && checkout.status) || \"completed\") === \"completed\"", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC4 a checkout's own status is not read at all, so a pending checkout is paid", "workers/entitlements/src/creem.js", "String((checkout && checkout.status) || \"\") === \"completed\"", "String((checkout && checkout.status) || \"\") !== \"expired\"", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC5 the plan written in a checkout's nested subscription metadata is ignored", "workers/entitlements/src/creem.js", "    || (subscription && typeof subscription === \"object\" && subscription.metadata)\n", "", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC6 the nested subscription's metadata outranks the checkout's own", "workers/entitlements/src/creem.js", "(checkout && checkout.metadata)\n    || (subscription && typeof subscription === \"object\" && subscription.metadata)", "(subscription && typeof subscription === \"object\" && subscription.metadata)\n    || (checkout && checkout.metadata)", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC7 an order that names no status (the documented paid shape) no longer counts as paid", "workers/entitlements/src/creem.js", "(orderStatus === \"\" || orderStatus === \"paid\")", "(orderStatus === \"paid\")", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC8 a subscription that names its product only in its items falls to the monthly default", "workers/entitlements/src/creem.js", "(subscription && subscription.product) || (item && item.product_id)", "(subscription && subscription.product)", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC9 a subscription's second item is read instead of its first", "workers/entitlements/src/creem.js", "subscription.items[0]", "subscription.items[1]", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC10 a subscription.canceled event whose snapshot still says active stays active", "workers/entitlements/src/creem.js", "expired || canceled ? \"canceled\"", "expired ? \"canceled\"", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC11 a subscription.expired event whose snapshot still says active stays active", "workers/entitlements/src/creem.js", "expired || canceled ? \"canceled\"", "canceled ? \"canceled\"", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC12 money going back is dated by the refund's own created_at, not the envelope", "workers/entitlements/src/creem.js", "update.reversedAt = update.occurredAt ?? epochSeconds(object.created_at);", "update.reversedAt = epochSeconds(object.created_at);", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC13 a reversal with no envelope date has no date at all, so the store dates it \"now\"", "workers/entitlements/src/creem.js", "update.reversedAt = update.occurredAt ?? epochSeconds(object.created_at);", "update.reversedAt = update.occurredAt;", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC14 a cancellation's own canceled_at is overwritten by the envelope date", "workers/entitlements/src/creem.js", "if (update.status === \"canceled\" && !Number.isFinite(update.endedAt)) {", "if (update.status === \"canceled\") {", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC15 a paid checkout with no envelope date counts its month from nowhere", "workers/entitlements/src/creem.js", "      ?? update.occurredAt\n      ?? epochSeconds(object.created_at);", "      ?? update.occurredAt;", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC16 the reversal stamping is inverted: purchases get a reversal date and refunds do not", "workers/entitlements/src/creem.js", "if (update.isReversal) {", "if (!update.isReversal) {", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WC17 a cancellation that names no date is left with no end at all", "workers/entitlements/src/creem.js", "    update.endedAt = update.occurredAt;\n", "", "workers/entitlements/test/split-creem.test.mjs"],
+    ["WR1 a body whose Content-Length is over the cap is read anyway", "workers/entitlements/src/reports.js", "  if (Number.isFinite(declared) && declared > MAX_REPORT_BODY_BYTES) {\n    return { status: 413", "  if (false) {\n    return { status: 413", "workers/entitlements/test/split-reports.test.mjs"],
+    ["WR2 a signed-in reporter's daily share resets on every new address", "workers/entitlements/src/reports.js", "    if (!perAccount.ok) {", "    if (false) {", "workers/entitlements/test/split-reports.test.mjs"],
+    ["WR3 a report's environment is stored as sent, outside its closed list", "workers/entitlements/src/reports.js", "    environment: sanitizeEnvironment(body.environment)\n", "    environment: body.environment\n", "workers/entitlements/test/split-reports.test.mjs"],
+    ["WR4 updateReport applies a status it does not know", "workers/entitlements/src/reports.js", "  const status = REPORT_STATUSES.has(change.status) ? change.status : row.status;", "  const status = change.status || row.status;", "workers/entitlements/test/split-reports.test.mjs"],
+    ["WR5 a later change made without a handler forgets who handled the report", "workers/entitlements/src/reports.js", "handled_by: change.by || row.handled_by || null,", "handled_by: change.by || null,", "workers/entitlements/test/split-reports.test.mjs"],
+    ["WR6 the reporter's steps to reproduce are dropped", "workers/entitlements/src/reports.js", "    steps: clampText(body.steps, FIELD_LIMITS.steps),", "    steps: \"\",", "workers/entitlements/test/split-reports.test.mjs"],
+    ["WT1 a checkout whose price and metadata both name a plan records the metadata as the source, though the price decided", "workers/entitlements/src/stripe.js", "const planSource = byPrice ? \"price_id\" : (byMetadata ? \"metadata\" : (subscriptionId ? undefined : \"default\"));", "const planSource = byMetadata ? \"metadata\" : (byPrice ? \"price_id\" : (subscriptionId ? undefined : \"default\"));", "workers/entitlements/test/split-stripe-mp.test.mjs"],
+    ["WT2 a checkout is priced by its second line item instead of its first", "workers/entitlements/src/stripe.js", "    ? session.line_items.data[0]\n", "    ? session.line_items.data[1]\n", "workers/entitlements/test/split-stripe-mp.test.mjs"],
+    ["WT3 a checkout's line-item price is never passed on, so a yearly pass is recorded as a month", "workers/entitlements/src/stripe.js", "const byPrice = planFromPriceId(checkoutPriceId(session), env);", "const byPrice = planFromPriceId(undefined, env);", "workers/entitlements/test/split-stripe-mp.test.mjs"],
+    ["WT4 an invoice line's price in the 2025+ pricing.price_details shape is not read, so a renewal of a price that is not ours is marked paid", "workers/entitlements/src/stripe.js", "  return idOf(line && line.price)\n    || idOf(line && line.pricing && line.pricing.price_details && line.pricing.price_details.price);\n", "  return idOf(line && line.price);\n", "workers/entitlements/test/split-stripe-mp.test.mjs"],
+    ["WT5 an invoice that names its subscription only on its line is dropped as having no license identity", "workers/entitlements/src/stripe.js", "    || idOf(line && line.subscription)\n", "", "workers/entitlements/test/split-stripe-mp.test.mjs"],
+    ["WT6 a paid checkout whose event carries no time gets no period bound from the session's own created, so one month sold is Pro for ever", "workers/entitlements/src/stripe.js", "update.periodEndFromCharge = update.occurredAt ?? unixOrNull(object.created);", "update.periodEndFromCharge = update.occurredAt;", "workers/entitlements/test/split-stripe-mp.test.mjs"],
+    ["WT7 money going back is dated by when the webhook arrived instead of by its event, so a late refund keeps days of Pro", "workers/entitlements/src/stripe.js", "    update.reversedAt = update.occurredAt;\n", "", "workers/entitlements/test/split-stripe-mp.test.mjs"],
+    ["WT8 the operator's monthly Mercado Pago plan id maps to a year, so every monthly charge grants twelve months", "workers/entitlements/src/mercadopago.js", "  if (planId && env && planId === env.MP_PLAN_PRO_MONTHLY) {\n    return { plan: \"pro_monthly\", planSource: \"preapproval_plan_id\" };", "  if (planId && env && planId === env.MP_PLAN_PRO_MONTHLY) {\n    return { plan: \"pro_yearly\", planSource: \"preapproval_plan_id\" };", "workers/entitlements/test/split-stripe-mp.test.mjs"],
+    ["WS1 an out-of-date renewal invoice lengthens access though its payment failed", "workers/entitlements/src/store.js", "  if (update.periodEndIsFloor === true && update.paid === true && Number.isFinite(update.periodEnd)) {", "  if (update.periodEndIsFloor === true && Number.isFinite(update.periodEnd)) {", "workers/entitlements/test/split-store.test.mjs"],
+    ["WS2 a deletion delivered again writes its ended: marker a second time", "workers/entitlements/src/store.js", "  if ((update.terminal && !stale) || restored) {", "  if (update.terminal || restored) {", "workers/entitlements/test/split-store.test.mjs"],
+    ["WS3 reading a deleted, never-paid subscription reads its paid: key twice", "workers/entitlements/src/store.js", "  const readPayment = async () => {\n    if (payment === undefined) {\n      payment = await readPaid(kv, licenseId);\n    }\n    return payment;\n  };", "  const readPayment = () => readPaid(kv, licenseId);", "workers/entitlements/test/split-store.test.mjs"],
+    ["WS4 a cancellation heard of first reads the new record's placeholder \"pending\" as unpaid and cuts the period", "workers/entitlements/src/store.js", "  const before = existing ? record.status : null;", "  const before = record.status;", "workers/entitlements/test/split-store.test.mjs"],
+    ["WS5 a dispute of an already-refunded payment moves when access ended to the dispute's date", "workers/entitlements/src/store.js", "    && paymentId === record.periodPaymentId\n    && record.reversedPaymentId !== record.periodPaymentId;", "    && paymentId === record.periodPaymentId;", "workers/entitlements/test/split-store.test.mjs"],
+    ["WS6 a period a payment restored after a deletion is not written to ended:, so an older copy's write loses it", "workers/entitlements/src/store.js", "  if ((update.terminal && !stale) || restored) {", "  if (update.terminal && !stale) {", "workers/entitlements/test/split-store.test.mjs"],
+    ["WRT1 POST to /v1/me/progress is answered 405: the route table takes only PUT as a write, so a POST save is lost", "workers/entitlements/src/api.js", "      PUT: withoutUrl(handlePutProgress),\n      POST: withoutUrl(handlePutProgress),\n", "      PUT: withoutUrl(handlePutProgress),\n", "workers/entitlements/test/split-routes.test.mjs"],
+    ["WRT2 a refused method on /v1/me is told GET only, though POST works too", "workers/entitlements/src/api.js", "[\"/v1/me\", accountRoute(\"GET, POST\", {", "[\"/v1/me\", accountRoute(\"GET\", {", "workers/entitlements/test/split-routes.test.mjs"],
+    ["WRT3 a refused method on /v1/me/progress is told GET, PUT only: DELETE is dropped from its allow", "workers/entitlements/src/api.js", "accountRoute(\"GET, PUT, DELETE\", {", "accountRoute(\"GET, PUT\", {", "workers/entitlements/test/split-routes.test.mjs"],
+    ["RG3 the progress UPDATE loses its rev = ?5 compare-and-swap: two devices writing from the same revision both win", "workers/entitlements/src/progress.js", "       WHERE account_id = ?1 AND profile_id = ?2 AND rev = ?5`", "       WHERE account_id = ?1 AND profile_id = ?2`", "workers/entitlements/test/progress-race.test.mjs"],
+    // The Pro dialog's plan card, split out of a map callback of complexity 29 in the merge of #26.
+    ["PC1 a trial holder's monthly card says it is the plan they hold, as if they had paid", "js/app.js", "    if (held === \"trialAccount\" || held === \"gift\") return offer;\n", "", "tests/account-pro-states.spec.js", "and the Pro dialog calls it a free trial"],
+    ["PC2 the free card says it is the plan a trial holder holds", "js/app.js", "label: held === \"free\" ? tt(\"pricing.current\")", "label: true ? tt(\"pricing.current\")", "tests/account-pro-states.spec.js", "and the Pro dialog calls it a free trial"],
+    ["PC3 before launch the plan buttons say Subscribe and answer with a toast", "js/app.js", "    if (ctx.prelaunch && !own.disabled) return", "    if (false) return", "tests/pricing-prelaunch.spec.js", "plan buttons say not available yet"],
+    ["PC4 the annual card loses the saving its two prices give", "js/app.js", "    if (p.badge === \"saveAnnual\" && savingPct) {", "    if (false) {", "tests/billing.spec.js", "the annual badge states the saving"],
+    ["PC5 the benefits past the first five are dropped, with no way to see them", "js/app.js", "    const restFeats = featList.slice(FEAT_MAX).map(item).join(\"\");", "    const restFeats = \"\";", "tests/pricing-prelaunch.spec.js", "benefit copy carries no internal jargon"],
   ].map(([name, file, from, to, spec, grep]) => ({
     name,
     file,

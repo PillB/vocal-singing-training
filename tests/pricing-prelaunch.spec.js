@@ -54,21 +54,12 @@ async function makeCheckoutLive(page) {
       required: true,
       revalidateHours: 24 * 365
     },
-    providers: {
-      stripe: {
-        id: "stripe",
-        label: "International card",
-        labelEs: "Tarjeta internacional",
-        regions: ["US"],
-        links: { pro_monthly: "https://buy.stripe.com/test_m", pro_yearly: "https://buy.stripe.com/test_y" }
-      },
-      mercadopago: {
-        id: "mercadopago",
-        label: "Mercado Pago",
-        labelEs: "Mercado Pago (Perú / LATAM)",
-        regions: ["PE"],
-        links: { pro_monthly: "", pro_yearly: "" }
-      }
+    // The go-live config, as gate steps 5 and 6 leave it: the two rails a
+    // market sells on, linked. It used to replace the providers with a linked
+    // Stripe rail that no market points at since #26, and drop Creem.
+    links: {
+      creem: { pro_monthly: "https://checkout.creem.io/ch_m", pro_yearly: "https://checkout.creem.io/ch_y" },
+      mercadopago: { pro_monthly: "https://www.mercadopago.com.pe/subscriptions/checkout?preapproval_plan_id=m" }
     }
   });
 }

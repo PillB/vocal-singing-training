@@ -24,7 +24,13 @@
   const LS_KEY = "vt_billing_v1";
   const TRIAL_KEY = "vt_billing_trial_started_v1";
   const PLAN_IDS = new Set(["pro_monthly", "pro_yearly", "trial"]);
-  const PROVIDER_IDS = new Set(["stripe", "mercadopago", "demo", "internal", "auth"]);
+  const PROVIDER_IDS = new Set(["stripe", "mercadopago", "creem", "demo", "internal", "auth"]);
+  /**
+   * The providers money can actually come in on. `PROVIDER_IDS` is wider: it
+   * also holds the QA override sources and the account rail, none of which has
+   * a checkout link, so a market must not be able to name one as its rail.
+   */
+  const CHECKOUT_RAILS = new Set(["stripe", "mercadopago", "creem"]);
   /** Sources that unlock Pro without payment — QA only, gated by demoUnlockEnabled. */
   const OVERRIDE_SOURCES = new Set(["demo", "internal_account"]);
 
@@ -32,6 +38,12 @@
   const DEFAULT_CHECKOUT_HOSTS = [
     "buy.stripe.com",
     "checkout.stripe.com",
+    // Creem, the merchant of record. The API returns checkout.creem.io/<id>;
+    // a product's own share link from the dashboard is on creem.io, so both
+    // are allowed. Anything else needs `allowedCheckoutHosts`.
+    "checkout.creem.io",
+    "www.creem.io",
+    "creem.io",
     "www.mercadopago.com",
     "www.mercadopago.com.pe",
     "www.mercadopago.com.ar",
@@ -100,12 +112,41 @@
 
   function marketFor(code) {
     const m = (cfg().markets || []).find((x) => x.code === code);
-    return m || { code: "WW", name: "Worldwide", currency: "USD", rail: "stripe", priority: 3 };
+    return m || { code: "WW", name: "Worldwide", currency: "USD", rail: "creem", priority: 3 };
   }
 
+  /**
+   * The rail a region buys on. A market naming a rail money cannot arrive on —
+   * a typo, a QA source, a rail removed from the config — falls back to Creem,
+   * the merchant of record, rather than to a Stripe account a Peru-registered
+   * seller cannot hold.
+   * @param {string} region Two-letter region code.
+   * @returns {string} Provider id.
+   */
   function preferredRail(region) {
     const m = marketFor(region);
-    return m.rail === "mercadopago" ? "mercadopago" : "stripe";
+    return CHECKOUT_RAILS.has(m.rail) ? m.rail : "creem";
+  }
+
+  /**
+   * The rails the Pro dialog offers, the region's own first: every rail a
+   * market sells on, each marked sellable when a paid plan has a checkout link
+   * on it. Read from the markets rather than drawn as a fixed pair, because the
+   * pair the dialog used to draw (Stripe and Mercado Pago) outlived the move to
+   * Creem: its card button still chose "stripe", which no market sells on, so
+   * pressing it turned a working checkout into "payments are not public yet",
+   * and outside Peru neither button showed as the one in use.
+   * @param {string} region Two-letter region code.
+   * @returns {{rail: string, sellable: boolean}[]} In the order to draw them.
+   */
+  function checkoutRails(region) {
+    const c = cfg();
+    const named = (c.markets || []).map((m) => m.rail).filter((r) => CHECKOUT_RAILS.has(r));
+    const paid = (c.plans || []).filter((p) => p.interval).map((p) => p.id);
+    return [...new Set([preferredRail(region), ...named])].map((rail) => ({
+      rail,
+      sellable: paid.some((id) => !!checkoutUrl(id, rail))
+    }));
   }
 
   function nowMs() {
@@ -203,6 +244,35 @@
   }
 
   /** True once the entitlements worker URL and its public key are both configured. */
+  /**
+   * What the account layer says about this browser, defensively.
+   *
+   * Null when this build has no account layer at all, which is not the same as
+   * a signed-out visitor: a deployment without accounts must still be able to
+   * take a payment the old way.
+   * @returns {object|null} Account state, or null.
+   */
+  function accountState() {
+    try {
+      return global.VTAccount?.getState?.() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Which payment rails the worker says it can honour, or null when nobody has
+   * asked yet. Read defensively: a build with no account layer has none of this.
+   * @returns {object|null} `{stripe, mercadopago}` or null.
+   */
+  function accountRails() {
+    try {
+      return global.VTAccount?.knownRails?.() || null;
+    } catch {
+      return null;
+    }
+  }
+
   function verificationConfigured() {
     try {
       return !!global.VTLicense?.isConfigured?.();
@@ -571,23 +641,9 @@
     }
     const url = checkoutUrl(planId, providerId);
     if (url) {
-      if (verificationRequired() && !verificationConfigured()) {
-        // Never send someone to pay when we cannot turn that payment into a
-        // verifiable entitlement — they would come back to a free account.
-        return { ok: false, mode: "verification_unavailable", message: null };
-      }
-      try {
-        sessionStorage.setItem(
-          "vt_billing_intent",
-          JSON.stringify({
-            plan: planId,
-            provider: providerId || preferredRail(detectRegion()),
-            at: Date.now()
-          })
-        );
-      } catch {
-        /* ignore */
-      }
+      const refusal = checkoutRefusal(planId, providerId);
+      if (refusal) return refusal;
+      rememberCheckoutIntent(planId, providerId);
       window.location.href = url;
       return { ok: true, mode: "redirect", url };
     }
@@ -602,6 +658,70 @@
       message:
         "Checkout isn’t available yet. Keep practicing free."
     };
+  }
+
+  /**
+   * Why a checkout that has a link must not go ahead yet, or null when it may:
+   * no way to verify the payment, nobody signed in where sign-in exists, or a
+   * rail the worker has said it cannot honour.
+   * @param {string} planId Plan.
+   * @param {string|undefined} providerId Rail asked for, if any.
+   * @returns {Object|null} The refusal startCheckout returns.
+   */
+  function checkoutRefusal(planId, providerId) {
+    if (verificationRequired() && !verificationConfigured()) {
+      // Never send someone to pay when we cannot turn that payment into a
+      // verifiable entitlement — they would come back to a free account.
+      return { ok: false, mode: "verification_unavailable", message: null };
+    }
+    // A payment made while signed out is tied to this browser's storage and
+    // to nothing else: the card keeps charging every month while the same
+    // person's next phone shows free, and no operator route exists to move
+    // that licence onto an account afterwards. So where this deployment can
+    // sign somebody in, it has to, before the money moves. The free trial
+    // already works this way (trial_result outcome "needs_account" in
+    // js/app.js); this is the same gate on the paid path.
+    const account = accountState();
+    if (account && account.configured && !account.signedIn) {
+      return { ok: false, mode: "signin_required", plan: planId, provider: providerId || null };
+    }
+    // A rail the worker cannot honour is not a rail. Mercado Pago's webhook
+    // is refused outright until MP_WEBHOOK_SECRET and MP_ACCESS_TOKEN exist,
+    // and nothing is written for a payment whose webhook was refused, so the
+    // claim route — which only ever reads what the webhook wrote — answers
+    // "pending" until the browser gives up after seven days. A payment taken
+    // in that window is money taken for Pro that can never be issued, and
+    // the only remedy left is to gift the buyer a grant by hand.
+    //
+    // "Set the secret before the link goes live" is the operator's order and
+    // stays the first line of defence. This is the net under it, in the one
+    // place that can see both halves.
+    //
+    // Only an explicit no stops a sale. A worker we could not reach, or one
+    // too old to report the field, is not an answer, and refusing without an
+    // answer would turn a flaky network into a lost sale.
+    const rail = providerId || preferredRail(detectRegion());
+    const rails = accountRails();
+    if (rails && rails[rail] === false) {
+      return { ok: false, mode: "provider_unavailable", plan: planId, provider: rail };
+    }
+    return null;
+  }
+
+  /** Note what is being bought, so the page can tell a returning buyer what to expect. */
+  function rememberCheckoutIntent(planId, providerId) {
+    try {
+      sessionStorage.setItem(
+        "vt_billing_intent",
+        JSON.stringify({
+          plan: planId,
+          provider: providerId || preferredRail(detectRegion()),
+          at: Date.now()
+        })
+      );
+    } catch {
+      /* ignore */
+    }
   }
 
   /** How long we keep retrying a checkout whose webhook never showed up. */
@@ -700,81 +820,109 @@
       return null;
     }
     const billing = params.get("billing");
-    if (!billing) return null;
-
     if (billing === "cancel") {
       cleanUrlParams();
       return { event: "cancel" };
     }
-    if (billing === "success") {
-      let plan = params.get("plan") || "pro_monthly";
-      if (!PLAN_IDS.has(plan) || plan === "trial") plan = "pro_monthly";
-      let provider = params.get("provider") || preferredRail(detectRegion());
-      if (!PROVIDER_IDS.has(provider)) provider = preferredRail(detectRegion());
-      const sessionId =
-        params.get("session_id") ||
-        params.get("payment_id") ||
-        params.get("preapproval_id") ||
-        null;
+    if (billing !== "success") return null;
 
-      try {
-        const intent = JSON.parse(sessionStorage.getItem("vt_billing_intent") || "null");
-        if (intent?.plan && PLAN_IDS.has(intent.plan)) plan = intent.plan;
-        if (intent?.provider && PROVIDER_IDS.has(intent.provider)) provider = intent.provider;
-        sessionStorage.removeItem("vt_billing_intent");
-      } catch {
-        /* ignore */
-      }
+    const { plan, provider } = returnedPlanAndProvider(params);
+    const sessionId = returnedSessionId(params);
 
-      // Production-ish guard: without demo mode, require a provider session id
-      const strict = cfg().demoUnlockEnabled === false;
-      const requireSession = cfg().requireCheckoutSessionId !== false && strict;
-      if (requireSession && !sessionId) {
-        cleanUrlParams();
-        return {
-          event: "error",
-          reason: "missing_session",
-          message: null // app maps → i18n pricing.toast.checkoutError
-        };
-      }
-
-      if (!verificationRequired()) {
-        // Operator opted out of server checks: legacy soft (forgeable) activation.
-        activate(plan, { provider, source: "checkout_return", sessionId, verified: false });
-        cleanUrlParams();
-        return { event: "success", plan, provider, sessionId, soft: true, verified: false };
-      }
-
-      // The return URL proves nothing. Record the intent, then ask the worker for
-      // a signed license — Pro turns on only when that signature verifies.
-      write({
-        status: "pending",
-        plan,
-        provider,
-        region: detectRegion(),
-        source: "checkout_return",
-        activatedAt: new Date().toISOString(),
-        expiresAt: null,
-        sessionId: sessionId ? String(sessionId).slice(0, 128) : null,
-        verified: false
-      });
-      const claiming = verificationConfigured()
-        ? claimLicense({ plan, provider, sessionId })
-        : null;
-      emit();
+    // Production-ish guard: without demo mode, require a provider session id
+    const strict = cfg().demoUnlockEnabled === false;
+    const requireSession = cfg().requireCheckoutSessionId !== false && strict;
+    if (requireSession && !sessionId) {
       cleanUrlParams();
       return {
-        event: "success",
-        plan,
-        provider,
-        sessionId,
-        soft: false,
-        verified: false,
-        pendingVerification: true,
-        claiming
+        event: "error",
+        reason: "missing_session",
+        message: null // app maps → i18n pricing.toast.checkoutError
       };
     }
-    return null;
+
+    if (!verificationRequired()) {
+      // Operator opted out of server checks: legacy soft (forgeable) activation.
+      activate(plan, { provider, source: "checkout_return", sessionId, verified: false });
+      cleanUrlParams();
+      return { event: "success", plan, provider, sessionId, soft: true, verified: false };
+    }
+    return startReturnClaim(plan, provider, sessionId);
+  }
+
+  /**
+   * The provider's id for the payment the customer is coming back from, or
+   * null: Stripe's `session_id` (the success URL's {CHECKOUT_SESSION_ID}),
+   * Creem's `checkout_id` (appended to its return URL; the worker files the
+   * claim under it), or Mercado Pago's `payment_id` / `preapproval_id`.
+   * @param {URLSearchParams} params The return URL's query.
+   * @returns {string|null}
+   */
+  function returnedSessionId(params) {
+    return (
+      params.get("session_id") ||
+      params.get("checkout_id") ||
+      params.get("payment_id") ||
+      params.get("preapproval_id") ||
+      null
+    );
+  }
+
+  /**
+   * The plan and rail being returned from. The intent saved as the checkout
+   * opened outranks the URL, which anybody can edit; with neither, a
+   * `checkout_id` is Creem's return (no other rail sends one) and anything
+   * else is the region's own rail.
+   * @param {URLSearchParams} params The return URL's query.
+   * @returns {{plan: string, provider: string}}
+   */
+  function returnedPlanAndProvider(params) {
+    let plan = params.get("plan") || "pro_monthly";
+    if (!PLAN_IDS.has(plan) || plan === "trial") plan = "pro_monthly";
+    let provider = params.get("provider") || (params.get("checkout_id") ? "creem" : "");
+    if (!PROVIDER_IDS.has(provider)) provider = preferredRail(detectRegion());
+    try {
+      const intent = JSON.parse(sessionStorage.getItem("vt_billing_intent") || "null");
+      if (intent?.plan && PLAN_IDS.has(intent.plan)) plan = intent.plan;
+      if (intent?.provider && PROVIDER_IDS.has(intent.provider)) provider = intent.provider;
+      sessionStorage.removeItem("vt_billing_intent");
+    } catch {
+      /* ignore */
+    }
+    return { plan, provider };
+  }
+
+  /**
+   * The return URL proves nothing. Record the intent, then ask the worker for
+   * a signed license — Pro turns on only when that signature verifies.
+   */
+  function startReturnClaim(plan, provider, sessionId) {
+    write({
+      status: "pending",
+      plan,
+      provider,
+      region: detectRegion(),
+      source: "checkout_return",
+      activatedAt: new Date().toISOString(),
+      expiresAt: null,
+      sessionId: sessionId ? String(sessionId).slice(0, 128) : null,
+      verified: false
+    });
+    const claiming = verificationConfigured()
+      ? claimLicense({ plan, provider, sessionId })
+      : null;
+    emit();
+    cleanUrlParams();
+    return {
+      event: "success",
+      plan,
+      provider,
+      sessionId,
+      soft: false,
+      verified: false,
+      pendingVerification: true,
+      claiming
+    };
   }
 
   function cleanUrlParams() {
@@ -797,7 +945,17 @@
         "external_reference",
         "site_id",
         "processing_mode",
-        "merchant_account_id"
+        "merchant_account_id",
+        // Creem's return URL (docs.creem.io, Return URL): its ids and the
+        // signature over them, none of which should be left to be copied,
+        // shared or bookmarked with the page.
+        "checkout_id",
+        "order_id",
+        "customer_id",
+        "subscription_id",
+        "product_id",
+        "request_id",
+        "signature"
       ].forEach((k) => u.searchParams.delete(k));
       window.history.replaceState({}, "", u.pathname + u.search + u.hash);
     } catch {
@@ -888,8 +1046,6 @@
       achievements_export: false,
       extra_reminders: false,
       extra_freezes: false,
-      priority_progressions: false,
-      no_limits: false,
       lesson_anchor: false,
       yearly_savings: false,
       ad_free: false,
@@ -907,8 +1063,6 @@
       achievements_export: pro,
       extra_reminders: pro,
       extra_freezes: pro,
-      priority_progressions: pro,
-      no_limits: pro,
       lesson_anchor: pro,
       yearly_savings: pro,
       ad_free: pro
@@ -990,6 +1144,7 @@
     detectRegion,
     marketFor,
     preferredRail,
+    checkoutRails,
     getEntitlement,
     isPro,
     can,

@@ -2029,6 +2029,14 @@
     return tt("session.bannerTitle", { track: tt(s.track === "vocal" ? "tab.vocalShort" : "tab.singingShort") });
   }
 
+  /** The catalog route's name for the banner line, or "" when it has no name of its own there. */
+  function sessionRouteName(s) {
+    // The basics and the daily class say their own name in the title.
+    const routeKey = `home.path.${s.path}`;
+    const route = s.path && s.path !== "daily" && s.path !== "basics" ? pathName(s.path, s.track) : "";
+    return route && route !== routeKey ? route : "";
+  }
+
   function updateSessionBanner() {
     const banner = $("#session-banner");
     const s = VTSession.get();
@@ -2056,11 +2064,9 @@
     pos.textContent = tt("session.progress", { n: Math.min(s.index + 1, total), total });
     const rest = document.createElement("span");
     rest.className = "session-banner-rest";
-    // The basics and the daily class say their own name in the title.
-    const routeKey = `home.path.${s.path}`;
-    const route = s.path && s.path !== "daily" && s.path !== "basics" ? pathName(s.path, s.track) : "";
+    const route = sessionRouteName(s);
     // A no-break space: a flex item drops its leading space ("2· Básicos")
-    const restParts = [s.status === "paused" ? status : "", route && route !== routeKey ? route : "", name].filter(Boolean);
+    const restParts = [s.status === "paused" ? status : "", route, name].filter(Boolean);
     rest.textContent = restParts.length ? "\u00a0· " + restParts.join(" · ") : "";
     const text = $("#session-banner-text");
     if (endAsking != null) {
@@ -6491,6 +6497,20 @@
       </button>`;
   }
 
+  /** One day of Historial's calendar: its date, its mark, and what a screen reader hears. */
+  function historyDayCellHtml(d, track) {
+    if (!d || d.state === "future") return `<td class="is-future"></td>`;
+    // Practised and rest days carry a mark as well as a colour.
+    const mark = d.state === "done" ? "✓" : d.state === "rest" ? "☾" : "";
+    const said = d.state === "missed" || d.state === "before" ? "" : trackText("loop.dayState." + d.state, null, track);
+    // Today is outlined; a screen reader hears it as well.
+    // Today is named once: an open day's own words already start with "hoy".
+    const label = d.isToday && d.state !== "today" ? [tt("history.today"), said].filter(Boolean).join(", ") : said;
+    return `<td class="is-${d.state}${d.isToday ? " is-today" : ""}">${Number(d.key.slice(8))}${
+      mark ? `<span class="hist-mark" aria-hidden="true">${mark}</span>` : ""
+    }${label ? `<span class="sr-only">: ${escapeHtml(label)}</span>` : ""}</td>`;
+  }
+
   /**
    * The days practised: how many in the last five weeks, and those weeks as a
    * Monday-first calendar with today outlined. Empty until there is a day.
@@ -6516,20 +6536,7 @@
     for (let w = 0; w < 5; w += 1) {
       rows += "<tr>";
       for (let i = 0; i < 7; i += 1) {
-        const d = days[w * 7 + i];
-        if (!d || d.state === "future") {
-          rows += `<td class="is-future"></td>`;
-          continue;
-        }
-        // Practised and rest days carry a mark as well as a colour.
-        const mark = d.state === "done" ? "✓" : d.state === "rest" ? "☾" : "";
-        const said = d.state === "missed" || d.state === "before" ? "" : trackText("loop.dayState." + d.state, null, track);
-        // Today is outlined; a screen reader hears it as well.
-        // Today is named once: an open day's own words already start with "hoy".
-        const label = d.isToday && d.state !== "today" ? [tt("history.today"), said].filter(Boolean).join(", ") : said;
-        rows += `<td class="is-${d.state}${d.isToday ? " is-today" : ""}">${Number(d.key.slice(8))}${
-          mark ? `<span class="hist-mark" aria-hidden="true">${mark}</span>` : ""
-        }${label ? `<span class="sr-only">: ${escapeHtml(label)}</span>` : ""}</td>`;
+        rows += historyDayCellHtml(days[w * 7 + i], track);
       }
       rows += "</tr>";
     }
@@ -6579,6 +6586,146 @@
     return parts;
   }
 
+  /** Historial's top: the days and the exercises practised, or, before any, a way to start. */
+  function historyTopHtml(daysHtml, recent) {
+    if (!daysHtml && !recent.length) {
+      return `<p class="muted">${tt("history.noSessions")}</p>
+          <p><button type="button" class="btn btn-practice btn-sm" id="history-empty-cta">${tt("history.emptyCta")}</button></p>`;
+    }
+    let html = `<div class="hist-top">${daysHtml}`;
+    if (recent.length) {
+      html += `<section class="hist-recent" aria-labelledby="hist-recent-h">
+            <h3 id="hist-recent-h">${tt("history.recent")}</h3>
+            <div class="history-list">${recent.map((r) => openRowHtml(r.ex, historyRowMeta(r.p), "history-item")).join("")}</div>
+          </section>`;
+    }
+    html += `</div>`;
+    return html;
+  }
+
+  /** The takes kept on this device, then a before-and-after pair for each exercise sung twice or more. */
+  function historyRecordingsHtml(recs) {
+    let html = `<h3 style="margin-top:1.5rem;">${tt("history.recordings")}</h3>`;
+    // Group by exercise for A/B compare (progress proof users love)
+    const byEx = {};
+    recs.forEach((r) => {
+      if (!byEx[r.exerciseId]) byEx[r.exerciseId] = [];
+      byEx[r.exerciseId].push(r);
+    });
+    html += `<div class="history-list">`;
+    for (const r of recs) {
+      const ex = findExercise(r.exerciseId);
+      // The name is drawn now, in the page's language: the label stored with
+      // the take is the language it was saved in (older ones, the English
+      // catalogue title). It is only shown for a take whose exercise has left
+      // the catalogue, and as text. The date and size are the meta line's.
+      html += `
+            <div class="history-item" data-id="${escapeHtml(r.id)}">
+              <div>
+                <strong>${escapeHtml(ex ? exName(ex) : r.label)}</strong>
+                <div class="meta">${escapeHtml(new Date(r.createdAt).toLocaleString(locale()))} · ${Math.round((r.size || 0) / 1024)} KB</div>
+              </div>
+              <div class="controls-row">
+                <button type="button" class="btn btn-sm" data-play="${escapeHtml(r.id)}">${tt("history.play")}</button>
+                <button type="button" class="btn btn-sm btn-danger" data-del="${escapeHtml(r.id)}">${tt("history.delete")}</button>
+              </div>
+            </div>`;
+    }
+    html += `</div>`;
+    // A/B compare blocks
+    const pairs = Object.entries(byEx).filter(([, arr]) => arr.length >= 2);
+    if (pairs.length) {
+      html += `<h3 style="margin-top:1.25rem;">${tt("retain.audioCompare")}</h3><div class="history-list">`;
+      pairs.forEach(([exId, arr]) => {
+        const sorted = arr.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+        const newer = sorted[0];
+        const older = sorted[1];
+        const ex = findExercise(exId);
+        html += `<div class="history-item">
+              <div><strong>${escapeHtml(ex ? exName(ex) : exId)}</strong>
+              <div class="meta">${tt("retain.audioCompareMeta")}</div></div>
+              <div class="controls-row">
+                <button type="button" class="btn btn-sm" data-ab-old="${escapeHtml(older.id)}" data-ab-new="${escapeHtml(newer.id)}">${tt("retain.audioCompareBtn")}</button>
+              </div>
+            </div>`;
+      });
+      html += `</div>`;
+    }
+    html += `<div id="history-player"></div>`;
+    return html;
+  }
+
+  /** Historial's buttons: open an exercise, play, delete or compare takes, and the empty page's start. */
+  function bindHistoryList(list) {
+    $$("[data-open-ex]", list).forEach((btn) => {
+      btn.addEventListener("click", () => openExercise(btn.dataset.openEx));
+    });
+
+    $$("[data-play]", list).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const blob = await VTStorage.getRecordingBlob(btn.dataset.play);
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const player = $("#history-player");
+        // Under the row that was tapped: at the foot of the list it played
+        // off screen on a phone.
+        btn.closest(".history-item")?.after(player);
+        // Object URL only — escape if ever concatenated with user text
+        player.replaceChildren();
+        const audio = document.createElement("audio");
+        audio.className = "audio-player";
+        audio.controls = true;
+        audio.autoplay = true;
+        audio.src = url;
+        fixUnknownDuration(audio);
+        player.appendChild(audio);
+      });
+    });
+    $("#history-empty-cta", list)?.addEventListener("click", () => {
+      setView("home");
+      continuePractice();
+    });
+    $$("[data-del]", list).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm(tt("history.confirmDelete"))) return;
+        await VTStorage.deleteRecording(btn.dataset.del);
+        renderHistory();
+        toast(tt("toast.deleted"));
+      });
+    });
+    $$("[data-ab-old]", list).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const oldId = btn.dataset.abOld;
+        const newId = btn.dataset.abNew;
+        const [bOld, bNew] = await Promise.all([
+          VTStorage.getRecordingBlob(oldId),
+          VTStorage.getRecordingBlob(newId)
+        ]);
+        if (!bOld || !bNew) {
+          toast(tt("retain.audioCompareFail"));
+          return;
+        }
+        const uOld = URL.createObjectURL(bOld);
+        const uNew = URL.createObjectURL(bNew);
+        const player = $("#history-player");
+        btn.closest(".history-item")?.after(player);
+        player.innerHTML = `
+            <div class="ab-player">
+              <div><span class="muted">${tt("retain.audioOlder")}</span>
+                <audio class="audio-player" controls src="${uOld}"></audio></div>
+              <div><span class="muted">${tt("retain.audioNewer")}</span>
+                <audio class="audio-player" controls src="${uNew}"></audio></div>
+            </div>`;
+        $$("audio", player).forEach(fixUnknownDuration);
+        try {
+          window.VTAnalytics?.track?.("audio_compare", {});
+        } catch {
+          /* ignore */
+        }
+      });
+    });
+  }
+
   async function renderHistory() {
     setView("history");
     const list = $("#history-list");
@@ -6605,69 +6752,10 @@
         .sort((a, b) => String(b.p.lastAt || "").localeCompare(String(a.p.lastAt || "")));
       const daysHtml = historyDaysHtml(track);
 
-      let html = "";
-      if (!daysHtml && !recent.length) {
-        html += `<p class="muted">${tt("history.noSessions")}</p>
-          <p><button type="button" class="btn btn-practice btn-sm" id="history-empty-cta">${tt("history.emptyCta")}</button></p>`;
-      } else {
-        html += `<div class="hist-top">${daysHtml}`;
-        if (recent.length) {
-          html += `<section class="hist-recent" aria-labelledby="hist-recent-h">
-            <h3 id="hist-recent-h">${tt("history.recent")}</h3>
-            <div class="history-list">${recent.map((r) => openRowHtml(r.ex, historyRowMeta(r.p), "history-item")).join("")}</div>
-          </section>`;
-        }
-        html += `</div>`;
-      }
+      let html = historyTopHtml(daysHtml, recent);
 
       if (recs.length) {
-        html += `<h3 style="margin-top:1.5rem;">${tt("history.recordings")}</h3>`;
-        // Group by exercise for A/B compare (progress proof users love)
-        const byEx = {};
-        recs.forEach((r) => {
-          if (!byEx[r.exerciseId]) byEx[r.exerciseId] = [];
-          byEx[r.exerciseId].push(r);
-        });
-        html += `<div class="history-list">`;
-        for (const r of recs) {
-          const ex = findExercise(r.exerciseId);
-          // The name is drawn now, in the page's language: the label stored with
-          // the take is the language it was saved in (older ones, the English
-          // catalogue title). It is only shown for a take whose exercise has left
-          // the catalogue, and as text. The date and size are the meta line's.
-          html += `
-            <div class="history-item" data-id="${escapeHtml(r.id)}">
-              <div>
-                <strong>${escapeHtml(ex ? exName(ex) : r.label)}</strong>
-                <div class="meta">${escapeHtml(new Date(r.createdAt).toLocaleString(locale()))} · ${Math.round((r.size || 0) / 1024)} KB</div>
-              </div>
-              <div class="controls-row">
-                <button type="button" class="btn btn-sm" data-play="${escapeHtml(r.id)}">${tt("history.play")}</button>
-                <button type="button" class="btn btn-sm btn-danger" data-del="${escapeHtml(r.id)}">${tt("history.delete")}</button>
-              </div>
-            </div>`;
-        }
-        html += `</div>`;
-        // A/B compare blocks
-        const pairs = Object.entries(byEx).filter(([, arr]) => arr.length >= 2);
-        if (pairs.length) {
-          html += `<h3 style="margin-top:1.25rem;">${tt("retain.audioCompare")}</h3><div class="history-list">`;
-          pairs.forEach(([exId, arr]) => {
-            const sorted = arr.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-            const newer = sorted[0];
-            const older = sorted[1];
-            const ex = findExercise(exId);
-            html += `<div class="history-item">
-              <div><strong>${escapeHtml(ex ? exName(ex) : exId)}</strong>
-              <div class="meta">${tt("retain.audioCompareMeta")}</div></div>
-              <div class="controls-row">
-                <button type="button" class="btn btn-sm" data-ab-old="${escapeHtml(older.id)}" data-ab-new="${escapeHtml(newer.id)}">${tt("retain.audioCompareBtn")}</button>
-              </div>
-            </div>`;
-          });
-          html += `</div>`;
-        }
-        html += `<div id="history-player"></div>`;
+        html += historyRecordingsHtml(recs);
       }
 
       if (reviews.length) {
@@ -6690,73 +6778,7 @@
       // Gentle trial and progress prompts live here, never during practice.
       setTimeout(() => showValueMoment(), 400);
 
-      $$("[data-open-ex]", list).forEach((btn) => {
-        btn.addEventListener("click", () => openExercise(btn.dataset.openEx));
-      });
-
-      $$("[data-play]", list).forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const blob = await VTStorage.getRecordingBlob(btn.dataset.play);
-          if (!blob) return;
-          const url = URL.createObjectURL(blob);
-          const player = $("#history-player");
-          // Under the row that was tapped: at the foot of the list it played
-          // off screen on a phone.
-          btn.closest(".history-item")?.after(player);
-          // Object URL only — escape if ever concatenated with user text
-          player.replaceChildren();
-          const audio = document.createElement("audio");
-          audio.className = "audio-player";
-          audio.controls = true;
-          audio.autoplay = true;
-          audio.src = url;
-          fixUnknownDuration(audio);
-          player.appendChild(audio);
-        });
-      });
-      $("#history-empty-cta", list)?.addEventListener("click", () => {
-        setView("home");
-        continuePractice();
-      });
-      $$("[data-del]", list).forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          if (!confirm(tt("history.confirmDelete"))) return;
-          await VTStorage.deleteRecording(btn.dataset.del);
-          renderHistory();
-          toast(tt("toast.deleted"));
-        });
-      });
-      $$("[data-ab-old]", list).forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const oldId = btn.dataset.abOld;
-          const newId = btn.dataset.abNew;
-          const [bOld, bNew] = await Promise.all([
-            VTStorage.getRecordingBlob(oldId),
-            VTStorage.getRecordingBlob(newId)
-          ]);
-          if (!bOld || !bNew) {
-            toast(tt("retain.audioCompareFail"));
-            return;
-          }
-          const uOld = URL.createObjectURL(bOld);
-          const uNew = URL.createObjectURL(bNew);
-          const player = $("#history-player");
-          btn.closest(".history-item")?.after(player);
-          player.innerHTML = `
-            <div class="ab-player">
-              <div><span class="muted">${tt("retain.audioOlder")}</span>
-                <audio class="audio-player" controls src="${uOld}"></audio></div>
-              <div><span class="muted">${tt("retain.audioNewer")}</span>
-                <audio class="audio-player" controls src="${uNew}"></audio></div>
-            </div>`;
-          $$("audio", player).forEach(fixUnknownDuration);
-          try {
-            window.VTAnalytics?.track?.("audio_compare", {});
-          } catch {
-            /* ignore */
-          }
-        });
-      });
+      bindHistoryList(list);
     } catch (e) {
       console.error(e);
       list.innerHTML = `<p class="muted">${tt("history.loadError")}</p>`;
@@ -6832,15 +6854,21 @@
     return D.countDays(start, D.addDays(start, 6));
   }
 
+  /**
+   * A week is over seven days after it started, reviewed or not: the review
+   * below opens then, and the lines above it stop saying "this week".
+   */
+  function planWeekOver(plan, idle) {
+    const start = planStartDay(plan);
+    return !idle && !!start && (window.VTDays?.dayKey?.() || "") >= window.VTDays?.addDays?.(start, 7);
+  }
+
   function renderPlan() {
     setView("plan");
     const plan = VTStorage.getWeekPlan();
     const track = pageTrack();
     const idle = plan.status === "idle";
-    // A week is over seven days after it started, reviewed or not: the review
-    // below opens then, and the lines above it stop saying "this week".
-    const start = planStartDay(plan);
-    const weekOver = !idle && !!start && (window.VTDays?.dayKey?.() || "") >= window.VTDays?.addDays?.(start, 7);
+    const weekOver = planWeekOver(plan, idle);
     renderPlanWeekRail(plan);
     $("#plan-week-num").textContent = tt("plan.weekN", { n: plan.weekNumber });
     // Before the week starts, "Elige el elemento" and the start button say it all.
@@ -8193,9 +8221,8 @@
     return p.id === "default" ? tt("pro.profileMain") : `${tt("pro.profile")} ${index + 1}`;
   }
 
-  function renderProStudio(pulse, isProUser) {
-    const es = isEsLang();
-    // Profiles
+  /** The profile picker: every profile on this device, the active one chosen. */
+  function renderProProfiles() {
     const sel = $("#sel-profile");
     if (sel && window.VTStorage?.getProfiles) {
       const { activeId, list } = VTStorage.getProfiles();
@@ -8213,6 +8240,10 @@
       // "Renombrar" renamed the one nobody could see.
       sel.value = activeId;
     }
+  }
+
+  /** The weekly goal's picker: the goal set, and whether this plan may change it. */
+  function renderProGoalPicker(isProUser) {
     const goalSel = $("#sel-week-goal");
     if (goalSel) {
       const g = VTStorage?.getGoals?.() || { weeklySessionsTarget: 3 };
@@ -8222,6 +8253,10 @@
       // Free can see default goal progress but not change
       if (!window.VTBilling?.can?.("studio_goals")) goalSel.disabled = true;
     }
+  }
+
+  /** The week's sessions against the goal, marked once it is met. */
+  function renderProGoalProgress(pulse) {
     const gp = $("#pro-goal-progress");
     if (gp) {
       gp.textContent = tt("pro.goalProgress", {
@@ -8230,8 +8265,10 @@
       });
       gp.classList.toggle("is-met", !!pulse.goalMet);
     }
+  }
 
-    // Insights panel
+  /** The insights panel's lock and its coach line: Pro's own reading, or the teaser. */
+  function renderProInsights(pulse, isProUser, es) {
     const lock = $("#pro-insights-lock");
     const panel = $("#pro-insights-panel");
     if (lock) lock.hidden = isProUser;
@@ -8246,6 +8283,10 @@
         ? VTValuePulse?.coachFocus?.(pulse, es) || ""
         : tt("pro.insightsTeaser");
     }
+  }
+
+  /** The sessions sparkline, shown to Pro only. */
+  function renderProSpark(pulse, isProUser) {
     const spark = $("#pro-spark");
     if (spark) {
       const arr = pulse.spark || [];
@@ -8261,6 +8302,10 @@
       // teaser text says what the chart would show instead.
       spark.hidden = !isProUser;
     }
+  }
+
+  /** The hold's trend, Pro only; what unlocks it, otherwise. */
+  function renderProHoldTrend(pulse, isProUser) {
     const ht = $("#pro-hold-trend");
     if (ht) {
       if (isProUser && pulse.holdTrend?.length) {
@@ -8272,8 +8317,10 @@
         ht.textContent = isProUser ? "" : tt("pro.unlockInsights");
       }
     }
+  }
 
-    // Achievements (earn free; labels always)
+  /** The achievement badges, each with its label, earned or not. */
+  function renderProAchievements(pulse) {
     const grid = $("#pro-ach-grid");
     if (grid && VTValuePulse?.achievements) {
       const ach = VTValuePulse.achievements(pulse);
@@ -8284,8 +8331,10 @@
         })
         .join("");
     }
+  }
 
-    // Practice heatmap (26 weeks)
+  /** Days practised over 26 weeks, once they go back further than Historial's calendar. */
+  function renderPracticeHeatmap() {
     const hm = $("#practice-heatmap");
     if (hm && VTValuePulse?.heatmap) {
       const data = VTValuePulse.heatmap(26);
@@ -8312,6 +8361,25 @@
       const firstCell = data.cells.find((c) => c.count > 0);
       if (wrap) wrap.hidden = !!calFrom && (!firstCell || String(firstCell.date) >= calFrom);
     }
+  }
+
+  function renderProStudio(pulse, isProUser) {
+    const es = isEsLang();
+    // Profiles
+    renderProProfiles();
+    renderProGoalPicker(isProUser);
+    renderProGoalProgress(pulse);
+
+    // Insights panel
+    renderProInsights(pulse, isProUser, es);
+    renderProSpark(pulse, isProUser);
+    renderProHoldTrend(pulse, isProUser);
+
+    // Achievements (earn free; labels always)
+    renderProAchievements(pulse);
+
+    // Practice heatmap (26 weeks)
+    renderPracticeHeatmap();
     updateHomeZeroClass();
   }
 
@@ -8335,11 +8403,8 @@
     return !!window.VTDays && !!window.VTLoop?.enabled?.();
   }
 
-  function renderRetentionChrome() {
-    if (!window.VTReminders) return;
-    const isEs = isEsLang();
-    const isPro = !!window.VTBilling?.can?.("extra_reminders") || !!window.VTBilling?.isPro?.();
-    const cfg = VTReminders.getConfig();
+  /** The reminder dialog's settings as stored: on or off, the times, and browser notifications. */
+  function renderReminderSettings(cfg, isPro) {
     const chk = $("#chk-reminders");
     if (chk) chk.checked = !!cfg.enabled;
     const t1 = $("#rem-time-1");
@@ -8354,12 +8419,14 @@
     // nothing to tick: the row would only ever answer "permission not granted".
     const notifyRow = bn?.closest(".retain-check");
     if (notifyRow) notifyRow.hidden = !("Notification" in window);
+  }
 
-    const loopOn = loopArm();
-
-    // Rest days (the old "freeze"): the ledger spends them on real misses; this
-    // only reports one it has just spent, once. The week card already shows
-    // the days left, so the reminder dialog does not repeat them.
+  /**
+   * Rest days (the old "freeze"): the ledger spends them on real misses; this
+   * only reports one it has just spent, once. The week card already shows
+   * the days left, so the reminder dialog does not repeat them.
+   */
+  function reportRestDaysSpent(loopOn) {
     const fr = VTReminders.tryApplyFreeze();
     if (fr.applied) {
       // Rest days are the ledger's in both arms, and so is their event. In the
@@ -8376,8 +8443,10 @@
         );
       }
     }
+  }
 
-    // The week card's way in to the reminder says whether one is set.
+  /** The week card's way in to the reminder says whether one is set. */
+  function renderReminderWayIn(cfg, loopOn) {
     const remText =
       cfg.enabled && cfg.times[0] ? tt("retain.openOn", { time: clockTime(cfg.times[0]) }) : tt("retain.open");
     const remLabel = $("#btn-reminder-label");
@@ -8387,12 +8456,16 @@
     if (classicLabel) classicLabel.textContent = remText;
     const classicRemind = $("#start-remind");
     if (classicRemind) classicRemind.hidden = loopOn;
+  }
 
-    // Welcome back after ≥2 days. With the daily loop the start panel itself
-    // becomes the comeback screen, so this card would only repeat it lower
-    // down, and its "▶ 5 min" would compete with the panel's one button. A
-    // guided session left open keeps the panel's copy, so its kicker says it.
-    // A gap the rest days covered is rest, not a lapse: the ledger says which.
+  /**
+   * Welcome back after ≥2 days. With the daily loop the start panel itself
+   * becomes the comeback screen, so this card would only repeat it lower
+   * down, and its "▶ 5 min" would compete with the panel's one button. A
+   * guided session left open keeps the panel's copy, so its kicker says it.
+   * A gap the rest days covered is rest, not a lapse: the ledger says which.
+   */
+  function renderWelcomeBack(loopOn) {
     const days = VTReminders.daysSinceLastPractice();
     const sumDays = window.VTDays?.summary?.();
     const away = sumDays ? !sumDays.todayDone && sumDays.comeback : days != null && days >= 2;
@@ -8407,11 +8480,32 @@
         if (body) body.textContent = tt("retain.welcomeBodyDays", { n: String(days) });
       }
     }
+  }
 
-    // Due reminder banner. Evaluating marks the day as notified, so the second
-    // render during page load used to hide the banner the first had just shown:
-    // it was never visible. What was shown today stays until dismissed or until
-    // practice makes it moot.
+  /** The due reminder's banner, kept for today: its sentence, its button, and one analytics event. */
+  function showRemindDue(isEs, loopOn, mins) {
+    const tx = $("#remind-due-text");
+    if (tx) tx.textContent = VTReminders.messageAt(state.remindDue.messageIndex, isEs, mins);
+    // The label names what the button starts (see #rd-start's click).
+    const go = $("#rd-start");
+    if (go) go.textContent = tt(loopOn ? "loop.remindCta" : "retain.micro5", { min: String(mins) });
+    try {
+      if (!state.remindDue.tracked) {
+        state.remindDue.tracked = true;
+        window.VTAnalytics?.track?.("remind_due_shown", {});
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /**
+   * Due reminder banner. Evaluating marks the day as notified, so the second
+   * render during page load used to hide the banner the first had just shown:
+   * it was never visible. What was shown today stays until dismissed or until
+   * practice makes it moot.
+   */
+  function renderRemindDue(cfg, isEs, loopOn) {
     const mins = minimoMinutes();
     const ev = VTReminders.evaluate(isEs, mins);
     const rd = $("#remind-due");
@@ -8428,22 +8522,23 @@
         state.remindDue.day === today &&
         !VTReminders.practicedToday();
       rd.hidden = !keep;
-      if (keep) {
-        const tx = $("#remind-due-text");
-        if (tx) tx.textContent = VTReminders.messageAt(state.remindDue.messageIndex, isEs, mins);
-        // The label names what the button starts (see #rd-start's click).
-        const go = $("#rd-start");
-        if (go) go.textContent = tt(loopOn ? "loop.remindCta" : "retain.micro5", { min: String(mins) });
-        try {
-          if (!state.remindDue.tracked) {
-            state.remindDue.tracked = true;
-            window.VTAnalytics?.track?.("remind_due_shown", {});
-          }
-        } catch {
-          /* ignore */
-        }
-      }
+      if (keep) showRemindDue(isEs, loopOn, mins);
     }
+  }
+
+  function renderRetentionChrome() {
+    if (!window.VTReminders) return;
+    const isEs = isEsLang();
+    const isPro = !!window.VTBilling?.can?.("extra_reminders") || !!window.VTBilling?.isPro?.();
+    const cfg = VTReminders.getConfig();
+    renderReminderSettings(cfg, isPro);
+
+    const loopOn = loopArm();
+
+    reportRestDaysSpent(loopOn);
+    renderReminderWayIn(cfg, loopOn);
+    renderWelcomeBack(loopOn);
+    renderRemindDue(cfg, isEs, loopOn);
   }
 
   /** Minutes the reminder's button starts: the Mínimo of the track on screen in the loop, else 5. */
@@ -8728,8 +8823,8 @@
       redrawTimer = setTimeout(() => showSyncedRecord(), 120);
     });
 
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState !== "visible") return;
+    // Shown again, signed in: /v1/me if it never answered, and a sync at most once a minute.
+    function catchUpAccount() {
       const acct = window.VTAccount?.getState?.();
       if (acct && acct.signedIn) {
         // The first /v1/me may have been missed; the panel and the door both
@@ -8744,12 +8839,22 @@
           window.VTSync?.schedule?.(0);
         }
       }
+    }
+
+    // Shown again on a new day: the open Plan or Historial is drawn for it.
+    function catchUpDay() {
       const today = window.VTDays?.dayKey?.() || "";
       if (today && today !== shownDay) {
         shownDay = today;
         if (state.view === "plan") renderPlan();
         else if (state.view === "history") renderHistory();
       }
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      catchUpAccount();
+      catchUpDay();
     });
   }
 
@@ -8832,36 +8937,29 @@
       ?.focus({ preventScroll: true });
   }
 
-  function showValueMoment(forceId) {
-    const B = window.VTBilling;
-    const VP = window.VTValuePulse;
-    if (!VP?.suggestUpgradeMoment) return;
-    // Don't interrupt e2e / tours
+  /** True while an end-to-end run or a guided tour is on screen. */
+  function valueMomentPaused() {
     try {
-      if (sessionStorage.getItem("vt_e2e") === "1") return;
-      if (document.body.classList.contains("tour-active")) return;
+      if (sessionStorage.getItem("vt_e2e") === "1") return true;
+      if (document.body.classList.contains("tour-active")) return true;
     } catch {
       /* ignore */
     }
-    const banner = $("#value-banner");
-    const text = $("#value-banner-text");
-    if (!banner || !text) return;
+    return false;
+  }
+
+  /** The plan as it stands and the moment worth a banner: the one asked for by name, or the pulse's pick. */
+  function valueMomentFor(forceId, VP, B) {
     const ent = B?.getEntitlement?.() || { pro: false };
     const stats = VP.compute();
-    let moment = forceId
+    const moment = forceId
       ? { id: forceId, priority: 99, sessions: stats.sessions, bestHoldSec: stats.bestHoldSec, trialDaysLeft: B?.trialDaysLeft?.() }
       : VP.suggestUpgradeMoment(stats, ent);
-    // Nothing to say for the record now open (another profile, a dismissed
-    // moment, Pro bought meanwhile): a banner left over from the last one is not
-    // true. It is put away without being dismissed, so it can come back for the
-    // record it was written for.
-    const nothingToSay = () => {
-      if (!banner.hidden) putAwayValueBanner(banner);
-    };
-    if (!moment || VP.isDismissed(moment.id)) return nothingToSay();
-    // If already full pro (paid/demo), skip soft upsells except trial ending
-    if (ent.pro && ent.source !== "trial" && moment.id !== "trial_ending") return nothingToSay();
+    return { ent, moment };
+  }
 
+  /** Put the moment's line up, and step the other Pro offers aside for it. */
+  function showValueBanner(banner, text, moment) {
     const vars = {
       // The trial's own line counts days; the others count sessions. A moment
       // asked for by name carries both figures.
@@ -8877,6 +8975,30 @@
     if (cta) cta.hidden = true;
     const teaser = $("#pro-insights-panel");
     if (teaser && teaser.classList.contains("is-locked")) teaser.hidden = true;
+  }
+
+  function showValueMoment(forceId) {
+    const B = window.VTBilling;
+    const VP = window.VTValuePulse;
+    if (!VP?.suggestUpgradeMoment) return;
+    // Don't interrupt e2e / tours
+    if (valueMomentPaused()) return;
+    const banner = $("#value-banner");
+    const text = $("#value-banner-text");
+    if (!banner || !text) return;
+    const { ent, moment } = valueMomentFor(forceId, VP, B);
+    // Nothing to say for the record now open (another profile, a dismissed
+    // moment, Pro bought meanwhile): a banner left over from the last one is not
+    // true. It is put away without being dismissed, so it can come back for the
+    // record it was written for.
+    const nothingToSay = () => {
+      if (!banner.hidden) putAwayValueBanner(banner);
+    };
+    if (!moment || VP.isDismissed(moment.id)) return nothingToSay();
+    // If already full pro (paid/demo), skip soft upsells except trial ending
+    if (ent.pro && ent.source !== "trial" && moment.id !== "trial_ending") return nothingToSay();
+
+    showValueBanner(banner, text, moment);
   }
 
   /** Keep an already visible upgrade message in the selected language.
@@ -9912,6 +10034,21 @@
     });
   }
 
+  /**
+   * Signed in but never told who: the /v1/me at load was missed (offline, a
+   * restart). Ask again now that somebody is looking, or this panel keeps
+   * saying nothing about who is signed in, and "Plan gratis" under a header
+   * that says Pro.
+   */
+  function askWhoIsSignedIn() {
+    const acctNow = window.VTAccount?.getState?.();
+    if (acctNow && acctNow.signedIn && !acctNow.account) {
+      Promise.resolve(window.VTAccount.refresh?.())
+        .then(() => refreshAccountUI())
+        .catch(() => {});
+    }
+  }
+
   function openAccount() {
     const modal = $("#account-modal");
     if (!modal) return;
@@ -9928,16 +10065,7 @@
     // never touches it. The answer redraws the panel through onChange.
     const asking = window.VTAccount?.ensureMethods?.();
     mountGoogleButton();
-    // Signed in but never told who: the /v1/me at load was missed (offline, a
-    // restart). Ask again now that somebody is looking, or this panel keeps
-    // saying nothing about who is signed in, and "Plan gratis" under a header
-    // that says Pro.
-    const acctNow = window.VTAccount?.getState?.();
-    if (acctNow && acctNow.signedIn && !acctNow.account) {
-      Promise.resolve(window.VTAccount.refresh?.())
-        .then(() => refreshAccountUI())
-        .catch(() => {});
-    }
+    askWhoIsSignedIn();
     // What the visitor ends up looking at is the state worth counting, and on
     // the first open of a page load that is not knowable yet: nothing probes
     // /v1/auth/methods before this, so accountPanelState() would read "checking"

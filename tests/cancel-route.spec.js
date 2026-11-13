@@ -134,7 +134,8 @@ test.describe("How to cancel says the true thing for the rail you paid on", () =
     const r = await page.evaluate(() => {
       try {
         window.VTBilling.clearEntitlement?.();
-        window.VT_BILLING_CONFIG.freeTrialDays = 7;
+        // The shipped config offers 7 days; it is frozen, so this case reads
+        // it rather than assigning it (an assignment here does nothing).
         window.VTBilling.startTrial?.();
       } catch {
         /* ignore */
@@ -142,8 +143,9 @@ test.describe("How to cancel says the true thing for the rail you paid on", () =
       document.getElementById("btn-pricing")?.click();
       const el = document.getElementById("pricing-cancel-note");
       const ent = window.VTBilling.getEntitlement();
-      return { status: ent.status, provider: ent.provider, hidden: !!el.hidden, text: el.textContent.trim() };
+      return { status: ent.status, provider: ent.provider, hidden: !!el.hidden, text: el.textContent.trim(), days: window.VT_BILLING_CONFIG.freeTrialDays };
     });
+    expect(r.days, "the shipped trial length this case relies on").toBe(7);
     // Whether a trial can start at all depends on the account; what must never
     // happen is a cancellation route appearing for a rail nobody paid on.
     expect(["trial", "free", "none", undefined]).toContain(r.status);

@@ -13,6 +13,7 @@
  */
 const { test, expect } = require("@playwright/test");
 const fs = require("fs");
+const { patchBillingConfig } = require("./helpers/billing");
 const path = require("path");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
@@ -98,15 +99,18 @@ async function boot(page, options) {
       })
     });
   });
+  if (opts.configured === false) {
+    // No worker at all, set as the config is assigned: the page freezes it
+    // straight after (QA-05), so the assignment this used to make once the
+    // page had loaded did nothing, and the case ran with the production worker
+    // still configured everywhere except a stubbed VTAccount.
+    await patchBillingConfig(page, { verification: { apiBaseUrl: "" } });
+  }
   await page.goto(BASE + (opts.url || "/index.html"), { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTReports);
   if (opts.configured === false) {
-    await page.evaluate(() => {
-      window.VT_BILLING_CONFIG.verification.apiBaseUrl = "";
-      // account.js read the base at parse time for its own state, so stand in
-      // for the one answer reports.js asks it for.
-      window.VTAccount = { ...(window.VTAccount || {}), isConfigured: () => false, getState: () => ({ configured: false, signedIn: false }) };
-    });
+    const base = await page.evaluate(() => window.VT_BILLING_CONFIG.verification.apiBaseUrl);
+    expect(base, "the patch must really be in the config, or this case checks nothing").toBe("");
   }
   return { posted };
 }
@@ -261,7 +265,7 @@ test.describe("reporting a problem", () => {
 
   // js/reports.js drawForm was split under the complexity ceiling (merging #26
   // into main); these three mutants lived until these tests.
-  test("C29 a drafted idea comes back as an idea when the dialog is opened without a kind", async ({ page }) => {
+  test("SP10 a drafted idea comes back as an idea when the dialog is opened without a kind", async ({ page }) => {
     // The footer entry is labelled "report a problem" and asks for a bug, so
     // it is the programmatic open (and the QA page's) that shows the restore.
     await boot(page);
@@ -276,7 +280,7 @@ test.describe("reporting a problem", () => {
     await expect(page.locator("#vt-report-summary")).toHaveValue("más escalas menores");
   });
 
-  test("C30 a signed-in reporter's address is offered as the contact, and a typed one wins", async ({ page }) => {
+  test("SP11 a signed-in reporter's address is offered as the contact, and a typed one wins", async ({ page }) => {
     await boot(page);
     await page.evaluate(() => {
       window.VTAccount = { ...window.VTAccount, getState: () => ({ configured: true, signedIn: true, account: { email: "cantante@example.test" } }) };
@@ -290,7 +294,7 @@ test.describe("reporting a problem", () => {
     await expect(page.locator("#vt-report-contact")).toHaveValue("otra@example.test");
   });
 
-  test("C31 back from the copy panel, the cursor is in the summary again, not lost on the page", async ({ page }) => {
+  test("SP12 back from the copy panel, the cursor is in the summary again, not lost on the page", async ({ page }) => {
     await boot(page, { reports: "off" });
     await page.locator(".app-footer [data-vt-report]").click();
     await fill(page, { summary: "no se guarda" });
@@ -439,7 +443,7 @@ test.describe("the QA site", () => {
 
   // qa/qa.js loadHealth and stateText were split under the complexity ceiling
   // (merging #26 into main); these three mutants lived until these tests.
-  test("C12 + C15 an older worker is called older, not 'off', and both ways in are named", async ({ page }) => {
+  test("SP5 + SP7 an older worker is called older, not 'off', and both ways in are named", async ({ page }) => {
     await boot(page, {
       url: "/qa/index.html",
       health: { ok: true, accountsConfigured: true, authMethods: { email: true, google: true, googleClientId: "x", trialDays: 14 } }
@@ -451,7 +455,7 @@ test.describe("the QA site", () => {
     await expect(page.locator("#qa-events")).toHaveText("este servidor es anterior a las estadísticas");
   });
 
-  test("C14 the pasted state carries what the worker said", async ({ page }) => {
+  test("SP6 the pasted state carries what the worker said", async ({ page }) => {
     await boot(page, { url: "/qa/index.html" });
     await expect(page.locator("#qa-worker")).toHaveText("responde");
     const state = await page.evaluate(() => window.VTQa.stateText());

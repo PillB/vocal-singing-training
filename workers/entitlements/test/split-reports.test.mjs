@@ -6,17 +6,18 @@
  * existing suite. These six tests are for the six that lived, each of which is
  * a real promise the route makes and nothing checked:
  *
- *   R3  a body whose Content-Length is over the cap is refused before it is read
- *   R8  a signed-in reporter has a daily share across every address they use
- *   R14 the environment blob is stored through its closed list, also via the route
- *   R15 updateReport leaves the status alone when handed one it does not know
- *   R18 a note added later does not wipe who handled the report
- *   R20 the reporter's steps to reproduce are stored and come back
+ *   WR1 a body whose Content-Length is over the cap is refused before it is read
+ *   WR2 a signed-in reporter has a daily share across every address they use
+ *   WR3 the environment blob is stored through its closed list, also via the route
+ *   WR4 updateReport leaves the status alone when handed one it does not know
+ *   WR5 a note added later does not wipe who handled the report
+ *   WR6 the reporter's steps to reproduce are stored and come back
  *
- * Each test names the mutant it kills. They drive the real router, except R15
- * and R18, which pin `updateReport`'s own contract: the admin route validates
- * the status and always passes an admin id first, so those two guards are the
- * function's defence for any other caller, and only a direct call reaches them.
+ * Each test names the mutant it kills (its id in qa/mutate.mjs, set "splits").
+ * They drive the real router, except WR4 and WR5, which pin `updateReport`'s
+ * own contract: the admin route validates the status and always passes an
+ * admin id first, so those two guards are the function's defence for any
+ * other caller, and only a direct call reaches them.
  */
 
 import assert from "node:assert/strict";
@@ -81,7 +82,7 @@ async function signIn(env, email, now) {
   return verified.body.sessionToken;
 }
 
-test("R3 a Content-Length over the cap is refused before the body is read, even when the body itself is small", async () => {
+test("WR1 a Content-Length over the cap is refused before the body is read, even when the body itself is small", async () => {
   const env = freshEnv();
   const control = await submit(env, { kind: "bug", summary: "el piano no suena" });
   assert.equal(control.status, 200, `control: an honest small report is taken: ${JSON.stringify(control.body)}`);
@@ -90,7 +91,7 @@ test("R3 a Content-Length over the cap is refused before the body is read, even 
   assert.equal(lying.body.reason, "body_too_large");
 });
 
-test("R8 a signed-in reporter's daily share holds across addresses, and a signed-out one on fresh addresses is not held to it", async () => {
+test("WR2 a signed-in reporter's daily share holds across addresses, and a signed-out one on fresh addresses is not held to it", async () => {
   const env = freshEnv();
   const token = await signIn(env, "cantante@example.test", NOW);
   const share = REPORT_LIMITS.perAccount[0];
@@ -109,7 +110,7 @@ test("R8 a signed-in reporter's daily share holds across addresses, and a signed
   assert.equal(anon.status, 200, JSON.stringify(anon.body));
 });
 
-test("R14 + R20 the steps and the environment a report carries are stored, and the environment only through its closed list", async () => {
+test("WR3 + WR6 the steps and the environment a report carries are stored, and the environment only through its closed list", async () => {
   const env = freshEnv();
   const admin = await signIn(env, "admin@example.test", NOW);
   const steps = "1. abrir la escala\n2. tocar el piano";
@@ -136,7 +137,7 @@ async function storedReport() {
   return { db: env.DB, id: parsed.report.id };
 }
 
-test("R15 updateReport keeps the stored status when handed one it does not know, and still applies the note", async () => {
+test("WR4 updateReport keeps the stored status when handed one it does not know, and still applies the note", async () => {
   const { db, id } = await storedReport();
   const moved = await updateReport(db, id, { status: "triaged", by: "acct_admin" }, NOW + 10);
   assert.equal(moved.report.status, "triaged", "control: a known status is applied");
@@ -148,7 +149,7 @@ test("R15 updateReport keeps the stored status when handed one it does not know,
   assert.equal(row.status, "triaged");
 });
 
-test("R18 a later change made without a handler keeps who handled the report", async () => {
+test("WR5 a later change made without a handler keeps who handled the report", async () => {
   const { db, id } = await storedReport();
   await updateReport(db, id, { status: "triaged", by: "acct_admin" }, NOW + 10);
   const noted = await updateReport(db, id, { note: "duplicado de otro" }, NOW + 20);

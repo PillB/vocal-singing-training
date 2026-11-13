@@ -83,6 +83,11 @@ async function boot(page, options) {
       return route.abort("aborted");
     });
   }
+  // Nothing in this file may reach the real worker: any /v1 call a case does
+  // not answer itself gets a 404 here (a later page.route takes precedence).
+  await page.route("**/v1/**", (route) =>
+    route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ ok: false, reason: "not_stubbed" }) })
+  );
   await page.route("**/v1/health**", (route) => {
     if (opts.health === null) return route.abort("failed");
     return route.fulfill({
@@ -182,6 +187,10 @@ test.describe("a rail the worker cannot honour", () => {
       health: healthBody({ mercadopagoConfigured: true, creemConfigured: true }),
       extraMarkets: [{ code: "ZZ", name: "Nowhere", currency: "USD", rail: "typo", priority: 3 }]
     });
+    // ZZ answers "creem" whether or not it is in the config (an unknown code
+    // falls back to Creem too), so the case first proves the market is there.
+    const landed = await page.evaluate(() => window.VT_BILLING_CONFIG.markets.some((m) => m.code === "ZZ" && m.rail === "typo"));
+    expect(landed, "the typo market must really be in the config, or this case checks nothing").toBe(true);
     const rails = await page.evaluate(() => {
       return {
         us: window.VTBilling.preferredRail("US"),
@@ -231,7 +240,7 @@ test.describe("a rail the worker cannot honour", () => {
     }
   });
 
-  test("C10 what was bought is remembered across the trip to the checkout, whatever the return link says", async ({ page }) => {
+  test("SP4 what was bought is remembered across the trip to the checkout, whatever the return link says", async ({ page }) => {
     // startCheckout was split under the complexity ceiling (merging #26 into
     // main); with the intent no longer written, this mutant lived. The return
     // link from a hosted checkout carries no plan or rail of ours, so the
@@ -241,6 +250,11 @@ test.describe("a rail the worker cannot honour", () => {
       links: { mercadopago: { pro_yearly: MP_LINK } }
     });
     await askTheWorker(page);
+    const claims = [];
+    await page.route("**/v1/claim", (route) => {
+      claims.push(JSON.parse(route.request().postData() || "{}"));
+      return route.fulfill({ status: 202, contentType: "application/json", body: "{}" });
+    });
     const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_yearly", "mercadopago"));
     expect(res.mode).toBe("redirect");
     await expect.poll(() => navigations.join(" ")).toContain("mercadopago.com.pe");
@@ -250,6 +264,8 @@ test.describe("a rail the worker cannot honour", () => {
       return { event: ret && ret.event, plan: ret && ret.plan, provider: ret && ret.provider };
     });
     expect(back).toEqual({ event: "success", plan: "pro_yearly", provider: "mercadopago" });
+    await expect.poll(() => claims.length).toBeGreaterThan(0);
+    expect(claims[0]).toEqual({ provider: "mercadopago", sessionId: "pre_test" });
   });
 
   // ----- the other direction: no answer is not a no
@@ -351,6 +367,28 @@ test.describe("a rail the worker cannot honour", () => {
     await page.waitForTimeout(300);
     expect(asked.length).toBe(1);
   });
+});
+
+// ----- the helper these cases stand on
+
+test("a checkout link for a rail the config does not have stops the page, rather than vanishing", async ({ page }) => {
+  // patchBillingConfig used to skip such a link without a word, so a typo in
+  // a rail's name left a case checking a config it had never changed.
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await patchBillingConfig(page, { links: { strpe: { pro_monthly: STRIPE_LINK } } });
+  await page.goto(`${BASE}/index.html`, { waitUntil: "domcontentloaded" });
+  await expect.poll(() => errors.join(" ")).toContain('no rail "strpe"');
+});
+
+test("control: a link for a rail the config has loads quietly", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await patchBillingConfig(page, { links: { stripe: { pro_monthly: STRIPE_LINK } } });
+  await page.goto(`${BASE}/index.html`, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => !!window.VTBilling?.startCheckout);
+  expect(await page.evaluate(() => window.VT_BILLING_CONFIG.providers.stripe.links.pro_monthly)).toBe(STRIPE_LINK);
+  expect(errors.filter((m) => m.includes("patchBillingConfig"))).toEqual([]);
 });
 
 // ----- coming back from Creem

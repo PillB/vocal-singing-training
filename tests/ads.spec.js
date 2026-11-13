@@ -132,7 +132,7 @@ test.describe("Ads scaffold", () => {
 
 // js/ads.js renderSlot and renderPreview were split under the complexity
 // ceiling (merging #26 into main). Six mutants were planted in the split and
-// three lived; each of these tests dies on one of them (C2, C5, C6) and passes
+// three lived; each of these tests dies on one of them (SP1, SP2, SP3 in qa/mutate.mjs) and passes
 // on the code before the split as well.
 test.describe("What the split of the ad slots must keep", () => {
   /** Ads on for a purely free visitor, in `mode`, with the throttle clocks cleared. */
@@ -150,7 +150,7 @@ test.describe("What the split of the ad slots must keep", () => {
     }, { mode, extra });
   }
 
-  test("C2 the home slot does not show again within its minimum interval; history is not rate-limited", async ({ page }) => {
+  test("SP1 the home slot does not show again within its minimum interval; history is not rate-limited", async ({ page }) => {
     await adsOn(page, "native");
     const r = await page.evaluate(() => {
       const card = window.VT_ADS_CONFIG.nativeCards[0];
@@ -168,7 +168,7 @@ test.describe("What the split of the ad slots must keep", () => {
     expect(r.history.map((x) => x.ok)).toEqual([true, true]);
   });
 
-  test("C5 in preview, a slot no card names says so in the page's language", async ({ page }) => {
+  test("SP2 in preview, a slot no card names says so in the page's language", async ({ page }) => {
     await adsOn(page, "preview");
     const text = await page.evaluate(() => {
       window.VT_ADS_CONFIG.nativeCards.forEach((card) => {
@@ -181,7 +181,7 @@ test.describe("What the split of the ad slots must keep", () => {
     expect(text.body).toBe("Ninguna tarjeta nombra este espacio.");
   });
 
-  test("C6 the post-session slot borrows the home AdSense unit, since it has none of its own", async ({ page }) => {
+  test("SP3 the post-session slot borrows the home AdSense unit, since it has none of its own", async ({ page }) => {
     await adsOn(page, "adsense", { adsense: { client: "ca-pub-0000000000000000", slots: { home: "1111111111" } } });
     const r = await page.evaluate(() => {
       const out = VTAds.renderSlot("post-session");

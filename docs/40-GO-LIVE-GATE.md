@@ -110,6 +110,20 @@ a country Stripe will take as a seller.
 **Only you can do this.** Create the account, then create **two products**, a
 monthly and a yearly, because Creem has no single link that offers both.
 
+Give each product a return URL (Creem's success or redirect URL) that tells
+the site it is a return:
+
+```text
+https://pillb.github.io/vocal-singing-training/?billing=success&provider=creem&plan=pro_monthly
+https://pillb.github.io/vocal-singing-training/?billing=success&provider=creem&plan=pro_yearly
+```
+
+Creem appends `checkout_id` and six other parameters to it (docs.creem.io,
+*Return URL*); the site claims the purchase under that `checkout_id` and then
+removes all of them from the address. Without `billing=success` the page does
+not know it is a return, nothing is claimed, and the buyer waits until they
+sign in for Pro to arrive.
+
 Then four values, none of which belong in a chat message:
 
 ```bash
@@ -129,7 +143,10 @@ listed in `workers/entitlements/README.md` under *Creem*.
 Filling either product id in also makes it an **allow-list**: anything else
 ever sold from the same Creem account cannot become Pro. That is the point,
 and the cost of it is a product you add in Creem and forget here, which is
-then refused — add the id and redeploy.
+then refused — add the id and redeploy. Naming a plan in metadata is no way
+around it on this rail: a Creem payment link takes `?metadata[plan]=…` from
+whoever opens it, so the worker reads metadata only for a product the list
+does not refuse.
 
 **Worth applying to Polar at the same time.** It is the second candidate in
 VG-19 and the code shape is identical; whichever answers first can be the rail.
@@ -150,7 +167,9 @@ without money moving.
 
 Walk all of it: sign in, buy monthly, see Pro arrive; refund it in Creem's
 dashboard and see Pro end; buy yearly; cancel and see the period you paid for
-survive to its end.
+survive to its end. Once, buy without signing in and in a fresh tab: Pro
+should still arrive from the return alone, and the address bar should end as
+the plain site address with no `checkout_id` or `signature` left in it.
 
 **Then set `CREEM_ALLOW_TEST_MODE` back to `"false"` and redeploy.** A test
 purchase moves no money, so while that flag is on, anyone who can make Creem

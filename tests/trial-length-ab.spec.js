@@ -21,15 +21,15 @@
 const { test, expect } = require("@playwright/test");
 const { mintLicense, patchBillingConfig } = require("./helpers/billing");
 
-// The worker is stood in for at a fake host (https://entitlements.test), which
-// the page's Content Security Policy rightly refuses: every request to it
-// failed, and sign-in read as "could not check access". The policy is tested
-// in tests/csp.spec.js against the real worker host; here it is bypassed so
-// the trial-length logic is what is under test, as in accounts.spec.js.
-test.use({ bypassCSP: true });
+// The worker is stood in for at the shipped worker's own host, which the
+// page's Content Security Policy allows: every request is answered by the
+// route below and none leaves the machine. A fake host (as before) is refused
+// by the policy, so the policy had to be switched off and no case ran sign-in
+// and the trial under it; now the policy is on, and one case checks that the
+// whole sign-in and trial start raise no violation.
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
-const API = "https://entitlements.test";
+const API = "https://vocal-studio-entitlements.vocalstudio-pe.workers.dev";
 const DAY = 86400;
 const KEY = "trial_len_2026_11";
 
@@ -211,6 +211,8 @@ async function installWorker(page, opts = {}) {
  */
 async function boot(page) {
   await page.addInitScript(() => {
+    window.__csp = [];
+    document.addEventListener("securitypolicyviolation", (e) => window.__csp.push(`${e.violatedDirective}|${e.blockedURI}`));
     // The client refuses to send from an automated browser, and rightly so.
     Object.defineProperty(Navigator.prototype, "webdriver", { get: () => false, configurable: true });
     try {
@@ -356,6 +358,9 @@ test.describe("the trial-length test in the browser", () => {
     }).toBe(1);
     const ev = sent.events().find((e) => e.name === "trial_started");
     expect(ev.props).toMatchObject({ where: "panel", kind: "account" });
+    // Under the shipped policy, start to finish: sign-in, the trial and the
+    // events beacon raised no violation.
+    expect(await page.evaluate(() => window.__csp)).toEqual([]);
   });
 
   test("pro_paid_first fires for a paid period, once, and never for a free one", async ({ page }) => {

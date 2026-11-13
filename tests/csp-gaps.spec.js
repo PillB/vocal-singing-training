@@ -79,7 +79,8 @@ async function visit(page, { mic = "tone", path = "/" } = {}) {
   await page.goto(BASE + path + (path.includes("?") ? "&" : "?") + "t=" + Date.now(), { waitUntil: "domcontentloaded" });
 }
 
-const PAGES = ["/index.html", "/guide.html", "/privacy.html", "/admin.html"];
+// Every page the site serves, the two #26 added included: the six qa/asset-versions.mjs lists.
+const PAGES = ["/index.html", "/guide.html", "/privacy.html", "/admin.html", "/terms.html", "/qa/index.html"];
 
 for (const path of PAGES) {
   test(`T1 ${path}: injected inline script, inline handler and foreign-origin script do not run`, async ({ page }) => {

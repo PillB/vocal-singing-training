@@ -32,7 +32,7 @@
  * should not make one.
  */
 const { test, expect } = require("@playwright/test");
-const { enableQaPro } = require("./helpers/billing");
+const { enableQaPro, patchBillingConfig } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
@@ -58,14 +58,17 @@ async function boot(page, { lang = "es" } = {}) {
     }
     window.__tracked = [];
   }, lang);
+  // No automatic trial, set as the config is assigned: the page freezes it
+  // straight after (QA-05), so assigning it once loaded did nothing.
+  await patchBillingConfig(page, { freeTrialDays: 0 });
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
+  expect(await page.evaluate(() => window.VT_BILLING_CONFIG.freeTrialDays), "the patch landed").toBe(0);
   await page.evaluate(() => {
     try {
       localStorage.removeItem("vt_billing_v1");
       localStorage.removeItem("vt_billing_trial_started_v1");
       localStorage.removeItem("vt_ads_last_home_v1");
       localStorage.removeItem("vt_ads_last_post_v1");
-      window.VT_BILLING_CONFIG.freeTrialDays = 0;
     } catch {
       /* ignore */
     }

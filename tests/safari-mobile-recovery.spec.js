@@ -900,24 +900,60 @@ for (const viewport of [{ width: 320, height: 568 }, { width: 568, height: 320 }
   });
 }
 
+// SB6. The first version of this case hid the status corner and counted on the
+// banner sitting in the band above the selects, so that the selects came up
+// under it. That held for main in CI, but not for main run in another
+// container, and not with PR #21's stage: there the banner sits below the selects,
+// they moved away from it, and the case passed with the rail watch removed.
+// Where the page rests after Start also varied from run to run. The geometry
+// is now pinned (the stage's top just under the sticky chrome, and no scroll
+// for the rest of the case), and the change is built from it: the status
+// corner above the selects grows or shrinks, as a status line that wraps or
+// empties does, until the selects' middle is on the banner's middle, wherever
+// the banner sits (above the selects on main's stage, below them on #21's).
+// The case checks that premise before it judges.
 test("the sound-paused banner moves off the controls a rail brings up under it", async ({ page }) => {
   test.setTimeout(60000);
   await page.setViewportSize({ width: 320, height: 568 });
   await startWithMic(page);
+  // Any scroll Start began has ended (the page holds still for 300 ms).
+  await expect.poll(() => page.evaluate(() => new Promise((done) => {
+    const y = scrollY;
+    setTimeout(() => done(scrollY === y), 300);
+  })), { timeout: 5000 }).toBe(true);
+  const pinned = await page.evaluate(() => {
+    // Chromium answers a taller rail here with scroll anchoring (the page
+    // scrolls by exactly the growth), and the scroll listener (SB7) then moves
+    // the banner. Safari before 27 has no scroll anchoring, and anchoring
+    // never answers a change below its anchor: there the rail watch alone
+    // moves the banner, so this case turns anchoring off and judges that.
+    document.documentElement.style.overflowAnchor = "none";
+    const css = getComputedStyle(document.documentElement);
+    const chrome = (parseFloat(css.getPropertyValue("--header-h")) || 0) + (parseFloat(css.getPropertyValue("--ex-chrome-h")) || 0);
+    const stage = document.getElementById("highway-stage");
+    scrollTo({ top: Math.round(stage.getBoundingClientRect().top + scrollY - chrome), behavior: "instant" });
+    return scrollY;
+  });
   await raiseSoundBanner(page);
   await holdSoundBanner(page);
   expect((await page.evaluate(bannerView)).covered).toEqual([]);
-  // At 320 px the banner sits in the band over the status corner, above the
-  // chord and mode selects. The corner goes (a row of the rail that hides),
-  // and the selects come up to where the banner is.
-  const before = await page.evaluate(() => {
-    const sel = document.getElementById("sel-progression").getBoundingClientRect().top;
-    document.querySelector("#hud-top-rail .hud-tl").style.display = "none";
-    return { sel, banner: document.getElementById("sound-blocked").getBoundingClientRect().top };
+  const change = await page.evaluate(() => {
+    const box = (id) => document.getElementById(id).getBoundingClientRect();
+    const banner = box("sound-blocked");
+    const sel = box("sel-progression");
+    const corner = document.querySelector("#hud-top-rail .hud-tl");
+    const d = Math.round(banner.top + banner.height / 2 - (sel.top + sel.height / 2));
+    const h = corner.getBoundingClientRect().height;
+    Object.assign(corner.style, { overflow: "hidden", minHeight: "0", height: `${Math.max(0, h + d)}px` });
+    // Read before the next frame: the banner has not been moved yet.
+    const now = box("sel-progression");
+    const still = box("sound-blocked");
+    return { d, sel: [Math.round(sel.top), Math.round(now.top)], banner: [Math.round(still.top), Math.round(still.bottom)],
+      under: now.top < still.bottom && now.bottom > still.top };
   });
-  const moved = await page.evaluate(() => document.getElementById("sel-progression").getBoundingClientRect().top);
-  expect(moved, `the selects came up (${JSON.stringify(before)})`).toBeLessThan(before.sel - 20);
+  expect(change.under, `the corner's change put the selects under the banner as it stood (${JSON.stringify(change)})`).toBe(true);
   await expect.poll(async () => (await page.evaluate(bannerView)).covered, { timeout: 2000 }).toEqual([]);
+  expect(await page.evaluate(() => scrollY), "no scroll moved the banner: only the rail's change did").toBe(pinned);
 });
 
 test("the sound-paused banner never sits under the sticky header when the stage has scrolled under it", async ({ page }) => {

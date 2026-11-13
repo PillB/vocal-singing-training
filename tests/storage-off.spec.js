@@ -71,3 +71,24 @@ test("storage switched off (localStorage itself throws): saving and then clearin
   }, SESSION);
   expect(r).toEqual({ ok: true, after: null });
 });
+
+// The test above no longer reaches storage.js's own guards: js/boot-head.js (PR #21) gives a page whose storage
+// throws a store in memory before any other script reads it, so remove() there talks to that store. Its guard
+// is still the one line between "storage switched off" and an exception wherever the swap could not happen
+// (boot-head.js failed to load, or the browser would not let the name be redefined), and while the page is
+// open, which is where this test switches storage off. Correct: no throw, nothing read back.
+// Wrong (S3, mutant C20): remove() has no try/catch and clearing the session throws.
+test("storage switched off while the page is open: saving and then clearing a session does not throw, the page reads none", async ({ page }) => {
+  const errors = await boot(page, "works");
+  const r = await page.evaluate((s) => {
+    const deny = () => new DOMException("The operation is insecure.", "SecurityError");
+    Object.defineProperty(window, "localStorage", { configurable: true, get() { throw deny(); } });
+    try {
+      VTStorage.setSession(s);
+      VTStorage.setSession(null);
+      return { ok: true, after: VTStorage.getSession() };
+    } catch (e) { return { ok: false, err: String(e.message) }; }
+  }, SESSION);
+  expect(r).toEqual({ ok: true, after: null });
+  expect(errors).toEqual([]);
+});

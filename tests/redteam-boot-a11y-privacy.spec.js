@@ -153,6 +153,21 @@ async function boot(page, hash = "") {
   await page.waitForTimeout(700);
 }
 
+/**
+ * The exercise list against the open tab's catalogue. The count comes from the
+ * catalogue, not a number: main's voice drills (#35) took the first tab from 20
+ * exercises to 24, and a fixed 20 then failed a boot that was whole. 20 stays
+ * as the floor, so an empty catalogue cannot pass for a whole list.
+ */
+async function expectWholeList(page) {
+  const list = await page.evaluate(() => ({
+    shown: document.querySelectorAll("#exercise-list .card-ex").length,
+    all: (window.VT_EXERCISES?.[window.VTApp?.getState?.().tab] || []).length
+  }));
+  expect(list.all).toBeGreaterThanOrEqual(20);
+  expect(list.shown).toBe(list.all);
+}
+
 /** The EEA statistics question, forced the way tests/region-gate.spec.js does. */
 async function openEea(browser, o = {}) {
   const c = await open(browser, { ...o, e2e: false, human: true, endpoint: ENDPOINT, timezoneId: "Europe/Madrid", locale: o.lang === "en" ? "en-GB" : "es-ES" });
@@ -291,7 +306,7 @@ test.describe("cross-04: site data blocked", () => {
       await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
       await page.waitForFunction(() => !!window.VTApp, null, { timeout: 15000 });
       await page.waitForTimeout(800);
-      expect(await page.evaluate(() => document.querySelectorAll("#exercise-list .card-ex").length)).toBe(20);
+      await expectWholeList(page);
       if (name === "phone") await page.click("#btn-more");
       await page.click("#btn-lang");
       await expect(page.locator("html")).toHaveAttribute("lang", "en");
@@ -335,7 +350,7 @@ test.describe("cross-04: site data blocked", () => {
       await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
       await page.waitForFunction(() => !!window.VTApp, null, { timeout: 15000 });
       await page.waitForTimeout(800);
-      expect(await page.evaluate(() => document.querySelectorAll("#exercise-list .card-ex").length)).toBe(20);
+      await expectWholeList(page);
       await page.click("#btn-plan");
       await expect.poll(() => page.evaluate(() => document.querySelectorAll("#element-chips .chip").length)).toBe(17);
       expect(errors).toEqual([]);

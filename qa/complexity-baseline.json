@@ -45,12 +45,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "2993131a41db15d49d2633f9d1e95c3b6c847e25a0f22622ac330bf4cacaa579",
-      "complexity": 35,
-      "name": "Async function 'onRoute'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "bf50749a2909998ed32e92fe49d07586a2ef24aa689ead139d0f184fc5fde8c5",
       "complexity": 45,
       "name": "Async function 'renderAbResults'"
@@ -60,12 +54,6 @@
       "sha": "aa116698feb36565c1691a658d2362ecceb36ed52386c4634d5161be264a2893",
       "complexity": 19,
       "name": "Async function 'renderFunnel'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "a6f96270b04696d944fe5e080e061e073111d306c1666e459a75c60c598faae1",
-      "complexity": 17,
-      "name": "Async function 'renderHistory'"
     },
     {
       "file": "js/app.js",
@@ -81,12 +69,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "d2d03cf0b93c8d1382f81f390124901c8cb478ff828052e3421c2e495cc3ac9c",
-      "complexity": 73,
-      "name": "Function 'completeExercise'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "884d50512b7850b177eff8f8300d4344243fe43b22c2380820d4cbd7df161b98",
       "complexity": 17,
       "name": "Function 'exerciseSummary'"
@@ -96,12 +78,6 @@
       "sha": "59f96e1f5a763986d19e0af1f7ad74d6e84f38b0134cca21a140df5a80d2047f",
       "complexity": 18,
       "name": "Function 'fitStageGuide'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "0ec785315e7edce81fe56d8cb4576ecde6b09dc7bf3bc093a0d06302f4049215",
-      "complexity": 22,
-      "name": "Function 'historyDaysHtml'"
     },
     {
       "file": "js/app.js",
@@ -123,39 +99,15 @@
     },
     {
       "file": "js/app.js",
-      "sha": "fbb8ec646f08ff6216065e4617a3577ef3611798d937498d15fdb01ea8973e48",
-      "complexity": 27,
-      "name": "Function 'relabelExercise'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "6ffd1890d0e5d94416500a0179e939770ad43e57e62323dcc61ff8c4271f4a8f",
       "complexity": 117,
       "name": "Function 'renderExercise'"
     },
     {
       "file": "js/app.js",
-      "sha": "2c0edc96d377e7db8e662c601b571f395993f98f155bc4b7fdb98c1f4742de81",
-      "complexity": 26,
-      "name": "Function 'renderExerciseText'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "0636d3a9e22d47c3b6413275baa1e5b99e78c2d6ad54683b8b72ff0bd98a74ea",
       "complexity": 16,
       "name": "Function 'renderNextStepCard'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "00181949ded3ed4abb47f419d3d81be27d82f0b40edb16d08c71d8e01b831e31",
-      "complexity": 51,
-      "name": "Function 'renderProStudio'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "db08d27893c7b595d87eba8ae7568023e53cde2d270d4af0dd383fcb411a156c",
-      "complexity": 41,
-      "name": "Function 'renderRetentionChrome'"
     },
     {
       "file": "js/app.js",
@@ -168,24 +120,6 @@
       "sha": "9d556165ebcf239cdcb1a493d0655a8f87f67bd549b0a29cf962225590f5d7bc",
       "complexity": 33,
       "name": "Function 'renderValuePulse'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "1f5d24f85496f3e8e15dd49fd8ffc92ce153de08cee498b0e7d86e8c17b7d2f3",
-      "complexity": 23,
-      "name": "Function 'selectProgression'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "ea4780388a7a96dff24d09b75e986031b0499301908b3a887421df77d9804a33",
-      "complexity": 23,
-      "name": "Function 'setView'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "97bbc26d25cb40d660d43781caec2336c54e59f09fc5e2c0114a05ed67cf9672",
-      "complexity": 25,
-      "name": "Function 'showValueMoment'"
     },
     {
       "file": "js/app.js",
@@ -210,12 +144,6 @@
       "sha": "4ca0bfd69bbf8652a2cbae02af14b91e4b2ab4d289814af809bde67d72b263b6",
       "complexity": 102,
       "name": "Function 'updatePitchStatsLabel'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "e37a54b84427af49d778e9bf6057372effadf90486f81d70ea7b57bfb58570d7",
-      "complexity": 19,
-      "name": "Function 'writeRoute'"
     },
     {
       "file": "js/auth.js",
@@ -270,18 +198,6 @@
       "sha": "ccbc9f1e1628d9f93bf1e6e6fd9c41e3d247346763d723f87bbe60171c4dd339",
       "complexity": 17,
       "name": "Function 'renderAside'"
-    },
-    {
-      "file": "js/daily-loop.js",
-      "sha": "43dd324b0cece44346037f782bf03fcf944a788a40f0df67eefbcffce98a8fb1",
-      "complexity": 46,
-      "name": "Function 'renderHome'"
-    },
-    {
-      "file": "js/daily-loop.js",
-      "sha": "8b854353ab52658be180195504af1f91b2e22f5f8f018752ec43150f7af2faa8",
-      "complexity": 25,
-      "name": "Function 'showDone'"
     },
     {
       "file": "js/exercise-viz.js",
@@ -380,12 +296,6 @@
       "name": "Arrow function"
     },
     {
-      "file": "js/practice-days.js",
-      "sha": "e689a2fb0a9a04c2360ae56f17a315a068485b7dc9ab15da2d93655fd8a96440",
-      "complexity": 17,
-      "name": "Function 'summary'"
-    },
-    {
       "file": "js/practice-engine.js",
       "sha": "d01d1e14381838fa02a7bfe2e8e5969764c675bff9ec130cf61bfba98133a3c8",
       "complexity": 17,
@@ -402,12 +312,6 @@
       "sha": "fc7e537bdfaba09d5e62316d00c175179014777e0e97c99df9dfd86f70e898c1",
       "complexity": 18,
       "name": "Method '_abCard'"
-    },
-    {
-      "file": "js/practice-modes.js",
-      "sha": "4d082f82347c06e396afb0a212eaa80cd0ec15563a7164f90553ff55fc58f557",
-      "complexity": 17,
-      "name": "Method '_abFrame'"
     },
     {
       "file": "js/practice-modes.js",
@@ -579,12 +483,6 @@
     },
     {
       "file": "js/practice-modes.js",
-      "sha": "018b953f20555c48de7efa4cf67ebcdbea7fdd09dab57dd0acee513286815214",
-      "complexity": 54,
-      "name": "Method 'onFrame'"
-    },
-    {
-      "file": "js/practice-modes.js",
       "sha": "0a923781be6d7dadfc49b9bee442e0d011b27f9bcecab23f7e1d2a2d1eb4e4a8",
       "complexity": 83,
       "name": "Method 'onFrame'"
@@ -623,12 +521,6 @@
       "file": "js/practice-modes.js",
       "sha": "6ea8f34257a0c344b8a5d58682665bcc2ed6fd52d88756ce83717d289f7e8960",
       "complexity": 22,
-      "name": "Method 'onFrame'"
-    },
-    {
-      "file": "js/practice-modes.js",
-      "sha": "80b78492853b751362cfc445084e924e449ddcbf64f02043419fdbffdab30e79",
-      "complexity": 49,
       "name": "Method 'onFrame'"
     },
     {
@@ -1125,12 +1017,6 @@
     },
     {
       "file": "js/scenes/resonance.js",
-      "sha": "2e0fff99ef35470ee3608aa0903baded7c46c6507dc750d5402eb5f0681a2108",
-      "complexity": 42,
-      "name": "Function 'takeLane'"
-    },
-    {
-      "file": "js/scenes/resonance.js",
       "sha": "72853500dcc17aab058a5486861a1587c49da4982275d5a654fcb3dd9a1060a2",
       "complexity": 17,
       "name": "Function 'textBlock'"
@@ -1419,21 +1305,9 @@
     },
     {
       "file": "js/storage.js",
-      "sha": "121a35cfb5f2c81a47c0f07729ac468e2b754c37b3f2eede452185d6db8071d2",
-      "complexity": 17,
-      "name": "Method 'saveExerciseResult'"
-    },
-    {
-      "file": "js/storage.js",
       "sha": "d5206da3097bcf5553b5ded129b37b267d7745e14f52d4163cfead1ab1fdb429",
       "complexity": 17,
       "name": "Method 'writeSyncBag'"
-    },
-    {
-      "file": "js/sync.js",
-      "sha": "003ff5d291920e9948d2c5a2df2a50b05a3c364148e5c6ab7a74541650c816e1",
-      "complexity": 24,
-      "name": "Async arrow function"
     },
     {
       "file": "js/sync.js",
@@ -1449,39 +1323,9 @@
     },
     {
       "file": "js/tour.js",
-      "sha": "0146d859c8076138e2edb6b5b85e67db1408095f0dcf2f72851b1c0d84bbe393",
-      "complexity": 16,
-      "name": "Function 'beginTour'"
-    },
-    {
-      "file": "js/tour.js",
       "sha": "c3fe8848271351da6b199063bc2d581d8d0d0abb093ed481634fb9fafcc51b60",
       "complexity": 16,
       "name": "Function 'packSteps'"
-    },
-    {
-      "file": "js/tour.js",
-      "sha": "2dd2e0ceb14bbb9bbbbea00591119d0b917efb0855d07528f4791c15801de455",
-      "complexity": 26,
-      "name": "Function 'placeStep'"
-    },
-    {
-      "file": "js/tour.js",
-      "sha": "ba26783dc62cf42deb69d8333fd514ae1809521fbe73d2e586fa050b41f98795",
-      "complexity": 19,
-      "name": "Function 'targetRect'"
-    },
-    {
-      "file": "js/value-pulse.js",
-      "sha": "94bab66b624e9289a905d2337132fed92dc5f6934800eb863909a6c5bdc560fa",
-      "complexity": 33,
-      "name": "Function 'compute'"
-    },
-    {
-      "file": "js/value-pulse.js",
-      "sha": "214dbef69f213a565cac1070f275f52527f397e3ce73d4fa74a981b392f9c8b4",
-      "complexity": 24,
-      "name": "Function 'narrative'"
     },
     {
       "file": "js/value-pulse.js",
@@ -1491,39 +1335,15 @@
     },
     {
       "file": "js/voice-features.js",
-      "sha": "927a7ea7e4b9dd786eeb69bfb8557e3a1bcf7f53de456658647bf6b53c8c8322",
-      "complexity": 19,
-      "name": "Method '_cameBack'"
-    },
-    {
-      "file": "js/voice-features.js",
-      "sha": "066097821350a6e2422b5a5bfaad729b974d1d058bd35f48ee2eb8b05b462aba",
-      "complexity": 29,
-      "name": "Method '_learnFloor'"
-    },
-    {
-      "file": "js/voice-features.js",
       "sha": "9c80d001310b379672670d0139e3eaea45ca65e471ed05c5f6d059499d84635e",
       "complexity": 17,
       "name": "Method '_measure'"
     },
     {
       "file": "js/voice-features.js",
-      "sha": "470f24dc9429d7ccef18023f1c07074a28087211bb2006034b4e2c62b0128e06",
-      "complexity": 16,
-      "name": "Method '_steadyRoom'"
-    },
-    {
-      "file": "js/voice-features.js",
       "sha": "9205f1fe9032f9a889d91b7ca1f1f5f224a7e690d31761a1446661a917dc072e",
       "complexity": 17,
       "name": "Method '_still'"
-    },
-    {
-      "file": "js/voice-features.js",
-      "sha": "0620b30beffacd8112739256f93ffdf35cee111fbf4bf9ddbb3ea3ed375b80b7",
-      "complexity": 29,
-      "name": "Method 'feed'"
     },
     {
       "file": "js/voice-features.js",
@@ -1706,18 +1526,6 @@
       "name": "Arrow function"
     },
     {
-      "file": "tests/format-hit-clicks.spec.js",
-      "sha": "90c596867973c7179183ec1260a65b3a03eb8a1258aeacf36782b85188e28f81",
-      "complexity": 24,
-      "name": "Async arrow function"
-    },
-    {
-      "file": "tests/headed-exercise-forensics.spec.js",
-      "sha": "6909a4bfef102072c51b9a0f34d5ef1c216ad7a3a9ce59b34c990267158a150c",
-      "complexity": 74,
-      "name": "Async arrow function"
-    },
-    {
       "file": "tests/headed-exercise-forensics.spec.js",
       "sha": "581d7d5033e71bc3ae6e166fa02ed8b3975d91eb79c367f7483314ff1c009a3c",
       "complexity": 25,
@@ -1758,12 +1566,6 @@
       "sha": "ffd7fd2b5959786e0d7c3e1aea8b6f519b9b577b525fad64bb3b463facee0ad8",
       "complexity": 41,
       "name": "Function 'writeMarkdownReport'"
-    },
-    {
-      "file": "tests/helpers/vad-sim.js",
-      "sha": "bec0d42ffb800e8f96a27d51e08616b3061b7a8c07aa5f1896635a444045040e",
-      "complexity": 26,
-      "name": "Arrow function"
     },
     {
       "file": "tests/helpers/vad-sim.js",

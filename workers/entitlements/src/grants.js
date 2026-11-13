@@ -599,6 +599,11 @@ export async function createGiftCode(db, input, now) {
   const plan = safePlan(input.plan);
   const days = Math.min(MAX_GRANT_DAYS, Math.max(1, Math.floor(Number(input.days) || 30)));
   const maxRedemptions = Math.min(1000, Math.max(1, Math.floor(Number(input.maxRedemptions) || 1)));
+  // Answered as stored: the create answer used to echo the note as sent (not
+  // cut to 200 characters, not made a string) while the list showed the
+  // stored one, so the same code read differently on the two screens.
+  const note = input.note ? String(input.note).slice(0, 200) : null;
+  const expiresAt = Number.isFinite(input.expiresAt) ? Math.floor(input.expiresAt) : null;
   await db
     .prepare(
       `INSERT INTO gift_codes (code_normalized, code_display, plan, days, max_redemptions,
@@ -611,22 +616,13 @@ export async function createGiftCode(db, input, now) {
       plan,
       days,
       maxRedemptions,
-      input.note ? String(input.note).slice(0, 200) : null,
+      note,
       input.createdBy || null,
-      Number.isFinite(input.expiresAt) ? Math.floor(input.expiresAt) : null,
+      expiresAt,
       at
     )
     .run();
-  return {
-    code: display,
-    plan,
-    days,
-    maxRedemptions,
-    redeemedCount: 0,
-    note: input.note || null,
-    expiresAt: Number.isFinite(input.expiresAt) ? Math.floor(input.expiresAt) : null,
-    createdAt: at
-  };
+  return { code: display, plan, days, maxRedemptions, redeemedCount: 0, note, expiresAt, createdAt: at };
 }
 
 /**

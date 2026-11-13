@@ -72,3 +72,9 @@ import "./ledger-boundaries.test.mjs";
 // Every rail (Stripe, Creem, Mercado Pago) on the D1 ledger while KV refuses
 // writes, every route that reads what they wrote, and the health flag's copy in KV.
 import "./d1-rails.test.mjs";
+// Gift codes, grants and the trial at their edges: one code among several, a
+// race mid-write, a long note, a D1 error.
+import "./grants-edges.test.mjs";
+// Sign-in through the router: refused codes write nothing, the fifth try,
+// two tabs, failed reads, session length, and what the admin sweep answers.
+import "./sign-in-edges.test.mjs";

@@ -1136,7 +1136,7 @@ test.describe("What the split of the account panel and the Pro dialog must keep"
     }
   };
 
-  test("A5 once checkout is live, an account whose trial is spent is told it ended, not that it is on a plain free plan", async ({ page }) => {
+  test("SP13 once checkout is live, an account whose trial is spent is told it ended, not that it is on a plain free plan", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     await patchBillingConfig(page, LIVE_LINKS);
     await install(page, {
@@ -1151,7 +1151,7 @@ test.describe("What the split of the account panel and the Pro dialog must keep"
     await expect(page.locator("#pricing-status")).toHaveText("Tu prueba terminó · estás en el plan gratis");
   });
 
-  test("A5 control: an account that never trialled is on the free plan", async ({ page }) => {
+  test("SP13 control: an account that never trialled is on the free plan", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     await patchBillingConfig(page, LIVE_LINKS);
     await install(page, {
@@ -1164,7 +1164,7 @@ test.describe("What the split of the account panel and the Pro dialog must keep"
     await expect(page.locator("#pricing-status")).toHaveText("Plan gratis");
   });
 
-  test("A12 the payment rails are named in the page's language, from the config's own wording", async ({ page }) => {
+  test("SP16 the payment rails are named in the page's language, from the config's own wording", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     await patchBillingConfig(page, LIVE_LINKS);
     await install(page, {}, license);
@@ -1183,7 +1183,7 @@ test.describe("What the split of the account panel and the Pro dialog must keep"
     await expect(mp).toHaveText("Mercado Pago");
   });
 
-  test("A7 the header door shows the given name of a full Google name, and is named by it", async ({ page }) => {
+  test("SP14 the header door shows the given name of a full Google name, and is named by it", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     await install(page, {
       signedIn: true,
@@ -1198,7 +1198,7 @@ test.describe("What the split of the account panel and the Pro dialog must keep"
     expect(await door.getAttribute("aria-label")).not.toContain("Fernanda");
   });
 
-  test("A9 a working sign-in has no retry row beside it; an unreachable worker does", async ({ page }) => {
+  test("SP15 a working sign-in has no retry row beside it; an unreachable worker does", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     await install(page, {}, license);
     await boot(page);

@@ -31,7 +31,7 @@
  * Adopted from QA round 10 with its expectations unchanged. VG-58.
  */
 const { test, expect } = require("@playwright/test");
-const { enableQaPro } = require("./helpers/billing");
+const { enableQaPro, patchBillingConfig } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
@@ -40,12 +40,15 @@ async function answers(page) {
   await page.addInitScript(() => {
     try { localStorage.setItem("vt_tour_v1", "1"); sessionStorage.setItem("vt_e2e", "1"); } catch { /* ignore */ }
   });
+  // No automatic trial, set as the config is assigned: the page freezes it
+  // straight after (QA-05), so assigning it once loaded did nothing.
+  await patchBillingConfig(page, { freeTrialDays: 0 });
   await page.goto(BASE + "/?e2e=1&t=" + Date.now(), { waitUntil: "domcontentloaded" });
+  expect(await page.evaluate(() => window.VT_BILLING_CONFIG.freeTrialDays), "the patch landed").toBe(0);
   return page.evaluate(() => {
     try {
       localStorage.removeItem("vt_billing_v1");
       localStorage.removeItem("vt_billing_trial_started_v1");
-      window.VT_BILLING_CONFIG.freeTrialDays = 0;
     } catch { /* ignore */ }
     const AGG = new Set(["all_free", "all_pro_monthly"]);
     const card = (id) => (window.VT_BILLING_CONFIG.plans.find((p) => p.id === id) || { features: [] }).features.filter((k) => !AGG.has(k));

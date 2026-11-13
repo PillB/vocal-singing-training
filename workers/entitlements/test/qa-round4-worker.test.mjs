@@ -5,12 +5,12 @@
  * Expected values are written by hand (or signed with node:crypto), never computed by the code
  * under test. Run each against the mutant it targets with qa/round4/worker/mutate.py.
  *
- *   S1  verifyMercadoPagoSignature accepts a timestamp from the FUTURE   (mutant M23)
- *   S2  planFromAutoRecurring day-based / yearly recurrence is untested   (mutant M30)
- *   S3  Stripe: a failed processing attempt must not swallow the retry    (mutant N11)
- *   S4  a retried charge after a decline must keep its period when the
+ *   QS1 verifyMercadoPagoSignature accepts a timestamp from the FUTURE   (mutant M23)
+ *   QS2 planFromAutoRecurring day-based / yearly recurrence is untested   (mutant M30)
+ *   QS3 Stripe: a failed processing attempt must not swallow the retry    (mutant N11)
+ *   QS4 a retried charge after a decline must keep its period when the
  *       subscription stops (record must keep the LATEST charge)           (mutant N24)
- *   S5  Mercado Pago refused-resource retry window: 86399 s retry, 86400 s acknowledge (mutant N08)
+ *   QS5 Mercado Pago refused-resource retry window: 86399 s retry, 86400 s acknowledge (mutant N08)
  */
 
 import assert from "node:assert/strict";
@@ -25,8 +25,8 @@ import { createFakeKv, createTestEnv } from "./fixtures.mjs";
 const DAY = 86400;
 const hmacHex = (secret, message) => createHmac("sha256", secret).update(message).digest("hex");
 
-// ---------------------------------------------------------------- S1
-test("S1 MP signature: a timestamp is accepted within 300 s of now in BOTH directions, refused beyond", async () => {
+// --------------------------------------------------------------- QS1
+test("QS1 MP signature: a timestamp is accepted within 300 s of now in BOTH directions, refused beyond", async () => {
   const NOW = 1_800_000_000;
   const secret = "mp_s1";
   // Hand-built manifest per the Mercado Pago docs; the signature never goes through the code under test.
@@ -49,8 +49,8 @@ test("S1 MP signature: a timestamp is accepted within 300 s of now in BOTH direc
   assert.equal(msFuture.ok, false);
 });
 
-// ---------------------------------------------------------------- S2
-test("S2 MP recurrence -> plan: days, months and years map to the plan that is billed", () => {
+// --------------------------------------------------------------- QS2
+test("QS2 MP recurrence -> plan: days, months and years map to the plan that is billed", () => {
   const plan = (frequency, frequency_type) => planFromAutoRecurring({ frequency, frequency_type });
   assert.equal(plan(1, "months"), "pro_monthly");
   assert.equal(plan(12, "months"), "pro_yearly");
@@ -63,8 +63,8 @@ test("S2 MP recurrence -> plan: days, months and years map to the plan that is b
   assert.equal(planFromAutoRecurring(null), null);
 });
 
-// ---------------------------------------------------------------- S3
-test("S3 Stripe: processing that fails after the idempotency marker is set does not swallow Stripe's retry", async () => {
+// --------------------------------------------------------------- QS3
+test("QS3 Stripe: processing that fails after the idempotency marker is set does not swallow Stripe's retry", async () => {
   const env = createTestEnv();
   const kv = env.ENTITLEMENTS;
   const put = kv.put.bind(kv);
@@ -99,8 +99,8 @@ test("S3 Stripe: processing that fails after the idempotency marker is set does 
   assert.equal(third.reason, "duplicate", "control: once it succeeded, a further delivery IS a duplicate");
 });
 
-// ---------------------------------------------------------------- S4
-test("S4 MP: a declined charge, then a retry that goes through, then a stop keeps the RETRY's period", async () => {
+// --------------------------------------------------------------- QS4
+test("QS4 MP: a declined charge, then a retry that goes through, then a stop keeps the RETRY's period", async () => {
   const kv = createFakeKv();
   const T = 1_800_000_000;
   const base = { provider: "mercadopago", subscriptionId: "pa_s4", customerId: "9" };
@@ -118,8 +118,8 @@ test("S4 MP: a declined charge, then a retry that goes through, then a stop keep
   assert.notEqual(record.periodEnd, T + MONTH, "wrong behaviour: the period shrinks back to the first charge's (day 31)");
 });
 
-// ---------------------------------------------------------------- S5
-test("S5 MP: a resource the API refuses is retried (500) for 86399 s and acknowledged (200) at 86400 s", async () => {
+// --------------------------------------------------------------- QS5
+test("QS5 MP: a resource the API refuses is retried (500) for 86399 s and acknowledged (200) at 86400 s", async () => {
   const env = createTestEnv();
   const secret = env.MP_WEBHOOK_SECRET;
   const answers = [];

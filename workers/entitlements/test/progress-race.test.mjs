@@ -6,17 +6,17 @@
  * It used to ask both with a read and then act on the answer, which is a race
  * on both counts, and both halves were reproduced on a322c30 before the fix:
  *
- *   - G1, two devices writing the same brand-new profile: both reads said "no
+ *   - RG1, two devices writing the same brand-new profile: both reads said "no
  *     row", both reached the INSERT, and the loser threw `UNIQUE constraint
  *     failed: progress.account_id, progress.profile_id`. The learner whose
  *     phone and laptop both woke up got a 500 where the documented answer is a
  *     409 with the winner's copy to merge against (api.js maps the `conflict`
  *     reason to 409).
- *   - G2, an account one short of the cap opening two profiles at once: both
+ *   - RG2, an account one short of the cap opening two profiles at once: both
  *     passed the same COUNT and the account ended holding four profiles with a
  *     cap of three.
  *
- * The three controls (S1, S2, C1) were green throughout, which is what says
+ * The three controls (RS1, RS2, RC1) were green throughout, which is what says
  * these are races and not a broken cap.
  *
  * Method: `Promise.all` over the real functions against the fake D1, which is
@@ -46,7 +46,7 @@ async function withAccount() {
 const settle = (p) => p.then((value) => ({ value }), (error) => ({ error: String(error && error.message || error) }));
 const rows = async (env, account) => (await env.DB.prepare("SELECT profile_id FROM progress WHERE account_id = ?1").bind(account.id).all()).results.length;
 
-test("S1 (control) one after the other: first wins, second is a conflict that carries the winner's copy", async () => {
+test("RS1 (control) one after the other: first wins, second is a conflict that carries the winner's copy", async () => {
   const { env, account } = await withAccount();
   const a = await putProgress(env.DB, account.id, "default", { by: "phone" }, 0, 5000);
   const b = await putProgress(env.DB, account.id, "default", { by: "laptop" }, 0, 5001);
@@ -56,14 +56,14 @@ test("S1 (control) one after the other: first wins, second is a conflict that ca
   assert.deepEqual(b.server.doc, { by: "phone" });
 });
 
-test("S2 (control) one after the other: the cap holds", async () => {
+test("RS2 (control) one after the other: the cap holds", async () => {
   const { env, account } = await withAccount();
   for (let i = 0; i < MAX_PROFILES; i += 1) assert.equal((await putProgress(env.DB, account.id, `p${i}`, { i }, 0, 5000)).ok, true);
   assert.equal((await putProgress(env.DB, account.id, "extra", {}, 0, 5000)).reason, "profile_limit");
   assert.equal(await rows(env, account), MAX_PROFILES);
 });
 
-test("C1 (control) two NEW profiles at once below the cap: both are stored", async () => {
+test("RC1 (control) two NEW profiles at once below the cap: both are stored", async () => {
   const { env, account } = await withAccount();
   const [a, b] = await Promise.all([putProgress(env.DB, account.id, "a", { a: 1 }, 0, 5000), putProgress(env.DB, account.id, "b", { b: 1 }, 0, 5000)].map(settle));
   assert.equal(a.value && a.value.ok, true, JSON.stringify(a));
@@ -71,7 +71,7 @@ test("C1 (control) two NEW profiles at once below the cap: both are stored", asy
   assert.equal(await rows(env, account), 2);
 });
 
-test("G1 two devices write the same brand-new profile at once: one wins, the other gets a conflict, nobody throws", async () => {
+test("RG1 two devices write the same brand-new profile at once: one wins, the other gets a conflict, nobody throws", async () => {
   const { env, account } = await withAccount();
   const [a, b] = await Promise.all([putProgress(env.DB, account.id, "default", { by: "phone" }, 0, 5000), putProgress(env.DB, account.id, "default", { by: "laptop" }, 0, 5000)].map(settle));
   assert.equal(a.error, undefined, `first caller threw: ${a.error}`);
@@ -83,7 +83,7 @@ test("G1 two devices write the same brand-new profile at once: one wins, the oth
   assert.ok(conflicts[0].value.server && conflicts[0].value.server.doc, "the loser must be handed the winner's copy to merge against");
 });
 
-test("G2 an account with the cap minus one profile opens two new profiles at once: it never holds more than the cap", async () => {
+test("RG2 an account with the cap minus one profile opens two new profiles at once: it never holds more than the cap", async () => {
   const { env, account } = await withAccount();
   for (let i = 0; i < MAX_PROFILES - 1; i += 1) await putProgress(env.DB, account.id, `p${i}`, { i }, 0, 5000);
   await Promise.all([putProgress(env.DB, account.id, "x", { x: 1 }, 0, 5001), putProgress(env.DB, account.id, "y", { y: 1 }, 0, 5001)].map(settle));
@@ -92,7 +92,7 @@ test("G2 an account with the cap minus one profile opens two new profiles at onc
   assert.ok(listed.length <= MAX_PROFILES, `listProgress shows ${listed.length}`);
 });
 
-// G3 guards the update path the way G1 guards the first write. Both devices
+// RG3 (in qa/mutate.mjs, set "splits") guards the update path the way RG1 guards the first write. Both devices
 // read revision 1 before either writes, so the early revision check in
 // `updateProgress` passes for both and only the `rev = ?5` guard on the UPDATE
 // stands between them and a lost update: without it both writes report
@@ -106,7 +106,7 @@ test("G2 an account with the cap minus one profile opens two new profiles at onc
 // the same conflict with the same server copy, one round trip later. That
 // early check is kept for the round trip it saves, not for correctness, so no
 // test here claims to pin it.
-test("G3 two devices update the same profile from the same revision at once: one wins, the other gets the winner's copy", async () => {
+test("RG3 two devices update the same profile from the same revision at once: one wins, the other gets the winner's copy", async () => {
   const { env, account } = await withAccount();
   assert.equal((await putProgress(env.DB, account.id, "default", { by: "start" }, 0, 5000)).ok, true);
   const [a, b] = await Promise.all([putProgress(env.DB, account.id, "default", { by: "phone" }, 1, 5001), putProgress(env.DB, account.id, "default", { by: "laptop" }, 1, 5001)].map(settle));

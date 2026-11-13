@@ -9,7 +9,9 @@
  * nothing would have noticed it going wrong. Every expected value is a literal
  * written down by hand, never one computed by the code under test, and every
  * case carries a nearby control that the same defect does not change, so a
- * test can only pass by telling the right reading from the wrong one.
+ * test can only pass by telling the right reading from the wrong one. The
+ * defects are registered in qa/mutate.mjs (set "splits") as WC1 to WC17, so
+ * CI keeps proving these cases still kill them.
  *
  * Times: the envelope's `created_at` and an object's own `created_at` are epoch
  * milliseconds; a subscription's dates are ISO 8601 strings.
@@ -58,7 +60,7 @@ const subscription = (over) => ({
   ...(over || {})
 });
 
-/* ---------------------------------------------------- what was paid (R1) */
+/* --------------------------------------------------- what was paid (WC1) */
 
 test("a transaction whose amount_paid is null is read by its amount, so a full refund of it ends access", () => {
   // Wrong behaviour: Number(null) is 0, and "paid nothing" makes every refund
@@ -72,7 +74,7 @@ test("a transaction whose amount_paid is null is read by its amount, so a full r
   assert.equal(isFullCreemRefund({ refund_amount: 999, transaction: t }), false);
 });
 
-/* ------------------------------------------- when a checkout is paid (C*) */
+/* ---------------------------------- when a checkout is paid (WC2-WC7) */
 
 test("a checkout is paid only when it completed and its order is paid or names no status", () => {
   const verdict = (over) => {
@@ -120,7 +122,7 @@ test("a checkout's plan comes from its own metadata first, then from its nested 
   assert.deepEqual(plan({ product: { id: "prod_k", billing_period: "every-year" } }), ["pro_yearly", "billing_period"]);
 });
 
-/* ------------------------------------- a subscription's product (S1, S2) */
+/* ----------------------------------- a subscription's product (WC8, WC9) */
 
 test("a subscription that names its product only in its items is read by the first item", () => {
   const env = { CREEM_PRODUCT_PRO_MONTHLY: "prod_m", CREEM_PRODUCT_PRO_YEARLY: "prod_y" };
@@ -141,7 +143,7 @@ test("a subscription that names its product only in its items is read by the fir
   assert.equal(own.update.plan, "pro_monthly");
 });
 
-/* ----------------------------------------- the event decides (S3, S4) */
+/* -------------------------------------- the event decides (WC10, WC11) */
 
 test("a canceled or expired event ends the subscription even when its snapshot still says active", () => {
   // A snapshot serialised before the status changed still says "active".
@@ -159,7 +161,7 @@ test("a canceled or expired event ends the subscription even when its snapshot s
     "suspended");
 });
 
-/* ------------------------------------------------- the stamped times (E*) */
+/* ---------------------------------------- the stamped times (WC12-WC17) */
 
 test("money going back is dated by the envelope, else by the refund's own created_at, and nothing else is", () => {
   const refund = {

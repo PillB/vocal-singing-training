@@ -8,6 +8,9 @@
  * code. Goal and wrong behaviour are stated per test; where an access outcome
  * cannot tell the two apart (the defect only costs a KV operation, or only
  * changes what the record reports), the test says so and asserts on what can.
+ *
+ * The defects are registered in qa/mutate.mjs (set "splits") as WS1 to WS6, in
+ * the order of the tests below, so CI keeps proving these tests still kill them.
  */
 import test from "node:test";
 import assert from "node:assert/strict";

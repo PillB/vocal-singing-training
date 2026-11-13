@@ -476,7 +476,7 @@ test.describe("Admin page", () => {
 
     // The form is novalidate, so the page's own check is the only one: a code
     // nobody can redeem, or one for a thousand and one people, is refused
-    // before it reaches the worker (C20, a mutant of the createCode split).
+    // before it reaches the worker (SP8 in qa/mutate.mjs, a mutant of the createCode split).
     for (const uses of ["0", "1001"]) {
       await page.fill("#code-days", "14");
       await page.fill("#code-uses", uses);
@@ -705,7 +705,7 @@ test.describe("Admin page", () => {
     await expect(bug).toContainText("ni con auriculares");
     await expect(bug).toContainText("tocar Empezar");
     await expect(bug).toContainText("/index.html#practice");
-    // Which build they were on (C24, a mutant of the reportCard split).
+    // Which build they were on (SP9 in qa/mutate.mjs, a mutant of the reportCard split).
     await expect(bug).toContainText("20261102a");
     await expect(bug).toContainText("iPhone");
     await expect(bug).toContainText("390x844");

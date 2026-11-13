@@ -120,7 +120,12 @@ async function patchBillingConfig(page, patch) {
         }
         for (const [rail, byPlan] of Object.entries(links || {})) {
           const provider = value.providers && value.providers[rail];
-          if (provider) provider.links = Object.assign({}, provider.links, byPlan);
+          // Loud, not skipped: a link for a rail the config does not have
+          // (a typo, a renamed rail) used to vanish, and the test that set it
+          // went on checking nothing. Thrown here, the page's config never
+          // loads and every assertion after it fails.
+          if (!provider) throw new Error(`patchBillingConfig: no rail "${rail}" in VT_BILLING_CONFIG.providers`);
+          provider.links = Object.assign({}, provider.links, byPlan);
         }
         if (extraMarkets) value.markets = (value.markets || []).concat(extraMarkets);
       }

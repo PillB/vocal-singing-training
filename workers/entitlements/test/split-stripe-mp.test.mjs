@@ -10,15 +10,18 @@
  * that came with the code, not ones the split opened. Every test here was
  * checked red on its mutant and green without it.
  *
- *   CS5  planSource precedence swapped (metadata named as the source when the
+ *   WT1  planSource precedence swapped (metadata named as the source when the
  *        price decided)
- *   CS6  the second line item read instead of the first
- *   CS7  the line-item price never consulted
- *   IN1  the 2025+ `pricing.price_details` price shape ignored
- *   IN4  an invoice that names its subscription only on its line dropped
- *   EV7  a paid checkout whose event has no `created` bought Pro for ever
- *   EV9  a refund dated by when its webhook arrived instead of when it happened
- *   MP1  the operator's monthly Mercado Pago plan id mapped to a year
+ *   WT2  the second line item read instead of the first
+ *   WT3  the line-item price never consulted
+ *   WT4  the 2025+ `pricing.price_details` price shape ignored
+ *   WT5  an invoice that names its subscription only on its line dropped
+ *   WT6  a paid checkout whose event has no `created` bought Pro for ever
+ *   WT7  a refund dated by when its webhook arrived instead of when it happened
+ *   WT8  the operator's monthly Mercado Pago plan id mapped to a year
+ *
+ * The ids are the ones these defects carry in qa/mutate.mjs (set "splits"),
+ * so CI keeps proving these tests still kill them.
  *
  * Expected values are written out (31-day month, the event's own timestamps),
  * never recomputed with the code under test.
@@ -82,10 +85,10 @@ const basilInvoice = (price, type = "invoice.paid") => mapStripeEvent({
   }
 }, PRICED);
 
-test("CS6/CS7: a checkout that carries its line items is priced by the first one", () => {
+test("WT2/WT3: a checkout that carries its line items is priced by the first one", () => {
   // Correct: the first line item's price is in the table as yearly, so this is a
-  // year. Wrong (CS7, price never read): it falls through to the one-time
-  // default and a yearly pass is recorded as a month. Wrong (CS6, second item
+  // year. Wrong (WT3, price never read): it falls through to the one-time
+  // default and a yearly pass is recorded as a month. Wrong (WT2, second item
   // read): the monthly add-on decides.
   const mapped = checkout(session({
     line_items: { data: [{ price: { id: "price_y" } }, { price: { id: "price_m" } }] }
@@ -99,7 +102,7 @@ test("CS6/CS7: a checkout that carries its line items is priced by the first one
   assert.deepEqual([unknown.update.plan, unknown.update.planSource], ["pro_monthly", "default"]);
 });
 
-test("CS5: when a checkout's price and its metadata both name a plan, the price is recorded as the source", () => {
+test("WT1: when a checkout's price and its metadata both name a plan, the price is recorded as the source", () => {
   // The price outranks metadata for the plan itself already; the source has to
   // say the same thing, or an operator reading the record is told the metadata
   // decided and goes to fix the wrong field.
@@ -114,7 +117,7 @@ test("CS5: when a checkout's price and its metadata both name a plan, the price 
   assert.deepEqual([metadataOnly.update.plan, metadataOnly.update.planSource], ["pro_monthly", "metadata"]);
 });
 
-test("IN1: an invoice on the 2025+ API names its price under pricing.price_details, and the gate reads it there", () => {
+test("WT4: an invoice on the 2025+ API names its price under pricing.price_details, and the gate reads it there", () => {
   // Correct: the yearly price, read from the newer shape, names the plan.
   const ours = basilInvoice("price_y");
   assert.equal(ours.handled, true);
@@ -123,7 +126,7 @@ test("IN1: an invoice on the 2025+ API names its price under pricing.price_detai
   assert.deepEqual([ours.update.status, ours.update.paid], ["active", true]);
 
   // The case that costs money: with a price table filled in, a renewal of a
-  // price that is not ours is suspended and never marked paid. Wrong (IN1): the
+  // price that is not ours is suspended and never marked paid. Wrong (WT4): the
   // price is not found at all, so nothing is checked against the table and the
   // renewal lifts the suspension its subscription received.
   const notOurs = basilInvoice("price_someone_elses");
@@ -133,8 +136,8 @@ test("IN1: an invoice on the 2025+ API names its price under pricing.price_detai
   assert.equal(notOurs.update.plan, undefined);
 });
 
-test("IN4: an invoice that names its subscription only on its line is still keyed on it", () => {
-  // Pre-2025 line items carried `subscription` themselves. Wrong (IN4): the
+test("WT5: an invoice that names its subscription only on its line is still keyed on it", () => {
+  // Pre-2025 line items carried `subscription` themselves. Wrong (WT5): the
   // invoice has no other identity, so the renewal is acknowledged and dropped
   // ("no_license_identity") and the paid period never reaches the license.
   const mapped = mapStripeEvent({
@@ -164,10 +167,10 @@ test("IN4: an invoice that names its subscription only on its line is still keye
   assert.deepEqual(nothing, { handled: false, reason: "no_license_identity" });
 });
 
-test("EV7: a paid checkout whose event carries no time counts its month from the session's own", async () => {
+test("WT6: a paid checkout whose event carries no time counts its month from the session's own", async () => {
   // `periodEnd` null is for ever, so a paid checkout must always be bounded.
   // Correct: the session's own `created` stands in when the event has none.
-  // Wrong (EV7): nothing stands in, and one month sold is Pro for life.
+  // Wrong (WT6): nothing stands in, and one month sold is Pro for life.
   const created = NOW - 100;
   const mapped = mapStripeEvent({
     id: "evt_untimed",
@@ -186,7 +189,7 @@ test("EV7: a paid checkout whose event carries no time counts its month from the
   assert.equal(timed.update.periodEndFromCharge, NOW);
 });
 
-test("EV9: money going back is dated by its event, not by when the webhook arrived", async () => {
+test("WT7: money going back is dated by its event, not by when the webhook arrived", async () => {
   const kv = createFakeKv();
   // A yearly pass bought on day 0.
   const bought = checkout(session({ id: "cs_late", payment_intent: "pi_late", metadata: { plan: "pro_yearly" } }), OPEN, NOW);
@@ -215,7 +218,7 @@ test("EV9: money going back is dated by its event, not by when the webhook arriv
   assert.equal(refund.handled, true);
   assert.equal(refund.update.reversedAt, refundedAt);
 
-  // Correct: access ends on day 2, when the money left. Wrong (EV9): with no
+  // Correct: access ends on day 2, when the money left. Wrong (WT7): with no
   // `reversedAt` the store falls back to its own clock and the refunded pass
   // keeps a week of Pro it no longer paid for.
   const late = await upsertEntitlement(kv, refund.update, { now: NOW + 9 * DAY });
@@ -223,10 +226,10 @@ test("EV9: money going back is dated by its event, not by when the webhook arriv
   assert.equal(late.record.periodEnd, refundedAt);
 });
 
-test("MP1: the operator's monthly Mercado Pago plan id buys a month, whatever the label says", () => {
+test("WT8: the operator's monthly Mercado Pago plan id buys a month, whatever the label says", () => {
   const env = { MP_PLAN_PRO_MONTHLY: "2c93_m", MP_PLAN_PRO_YEARLY: "2c93_y" };
   // Correct: the configured id is the operator's own mapping and outranks a
-  // label. Wrong (MP1): the monthly id maps to a year, and every monthly
+  // label. Wrong (WT8): the monthly id maps to a year, and every monthly
   // subscriber is granted twelve months per charge.
   assert.deepEqual(
     planForPreapproval({ preapproval_plan_id: "2c93_m" }, env),

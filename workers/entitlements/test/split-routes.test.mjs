@@ -10,6 +10,10 @@
  * - A method a path does not take is answered 405 with an `allow` header that
  *   names every method the path does take. Wrong behaviour rejected: /v1/me
  *   advertising GET only when POST works too, or progress dropping DELETE.
+ *
+ * The defects are registered in qa/mutate.mjs (set "splits"): WRT1 is the POST
+ * save, WRT2 and WRT3 the two allow headers, so CI keeps proving these tests
+ * still kill them.
  */
 import assert from "node:assert/strict";
 import test from "node:test";

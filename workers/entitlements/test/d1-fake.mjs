@@ -15,6 +15,15 @@
 import { DatabaseSync } from "node:sqlite";
 
 /**
+ * D1 refuses a statement with more than 100 bound parameters ("Maximum bound
+ * parameters per query: 100", developers.cloudflare.com/d1/platform/limits,
+ * read 13 November 2026), each statement of a batch included. SQLite's own
+ * limit is far higher, so without this a statement that can never run on D1
+ * would pass every test here.
+ */
+export const D1_MAX_BOUND_PARAMETERS = 100;
+
+/**
  * SQLite cannot bind a JS boolean, undefined, or a bigint from `crypto`.
  * D1 coerces these itself, so the adapter has to as well or a test would fail
  * on something production never sees.
@@ -115,10 +124,13 @@ class FakeD1PreparedStatement {
 
   /**
    * The statement as `node:sqlite` takes it on any Node 22.13 or later, with
-   * its values.
+   * its values. Refused, as D1 refuses it, past D1's bound-parameter limit.
    * @returns {{statement: import('node:sqlite').StatementSync, params: unknown[]}} Statement and values.
    */
   prepared() {
+    if (this.params.length > D1_MAX_BOUND_PARAMETERS) {
+      throw new RangeError(`too many SQL variables: ${this.params.length} bound, and D1 binds at most ${D1_MAX_BOUND_PARAMETERS}`);
+    }
     const { sql, params } = expandNumberedParameters(this.sql, this.params);
     return { statement: this.db.prepare(sql), params };
   }

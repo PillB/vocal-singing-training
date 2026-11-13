@@ -407,6 +407,19 @@ test.describe("no false 'Algo falló / Something failed'", () => {
  * contents, and the octave "−" must get its own clicks.
  */
 function probeRail() {
+  // Runs in the page (page.evaluate(probeRail)): its helpers live inside it.
+  const overlaps = (kids) => {
+    const found = [];
+    for (let i = 0; i < kids.length; i++)
+      for (let j = i + 1; j < kids.length; j++) {
+        const a = kids[i].b;
+        const c = kids[j].b;
+        const x = Math.min(a.right, c.right) - Math.max(a.left, c.left);
+        const y = Math.min(a.bottom, c.bottom) - Math.max(a.top, c.top);
+        if (x > 0.5 && y > 0.5) found.push(`${kids[i].n} overlaps ${kids[j].n} by ${Math.round(x)}x${Math.round(y)}px`);
+      }
+    return found;
+  };
   const rail = document.getElementById("hud-bottom-rail");
   const stage = document.getElementById("highway-stage");
   if (!rail || !stage || !rail.offsetParent) return [];
@@ -415,16 +428,8 @@ function probeRail() {
     const b = e.getBoundingClientRect();
     return cs.display !== "none" && cs.visibility !== "hidden" && b.width > 0 && b.height > 0 && !e.closest("[hidden]");
   };
-  const out = [];
   const kids = [...rail.children].filter(shown).map((e) => ({ n: e.id || e.className, b: e.getBoundingClientRect() }));
-  for (let i = 0; i < kids.length; i++)
-    for (let j = i + 1; j < kids.length; j++) {
-      const a = kids[i].b;
-      const c = kids[j].b;
-      const x = Math.min(a.right, c.right) - Math.max(a.left, c.left);
-      const y = Math.min(a.bottom, c.bottom) - Math.max(a.top, c.top);
-      if (x > 0.5 && y > 0.5) out.push(`${kids[i].n} overlaps ${kids[j].n} by ${Math.round(x)}x${Math.round(y)}px`);
-    }
+  const out = overlaps(kids);
   const sr = stage.getBoundingClientRect();
   let over = 0;
   rail.querySelectorAll("*").forEach((e) => {

@@ -426,6 +426,52 @@ function createStub(opts) {
   };
 }
 
+/** A request's JSON body, or {} when it has none. */
+function requestBody(request) {
+  try {
+    return request.postDataJSON() || {};
+  } catch {
+    return {};
+  }
+}
+
+/** /v1/auth/email/start: a code that was tried or burned is replaced by the next one. */
+function stubNewCode(stub) {
+  if (stub.codes.burned || stub.codes.attempts) {
+    stub.codes.current = stub.codes.next.shift() || "999999";
+    stub.codes.attempts = 0;
+    stub.codes.burned = false;
+  }
+}
+
+/**
+ * /v1/auth/email/verify: [status, body] for a code the stub turns down, null
+ * for the right one. As workers/entitlements/src/accounts.js consumeLoginCode:
+ * the fifth wrong try burns the code, and a burned code is no code at all.
+ */
+function stubRefusal(stub, code) {
+  if (stub.codes.burned) return [401, { ok: false, reason: "no_code" }];
+  if (code === stub.codes.current) return null;
+  stub.codes.attempts += 1;
+  if (stub.codes.attempts >= 5) {
+    stub.codes.burned = true;
+    return [401, { ok: false, reason: "too_many_attempts" }];
+  }
+  return [401, { ok: false, reason: "bad_code" }];
+}
+
+/** GET /v1/me as `stub.me` says: up, down, a 402, or held (hang). */
+async function stubMe(stub, route, json, mePayload) {
+  stub.meCalls += 1;
+  if (stub.me === "down") return route.abort("connectionrefused").catch(() => {});
+  if (stub.me === "status") return json(402, { ok: false, reason: "payment_required" });
+  if (stub.me === "hang") {
+    stub.held.push(route);
+    return undefined;
+  }
+  return json(200, await mePayload());
+}
+
 /** Install the stub; `license` signs the entitlement's token. */
 async function installStub(page, stub, license) {
   await patchBillingConfig(page, {
@@ -436,49 +482,22 @@ async function installStub(page, stub, license) {
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();
-    let body = {};
-    try {
-      body = request.postDataJSON() || {};
-    } catch {
-      body = {};
-    }
+    const body = requestBody(request);
     const headers = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type, authorization" };
     const json = (status, data) =>
       route.fulfill({ status, contentType: "application/json", headers, body: JSON.stringify(data) }).catch(() => {});
     if (method === "OPTIONS") return route.fulfill({ status: 204, headers }).catch(() => {});
     if (url.pathname === "/v1/auth/methods") return json(200, { ok: true, ...stub.methods });
     if (url.pathname === "/v1/auth/email/start") {
-      if (stub.codes.burned || stub.codes.attempts) {
-        stub.codes.current = stub.codes.next.shift() || "999999";
-        stub.codes.attempts = 0;
-        stub.codes.burned = false;
-      }
+      stubNewCode(stub);
       return json(200, { ok: true, sent: true, expiresInSeconds: 900 });
     }
     if (url.pathname === "/v1/auth/email/verify") {
-      // As workers/entitlements/src/accounts.js consumeLoginCode: the fifth
-      // wrong try burns the code, and a burned code is no code at all.
-      if (stub.codes.burned) return json(401, { ok: false, reason: "no_code" });
-      if (body.code !== stub.codes.current) {
-        stub.codes.attempts += 1;
-        if (stub.codes.attempts >= 5) {
-          stub.codes.burned = true;
-          return json(401, { ok: false, reason: "too_many_attempts" });
-        }
-        return json(401, { ok: false, reason: "bad_code" });
-      }
+      const refused = stubRefusal(stub, body.code);
+      if (refused) return json(...refused);
       return json(200, { ok: true, sessionToken: "sess-stub-1", expiresAt: 4102444800, ...(await mePayload()) });
     }
-    if (url.pathname === "/v1/me" && method === "GET") {
-      stub.meCalls += 1;
-      if (stub.me === "down") return route.abort("connectionrefused").catch(() => {});
-      if (stub.me === "status") return json(402, { ok: false, reason: "payment_required" });
-      if (stub.me === "hang") {
-        stub.held.push(route);
-        return undefined;
-      }
-      return json(200, await mePayload());
-    }
+    if (url.pathname === "/v1/me" && method === "GET") return stubMe(stub, route, json, mePayload);
     if (url.pathname === "/v1/me/progress" && method === "GET") return json(200, { ok: true, rev: 0, doc: null, updatedAt: null });
     if (url.pathname === "/v1/me/progress") return json(200, { ok: true, rev: 1, updatedAt: 2 });
     if (url.pathname === "/v1/auth/logout") return json(200, { ok: true });

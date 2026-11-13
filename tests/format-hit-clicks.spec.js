@@ -129,6 +129,226 @@ async function dismissLeave(page) {
   });
 }
 
+/*
+ * One exercise at one viewport. `c`: { page, vp, exId, vpEntry, exEntry };
+ * each check records what it saw in exEntry.checks, and a failure clears
+ * exEntry.ok and adds an issue to vpEntry.issues.
+ */
+
+async function checkGeometry(c) {
+  const { page, vp, exId, vpEntry, exEntry } = c;
+  // Stage must not overflow visual viewport
+  const geom = await page.evaluate(() => {
+    const stage = document.getElementById("highway-stage");
+    const start = document.getElementById("btn-practice-start");
+    const r = stage?.getBoundingClientRect();
+    const s = start?.getBoundingClientRect();
+    const vh = window.visualViewport?.height || window.innerHeight;
+    const ot = window.visualViewport?.offsetTop || 0;
+    return {
+      stageBottom: r?.bottom,
+      stageTop: r?.top,
+      startBottom: s?.bottom,
+      startTop: s?.top,
+      visualBottom: ot + vh,
+      startHit: (() => {
+        if (!s) return false;
+        const t = document.elementFromPoint(
+          s.left + s.width / 2,
+          s.top + s.height / 2
+        );
+        return !!(
+          t &&
+          (t.id === "btn-practice-start" ||
+            t.closest?.("#btn-practice-start"))
+        );
+      })()
+    };
+  });
+  exEntry.checks.geometry = geom;
+  // On a ~320px phone the two rails and 60px of lanes need more than the
+  // screen, so the stage takes that height and the page scrolls (cross-01);
+  // Start is still hit-tested and clicked below.
+  if (geom.stageBottom > geom.visualBottom + 2 && vp.width > 340) {
+    exEntry.ok = false;
+    exEntry.checks.stageOverflow = true;
+    vpEntry.issues.push({
+      ex: exId,
+      code: "stage_overflow",
+      msg: `stage bottom ${geom.stageBottom} > visual ${geom.visualBottom}`
+    });
+  }
+  if (geom.startBottom > geom.visualBottom + 2) {
+    exEntry.ok = false;
+    vpEntry.issues.push({
+      ex: exId,
+      code: "start_offscreen",
+      msg: `Start bottom ${geom.startBottom} > visual ${geom.visualBottom}`
+    });
+  }
+}
+
+async function checkStartStop(c) {
+  const { page, exId, vpEntry, exEntry } = c;
+  // Hit-test Start
+  const startHit = await hitSamples(page, "#btn-practice-start");
+  exEntry.checks.startHit = startHit;
+  if (!startHit.ok) {
+    exEntry.ok = false;
+    vpEntry.issues.push({
+      ex: exId,
+      code: "start_hit_miss",
+      misses: startHit.misses
+    });
+  }
+
+  // Real click Start → live
+  await realClickSel(page, "#btn-practice-start");
+  await page.waitForTimeout(700);
+  const live = await page.evaluate(
+    () => !document.querySelector("#btn-practice-stop")?.hidden
+  );
+  exEntry.checks.startClickLive = live;
+  if (!live) {
+    exEntry.ok = false;
+    vpEntry.issues.push({ ex: exId, code: "start_click_no_live" });
+  }
+
+  if (live) await checkStop(c);
+}
+
+async function checkStop(c) {
+  const { page, exId, vpEntry, exEntry } = c;
+  await layoutReady(page);
+  const stopHit = await hitSamples(page, "#btn-practice-stop");
+  exEntry.checks.stopHit = stopHit;
+  if (!stopHit.ok) {
+    exEntry.ok = false;
+    vpEntry.issues.push({
+      ex: exId,
+      code: "stop_hit_miss",
+      misses: stopHit.misses
+    });
+  }
+  await realClickSel(page, "#btn-practice-stop");
+  await page.waitForTimeout(350);
+  await dismissLeave(page);
+  const stopped = await page.evaluate(
+    () => !!document.querySelector("#btn-practice-stop")?.hidden
+  );
+  exEntry.checks.stopClick = stopped;
+  if (!stopped) {
+    exEntry.ok = false;
+    vpEntry.issues.push({ ex: exId, code: "stop_click_fail" });
+  }
+}
+
+async function checkGuide(c) {
+  const { page, exId, vpEntry, exEntry } = c;
+  // Guide toggle hit + click (may need scroll)
+  if (await page.locator("#btn-toggle-guide").isVisible().catch(() => false)) {
+    await page.locator("#btn-toggle-guide").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(40);
+    const gHit = await hitSamples(page, "#btn-toggle-guide");
+    exEntry.checks.guideHit = gHit;
+    if (!gHit.ok) {
+      // soft on guide if scrolled — only hard-fail if completely broken center
+      if (gHit.misses?.some((m) => m.px === 0.5 && m.py === 0.5)) {
+        exEntry.ok = false;
+        vpEntry.issues.push({
+          ex: exId,
+          code: "guide_hit_miss",
+          misses: gHit.misses
+        });
+      }
+    }
+  }
+}
+
+async function checkBack(c) {
+  const { page, exId, vpEntry, exEntry } = c;
+  // Back home
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.locator("#btn-back-home").scrollIntoViewIfNeeded().catch(() => {});
+  await layoutReady(page);
+  const backHit = await hitSamples(page, "#btn-back-home");
+  exEntry.checks.backHit = backHit;
+  if (!backHit.ok && backHit.misses?.some((m) => m.px === 0.5 && m.py === 0.5)) {
+    exEntry.ok = false;
+    vpEntry.issues.push({
+      ex: exId,
+      code: "back_hit_miss",
+      misses: backHit.misses
+    });
+  }
+  await realClickSel(page, "#btn-back-home");
+  await page.waitForTimeout(100);
+  await dismissLeave(page);
+  await page.evaluate(() => {
+    if (!document.getElementById("view-home")?.classList.contains("active")) {
+      window.VTApp?.setView?.("home");
+    }
+  });
+}
+
+/** Every check of one exercise, in order; an exception is an issue too. Returns its entry. */
+async function checkExercise({ page, vp, exId, vpEntry }) {
+  const exEntry = { id: exId, checks: {}, ok: true };
+  const c = { page, vp, exId, vpEntry, exEntry };
+  try {
+    await dismissLeave(page);
+    await openExercise(page, exId);
+    await layoutReady(page);
+    await checkGeometry(c);
+    await checkStartStop(c);
+    await checkGuide(c);
+    await checkBack(c);
+  } catch (e) {
+    exEntry.ok = false;
+    exEntry.error = String(e.message || e).slice(0, 160);
+    vpEntry.issues.push({
+      ex: exId,
+      code: "exception",
+      msg: exEntry.error
+    });
+    await dismissLeave(page);
+    await page.evaluate(() => window.VTApp?.setView?.("home")).catch(() => {});
+  }
+  return exEntry;
+}
+
+/** Start stays hit-testable when a desktop window turns into a phone, then fullscreen, mid-session. */
+async function resizeStress(page, vp, vpEntry, report) {
+  await openExercise(page, "s15-sh-air-ladder");
+  await layoutReady(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(100);
+  await layoutReady(page);
+  let hit = await hitSamples(page, "#btn-practice-start");
+  if (!hit.ok) {
+    vpEntry.issues.push({
+      ex: "s15-resize-phone",
+      code: "resize_hit_miss",
+      misses: hit.misses
+    });
+    report.summary.failed++;
+  }
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.waitForTimeout(100);
+  await layoutReady(page);
+  hit = await hitSamples(page, "#btn-practice-start");
+  if (!hit.ok) {
+    vpEntry.issues.push({
+      ex: "s15-resize-fullscreen",
+      code: "resize_hit_miss",
+      misses: hit.misses
+    });
+    report.summary.failed++;
+  }
+  // restore
+  await page.setViewportSize({ width: vp.width, height: vp.height });
+}
+
 test.describe("Format hit-clicks matrix", () => {
   test.setTimeout(600000);
 
@@ -158,200 +378,14 @@ test.describe("Format hit-clicks matrix", () => {
         await boot(page, { lang: "es", tourDone: true, mic: "silent" });
 
         for (const exId of EXERCISES) {
-          const exEntry = { id: exId, checks: {}, ok: true };
-          try {
-            await dismissLeave(page);
-            await openExercise(page, exId);
-            await layoutReady(page);
-
-            // Stage must not overflow visual viewport
-            const geom = await page.evaluate(() => {
-              const stage = document.getElementById("highway-stage");
-              const start = document.getElementById("btn-practice-start");
-              const r = stage?.getBoundingClientRect();
-              const s = start?.getBoundingClientRect();
-              const vh = window.visualViewport?.height || window.innerHeight;
-              const ot = window.visualViewport?.offsetTop || 0;
-              return {
-                stageBottom: r?.bottom,
-                stageTop: r?.top,
-                startBottom: s?.bottom,
-                startTop: s?.top,
-                visualBottom: ot + vh,
-                startHit: (() => {
-                  if (!s) return false;
-                  const t = document.elementFromPoint(
-                    s.left + s.width / 2,
-                    s.top + s.height / 2
-                  );
-                  return !!(
-                    t &&
-                    (t.id === "btn-practice-start" ||
-                      t.closest?.("#btn-practice-start"))
-                  );
-                })()
-              };
-            });
-            exEntry.checks.geometry = geom;
-            // On a ~320px phone the two rails and 60px of lanes need more than the
-            // screen, so the stage takes that height and the page scrolls (cross-01);
-            // Start is still hit-tested and clicked below.
-            if (geom.stageBottom > geom.visualBottom + 2 && vp.width > 340) {
-              exEntry.ok = false;
-              exEntry.checks.stageOverflow = true;
-              vpEntry.issues.push({
-                ex: exId,
-                code: "stage_overflow",
-                msg: `stage bottom ${geom.stageBottom} > visual ${geom.visualBottom}`
-              });
-            }
-            if (geom.startBottom > geom.visualBottom + 2) {
-              exEntry.ok = false;
-              vpEntry.issues.push({
-                ex: exId,
-                code: "start_offscreen",
-                msg: `Start bottom ${geom.startBottom} > visual ${geom.visualBottom}`
-              });
-            }
-
-            // Hit-test Start
-            const startHit = await hitSamples(page, "#btn-practice-start");
-            exEntry.checks.startHit = startHit;
-            if (!startHit.ok) {
-              exEntry.ok = false;
-              vpEntry.issues.push({
-                ex: exId,
-                code: "start_hit_miss",
-                misses: startHit.misses
-              });
-            }
-
-            // Real click Start → live
-            await realClickSel(page, "#btn-practice-start");
-            await page.waitForTimeout(700);
-            const live = await page.evaluate(
-              () => !document.querySelector("#btn-practice-stop")?.hidden
-            );
-            exEntry.checks.startClickLive = live;
-            if (!live) {
-              exEntry.ok = false;
-              vpEntry.issues.push({ ex: exId, code: "start_click_no_live" });
-            }
-
-            if (live) {
-              await layoutReady(page);
-              const stopHit = await hitSamples(page, "#btn-practice-stop");
-              exEntry.checks.stopHit = stopHit;
-              if (!stopHit.ok) {
-                exEntry.ok = false;
-                vpEntry.issues.push({
-                  ex: exId,
-                  code: "stop_hit_miss",
-                  misses: stopHit.misses
-                });
-              }
-              await realClickSel(page, "#btn-practice-stop");
-              await page.waitForTimeout(350);
-              await dismissLeave(page);
-              const stopped = await page.evaluate(
-                () => !!document.querySelector("#btn-practice-stop")?.hidden
-              );
-              exEntry.checks.stopClick = stopped;
-              if (!stopped) {
-                exEntry.ok = false;
-                vpEntry.issues.push({ ex: exId, code: "stop_click_fail" });
-              }
-            }
-
-            // Guide toggle hit + click (may need scroll)
-            if (await page.locator("#btn-toggle-guide").isVisible().catch(() => false)) {
-              await page.locator("#btn-toggle-guide").scrollIntoViewIfNeeded();
-              await page.waitForTimeout(40);
-              const gHit = await hitSamples(page, "#btn-toggle-guide");
-              exEntry.checks.guideHit = gHit;
-              if (!gHit.ok) {
-                // soft on guide if scrolled — only hard-fail if completely broken center
-                if (gHit.misses?.some((m) => m.px === 0.5 && m.py === 0.5)) {
-                  exEntry.ok = false;
-                  vpEntry.issues.push({
-                    ex: exId,
-                    code: "guide_hit_miss",
-                    misses: gHit.misses
-                  });
-                }
-              }
-            }
-
-            // Back home
-            await page.evaluate(() => window.scrollTo(0, 0));
-            await page.locator("#btn-back-home").scrollIntoViewIfNeeded().catch(() => {});
-            await layoutReady(page);
-            const backHit = await hitSamples(page, "#btn-back-home");
-            exEntry.checks.backHit = backHit;
-            if (!backHit.ok && backHit.misses?.some((m) => m.px === 0.5 && m.py === 0.5)) {
-              exEntry.ok = false;
-              vpEntry.issues.push({
-                ex: exId,
-                code: "back_hit_miss",
-                misses: backHit.misses
-              });
-            }
-            await realClickSel(page, "#btn-back-home");
-            await page.waitForTimeout(100);
-            await dismissLeave(page);
-            await page.evaluate(() => {
-              if (!document.getElementById("view-home")?.classList.contains("active")) {
-                window.VTApp?.setView?.("home");
-              }
-            });
-          } catch (e) {
-            exEntry.ok = false;
-            exEntry.error = String(e.message || e).slice(0, 160);
-            vpEntry.issues.push({
-              ex: exId,
-              code: "exception",
-              msg: exEntry.error
-            });
-            await dismissLeave(page);
-            await page.evaluate(() => window.VTApp?.setView?.("home")).catch(() => {});
-          }
-
+          const exEntry = await checkExercise({ page, vp, exId, vpEntry });
           vpEntry.exercises.push(exEntry);
           report.summary.total++;
           if (!exEntry.ok) report.summary.failed++;
         }
 
         // Mid-session resize stress: desktop → phone → fullscreen
-        if (vp.name === "desktop") {
-          await openExercise(page, "s15-sh-air-ladder");
-          await layoutReady(page);
-          await page.setViewportSize({ width: 390, height: 844 });
-          await page.waitForTimeout(100);
-          await layoutReady(page);
-          let hit = await hitSamples(page, "#btn-practice-start");
-          if (!hit.ok) {
-            vpEntry.issues.push({
-              ex: "s15-resize-phone",
-              code: "resize_hit_miss",
-              misses: hit.misses
-            });
-            report.summary.failed++;
-          }
-          await page.setViewportSize({ width: 1920, height: 1080 });
-          await page.waitForTimeout(100);
-          await layoutReady(page);
-          hit = await hitSamples(page, "#btn-practice-start");
-          if (!hit.ok) {
-            vpEntry.issues.push({
-              ex: "s15-resize-fullscreen",
-              code: "resize_hit_miss",
-              misses: hit.misses
-            });
-            report.summary.failed++;
-          }
-          // restore
-          await page.setViewportSize({ width: vp.width, height: vp.height });
-        }
+        if (vp.name === "desktop") await resizeStress(page, vp, vpEntry, report);
       } finally {
         await context.close();
       }

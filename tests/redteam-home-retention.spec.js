@@ -57,7 +57,8 @@ async function boot(page, o = {}) {
   await page.clock.install({ time: new Date(o.now || NOW) });
   await page.addInitScript(
     ({ days, loop, session, reminders, lang, toasts, cardOn, notif, noNotif }) => {
-      try {
+      // Runs in the page: its helpers live inside it.
+      const seedStorage = () => {
         // A second page of the same test shares localStorage: start clean, once.
         const first = !sessionStorage.getItem("vt_seeded");
         if (first) localStorage.clear();
@@ -73,6 +74,9 @@ async function boot(page, o = {}) {
           if (session) localStorage.setItem("vt_session_v1", JSON.stringify(session));
           if (reminders) localStorage.setItem("vt_reminders_v1", JSON.stringify(reminders));
         }
+      };
+      try {
+        seedStorage();
       } catch {
         /* ignore */
       }
@@ -276,7 +280,7 @@ test.describe("Home and retention: red-team fixes", () => {
   }
 
   // ---------------------------------------------------------------- home-15
-  for (const [lang, name, vp] of VIEWS) {
+  VIEWS.forEach(([lang, name, vp]) => {
     for (const how of ["Escape", "close"]) {
       test(`home-15 closing the done card leaves focus on a visible control (${how}, ${lang}, ${name})`, async ({ page }) => {
         await page.setViewportSize(vp);
@@ -299,7 +303,7 @@ test.describe("Home and retention: red-team fixes", () => {
         expect(f.shown, "focus is on " + f.id).toBe(true);
       });
     }
-  }
+  });
 
   test("home-15 dismissing the welcome back or the due card does not drop focus on the body", async ({ page }) => {
     await page.setViewportSize(LAPTOP);
@@ -501,7 +505,7 @@ test.describe("Home and retention: red-team fixes", () => {
   });
 
   // ---------------------------------------------------------------- cross-10
-  for (const lang of ["es", "en"]) {
+  ["es", "en"].forEach((lang) => {
     for (const exerciseId of ["s4-lip-trills", "v1-diction"]) {
       test(`cross-10 the first practice day is not "1 días" (${lang}, ${exerciseId})`, async ({ page }) => {
         await boot(page, { lang, toasts: true });
@@ -515,7 +519,7 @@ test.describe("Home and retention: red-team fixes", () => {
         expect(toast.text).toMatch(lang === "es" ? /primer día/i : /first practice day|first day/i);
       });
     }
-  }
+  });
 
   test("cross-10 later milestones keep the plural", async ({ page }) => {
     await boot(page, { lang: "en", toasts: true, days: ledger([-6, -5, -4, -3, -2, -1, 0].slice(0, 6)) });

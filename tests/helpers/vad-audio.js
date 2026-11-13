@@ -137,108 +137,122 @@
     const truth = [];
     let t = 0;
     spec.parts.forEach((p) => {
-      const i0 = pre + Math.round(t * sr);
-      const len = Math.round(p.sec * sr);
-      if (p.kind === "speech") {
-        const peak = p.peak != null ? p.peak : -25;
-        const dip = p.dip != null ? p.dip : -42;
-        const rate = p.rate || 5;
-        const env = new Float32Array(len);
-        const hz = new Float32Array(len);
-        let i = 0;
-        let semis = 0;
-        while (i < len) {
-          const syl = Math.round((sr / rate) * (0.75 + 0.5 * rnd()));
-          const cons = Math.round(syl * (0.2 + 0.2 * rnd()));
-          const pk = peak + (rnd() - 0.5) * 6;
-          semis = Math.max(-4, Math.min(4, semis + (rnd() - 0.5) * 3));
-          const f = 135 * Math.pow(2, semis / 12);
-          for (let k = 0; k < syl && i < len; k++, i++) {
-            let db = dip;
-            if (k >= cons) {
-              const u = (k - cons) / Math.max(1, syl - cons);
-              const shape = u < 0.2 ? u / 0.2 : 1 - 0.35 * ((u - 0.2) / 0.8);
-              db = dip + (pk - dip) * Math.max(0, shape);
-            }
-            env[i] = amp(db);
-            hz[i] = f;
-          }
-        }
-        // The sawtooth, its pitch gliding 20 ms into each new one
-        const x = new Float32Array(len);
-        let ph = 0;
-        let g = hz[0];
-        const glide = 1 - Math.exp(-1 / (0.02 * sr));
-        for (let k = 0; k < len; k++) {
-          g += (hz[k] - g) * glide;
-          ph += g / sr;
-          ph -= Math.floor(ph);
-          x[k] = 2 * ph - 1;
-        }
-        unit(onePole(x, 2400, sr, 2, false));
-        // a 5 ms fade in and out, so a phrase starts and stops without a click
-        const fade = Math.round(0.005 * sr);
-        for (let k = 0; k < len; k++) {
-          const e = Math.min(1, (k + 1) / fade, (len - k) / fade);
-          wave[i0 + k] += x[k] * env[k] * e;
-          f0[i0 + k] = hz[k];
-        }
-      } else if (p.kind === "hiss") {
-        const bands = p.bands || [5000, 7000];
-        const raw = white(len, rnd);
-        const x = new Float32Array(len);
-        bands.forEach((f) => bandpass(raw, f, p.q || 1.2, sr).forEach((v, k) => (x[k] += v)));
-        unit(x);
-        const top = amp(p.db != null ? p.db : -30);
-        const low = amp(-(p.swingDb != null ? p.swingDb : 1.5));
-        // Each syllable glides to its level (30 ms) and, 62 % of the way
-        // through, down to `low` of it (40 ms); the hold ends in 50 ms
-        const syl = sr / 4.5;
-        const stop = len - Math.round(0.05 * sr);
-        let g = 0;
-        let target = 0;
-        let tau = 1;
-        let lvl = 0;
-        let s = -1;
-        let dipped = false;
-        for (let k = 0; k < len; k++) {
-          const j = Math.floor(k / syl);
-          if (j !== s) {
-            s = j;
-            lvl = top * (0.8 + rnd() * 0.2);
-            target = lvl;
-            tau = 0.03 * sr;
-            dipped = false;
-          } else if (!dipped && k / syl - j >= 0.62) {
-            target = lvl * low;
-            tau = 0.04 * sr;
-            dipped = true;
-          }
-          if (k >= stop) {
-            target = 0;
-            tau = 0.05 * sr;
-          }
-          g += (target - g) / tau;
-          wave[i0 + k] += x[k] * g;
-        }
-      } else if (p.kind === "fricative") {
-        const x = white(len, rnd);
-        onePole(x, p.hp || 500, sr, 1, true);
-        onePole(x, p.lp || 12000, sr, 1, false);
-        unit(x);
-        const a = amp(p.db != null ? p.db : -35);
-        const sway = p.swayDb != null ? p.swayDb : 0.5;
-        const ph = rnd() * 2 * Math.PI;
-        const fade = Math.round(0.06 * sr);
-        for (let k = 0; k < len; k++) {
-          const e = Math.min(1, (k + 1) / fade, (len - k) / fade);
-          wave[i0 + k] += x[k] * a * e * amp(sway * Math.sin((Math.PI * k) / sr + ph));
-        }
-      }
+      // Where the part goes: samples i0 to i0 + len of the take
+      const at = { wave, f0, i0: pre + Math.round(t * sr), len: Math.round(p.sec * sr), sr, rnd };
+      if (p.kind === "speech") speechPart(p, at);
+      else if (p.kind === "hiss") hissPart(p, at);
+      else if (p.kind === "fricative") fricativePart(p, at);
       truth.push({ kind: p.kind, start: t, end: t + p.sec });
       t += p.sec;
     });
     return { wave, f0, truth, sr, pre, sec };
+  }
+
+  /** A speech part's level (env, amplitude) and pitch (hz) per sample, syllable by syllable. */
+  function syllables(p, len, sr, rnd) {
+    const peak = p.peak != null ? p.peak : -25;
+    const dip = p.dip != null ? p.dip : -42;
+    const rate = p.rate || 5;
+    const env = new Float32Array(len);
+    const hz = new Float32Array(len);
+    let i = 0;
+    let semis = 0;
+    while (i < len) {
+      const syl = Math.round((sr / rate) * (0.75 + 0.5 * rnd()));
+      const cons = Math.round(syl * (0.2 + 0.2 * rnd()));
+      const pk = peak + (rnd() - 0.5) * 6;
+      semis = Math.max(-4, Math.min(4, semis + (rnd() - 0.5) * 3));
+      const f = 135 * Math.pow(2, semis / 12);
+      for (let k = 0; k < syl && i < len; k++, i++) {
+        let db = dip;
+        if (k >= cons) {
+          const u = (k - cons) / Math.max(1, syl - cons);
+          const shape = u < 0.2 ? u / 0.2 : 1 - 0.35 * ((u - 0.2) / 0.8);
+          db = dip + (pk - dip) * Math.max(0, shape);
+        }
+        env[i] = amp(db);
+        hz[i] = f;
+      }
+    }
+    return { env, hz };
+  }
+  function speechPart(p, at) {
+    const { wave, f0, i0, len, sr, rnd } = at;
+    const { env, hz } = syllables(p, len, sr, rnd);
+    // The sawtooth, its pitch gliding 20 ms into each new one
+    const x = new Float32Array(len);
+    let ph = 0;
+    let g = hz[0];
+    const glide = 1 - Math.exp(-1 / (0.02 * sr));
+    for (let k = 0; k < len; k++) {
+      g += (hz[k] - g) * glide;
+      ph += g / sr;
+      ph -= Math.floor(ph);
+      x[k] = 2 * ph - 1;
+    }
+    unit(onePole(x, 2400, sr, 2, false));
+    // a 5 ms fade in and out, so a phrase starts and stops without a click
+    const fade = Math.round(0.005 * sr);
+    for (let k = 0; k < len; k++) {
+      const e = Math.min(1, (k + 1) / fade, (len - k) / fade);
+      wave[i0 + k] += x[k] * env[k] * e;
+      f0[i0 + k] = hz[k];
+    }
+  }
+  function hissPart(p, at) {
+    const { wave, i0, len, sr, rnd } = at;
+    const bands = p.bands || [5000, 7000];
+    const raw = white(len, rnd);
+    const x = new Float32Array(len);
+    bands.forEach((f) => bandpass(raw, f, p.q || 1.2, sr).forEach((v, k) => (x[k] += v)));
+    unit(x);
+    const top = amp(p.db != null ? p.db : -30);
+    const low = amp(-(p.swingDb != null ? p.swingDb : 1.5));
+    // Each syllable glides to its level (30 ms) and, 62 % of the way
+    // through, down to `low` of it (40 ms); the hold ends in 50 ms
+    const syl = sr / 4.5;
+    const stop = len - Math.round(0.05 * sr);
+    let g = 0;
+    let target = 0;
+    let tau = 1;
+    let lvl = 0;
+    let s = -1;
+    let dipped = false;
+    for (let k = 0; k < len; k++) {
+      const j = Math.floor(k / syl);
+      if (j !== s) {
+        s = j;
+        lvl = top * (0.8 + rnd() * 0.2);
+        target = lvl;
+        tau = 0.03 * sr;
+        dipped = false;
+      } else if (!dipped && k / syl - j >= 0.62) {
+        target = lvl * low;
+        tau = 0.04 * sr;
+        dipped = true;
+      }
+      if (k >= stop) {
+        target = 0;
+        tau = 0.05 * sr;
+      }
+      g += (target - g) / tau;
+      wave[i0 + k] += x[k] * g;
+    }
+  }
+  function fricativePart(p, at) {
+    const { wave, i0, len, sr, rnd } = at;
+    const x = white(len, rnd);
+    onePole(x, p.hp || 500, sr, 1, true);
+    onePole(x, p.lp || 12000, sr, 1, false);
+    unit(x);
+    const a = amp(p.db != null ? p.db : -35);
+    const sway = p.swayDb != null ? p.swayDb : 0.5;
+    const ph = rnd() * 2 * Math.PI;
+    const fade = Math.round(0.06 * sr);
+    for (let k = 0; k < len; k++) {
+      const e = Math.min(1, (k + 1) / fade, (len - k) / fade);
+      wave[i0 + k] += x[k] * a * e * amp(sway * Math.sin((Math.PI * k) / sr + ph));
+    }
   }
 
   /**

@@ -1397,35 +1397,48 @@
     return !!(s && s.status !== "completed" && s.order?.length && VTSession.currentExerciseId() === id);
   }
 
+  /** Where the way back from an exercise leads. After a reload only the exercise's own entry still knows the way back. */
+  function exerciseBackTo() {
+    const entryFrom = history.state?.vt === "exercise" && typeof history.state.from === "string" ? history.state.from : null;
+    return route.backTo ?? entryFrom;
+  }
+
+  /**
+   * The history step for a move from `prev` to `name`: back one entry, one
+   * entry replaced, or one added. Throws where addresses cannot be written
+   * (writeRoute catches it).
+   */
+  function stepRouteHistory(name, prev, want, url, backTo) {
+    if (prev === "exercise" && name !== "exercise" && backTo === want) {
+      // Back to where the exercise was opened from: the entry is already
+      // there, one step back. The URL follows when popstate arrives.
+      route.backTo = null;
+      route.pendingBack = true;
+      clearTimeout(route.pendingTimer);
+      route.pendingTimer = setTimeout(() => {
+        route.pendingBack = false;
+      }, 1500);
+      history.back();
+    } else if (prev === "exercise") {
+      // One exercise to the next, or out to somewhere else: one entry.
+      history.replaceState(name === "exercise" ? exerciseEntry(backTo) : routeEntry(name), "", url);
+      if (name !== "exercise") route.backTo = null;
+    } else {
+      if (name === "exercise") route.backTo = hashFor(prev);
+      history.pushState(name === "exercise" ? exerciseEntry(route.backTo) : routeEntry(name), "", url);
+    }
+  }
+
   function writeRoute(name, prev) {
     if (!route.ready || route.silent || route.pendingBack) return;
     const want = hashFor(name);
     if ((location.hash || "") === want || (!want && !parseRoute(location.hash))) return;
     const url = want || location.pathname + location.search;
-    // After a reload only the exercise's own entry still knows the way back.
-    const entryFrom = history.state?.vt === "exercise" && typeof history.state.from === "string" ? history.state.from : null;
-    const backTo = route.backTo ?? entryFrom;
+    const backTo = exerciseBackTo();
     try {
       // The page you leave keeps its scroll position, for when Back returns to it.
       if (prev && prev !== "exercise") history.replaceState({ ...(history.state || {}), y: route.leftY }, "");
-      if (prev === "exercise" && name !== "exercise" && backTo === want) {
-        // Back to where the exercise was opened from: the entry is already
-        // there, one step back. The URL follows when popstate arrives.
-        route.backTo = null;
-        route.pendingBack = true;
-        clearTimeout(route.pendingTimer);
-        route.pendingTimer = setTimeout(() => {
-          route.pendingBack = false;
-        }, 1500);
-        history.back();
-      } else if (prev === "exercise") {
-        // One exercise to the next, or out to somewhere else: one entry.
-        history.replaceState(name === "exercise" ? exerciseEntry(backTo) : routeEntry(name), "", url);
-        if (name !== "exercise") route.backTo = null;
-      } else {
-        if (name === "exercise") route.backTo = hashFor(prev);
-        history.pushState(name === "exercise" ? exerciseEntry(route.backTo) : routeEntry(name), "", url);
-      }
+      stepRouteHistory(name, prev, want, url, backTo);
     } catch {
       /* file:// or a sandboxed frame: the views still work without addresses */
     }
@@ -1454,36 +1467,36 @@
     }
   }
 
-  async function onRoute() {
-    if (route.pendingBack) {
-      // Our own history.back(): the view already changed. Anything opened
-      // while it was on its way gets its address now.
-      route.pendingBack = false;
-      clearTimeout(route.pendingTimer);
-      if (!routeMatchesView(parseRoute(location.hash))) writeRoute(state.view, null);
-      return;
-    }
-    if (state.leavePromptOpen && state.view === "exercise") {
-      // Back or Forward with the leave question open answers it "Seguir
-      // practicando", as Escape does: the exercise and its take stay, and so
-      // does its address. When the question came from an earlier Back, that
-      // Back's own "Seguir aquí" below sees the address back and adds none.
-      $("#leave-cancel")?.click();
-      if (!routeMatchesView(parseRoute(location.hash))) {
-        try {
-          history.pushState(exerciseEntry(route.backTo), "", hashFor("exercise"));
-        } catch {
-          /* ignore */
-        }
+  /**
+   * Our own history.back(): the view already changed. Anything opened
+   * while it was on its way gets its address now.
+   */
+  function settleOwnBack() {
+    route.pendingBack = false;
+    clearTimeout(route.pendingTimer);
+    if (!routeMatchesView(parseRoute(location.hash))) writeRoute(state.view, null);
+  }
+
+  /**
+   * Back or Forward with the leave question open answers it "Seguir
+   * practicando", as Escape does: the exercise and its take stay, and so
+   * does its address. When the question came from an earlier Back, that
+   * Back's own "Seguir aquí" (keepStayedExerciseAddress) sees the address
+   * back and adds none.
+   */
+  function answerLeavePromptStay() {
+    $("#leave-cancel")?.click();
+    if (!routeMatchesView(parseRoute(location.hash))) {
+      try {
+        history.pushState(exerciseEntry(route.backTo), "", hashFor("exercise"));
+      } catch {
+        /* ignore */
       }
-      return;
     }
-    const t = parseRoute(location.hash);
-    // The tour shows pages without addresses of their own, so Back can land on
-    // the very page it is showing: close it first, then compare (ending it
-    // puts the page it opened on back).
-    if (window.VTTour?.isActive?.()) window.VTTour.end?.(false);
-    if (routeMatchesView(t)) return;
+  }
+
+  /** What is open over the page closes before the page under it changes. */
+  function closeOverPageForRoute() {
     setHeaderMenu(false);
     if ($("#pricing-modal") && !$("#pricing-modal").hidden) closePricing();
     if ($("#account-modal") && !$("#account-modal").hidden) closeAccount();
@@ -1493,42 +1506,77 @@
     window.VTTour?.closeMicPrimer?.();
     closeReminders();
     window.VTLoop?.closeDialogs?.();
+  }
+
+  /** Forward into the exercise you just left: same way back as before. */
+  function reopenRoutedExercise(id) {
+    route.reopening = true;
+    try {
+      if (findExercise(id)) openExercise(id, guidedStep(id));
+      else showShownAddress();
+    } finally {
+      route.reopening = false;
+    }
+  }
+
+  /** Where an address other than an exercise's leads: Practicar from a catalog card goes back to that card. */
+  function routeDestination(t, fromExercise) {
+    return t ? { type: t.type } : { type: "home", restore: fromExercise && state.exOrigin?.catalog ? state.exOrigin : null };
+  }
+
+  /** "Seguir aquí": the exercise stays, so its address comes back, once. */
+  function keepStayedExerciseAddress(left) {
+    if (!left && state.view === "exercise" && !routeMatchesView(parseRoute(location.hash))) {
+      route.silent -= 1;
+      try {
+        history.pushState(exerciseEntry(route.backTo), "", hashFor("exercise"));
+      } catch {
+        /* ignore */
+      }
+      route.silent += 1;
+    }
+  }
+
+  function showRoutedPage(dest) {
+    const drawn = navigateDestination(dest);
+    // Back to a page you scrolled: the same place on it, and again once it
+    // is drawn (Historial reads its list first).
+    const y = history.state?.y;
+    if (y) {
+      window.scrollTo({ top: y, behavior: "instant" });
+      restoreY(y, drawn);
+    }
+  }
+
+  async function onRoute() {
+    if (route.pendingBack) {
+      settleOwnBack();
+      return;
+    }
+    if (state.leavePromptOpen && state.view === "exercise") {
+      answerLeavePromptStay();
+      return;
+    }
+    const t = parseRoute(location.hash);
+    // The tour shows pages without addresses of their own, so Back can land on
+    // the very page it is showing: close it first, then compare (ending it
+    // puts the page it opened on back).
+    if (window.VTTour?.isActive?.()) window.VTTour.end?.(false);
+    if (routeMatchesView(t)) return;
+    closeOverPageForRoute();
     route.silent += 1;
     try {
       if (t?.type === "exercise") {
-        // Forward into the exercise you just left: same way back as before.
-        route.reopening = true;
-        try {
-          if (findExercise(t.id)) openExercise(t.id, guidedStep(t.id));
-          else showShownAddress();
-        } finally {
-          route.reopening = false;
-        }
+        reopenRoutedExercise(t.id);
         return;
       }
       const fromExercise = state.view === "exercise";
-      const dest = t ? { type: t.type } : { type: "home", restore: fromExercise && state.exOrigin?.catalog ? state.exOrigin : null };
+      const dest = routeDestination(t, fromExercise);
       if (fromExercise) {
         const left = await leaveExercise(dest);
-        // "Seguir aquí": the exercise stays, so its address comes back, once.
-        if (!left && state.view === "exercise" && !routeMatchesView(parseRoute(location.hash))) {
-          route.silent -= 1;
-          try {
-            history.pushState(exerciseEntry(route.backTo), "", hashFor("exercise"));
-          } catch {
-            /* ignore */
-          }
-          route.silent += 1;
-        }
+        keepStayedExerciseAddress(left);
       } else {
-        const drawn = navigateDestination(dest);
-        // Back to a page you scrolled: the same place on it, and again once it
-        // is drawn (Historial reads its list first).
-        const y = history.state?.y;
-        if (y) {
-          window.scrollTo({ top: y, behavior: "instant" });
-          restoreY(y, drawn);
-        }
+        showRoutedPage(dest);
       }
     } finally {
       route.silent -= 1;
@@ -1583,6 +1631,39 @@
     keepFocusClearOfHeader();
   }
 
+  /**
+   * On an exercise the header's guide opens beside it, as the exercise's own
+   * guide link does: leaving the tab mid-take dropped the take and its
+   * rating without the app's own question.
+   */
+  function syncHeaderGuideTarget(name) {
+    const guide = $("#link-guide");
+    if (guide && name === "exercise") {
+      guide.target = "_blank";
+      guide.rel = "noopener";
+    } else if (guide) {
+      guide.removeAttribute("target");
+      guide.removeAttribute("rel");
+    }
+  }
+
+  function renderViewAd(slot) {
+    try {
+      window.VTAds?.renderSlot?.(slot);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function clearViewAds() {
+    try {
+      window.VTAds?.clearSlot?.(document.getElementById("ad-slot-home"));
+      window.VTAds?.clearSlot?.(document.getElementById("ad-slot-history"));
+    } catch {
+      /* ignore */
+    }
+  }
+
   function setView(name) {
     const prev = state.view;
     route.leftY = window.scrollY;
@@ -1599,17 +1680,7 @@
     const target = $(map[name]);
     if (target) target.classList.add("active");
     document.body.classList.toggle("view-exercise", name === "exercise");
-    // On an exercise the header's guide opens beside it, as the exercise's own
-    // guide link does: leaving the tab mid-take dropped the take and its
-    // rating without the app's own question.
-    const guide = $("#link-guide");
-    if (guide && name === "exercise") {
-      guide.target = "_blank";
-      guide.rel = "noopener";
-    } else if (guide) {
-      guide.removeAttribute("target");
-      guide.removeAttribute("rel");
-    }
+    syncHeaderGuideTarget(name);
     syncHeaderNav(name);
     setHeaderMenu(false);
     setHelpMenu(false);
@@ -1633,27 +1704,12 @@
       renderValuePulse();
       renderRetentionChrome();
       renderNextStepCard();
-      try {
-        window.VTAds?.renderSlot?.("home");
-      } catch {
-        /* ignore */
-      }
+      renderViewAd("home");
     }
-    if (name === "history") {
-      try {
-        window.VTAds?.renderSlot?.("history");
-      } catch {
-        /* ignore */
-      }
-    }
+    if (name === "history") renderViewAd("history");
     if (name === "exercise") {
       // Never show home/history ads on exercise; clear post-session until complete
-      try {
-        window.VTAds?.clearSlot?.(document.getElementById("ad-slot-home"));
-        window.VTAds?.clearSlot?.(document.getElementById("ad-slot-history"));
-      } catch {
-        /* ignore */
-      }
+      clearViewAds();
     }
   }
 
@@ -2784,6 +2840,17 @@
     }
   }
 
+  /**
+   * Opened by its address (a reload, Forward), the exercise's own entry still
+   * says where it was opened from. That origin, when it names a page an
+   * exercise is opened from; otherwise null.
+   */
+  function originInEntry() {
+    const kept = history.state?.vt === "exercise" && (route.reopening || !route.ready) ? history.state.origin : null;
+    const keptOk = !!kept && typeof kept === "object" && ["home", "plan", "history"].includes(kept.view);
+    return keptOk ? kept : null;
+  }
+
   function forceOpenExercise(id, fromStructured) {
     const ex = findExercise(id);
     if (!ex) return;
@@ -2800,11 +2867,8 @@
     state.pitchHeard = false;
     // Where this exercise was opened from, so the way back can name it and
     // land there: a catalog card brings you back to that card.
-    // Opened by its address (a reload, Forward), the exercise's own entry still
-    // says where it was opened from.
-    const kept = history.state?.vt === "exercise" && (route.reopening || !route.ready) ? history.state.origin : null;
-    const keptOk = !!kept && typeof kept === "object" && ["home", "plan", "history"].includes(kept.view);
-    if (state.view !== "exercise" && keptOk) {
+    const kept = originInEntry();
+    if (state.view !== "exercise" && kept) {
       state.exOrigin = kept;
     } else if (state.view !== "exercise" && !(route.reopening && state.exOrigin?.id === id)) {
       state.exOrigin = {
@@ -2826,7 +2890,7 @@
     state.recorder.clear();
     VTPiano.stopAll();
     resetSessionPractice();
-    renderExercise();
+    renderExerciseAfresh();
     setView("exercise");
     // Instant jump to top so game stage is the first viewport (no smooth lag).
     // "instant", not (0, 0): html has scroll-behavior: smooth, so that glided
@@ -2987,6 +3051,18 @@
     forceOpenExercise(id, fromStructured);
   }
 
+  /** The exercise's catalog copy in the language showing, or the catalog's own without VTI18n. */
+  function exerciseCopy(ex) {
+    const I = window.VTI18n;
+    return {
+      original: I?.exField ? I.exField(ex, "original") : ex.original,
+      research: I?.exField ? I.exField(ex, "research") : ex.research,
+      steps: I?.exField ? I.exField(ex, "steps") : ex.steps || [],
+      tips: I?.exField ? I.exField(ex, "tips") : ex.tips || [],
+      mistakes: I?.exField ? I.exField(ex, "mistakes") : ex.mistakes || []
+    };
+  }
+
   /**
    * The open exercise's own words: its name, badge, way back, original,
    * research, steps, tips and mistakes. Written on every open, and again on a
@@ -3009,12 +3085,7 @@
       : `${tt(ex.track === "vocal" ? "badge.vocal" : "badge.singing")} · ${tierLabel(tier, ex.track)}`;
     kind.dataset.track = routineTrack || ex.track;
     syncExerciseBack();
-    const I = window.VTI18n;
-    const original = I?.exField ? I.exField(ex, "original") : ex.original;
-    const research = I?.exField ? I.exField(ex, "research") : ex.research;
-    const steps = I?.exField ? I.exField(ex, "steps") : ex.steps || [];
-    const tips = I?.exField ? I.exField(ex, "tips") : ex.tips || [];
-    const mistakes = I?.exField ? I.exField(ex, "mistakes") : ex.mistakes || [];
+    const { original, research, steps, tips, mistakes } = exerciseCopy(ex);
     const origEl = $("#ex-original");
     if (origEl) {
       const label = tt("ex.original");
@@ -3039,13 +3110,25 @@
     return steps;
   }
 
+  /**
+   * The open exercise drawn afresh (renderExercise), clear of what the last
+   * one left: every open and every rebuild goes through here. The two resets
+   * live outside renderExercise so that its text stays the one its
+   * qa/complexity-baseline.json exemption was hashed from.
+   */
+  function renderExerciseAfresh() {
+    if (state.exercise) {
+      // The last exercise's chord or note is not this one's
+      if ($("#chord-now")) $("#chord-now").textContent = "—";
+      // A microphone notice put away on the last visit shows again on this one
+      state.micBlockedClosed = false;
+    }
+    renderExercise();
+  }
+
   function renderExercise() {
     const ex = state.exercise;
     if (!ex) return;
-    // The last exercise's chord or note is not this one's
-    if ($("#chord-now")) $("#chord-now").textContent = "—";
-    // A microphone notice put away on the last visit shows again on this one
-    state.micBlockedClosed = false;
     hideMicBlocked();
 
     const steps = renderExerciseText(ex);
@@ -3386,6 +3469,38 @@
     );
   }
 
+  /** The exercise's status pill, Start and panel toggles, saying what is true now (relabelExercise). */
+  function relabelExerciseToggles() {
+    const pill = $("#practice-status");
+    if (pill) pill.textContent = tt(state.practiceLive ? "practice.live" : "practice.ready");
+    const start = $("#btn-practice-start");
+    if (start) start.textContent = tt(document.body.classList.contains("ex-ended") ? "practice.again" : "practice.start");
+    const guideBtn = $("#btn-toggle-guide");
+    if (guideBtn) {
+      guideBtn.textContent = tt(state.guideOpen ? "ex.hideGuide" : "ex.showGuide");
+      guideBtn.setAttribute("aria-label", tt(state.guideOpen ? "ex.hideGuideAria" : "ex.showGuideAria"));
+    }
+    const metricsBtn = $("#btn-toggle-metrics");
+    if (metricsBtn) metricsBtn.textContent = tt(state.metricsOpen ? "metrics.hide" : "metrics.show");
+    const piano = $("#btn-toggle-piano");
+    if (piano && !piano.hidden) {
+      setPianoToggleLabel(piano, !!state.pianoOpen);
+      piano.title = tt(state.pianoOpen ? "piano.hidePanel" : "piano.showPanel");
+      piano.setAttribute("aria-label", piano.title);
+    }
+  }
+
+  /** The rating card's take row, saying what is true now (relabelExercise). */
+  function relabelTakeButtons() {
+    // The take's words, not its recording.
+    const takeK = $("#rate-take-k");
+    if (takeK) takeK.textContent = tt("rate.take");
+    const save = $("#btn-save-rec");
+    if (save) save.textContent = tt(save.disabled ? "rate.takeSaved" : "rate.takeSave");
+    const discard = $("#btn-discard-rec");
+    if (discard) discard.textContent = tt("rate.takeDiscard");
+  }
+
   /**
    * A language switch on an exercise under way: the same screen, in the other
    * language. Rendering it again opened it fresh, which mid-take put Empezar
@@ -3405,30 +3520,8 @@
     const cue = $("#mode-cue");
     if (cue) cue.textContent = (window.VTI18n?.lang === "es" && profile.cueEs) || profile.cue || tt("practice.hint");
     // The switch put these back to their defaults (data-i18n); say what is true now.
-    const pill = $("#practice-status");
-    if (pill) pill.textContent = tt(state.practiceLive ? "practice.live" : "practice.ready");
-    const start = $("#btn-practice-start");
-    if (start) start.textContent = tt(document.body.classList.contains("ex-ended") ? "practice.again" : "practice.start");
-    const guideBtn = $("#btn-toggle-guide");
-    if (guideBtn) {
-      guideBtn.textContent = tt(state.guideOpen ? "ex.hideGuide" : "ex.showGuide");
-      guideBtn.setAttribute("aria-label", tt(state.guideOpen ? "ex.hideGuideAria" : "ex.showGuideAria"));
-    }
-    const metricsBtn = $("#btn-toggle-metrics");
-    if (metricsBtn) metricsBtn.textContent = tt(state.metricsOpen ? "metrics.hide" : "metrics.show");
-    const piano = $("#btn-toggle-piano");
-    if (piano && !piano.hidden) {
-      setPianoToggleLabel(piano, !!state.pianoOpen);
-      piano.title = tt(state.pianoOpen ? "piano.hidePanel" : "piano.showPanel");
-      piano.setAttribute("aria-label", piano.title);
-    }
-    // The take's words, not its recording.
-    const takeK = $("#rate-take-k");
-    if (takeK) takeK.textContent = tt("rate.take");
-    const save = $("#btn-save-rec");
-    if (save) save.textContent = tt(save.disabled ? "rate.takeSaved" : "rate.takeSave");
-    const discard = $("#btn-discard-rec");
-    if (discard) discard.textContent = tt("rate.takeDiscard");
+    relabelExerciseToggles();
+    relabelTakeButtons();
     paintRating();
     // A saved take's score card: the same numbers, worked out again for their words.
     const r = state.rate;
@@ -3589,6 +3682,14 @@
     sel.value = cur;
   }
 
+  /** Whether the open exercise draws a pitch highway the progression locks (truthy) or not. */
+  function highwayFollowsProgression() {
+    return (
+      (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) &&
+      !(state.exercise && getProfile(state.exercise)?.noProgression)
+    );
+  }
+
   function selectProgression(id, { silent, fromUi } = {}) {
     const progs = VTPiano?.getProgressions?.() || VT_PROGRESSIONS || {};
     const p = progs[id];
@@ -3601,10 +3702,7 @@
     });
     state.chordPlayHint = null;
     paintChordDesc();
-    if (
-      (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) &&
-      !(state.exercise && getProfile(state.exercise)?.noProgression)
-    ) {
+    if (highwayFollowsProgression()) {
       lockHighwayForProgression(id);
     }
     if (!silent) applyPianoOptionsHot("prog:" + progName(p, id));
@@ -4313,6 +4411,21 @@
     return !!VTPiano.ctx && VTPiano.ctx.state !== "running";
   }
 
+  /**
+   * "↻ Otra vez" after a rated take starts a new take: its own practice
+   * clock, its own history entry and an unanswered card. The saved flag
+   * used to carry over, so the second take was never recorded and leaving
+   * it did not ask.
+   */
+  function startNewTakeAfterSave() {
+    if (state.sessionPractice.saved) {
+      resetSessionPractice();
+      resetRating();
+      const scored = $("#score-result");
+      if (scored) scored.hidden = true;
+    }
+  }
+
   async function startPractice() {
     const ex = state.exercise;
     if (!ex || state.practiceLive || state.practiceStarting) return;
@@ -4327,16 +4440,7 @@
     try {
       if (startsElsewhere(ex, profile)) return;
 
-      // "↻ Otra vez" after a rated take starts a new take: its own practice
-      // clock, its own history entry and an unanswered card. The saved flag
-      // used to carry over, so the second take was never recorded and leaving
-      // it did not ask.
-      if (state.sessionPractice.saved) {
-        resetSessionPractice();
-        resetRating();
-        const scored = $("#score-result");
-        if (scored) scored.hidden = true;
-      }
+      startNewTakeAfterSave();
       state.practiceStarting = true;
       setPracticeUI(false); // hides/disables Start while bootstrapping
       trackPracticeStart(ex, profile);
@@ -5760,29 +5864,17 @@
     return { values, notes };
   }
 
-  /**
-   * Save this take with its rating and show the score.
-   * @param {{ feel?: "easy"|"ok"|"hard" }} [opts] feel: the one-tap answer
-   *   (rateFeel), shown on the score card; absent for "Guardar con estos detalles"
-   */
-  function completeExercise(opts = {}) {
-    const ex = state.exercise;
-    if (!ex) return;
-    // A self-rating describes a real attempt; merely opening this screen must
-    // never create a completed session, perfect score, streak day or first-win.
-    // The same threshold already guards the unrated auto-save path. Checking
-    // before stopPractice means an accidental early tap won't end the take.
-    if (!canSaveRatedTake()) return;
-    if (state.practiceLive) stopPractice(true);
-    else if (state.pitchRunning) stopPitchViz();
-    flushPracticeClock();
-    // Prefer best auto-hold into metrics
+  /** Prefer best auto-hold into metrics */
+  function fillBestHold() {
     const best = state.practice.bestHold?.() || 0;
     if (best > 0) {
       const input = $('#metrics-form [name="maxHold"]');
       if (input && !(Number(input.value) > best)) input.value = best;
     }
-    // Pitch game → self-scores
+  }
+
+  /** Pitch game → self-scores */
+  function fillPitchGameScores() {
     if (state.pitchGame && state.exercise?.audio?.pitchViz) {
       const snap = state.pitchGame.snapshot();
       const accInput = $('#metrics-form [name="accuracy"]');
@@ -5798,6 +5890,13 @@
         precInput.dispatchEvent(new Event("input"));
       }
     }
+  }
+
+  /**
+   * The rated take's numbers, read off the details form: the values to keep,
+   * the score worked out from them and the time the take took.
+   */
+  function rateTake(ex) {
     const { values, notes } = collectMetrics();
     if (ex.audio.reviewWorkflow) {
       values.stepsDone = Object.values(state.reviewChecks).filter(Boolean).length;
@@ -5824,7 +5923,15 @@
         : state.timer.total > 0
           ? state.timer.total - state.timer.remaining
           : 0;
+    return { values, notes, scored, result, elapsed };
+  }
 
+  /**
+   * Keeps the rated take in History and on its day, and says what it was
+   * before: whether this open had saved it already, the score to compare
+   * with, the day's record and whether it is the first rated take.
+   */
+  function storeRatedTake(ex, { values, notes, result, elapsed }) {
     // A take this open already recorded automatically is the same take: rate
     // it in place rather than adding a second one.
     const sp = state.sessionPractice;
@@ -5857,6 +5964,11 @@
     // first-win card is about the first time somebody reviewed their own work.
     // A changed answer keeps the card its first save showed.
     const isFirstWin = wasSaved ? state.rate.firstWin : ratedSessionsSaved() === 1;
+    return { wasSaved, prevScore, dayRec, isFirstWin };
+  }
+
+  /** The saved take told to the daily loop, the analytics and the value pulse, and its soft moment. */
+  function announceRatedTake(ex, opts, { result, elapsed }, { wasSaved, dayRec, isFirstWin }) {
     window.VTLoop?.onPractice?.({
       exerciseId: ex.id,
       source: "save",
@@ -5884,15 +5996,14 @@
     if (!state.structured && !wasSaved) {
       setTimeout(() => showValueMoment(isFirstWin ? "first_save" : undefined), 600);
     }
+  }
 
-    state.sessionPractice.saved = true;
-    state.microSession = false;
-    const pending = state.pendingLeave;
-    state.pendingLeave = null;
-
-    // Inside a guided routine the next thing is the routine's next step; the
-    // generic suggestion used to hijack it with an unrelated exercise opened
-    // outside the session (no Next button, the wrong timer).
+  /**
+   * Inside a guided routine the next thing is the routine's next step; the
+   * generic suggestion used to hijack it with an unrelated exercise opened
+   * outside the session (no Next button, the wrong timer).
+   */
+  function nextAfterRatedTake(ex) {
     const sessionNow = state.structured ? VTSession.get() : null;
     const routineNextId =
       sessionNow && VTSession.currentExerciseId() === ex.id
@@ -5900,25 +6011,13 @@
         : sessionNow
           ? VTSession.currentExerciseId()
           : null;
-    const nextEx = state.structured
+    return state.structured
       ? (routineNextId && findExercise(routineNextId)) || null
       : suggestNextExercise({ excludeId: ex.id })?.ex || null;
+  }
 
-    // The rating card says "Guardado" itself; a toast on top covered the
-    // exercise's back and Ayuda buttons.
-    if (!state.metricsOpen || rateQuiet()) toast(tt("toast.sessionSaved"));
-    Object.assign(state.rate, {
-      feel: opts.feel || null,
-      result,
-      prevScore,
-      firstWin: isFirstWin,
-      scored,
-      nextId: nextEx?.id || null
-    });
-    paintScore(ex);
-    paintRating();
-    revealScore();
-
+  /** After the score card: the end-of-task ad, the routine's step done, and the way out the leave question asked for. */
+  function followRatedTake(ex, wasSaved, pending) {
     // Post-session native tip (free only; never mid-practice) — research: end-of-task ads only
     if (!wasSaved) {
       try {
@@ -5939,6 +6038,53 @@
     if (pending && pending.type && pending.type !== "next") {
       setTimeout(() => navigateDestination(pending), 400);
     }
+  }
+
+  /**
+   * Save this take with its rating and show the score.
+   * @param {{ feel?: "easy"|"ok"|"hard" }} [opts] feel: the one-tap answer
+   *   (rateFeel), shown on the score card; absent for "Guardar con estos detalles"
+   */
+  function completeExercise(opts = {}) {
+    const ex = state.exercise;
+    if (!ex) return;
+    // A self-rating describes a real attempt; merely opening this screen must
+    // never create a completed session, perfect score, streak day or first-win.
+    // The same threshold already guards the unrated auto-save path. Checking
+    // before stopPractice means an accidental early tap won't end the take.
+    if (!canSaveRatedTake()) return;
+    if (state.practiceLive) stopPractice(true);
+    else if (state.pitchRunning) stopPitchViz();
+    flushPracticeClock();
+    fillBestHold();
+    fillPitchGameScores();
+    const rating = rateTake(ex);
+    const kept = storeRatedTake(ex, rating);
+    announceRatedTake(ex, opts, rating, kept);
+
+    state.sessionPractice.saved = true;
+    state.microSession = false;
+    const pending = state.pendingLeave;
+    state.pendingLeave = null;
+
+    const nextEx = nextAfterRatedTake(ex);
+
+    // The rating card says "Guardado" itself; a toast on top covered the
+    // exercise's back and Ayuda buttons.
+    if (!state.metricsOpen || rateQuiet()) toast(tt("toast.sessionSaved"));
+    Object.assign(state.rate, {
+      feel: opts.feel || null,
+      result: rating.result,
+      prevScore: kept.prevScore,
+      firstWin: kept.isFirstWin,
+      scored: rating.scored,
+      nextId: nextEx?.id || null
+    });
+    paintScore(ex);
+    paintRating();
+    revealScore();
+
+    followRatedTake(ex, kept.wasSaved, pending);
   }
 
   /**
@@ -10403,7 +10549,7 @@
       mic: !!$("#mic-blocked") && !$("#mic-blocked").hidden,
       y: window.scrollY
     };
-    renderExercise();
+    renderExerciseAfresh();
     if (keep.guide) $("#btn-toggle-guide")?.click();
     if (keep.metrics) openMetricsPanel(true, { reveal: false });
     // Put back, not asked for: opened from its button the panel scrolls into
@@ -10447,6 +10593,26 @@
     if (close) close.setAttribute("aria-label", tt("a11y.close"));
   }
 
+  /** A language switch on the open exercise: relabelled in place once under way, rebuilt otherwise. */
+  function switchExerciseLanguage() {
+    if (exerciseUnderWay()) {
+      relabelExercise();
+      // A take is running: its panel changes when it stops. Otherwise now.
+      if (state.practiceLive || state.practiceStarting) state.langChangedMidTake = true;
+      else {
+        try {
+          state.modeInstance?.relabel?.();
+        } catch (err) {
+          console.warn("[VT] relabel", err);
+        }
+      }
+      if (!$("#mic-blocked")?.hidden) relabelMicBlocked();
+    } else {
+      state.langChangedMidTake = false;
+      renderExerciseInPlace();
+    }
+  }
+
   function init() {
     ensureRangeAdapter();
     installGlobalErrorHandlers();
@@ -10455,24 +10621,7 @@
       VTI18n.onChange = () => {
         renderExerciseList();
         updateOctaveUI();
-        if (state.view === "exercise" && state.exercise) {
-          if (exerciseUnderWay()) {
-            relabelExercise();
-            // A take is running: its panel changes when it stops. Otherwise now.
-            if (state.practiceLive || state.practiceStarting) state.langChangedMidTake = true;
-            else {
-              try {
-                state.modeInstance?.relabel?.();
-              } catch (err) {
-                console.warn("[VT] relabel", err);
-              }
-            }
-            if (!$("#mic-blocked")?.hidden) relabelMicBlocked();
-          } else {
-            state.langChangedMidTake = false;
-            renderExerciseInPlace();
-          }
-        }
+        if (state.view === "exercise" && state.exercise) switchExerciseLanguage();
         if ($("#step-done") && !$("#step-done").hidden) renderStepDone();
         // Plan and history build their copy at render time, so a language
         // switch has to re-render them or they stay in the old language.

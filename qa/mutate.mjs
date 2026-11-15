@@ -6,7 +6,7 @@
  * suite that stays green on a mutant is not testing that behaviour, however
  * high its coverage. Ported from the QA thread's mutate.py (2026-11-01).
  *
- *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets)
+ *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets, nightly)
  *   node qa/mutate.mjs audio      # one set
  *   node qa/mutate.mjs stage a11y flows regress billing scoring controls audit toast designs splits  # browser sets: need Playwright's Chromium
  *
@@ -79,7 +79,8 @@ const CONTROL_SPECS = {
   race: ["tests/safari-mobile-recovery.spec.js", "-g", "older prompt answered"],
   orphan: ["tests/safari-mobile-recovery.spec.js", "-g", "Start replaced|lets go of the piano|piano option changed|held session and stopped"],
   focus: ["tests/exercise-viz-guided.spec.js", "-g", "Enter on Next past the last step|ends while Next has keyboard focus"],
-  banner: ["tests/safari-mobile-recovery.spec.js", "-g", "sound-paused banner"]
+  banner: ["tests/safari-mobile-recovery.spec.js", "-g", "sound-paused banner"],
+  reach: ["tests/sweep-reachability.spec.js", "-g", "real pointer reaches"]
 };
 
 // QA-45. Every a11y mutant (A6 on) used to be judged by all six browser specs together, ~70 s each; 21 of them
@@ -105,6 +106,11 @@ function a11yKillers(name) {
 }
 
 export const MUTANTS = {
+  nightly: [
+    ["NS1 the short format is silently replaced by a duplicate desktop run", ".github/workflows/quality.yml", 'formats: "short"', 'formats: "desktop"'],
+    ["NS2 the selected formats never reach the headed spec", ".github/workflows/quality.yml", '      FORENSICS_FORMATS: ${{ matrix.formats }}\n', ""],
+    ["NS3 PR fullscreen smoke loses the solfege regression", ".github/workflows/quality.yml", "FULLSCREEN_IDS: 'v1-diction,s2-solfege-chords'", "FULLSCREEN_IDS: 'v1-diction'"]
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/nightly-sweep-contract.test.mjs"]) })),
   coaching: [
     ["VC1 the breath mode silently adds 2s when hold is omitted", "js/practice-modes.js", "this.state.holdSec = p.hold != null ? p.hold : 0;", "this.state.holdSec = p.hold != null ? p.hold : 2;"],
     ["VC2 the exercise prescribes a 2s breath hold", "js/practice-profiles.js", "pattern: { in: 4, hold: 0, out: 6 },", "pattern: { in: 4, hold: 2, out: 6 },"],
@@ -340,6 +346,7 @@ export const MUTANTS = {
   })),
   // Controls ported from PR #24: each says what it does, or is off when it cannot act.
   controls: [
+    ["NS4 below-fold controls are hit-tested before scrolling into view", "tests/helpers/mouse-control.js", '    await page.locator(selector).click({ trial: true, timeout: 5000 });\n', "", "reach"],
     ["R12 octave -2 shown without its caution", "js/app.js", "if (moved && !opts.silent && state.octaveShift === -2) cautionLowOctave();", "if (moved && !opts.silent && state.octaveShift === -9) cautionLowOctave();", "range"],
     ["R4 in a take the piano's restart toast replaces the caution at once", "js/app.js", "    if (state.practiceLive && state._hotApplyPromise) state._hotApplyPromise.then(say, say);\n    else say();", "    say();", "range"],
     ["R5 the label forgets octave -2 once the toast is gone", "js/app.js", "      lab.classList.toggle(\"oct-caution\", low);\n", "", "range"],
@@ -1004,7 +1011,7 @@ export const MUTANTS = {
   }))
 };
 
-export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets"];
+export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "nightly"];
 
 /** What the last failing command printed, so a red baseline in CI says which test failed. */
 let lastFailure = "";

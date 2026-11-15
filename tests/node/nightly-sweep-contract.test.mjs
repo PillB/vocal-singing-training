@@ -12,25 +12,36 @@ const reportSpec = read("tests/click-ui-formats.spec.js");
 const require = createRequire(import.meta.url);
 const config = require("../../playwright.config.js");
 const names = config.metadata.sweepSpecs.match(/\(\?:([^)]+)\)/)[1].split("|");
+const headedSpec = "tests/headed-exercise-forensics.spec.js";
+const formats = ["desktop", "mobile", "mobile-land", "tablet", "short", "fullscreen"];
 const expected = names.map((name) => "tests/" + name + ".spec.js").sort();
+const expectedCoverage = expected.flatMap((file) => file === headedSpec ? formats.map((fmt) => `${file}@${fmt}`) : [file]).sort();
 
-function matrixFiles(yaml) {
-  return [...yaml.matchAll(/^\s+specs: "([^"]+)"$/gm)]
-    .flatMap((match) => match[1].split(/\s+/).filter(Boolean))
-    .sort();
+export function matrixCoverage(yaml) {
+  return yaml.split(/\n\s+- group: /).slice(1).flatMap((block) => {
+    const specs = block.match(/^\s+specs: "([^"]+)"$/m)?.[1].split(/\s+/) || [];
+    const selected = block.match(/^\s+formats: "([^"]+)"$/m)?.[1].split(",") || ["unsplit"];
+    return specs.flatMap((file) => file === headedSpec ? selected.map((fmt) => `${file}@${fmt}`) : [file]);
+  }).sort();
 }
 
-test("nightly partitions execute every registered headed sweep exactly once", () => {
-  assert.deepEqual(matrixFiles(workflow), expected);
-  assert.equal(new Set(matrixFiles(workflow)).size, expected.length);
+test("nightly partitions execute every sweep and every headed format exactly once", () => {
+  assert.deepEqual(matrixCoverage(workflow), expectedCoverage);
+  assert.equal(new Set(matrixCoverage(workflow)).size, expectedCoverage.length);
+  assert.match(workflow, /FORENSICS_FORMATS: \$\{\{ matrix\.formats \}\}/);
   assert.match(workflow, /name: sweep-reports-\$\{\{ matrix\.group \}\}/);
+});
+
+test("negative control: one missing or duplicate headed format is caught", () => {
+  assert.notDeepEqual(matrixCoverage(workflow.replace('formats: "short"', 'formats: "desktop"')), expectedCoverage);
+  assert.notDeepEqual(matrixCoverage(workflow.replace('formats: "fullscreen"', 'formats: ""')), expectedCoverage);
 });
 
 test("negative control: dropping or duplicating a sweep becomes a test failure", () => {
   const minus = workflow.replace("tests/live-mouse-demo.spec.js", "");
-  assert.notDeepEqual(matrixFiles(minus), expected);
+  assert.notDeepEqual(matrixCoverage(minus), expectedCoverage);
   const doubled = workflow.replace("tests/fullscreen-all-clicks.spec.js", "tests/fullscreen-all-clicks.spec.js tests/fullscreen-all-clicks.spec.js");
-  assert.notDeepEqual(matrixFiles(doubled), expected);
+  assert.notDeepEqual(matrixCoverage(doubled), expectedCoverage);
 });
 
 // qa/geometry is gitignored, so CI starts without it, and a report written before its folder is made fails ENOENT
@@ -78,6 +89,7 @@ test("PR smoke watches the report writer and fullscreen without running all 47 r
   assert.match(workflow, /SLOWMO: '5'/);
   assert.match(workflow, /Six-format real-mouse report smoke/);
   assert.match(workflow, /Fullscreen mouse and control smoke/);
+  assert.match(workflow, /FULLSCREEN_IDS: 'v1-diction,s2-solfege-chords'/);
 });
 
 // The fullscreen group runs one exercise per process, in a shell loop under bash -e. A loop line without

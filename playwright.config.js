@@ -79,6 +79,11 @@ module.exports = {
       testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call)\.spec\.js/
     },
     {
+      name: "webkit-layout",
+      use: { browserName: "webkit" },
+      testMatch: /(site-version|site-version-devices|touch-hover)\.spec\.js/
+    },
+    {
       name: "mobile-chrome",
       use: {
         browserName: "chromium",

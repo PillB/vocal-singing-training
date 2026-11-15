@@ -111,6 +111,13 @@ function a11yKillers(name) {
 }
 
 export const MUTANTS = {
+  "safari-layout": [{
+    name: "SL1 macOS native select sizing overrides the 44px touch target",
+    file: "css/site-version.css",
+    from: "  -webkit-appearance: none;\n  appearance: none;\n",
+    to: "",
+    cmd: [process.execPath, "node_modules/@playwright/test/cli.js", "test", "tests/site-version-devices.spec.js", "--project=webkit-layout", "--workers=1", "--reporter=line", "-g", "iPhone 12-16"]
+  }],
   nightly: [
     ["NS1 the short format is silently replaced by a duplicate desktop run", ".github/workflows/quality.yml", 'formats: "short"', 'formats: "desktop"'],
     ["NS2 the selected formats never reach the headed spec", ".github/workflows/quality.yml", '      FORENSICS_FORMATS: ${{ matrix.formats }}\n', ""],

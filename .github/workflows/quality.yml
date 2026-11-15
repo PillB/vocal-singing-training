@@ -28,6 +28,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  safari-layout:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install webkit
+      - name: macOS WebKit design selection and device layouts
+        run: npx playwright test --project=webkit-layout --workers=2 --reporter=line --global-timeout=600000
+      - name: Native select regression must be detected on macOS
+        run: node qa/mutate.mjs safari-layout
+      - name: Preserve macOS WebKit diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safari-layout-failures
+          path: test-results/
+          if-no-files-found: ignore
+
   sweep-regressions:
     runs-on: ubuntu-latest
     timeout-minutes: 10

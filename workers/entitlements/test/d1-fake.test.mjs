@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createD1, expandNumberedParameters } from "./d1-fake.mjs";
+import { D1_MAX_BOUND_PARAMETERS, createD1, expandNumberedParameters } from "./d1-fake.mjs";
 
 test("numbered parameters become bare ones with their values in order, as SQLite numbers them", () => {
   assert.deepEqual(expandNumberedParameters("SELECT ?1, ?1", ["a"]), { sql: "SELECT ?, ?", params: ["a", "a"] });
@@ -30,6 +30,24 @@ test("a parameter with no value is NULL, and more values than parameters is an e
   assert.deepEqual(expandNumberedParameters("SELECT ?1, ?2", ["a"]), { sql: "SELECT ?, ?", params: ["a", null] });
   assert.throws(() => expandNumberedParameters("SELECT ?1", ["a", "b"]), RangeError);
   assert.throws(() => expandNumberedParameters("SELECT 1", ["a"]), RangeError);
+});
+
+test("a statement past D1's 100 bound parameters is refused, as D1 refuses it, and one at the limit runs", async () => {
+  // SQLite itself would take thousands, so without this a statement that can
+  // never run on D1 passes every test (the ledger's validation chunk is sized
+  // against exactly this limit).
+  assert.equal(D1_MAX_BOUND_PARAMETERS, 100);
+  const marks = (n) => Array.from({ length: n }, (_, i) => `?${i + 1} AS c${i + 1}`).join(", ");
+  const values = (n) => Array.from({ length: n }, (_, i) => i);
+  const db = createD1();
+  try {
+    const row = await db.prepare(`SELECT ${marks(100)}`).bind(...values(100)).first();
+    assert.equal(Object.keys(row).length, 100, "100 runs");
+    await assert.rejects(db.prepare(`SELECT ${marks(101)}`).bind(...values(101)).first(), /too many SQL variables/);
+    await assert.rejects(db.batch([db.prepare(`SELECT ${marks(101)}`).bind(...values(101))]), /too many SQL variables/, "and inside a batch");
+  } finally {
+    db.close();
+  }
 });
 
 test("the fake runs a statement that uses a numbered parameter twice", async () => {

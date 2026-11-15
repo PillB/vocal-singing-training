@@ -47,8 +47,15 @@ scroll/actionability step and must fail the below-fold test in CI.
 Five review passes: (1) malformed/duplicate schedule inputs, (2) geometry and
 scroll changes between pointer movement and click, (3) occlusion with a genuine
 overlay, (4) preservation of all exercise/format coverage and timeout bounds,
-(5) branch integration, cache history and privacy. No product audio, billing,
-scientific scoring or pose instructions are changed.
+(5) branch integration, cache history and privacy. The CI/layout fixes change
+no audio, billing, scientific scoring or pose instructions. This branch also
+integrates #36's evidence wording and #38's worker changes for combined CI;
+their separate reviews and rollout limits still apply. The mutation registry
+retains all evidence guards plus `pitch`, `ledger` and `nightly` defaults.
+
+On the separately reconciled branches, all 25 evidence mutations and all 143
+ledger mutations were killed locally. GitHub's full core check passed for both
+heads before browser/mutation jobs began.
 
 Local browser launch fails at macOS Mach-port registration; the complete core
 command also cannot open the redeploy checker's localhost socket. A separate
@@ -66,4 +73,7 @@ PR fullscreen smoke adds the failing solfège exercise, increasing its runtime.
 The click helper can spend five seconds diagnosing a blocked control; it never
 forces a click or treats a failed hit test as success. The dedicated focused
 job duplicates four small tests from the full browser suite to surface nightly
-regressions early. Worker rollout and real-device verification remain separate.
+regressions early. On a short screen, optional guide rows may fold into the
+existing button for all steps before the picture is allowed to grow; the
+picture's words and primary controls keep their space. Worker rollout and
+real-device verification remain separate.

@@ -16,7 +16,7 @@
 import {
   LOGIN_CODE_TTL_SECONDS,
   adminEmails,
-  consumeLoginCode,
+  checkLoginCode,
   createSession,
   ensureAccount,
   getAccountByEmail,
@@ -26,6 +26,7 @@ import {
   resolveSession,
   revokeAllSessions,
   revokeSession,
+  startSessionWithCode,
   toPublicAccount
 } from "./accounts.js";
 import { callerIp, ensureSchema, hitRateLimit, normalizeEmail, nowSec, sweepExpired } from "./db.js";
@@ -56,6 +57,7 @@ import { buildTokenPayload, isLicenseIdShape, signPayload } from "./license.js";
 import { CLAIMABLE_PROVIDERS } from "./limits.js";
 import { deleteProgress, getProgress, listProgress, putProgress } from "./progress.js";
 import { getEntitlement, getLicenseIdForClaim } from "./store.js";
+import { ledgerReader } from "./ledger.js";
 
 /** Largest JSON body any account route accepts (progress documents dominate). */
 export const MAX_API_BODY_BYTES = 1048576;
@@ -211,7 +213,7 @@ export async function licenseTokenForResolution(resolution, account, env, now) {
  * @returns {Promise<Object>} `{account, entitlement, token, grants}`.
  */
 export async function buildMePayload(env, account, now) {
-  const resolution = await resolveEntitlement(env.DB, env.ENTITLEMENTS, account.id, now);
+  const resolution = await resolveEntitlement(env.DB, ledgerReader(env), account.id, now);
   const minted = await licenseTokenForResolution(resolution, account, env, now).catch(() => null);
   const trial = await trialViewFor(env, account, resolution);
   return {
@@ -385,11 +387,15 @@ export async function handleEmailVerify(request, env, deps) {
     return json({ ok: false, reason: "rate_limited", retryAfter: limited.retryAfter }, 429, cors);
   }
 
-  const consumed = await consumeLoginCode(env.DB, email, parsed.body.code, at);
-  if (!consumed.ok) {
-    return json({ ok: false, reason: consumed.reason }, 401, cors);
+  const checked = await checkLoginCode(env.DB, email, parsed.body.code, at);
+  if (!checked.ok) {
+    return json({ ok: false, reason: checked.reason }, 401, cors);
   }
 
+  // Everything that can fail and is safe to repeat comes before the code is
+  // spent: the account and identity writes are idempotent and the payload is
+  // reads. The code is spent in the same transaction that opens the session,
+  // so a failure anywhere leaves the person a code that still works.
   const { account } = await ensureAccount(
     env.DB,
     email,
@@ -397,8 +403,12 @@ export async function handleEmailVerify(request, env, deps) {
     at
   );
   await recordIdentity(env.DB, account.id, "email", email, at);
-  const session = await createSession(env.DB, account.id, at);
   const payload = await buildMePayload(env, account, at);
+  const session = await startSessionWithCode(env.DB, checked.codeId, account.id, at);
+  if (!session) {
+    // Another request signed in with this code first: single use.
+    return json({ ok: false, reason: "no_code" }, 401, cors);
+  }
   return json({ ...payload, sessionToken: session.token, expiresAt: session.expiresAt }, 200, cors);
 }
 
@@ -524,7 +534,7 @@ export async function handleLink(request, env, deps) {
     if (!sessionId || sessionId.length > 200) {
       return json({ ok: false, reason: "bad_request" }, 400, cors);
     }
-    licenseId = await getLicenseIdForClaim(env.ENTITLEMENTS, provider, sessionId);
+    licenseId = await getLicenseIdForClaim(ledgerReader(env), provider, sessionId);
     if (!licenseId) {
       // The webhook has not landed yet; the browser retries, same as /v1/claim.
       return json({ ok: false, reason: "pending" }, 202, cors);
@@ -533,7 +543,7 @@ export async function handleLink(request, env, deps) {
     return json({ ok: false, reason: "bad_request" }, 400, cors);
   }
 
-  const record = await getEntitlement(env.ENTITLEMENTS, licenseId);
+  const record = await getEntitlement(ledgerReader(env), licenseId);
   if (!record) {
     return json({ ok: false, reason: "not_found" }, 404, cors);
   }
@@ -1012,7 +1022,7 @@ export async function handleAdminLookupAccount(request, env, url, deps) {
   if (!account) {
     return json({ ok: false, reason: "not_found" }, 404, cors);
   }
-  const resolution = await resolveEntitlement(env.DB, env.ENTITLEMENTS, account.id, at);
+  const resolution = await resolveEntitlement(env.DB, ledgerReader(env), account.id, at);
   const grants = await listGrants(env.DB, account.id, { includeRevoked: true, limit: 200 });
   return json(
     {
@@ -1058,8 +1068,11 @@ async function handleAdminSweep(request, env, deps) {
   if (!admin.ok) {
     return json({ ok: false, reason: admin.reason }, admin.status, cors);
   }
-  await sweepExpired(env.DB, nowSec(deps.now));
-  return json({ ok: true }, 200, cors);
+  const report = await sweepExpired(env.DB, nowSec(deps.now), env.ENTITLEMENTS);
+  if (report.failed.length) {
+    return json({ ok: false, reason: "sweep_failed", ...report }, 500, cors);
+  }
+  return json({ ok: true, ...report }, 200, cors);
 }
 
 /** Adapt a `(request, env, deps)` handler to the route table's `(request, env, url, deps)`. */

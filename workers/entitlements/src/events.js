@@ -40,7 +40,7 @@
 
 "use strict";
 
-import { callerIp, ensureSchema, hitRateLimit, hmacSha256Hex, nowSec } from "./db.js";
+import { callerIp, ensureSchema, hitRateLimit, hmacSha256Hex, nowSec, peekRateLimit } from "./db.js";
 import { compareMeans, compareRates, homogeneity, meanFromSums, sampleRatioMismatch, wilson } from "./stats.js";
 import { handleLayouts, LAYOUT_EVENTS } from "./layouts.js";
 
@@ -72,6 +72,43 @@ export const EVENTS_IP_RATE_LIMIT = [3000, 3600];
  */
 export const EXPOSURE_IP_CAP = [100, 86400];
 
+/**
+ * Events stored per deployment per rolling day, so counting cannot starve the
+ * thing people actually came for.
+ *
+ * D1's free plan refuses *every* query for the rest of the UTC day once 100,000
+ * rows have been written, and rows are what it bills: "Indexes will add an
+ * additional written row when writes include the indexed column". `events`
+ * carries two indexes, so one stored event is three rows now and three more
+ * when the 180-day sweep deletes it — "Write operations include `INSERT`,
+ * `UPDATE`, and `DELETE`" — which is six rows per event in a steady state.
+ *
+ * Without a cap the arithmetic lands here: about 155 rows per learner-day, so
+ * roughly 650 learner-days fills the free allowance, and past it sign-in, saved
+ * progress, the trial and the licence link all refuse — because of analytics.
+ * A ceiling reached that way should shed the load nobody asked for first.
+ *
+ * 10,000 events leaves about 40,000 rows a day for the account layer, which is
+ * on the order of 500 sign-ins with their progress writes. A refused call writes
+ * nothing (see `hitRateLimit`), so the cap cannot spend the budget it protects.
+ * The window is rolling rather than aligned to 00:00 UTC, which is the safe
+ * direction: it never allows more than the cap inside any 24 hours.
+ *
+ * `EVENTS_DAILY_CAP` in the environment overrides it, which is what a deploy on
+ * the $5 plan wants: there the same ceiling is 500 times higher.
+ */
+export const EVENTS_DAILY_CAP = [10000, 86400];
+
+/**
+ * The cap this deployment runs under.
+ * @param {Object} env Worker env bindings.
+ * @returns {number} Events per rolling day.
+ */
+export function eventsDailyCap(env) {
+  const raw = Number(env && env.EVENTS_DAILY_CAP);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : EVENTS_DAILY_CAP[0];
+}
+
 /** Forget requests per hashed IP per hour. */
 export const FORGET_RATE_LIMIT = [30, 3600];
 
@@ -87,6 +124,11 @@ export const EVENT_NAMES = new Set([
   "ad_impression",
   "ad_suppressed_practice",
   "ad_suppressed_pro",
+  // An AdSense unit that finished its request and came back empty. Separate from
+  // `ad_impression` because that event now fires only on `data-ad-status`
+  // "filled"; without this one, a slot that rendered and filled nothing would be
+  // indistinguishable from a slot that never rendered.
+  "ad_unfilled",
   "app_open",
   "audio_compare",
   "basics_complete",
@@ -146,7 +188,21 @@ export const EVENT_NAMES = new Set([
   // Which design of the site a visit used, how long, and the control being
   // used (src/layouts.js). Sent by js/site-version.js through the same code
   // whatever the design, so none of them is an arm event.
-  ...LAYOUT_EVENTS
+  ...LAYOUT_EVENTS,
+  // The two the trial-length test is read on, added 2026-11-03. Both fire from
+  // the same code in every arm.
+  //
+  // `trial_started` exists because `trial_result` fires on every outcome,
+  // refusals included, and a metric counts an event rather than reading its
+  // props — so "started a trial" could not be told from "tried and could not".
+  //
+  // `pro_paid_first` is the only thing in this list the site does not learn by
+  // watching the person: it is sent the first time the account's own licence
+  // says a paid period, which is the outcome a trial exists to produce. It is
+  // latched per browser, so somebody who was already paying when it shipped
+  // sends it once and lands outside every exposure window anyway.
+  "pro_paid_first",
+  "trial_started"
 ]);
 
 /**
@@ -274,6 +330,60 @@ export const EXPERIMENT_PRESETS = {
       { event: "practice_day", kind: "days", from: 0, to: 14 },
       { event: "first_win", kind: "share", from: 0, to: 7 }
     ]
+  },
+
+  /**
+   * How long should the free trial be?
+   *
+   * control "seven" — seven free days, which is what ships.
+   * treatment "fourteen" — fourteen.
+   *
+   * The one experiment here whose arm the browser does not choose. The arm
+   * decides how much Pro is given away, so the worker assigns it from the
+   * account id (grants.js `trialArmFor`) and writes it on the grant row it
+   * produced; the page is told which arm it got and reports the exposure with
+   * its own browser id, which is why the exposures table still joins to nothing
+   * but a browser. Switched on with the worker's `TRIAL_LEN_EXPERIMENT`, not
+   * with the `enabled` flag in js/experiments-config.js.
+   *
+   * Exposed when a signed-in account is shown the offer, not when the trial
+   * starts. The offer names the length ("Start 14 free days"), so it is already
+   * the treatment, and counting only the people who went on to start would
+   * condition on something the treatment itself moves — the longer offer could
+   * be taken up more often, and the arms would no longer be comparable.
+   *
+   * Primary: share who reach a first paid period within 28 days of that offer.
+   * Guardrails: share who start the trial at all in the first week (the other
+   * half of the question, and the first place a difference would show), and
+   * practice days in the 28 (a longer free run should not mean less practice).
+   *
+   * Plan: 432 per arm, at least 28 days. That is sized for conversion
+   * *doubling*, 5% -> 10%: n = 7.84 * (0.05*0.95 + 0.10*0.90) / 0.05^2. A more
+   * believable 5% -> 7% needs about 2,200 per arm. So this test can only ever
+   * see a very large effect at the traffic this site will have for a long time,
+   * and the honest reading of anything short of that is "no detectable
+   * difference". Run it last, after aa_2026_10 has shown the pipeline is sound.
+   *
+   * And the prior is that there is nothing to find: the only large randomised
+   * test of trial length (337,724 users, six markets — docs/35-PRICING.md)
+   * found seven days beat a thirty-day control and found **fourteen not
+   * significant**. docs/38-AB-TESTING.md says why it is built anyway and why
+   * it should not be switched on at a few hundred users.
+   *
+   * Both arms run identical code — a number in a label and a number of days in
+   * a grant — so no event belongs to one arm and every metric is comparable.
+   */
+  trial_len_2026_11: {
+    arms: ["seven", "fourteen"],
+    weights: [1, 1],
+    control: "seven",
+    armEvents: { seven: [], fourteen: [] },
+    plan: { nPerArm: 432, minDays: 28, mde: 0.05 },
+    primary: { event: "pro_paid_first", kind: "share", from: 0, to: 28 },
+    guardrails: [
+      { event: "trial_started", kind: "share", from: 0, to: 7 },
+      { event: "practice_day", kind: "days", from: 0, to: 28 }
+    ]
   }
 };
 
@@ -291,7 +401,7 @@ export const MIX_CHECK_EVENTS = ["app_open", "practice_start", "practice_recorde
  * The reason is always one of these strings, never anything from a request.
  */
 export const INGEST_REASONS = {
-  event: ["accepted", "unknown_event", "bad_cid", "not_an_object"],
+  event: ["accepted", "unknown_event", "bad_cid", "not_an_object", "daily_capped"],
   exposure: ["exposure_new", "exposure_recovered", "exposure_unregistered", "exposure_capped"],
   request: [
     "origin_not_allowed",
@@ -566,16 +676,31 @@ function ipSecret(env) {
 }
 
 /**
+ * Whether this deployment has a key to pseudonymise addresses under. A route
+ * that limits by address and has none must refuse rather than fall back to the
+ * address itself, or to an unkeyed hash of it: there are only 2^32 IPv4
+ * addresses, so a plain hash is reversed by trying them all.
+ * @param {Object} env Worker env bindings.
+ * @returns {boolean} True when ipBucketKey has a secret to work with.
+ */
+export function ipKeyConfigured(env) {
+  return Boolean(ipSecret(env));
+}
+
+/**
  * The rate-limit bucket for the caller's address: an HMAC with the UTC day in
  * the message, so two days' buckets cannot be joined, cut to 96 bits because it
- * only has to spread load, not identify anybody.
+ * only has to spread load, not identify anybody. `scope` keeps one route's
+ * buckets from being joined to another's; the events route's default scope is
+ * the one its stored buckets were always written under.
  * @param {Object} env Worker env bindings.
  * @param {Request} request Incoming request.
  * @param {number} at Unix seconds.
+ * @param {string} [scope] The route the bucket belongs to.
  * @returns {Promise<string>} 24 hex characters.
  */
-export async function ipBucketKey(env, request, at) {
-  return (await hmacSha256Hex(ipSecret(env), `events:${callerIp(request)}:${Math.floor(at / DAY)}`)).slice(0, 24);
+export async function ipBucketKey(env, request, at, scope = "events") {
+  return (await hmacSha256Hex(ipSecret(env), `${scope}:${callerIp(request)}:${Math.floor(at / DAY)}`)).slice(0, 24);
 }
 
 /**
@@ -684,6 +809,56 @@ export async function handleIngest(request, env, deps) {
   const { json, cors } = deps;
   const presets = deps.presets || EXPERIMENT_PRESETS;
   const at = nowSec(deps.now);
+  const early = await refuseBeforeReading(request, env, at, json, cors);
+  if (early) {
+    return early;
+  }
+  const batch = await readIngestBatch(request, env, at, json, cors);
+  if (batch.response) {
+    return batch.response;
+  }
+  const list = batch.list;
+
+  await ensureSchema(env.DB);
+  // Sanitising writes nothing, so it comes first: the day's cap can then be
+  // read for this batch's real size before any gate below writes a row.
+  const { counts, clean } = sanitizeBatch(list, presets);
+  const shed = await shedPastDailyCap(env, clean, at, json, cors);
+  if (shed) {
+    return shed;
+  }
+  const ipKey = await ipBucketKey(env, request, at);
+  const limited = (gate) => {
+    return json({ ok: false, reason: "rate_limited", retryAfter: gate.retryAfter }, 429, {
+      ...cors,
+      "retry-after": String(gate.retryAfter)
+    });
+  };
+  const ipGate = await hitRateLimit(env.DB, `ev:${ipKey}`, EVENTS_IP_RATE_LIMIT[0], EVENTS_IP_RATE_LIMIT[1], at);
+  if (!ipGate.ok) {
+    await countIngest(env.DB, at, { rate_limited: 1 });
+    return limited(ipGate);
+  }
+
+  const refused = await gateCleanBatch(env, clean, at, limited, json, cors);
+  if (refused) {
+    return refused;
+  }
+  const fresh = await admitExposures(env, clean, ipKey, at, counts);
+  await storeBatch(env, clean, fresh, at);
+  counts.accepted = clean.length;
+  counts.exposure_new = fresh.length;
+  counts.exposure_recovered = fresh.filter((x) => x.via === "app_open").length;
+  await countIngest(env.DB, at, counts);
+  return json({ ok: true, accepted: clean.length, dropped: list.length - clean.length }, 200, cors);
+}
+
+/**
+ * The answer to a batch refused before its body is read: the visitor's choice
+ * or ours not to count (202, nothing stored), a foreign origin (403), or no
+ * database to keep it in (503). Null when the body may be read.
+ */
+async function refuseBeforeReading(request, env, at, json, cors) {
   const refusal = ingestRefusal(request, env);
   if (refusal) {
     if (refusal !== "events_disabled") {
@@ -698,38 +873,45 @@ export async function handleIngest(request, env, deps) {
   if (!env.DB || !ipSecret(env)) {
     return json({ ok: false, reason: "events_not_configured" }, 503, cors);
   }
+  return null;
+}
+
+/** A batch's events: its `events` array, or the body itself as one event, or none. */
+function batchEvents(body) {
+  if (Array.isArray(body && body.events)) {
+    return body.events;
+  }
+  return body && typeof body === "object" ? [body] : [];
+}
+
+/**
+ * Read the body: `{ list }` of the batch's events, or `{ response }` refusing a
+ * body that is unreadable, not consented where asking comes first, or empty or
+ * too long.
+ */
+async function readIngestBatch(request, env, at, json, cors) {
   const parsed = await readEventsBody(request);
   if (!parsed.ok) {
     await countIngest(env.DB, at, { [parsed.reason]: 1 });
-    return json({ ok: false, reason: parsed.reason }, parsed.reason === "body_too_large" ? 413 : 400, cors);
+    return { response: json({ ok: false, reason: parsed.reason }, parsed.reason === "body_too_large" ? 413 : 400, cors) };
   }
   const body = parsed.body;
   // Before anything is read out of the batch: where the law wants the visitor
   // asked first, a batch that does not say they were asked is not ours to keep.
   if (asksFirst(request) && !(body && typeof body === "object" && body.consent === "granted")) {
     await countIngest(env.DB, at, { eu_no_consent: 1 });
-    return json({ ok: true, accepted: 0, reason: "eu_no_consent" }, 202, cors);
+    return { response: json({ ok: true, accepted: 0, reason: "eu_no_consent" }, 202, cors) };
   }
-  const list = Array.isArray(body && body.events) ? body.events : body && typeof body === "object" ? [body] : [];
+  const list = batchEvents(body);
   if (!list.length || list.length > MAX_EVENTS_PER_REQUEST) {
     await countIngest(env.DB, at, { bad_request: 1 });
-    return json({ ok: false, reason: "bad_request" }, 400, cors);
+    return { response: json({ ok: false, reason: "bad_request" }, 400, cors) };
   }
+  return { list };
+}
 
-  await ensureSchema(env.DB);
-  const ipKey = await ipBucketKey(env, request, at);
-  const limited = (gate) => {
-    return json({ ok: false, reason: "rate_limited", retryAfter: gate.retryAfter }, 429, {
-      ...cors,
-      "retry-after": String(gate.retryAfter)
-    });
-  };
-  const ipGate = await hitRateLimit(env.DB, `ev:${ipKey}`, EVENTS_IP_RATE_LIMIT[0], EVENTS_IP_RATE_LIMIT[1], at);
-  if (!ipGate.ok) {
-    await countIngest(env.DB, at, { rate_limited: 1 });
-    return limited(ipGate);
-  }
-
+/** Sanitize a batch: the events that are fit to keep, and a count of each reason the rest were dropped. */
+function sanitizeBatch(list, presets) {
   const counts = { accepted: 0, unknown_event: 0, bad_cid: 0, not_an_object: 0, exposure_unregistered: 0 };
   const clean = [];
   for (const raw of list) {
@@ -741,25 +923,85 @@ export async function handleIngest(request, env, deps) {
     clean.push(result.event);
     counts.exposure_unregistered += result.event.unregistered;
   }
+  return { counts, clean };
+}
+
+/**
+ * The 202 for a batch the day's cap has no room for, read WITHOUT writing, or
+ * null. The per-address and per-browser gates each write a row, so with the
+ * cap checked only after them a day that was already full still cost every
+ * request two rate-limit writes plus its count, the exact pattern the report
+ * route fixed in QA round 5 (QA-40). Refused here, a batch costs its one
+ * `daily_capped` count. gateCleanBatch still spends the cap with a write,
+ * because two batches can both see room here and only one may take it.
+ */
+async function shedPastDailyCap(env, clean, at, json, cors) {
+  if (!clean.length) {
+    return null;
+  }
+  const room = await peekRateLimit(env.DB, "evday", eventsDailyCap(env), EVENTS_DAILY_CAP[1], at, clean.length);
+  if (room.ok) {
+    return null;
+  }
+  return refuseDailyCapped(env, clean, at, json, cors);
+}
+
+/** Count a batch the day's cap refused and answer it: 202, because the beacon is no-cors and must not retry. */
+async function refuseDailyCapped(env, clean, at, json, cors) {
+  await countIngest(env.DB, at, { daily_capped: clean.length });
+  // 202 and not 429: the browser posts no-cors and can neither read this
+  // nor usefully retry, and a retry is the last thing this wants.
+  return json({ ok: true, accepted: 0, reason: "daily_capped" }, 202, cors);
+}
+
+/** The per-browser limit, then the day's cap on stored events: the answer refusing the batch, or null. */
+async function gateCleanBatch(env, clean, at, limited, json, cors) {
+  if (!clean.length) {
+    return null;
+  }
   // Per browser, so one browser stuck in a loop cannot spend a classroom's
   // shared address. The site sends one browser's events per request.
-  if (clean.length) {
-    const gate = await hitRateLimit(env.DB, `evc:${clean[0].cid}`, EVENTS_RATE_LIMIT[0], EVENTS_RATE_LIMIT[1], at);
-    if (!gate.ok) {
-      await countIngest(env.DB, at, { rate_limited: 1 });
-      return limited(gate);
-    }
+  const gate = await hitRateLimit(env.DB, `evc:${clean[0].cid}`, EVENTS_RATE_LIMIT[0], EVENTS_RATE_LIMIT[1], at);
+  if (!gate.ok) {
+    await countIngest(env.DB, at, { rate_limited: 1 });
+    return limited(gate);
   }
 
-  let fresh = await newExposures(env.DB, clean);
-  if (fresh.length) {
-    const cap = await hitRateLimit(env.DB, `exn:${ipKey}`, EXPOSURE_IP_CAP[0], EXPOSURE_IP_CAP[1], at, fresh.length);
-    if (!cap.ok) {
-      counts.exposure_capped = fresh.length;
-      fresh = [];
-    }
+  // The day's cap on stored events. Checked after the per-browser gate so a
+  // single looping browser is refused by its own limit first, and before
+  // anything is written, because the whole point is to not write. Costs the
+  // batch's own size: a batch that would cross the cap is refused whole rather
+  // than stored in part, so a learner's session is never half-counted.
+  const day = await hitRateLimit(
+    env.DB,
+    "evday",
+    eventsDailyCap(env),
+    EVENTS_DAILY_CAP[1],
+    at,
+    clean.length
+  );
+  if (!day.ok) {
+    return refuseDailyCapped(env, clean, at, json, cors);
   }
+  return null;
+}
 
+/** The exposures this batch may add; none, and `counts.exposure_capped` set, once the address's daily cap is spent. */
+async function admitExposures(env, clean, ipKey, at, counts) {
+  const fresh = await newExposures(env.DB, clean);
+  if (!fresh.length) {
+    return fresh;
+  }
+  const cap = await hitRateLimit(env.DB, `exn:${ipKey}`, EXPOSURE_IP_CAP[0], EXPOSURE_IP_CAP[1], at, fresh.length);
+  if (!cap.ok) {
+    counts.exposure_capped = fresh.length;
+    return [];
+  }
+  return fresh;
+}
+
+/** Write the batch's events and its new exposures in one D1 batch (none at all when both are empty). */
+async function storeBatch(env, clean, fresh, at) {
   const statements = clean.map((e) =>
     env.DB
       .prepare(
@@ -781,11 +1023,6 @@ export async function handleIngest(request, env, deps) {
   if (statements.length) {
     await env.DB.batch(statements);
   }
-  counts.accepted = clean.length;
-  counts.exposure_new = fresh.length;
-  counts.exposure_recovered = fresh.filter((x) => x.via === "app_open").length;
-  await countIngest(env.DB, at, counts);
-  return json({ ok: true, accepted: clean.length, dropped: list.length - clean.length }, 200, cors);
 }
 
 /**

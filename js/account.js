@@ -33,6 +33,25 @@
    * what the signature check says.
    */
   const LS_PLAN_KEY = "vt_account_plan_v1";
+  /**
+   * Longest /v1/me may take. Without a limit a host that accepts the request and
+   * never answers holds every later refresh (the account panel's, the sync's)
+   * on the same promise for as long as the browser waits.
+   */
+  const ME_TIMEOUT_MS = 15000;
+
+  /**
+   * Set once `pro_paid_first` has actually been recorded, so it is sent once per
+   * browser and not on every `/v1/me` answer for as long as somebody pays.
+   *
+   * It is the outcome the trial-length test is read on (the primary metric of
+   * `trial_len_2026_11`), and the only thing in the statistics that comes from
+   * the account rather than from watching the page. Latched on the beacon being
+   * recorded rather than on sending it, so a visit with sending switched off, or
+   * one where the request failed, tries again next time instead of losing the
+   * only conversion this browser will ever report.
+   */
+  const LS_PAID_FIRST_KEY = "vt_pro_paid_first_v1";
   /** Google Identity Services, loaded on demand so a signed-out visitor pays nothing for it. */
   const GIS_SRC = "https://accounts.google.com/gsi/client";
 
@@ -58,6 +77,31 @@
   /** In-flight probe, so two callers on the same open share one request. */
   let methodsPending = null;
   /**
+   * Which probe is the newest. A probe that was superseded (somebody pressed
+   * "try again" while it was still out) must not write its late answer over
+   * the newer one: a stale failure landing last put the admin page back on
+   * "server did not answer" after the server had answered.
+   */
+  let methodsGen = 0;
+
+  /**
+   * Which payment rails the worker can actually honour, from /v1/health.
+   *
+   * A rail is honourable only when the secret its webhook is verified with is
+   * set: Mercado Pago needs MP_WEBHOOK_SECRET and MP_ACCESS_TOKEN, Stripe needs
+   * STRIPE_WEBHOOK_SECRET. Without them the webhook is refused, nothing is ever
+   * written for the payment, and the claim route — which only reads what the
+   * webhook wrote — answers "pending" until the browser gives up. So a payment
+   * taken in that window is money taken for Pro that can never be issued.
+   *
+   * `ok` false means we could not get an answer, which is not the same as a no;
+   * js/billing.js stops a sale only on an explicit false.
+   * @type {{stripe: boolean|null, mercadopago: boolean|null, ok: boolean}|null}
+   */
+  let rails = null;
+  /** In-flight probe, shared the same way as methodsPending. */
+  let railsPending = null;
+  /**
    * Whether Google's script could actually be loaded in this browser: null
    * until we have tried, then true or false. The worker naming Google as a
    * method and a browser being able to run it are different facts — an
@@ -67,6 +111,8 @@
    */
   let googleReady = null;
   let refreshing = null;
+  /** The session token `refreshing` was asked for. */
+  let refreshingFor = null;
   let gisPromise = null;
 
   const listeners = new Set();
@@ -164,6 +210,37 @@
     }
   }
 
+  /**
+   * Send `pro_paid_first` the first time this browser sees a paid period.
+   *
+   * `source` is "paid" only for a subscription the provider has actually paid
+   * for; a trial, a gift and a comp all report their own kind, so this cannot
+   * count free access as a conversion. Nothing about the account goes with it —
+   * the beacon carries the event name and the random browser id, like every
+   * other one.
+   * @param {Object|null} ent The entitlement from `/v1/me`.
+   */
+  function notePaidFirst(ent) {
+    if (!ent || ent.pro !== true || ent.source !== "paid") return;
+    try {
+      if (localStorage.getItem(LS_PAID_FIRST_KEY) === "1") return;
+    } catch {
+      /* private mode: send it, and accept that it may be sent again */
+    }
+    let kept = null;
+    try {
+      kept = global.VTAnalytics?.track?.("pro_paid_first", {});
+    } catch {
+      /* analytics never breaks the page */
+    }
+    if (kept !== "recorded") return;
+    try {
+      localStorage.setItem(LS_PAID_FIRST_KEY, "1");
+    } catch {
+      /* private mode */
+    }
+  }
+
   function emit() {
     const state = getState();
     listeners.forEach((fn) => {
@@ -253,6 +330,7 @@
   async function adopt(data) {
     snapshot = data;
     writeLastPlan(data && data.entitlement);
+    notePaidFirst(data && data.entitlement);
     if (data && data.token && global.VTLicense?.adopt) {
       await global.VTLicense.adopt(data.token, data.licenseId);
     } else if (global.VTLicense?.clear) {
@@ -288,9 +366,10 @@
   async function getMethods() {
     if (methods) return methods;
     if (methodsPending) return methodsPending;
+    const gen = (methodsGen += 1);
     methodsPending = (async () => {
       const res = await request("GET", "/v1/auth/methods", null, { auth: false, timeoutMs: 6000 });
-      methods = res.ok && res.data
+      const answer = res.ok && res.data
         ? {
           email: !!res.data.email,
           google: !!res.data.google,
@@ -302,18 +381,16 @@
         // something terminal to draw, and ensureMethods() throws it away so
         // the next open asks again.
         : { email: false, google: false, googleClientId: null, trialDays: 7, ok: false };
+      // Only the newest probe writes. A superseded one hands its own caller
+      // the newer answer when there is one, and leaves the state alone.
+      if (gen !== methodsGen) return methods || answer;
+      methods = answer;
       methodsPending = null;
       return methods;
     })();
     return methodsPending;
   }
 
-  /**
-   * Ask the worker what it offers, if nobody has asked yet, and tell listeners
-   * when the answer lands so the panel can redraw. Cheap to call on every open:
-   * a real answer is cached for the page's life, a failed probe is not.
-   * @returns {Promise<object|null>} The answer, or null when unconfigured.
-   */
   /**
    * Ask the worker again, from scratch.
    *
@@ -326,6 +403,7 @@
    * @returns {Promise<object|null>} The methods, or null with no worker.
    */
   function refreshMethods() {
+    methodsGen += 1;
     methods = null;
     methodsPending = null;
     googleReady = null;
@@ -340,6 +418,12 @@
     });
   }
 
+  /**
+   * Ask the worker what it offers, if nobody has asked yet, and tell listeners
+   * when the answer lands so the panel can redraw. Cheap to call on every open:
+   * a real answer is cached for the page's life, a failed probe is not.
+   * @returns {Promise<object|null>} The answer, or null when unconfigured.
+   */
   function ensureMethods() {
     if (!isConfigured()) return Promise.resolve(null);
     if (methods && methods.ok) return Promise.resolve(methods);
@@ -348,6 +432,48 @@
       emit();
       return m;
     });
+  }
+
+  /**
+   * Ask the worker which payment rails it can honour. Cached for the page's
+   * life when it answers; a failed probe is thrown away so the next open asks
+   * again, exactly as `ensureMethods` does.
+   *
+   * /v1/health needs no session and is the only route that reports this, which
+   * is why it is read here rather than folded into /v1/me.
+   * @returns {Promise<object|null>} The answer, or null with no worker.
+   */
+  function ensureRails() {
+    if (!isConfigured()) return Promise.resolve(null);
+    if (rails && rails.ok) return Promise.resolve(rails);
+    if (railsPending) return railsPending;
+    rails = null;
+    railsPending = (async () => {
+      const res = await request("GET", "/v1/health", null, { auth: false, timeoutMs: 6000 });
+      const d = (res.ok && res.data) || null;
+      rails = d
+        ? {
+          // A worker too old to report a field leaves it null, and null is not
+          // a no: it must not stop a sale.
+          stripe: typeof d.stripeConfigured === "boolean" ? d.stripeConfigured : null,
+          mercadopago: typeof d.mercadopagoConfigured === "boolean" ? d.mercadopagoConfigured : null,
+          creem: typeof d.creemConfigured === "boolean" ? d.creemConfigured : null,
+          ok: true
+        }
+        : { stripe: null, mercadopago: null, creem: null, ok: false };
+      railsPending = null;
+      return rails;
+    })();
+    return railsPending;
+  }
+
+  /**
+   * What `ensureRails()` last learned, without asking. Null until an answer
+   * has landed, so a caller can tell "no answer yet" from "the worker said no".
+   * @returns {object|null} The cached answer, or null.
+   */
+  function knownRails() {
+    return rails && rails.ok ? rails : null;
   }
 
   /**
@@ -425,7 +551,16 @@
    * @returns {Promise<{ok: boolean, reason?: string}>} Whether the button drew.
    */
   async function renderGoogleButton(container, options) {
+    // A failed probe is cached only so the panel has something to draw. It is
+    // not a reason to say Google is not set up: ask again. If the worker still
+    // does not answer, say that, so the caller can show "server did not answer"
+    // instead of blaming an extension.
+    if (methods && methods.ok === false) methods = null;
     const available = await getMethods();
+    if (available.ok === false && isConfigured()) {
+      container.innerHTML = "";
+      return { ok: false, reason: "unreachable" };
+    }
     if (!available.google || !available.googleClientId) {
       // Clear on the way out too: what a deploy offers can change between one
       // open and the next, and a button drawn earlier must not outlive it.
@@ -499,10 +634,14 @@
    * @returns {Promise<{ok: boolean, reason?: string}>} Result.
    */
   function refresh() {
-    if (refreshing) return refreshing;
     if (!session?.token) return Promise.resolve({ ok: false, reason: "no_session" });
-    refreshing = (async () => {
-      const res = await request("GET", "/v1/me", null);
+    const token = session.token;
+    // One ask at a time, but only for the same sign-in: an answer about
+    // somebody who has since signed out is not an answer about whoever is here.
+    if (refreshing && refreshingFor === token) return refreshing;
+    const mine = (async () => {
+      const res = await request("GET", "/v1/me", null, { timeoutMs: ME_TIMEOUT_MS });
+      if (session?.token !== token) return { ok: false, reason: "signed_out" };
       if (res.ok && res.data) {
         await adopt(res.data);
         return { ok: true, claims: global.VTLicense?.getClaims?.() || null };
@@ -515,13 +654,14 @@
       if (res.status === 0) return { ok: false, reason: "offline" };
       return { ok: false, reason: res.data?.reason || "error" };
     })();
-    try {
-      return refreshing;
-    } finally {
-      refreshing.finally(() => {
-        refreshing = null;
-      });
-    }
+    refreshing = mine;
+    refreshingFor = token;
+    mine
+      .finally(() => {
+        if (refreshing === mine) refreshing = null;
+      })
+      .catch(() => {});
+    return mine;
   }
 
   /**
@@ -595,9 +735,30 @@
       methods,
       // Null until the account panel has tried to load Google's script.
       googleReady,
+      /**
+       * How long THIS account's trial is, which is not always what
+       * `/v1/auth/methods` says: that route answers before anyone signs in and
+       * can only report the configured default, while the trial-length test
+       * gives each account 7 or 14 days. Falls back to the public answer until
+       * the first `/v1/me` lands, and to nothing when neither has.
+       */
+      trialDays: accountTrialDays(),
+      /**
+       * Which arm of the trial-length test this account is in, as the worker
+       * assigned it. Null when the test is off, and null for an account that
+       * trialled before it was switched on. The page never chooses this.
+       */
+      trialArm: typeof snapshot?.trialArm === "string" ? snapshot.trialArm : null,
       // Pro is whatever the signature check says, never what this JSON claims.
       pro: !!global.VTLicense?.getClaims?.()
     };
+  }
+
+  /** This account's trial length from `/v1/me`, else the public default from `/v1/auth/methods`, else null. */
+  function accountTrialDays() {
+    if (Number(snapshot?.trialDays) > 0) return Number(snapshot.trialDays);
+    if (Number(methods?.trialDays) > 0) return Number(methods.trialDays);
+    return null;
   }
 
   /** The session token, for modules that call the worker themselves (sync). */
@@ -664,6 +825,8 @@
     isConfigured,
     getMethods,
     ensureMethods,
+    ensureRails,
+    knownRails,
     getState,
     getSessionToken,
     onChange,

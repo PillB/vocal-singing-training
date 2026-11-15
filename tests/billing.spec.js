@@ -53,6 +53,7 @@ test.describe("Billing & subscriptions", () => {
         markets: (c?.markets || []).map((m) => m.code),
         hasStripe: !!c?.providers?.stripe,
         hasMp: !!c?.providers?.mercadopago,
+        hasCreem: !!c?.providers?.creem,
         pe: (c?.markets || []).find((m) => m.code === "PE"),
         us: (c?.markets || []).find((m) => m.code === "US")
       };
@@ -64,8 +65,11 @@ test.describe("Billing & subscriptions", () => {
     expect(info.markets).toEqual(expect.arrayContaining(["PE", "US", "ES", "GB", "MX", "DE", "BR"]));
     expect(info.hasStripe).toBe(true);
     expect(info.hasMp).toBe(true);
+    expect(info.hasCreem).toBe(true);
     expect(info.pe?.rail).toBe("mercadopago");
-    expect(info.us?.rail).toBe("stripe");
+    // Creem, not Stripe: the international rail is a merchant of record,
+    // because a Peru-registered seller cannot be a Stripe merchant.
+    expect(info.us?.rail).toBe("creem");
   });
 
   test("shipped config hands out nothing for free", async ({ page }) => {

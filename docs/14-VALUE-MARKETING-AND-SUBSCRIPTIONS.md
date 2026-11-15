@@ -102,6 +102,12 @@ Gaming literature is clear: dopamine loops **work** for retention but raise ethi
 
 ## 3. Offer packaging (Grand Slam shape)
 
+> The prices and the "~20% savings" in this section are the July 2026 ones and
+> are out of date; the current prices are in `js/billing-config.js` and
+> [`35-PRICING.md`](./35-PRICING.md). The trial is no longer local only: with
+> accounts configured it is one per account (`TRIAL_DAYS` in
+> `workers/entitlements/wrangler.toml`).
+
 ### Free forever (distribution + habit)
 
 - All exercises, highway, piano, range shift, holds, plan, local history  

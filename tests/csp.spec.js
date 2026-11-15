@@ -73,7 +73,7 @@ test("a learner's whole visit raises no violation: practise, piano, rate, accoun
   expect(await violations(page)).toEqual([]);
 });
 
-for (const path of ["guide.html", "privacy.html", "admin.html"]) {
+for (const path of ["guide.html", "privacy.html", "admin.html", "terms.html", "qa/index.html"]) {
   test(`${path} loads with no violation`, async ({ page }) => {
     await page.addInitScript(recordViolations);
     await page.goto(path);

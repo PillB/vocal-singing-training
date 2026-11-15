@@ -213,6 +213,47 @@ test("a second person can redeem a multi-use code until it is exhausted", async 
   assert.equal((await redeemGiftCode(env.DB, third.id, code.code, 5300)).reason, "exhausted");
 });
 
+test("two people redeeming the last use of a code at the same moment do not both get it", async () => {
+  // QA round 4, QA-W-06. The SELECT that reads `redeemed_count` is a fast path
+  // that both callers pass, because each reads the count before either writes
+  // it, and the unique index on (code, account) does not fire for two
+  // different accounts. Only the guarded UPDATE's changed-row count can tell
+  // them apart, and its result used to be thrown away.
+  const { env, account } = await withAccount();
+  const other = (await ensureAccount(env.DB, "friend@example.test", {}, 1000)).account;
+  const code = await createGiftCode(env.DB, { days: 30, maxRedemptions: 1 }, 5000);
+
+  // Both in flight at once: each awaits inside, so they interleave exactly as
+  // two requests to the worker would.
+  const [first, second] = await Promise.all([
+    redeemGiftCode(env.DB, account.id, code.code, 5100),
+    redeemGiftCode(env.DB, other.id, code.code, 5100)
+  ]);
+  const winners = [first, second].filter((r) => r.ok);
+  const losers = [first, second].filter((r) => !r.ok);
+  assert.equal(winners.length, 1, "exactly one of them may be granted");
+  assert.deepEqual(losers.map((r) => r.reason), ["exhausted"]);
+
+  // And the database agrees afterwards: one use spent, one grant, one
+  // redemption row. A loser must leave nothing behind.
+  const counted = await env.DB.prepare("SELECT redeemed_count FROM gift_codes").first();
+  assert.equal(Number(counted.redeemed_count), 1);
+  const grants = await env.DB.prepare("SELECT COUNT(*) AS n FROM grants WHERE kind = 'gift'").first();
+  assert.equal(Number(grants.n), 1);
+  const redemptions = await env.DB.prepare("SELECT COUNT(*) AS n FROM gift_redemptions").first();
+  assert.equal(Number(redemptions.n), 1);
+  // The one who lost has no access, and the one who won does.
+  const wonBy = winners[0].grant.account_id;
+  assert.ok(wonBy === account.id || wonBy === other.id, "the grant names one of the two accounts");
+  const winner = wonBy === account.id ? account : other;
+  const loser = winner === account ? other : account;
+  assert.equal((await resolveEntitlement(env.DB, env.ENTITLEMENTS, winner.id, 5200)).pro, true);
+  assert.equal((await resolveEntitlement(env.DB, env.ENTITLEMENTS, loser.id, 5200)).pro, false);
+  // The loser can still be given the code if the operator raises its uses: the
+  // refusal spent nothing of theirs.
+  assert.equal((await listGrants(env.DB, loser.id, {})).length, 0);
+});
+
 test("a revoked or expired gift code cannot be redeemed", async () => {
   const { env, account } = await withAccount();
   const revoked = await createGiftCode(env.DB, { days: 30 }, 5000);
@@ -357,4 +398,41 @@ test("one account's grants never reach another account", async () => {
   const other = (await ensureAccount(env.DB, "other@example.test", {}, 1000)).account;
   await createGrant(env.DB, { accountId: account.id, kind: "gift", days: 30 }, 5000);
   assert.equal((await resolveEntitlement(env.DB, env.ENTITLEMENTS, other.id, 5100)).pro, false);
+});
+
+test("trials asked for together give one trial, not one each", async () => {
+  // The marker used to be written AFTER the grant, and the row that says
+  // whether a trial has been used was read before any of it. Five requests
+  // arriving together all read null, all wrote a grant, and the account held
+  // five trials (QA round 7). What makes that cost money is the next step:
+  // revoking "the trial" leaves the duplicates entitling, so the account still
+  // answers pro.
+  const { env, account } = await withAccount();
+  const answers = await Promise.all(
+    Array.from({ length: 5 }, () => startTrial(env.DB, account, env, 5000))
+  );
+  assert.equal(answers.filter((a) => a.ok).length, 1);
+  assert.equal(answers.filter((a) => a.reason === "trial_used").length, 4);
+  const rows = await env.DB
+    .prepare("SELECT COUNT(*) AS n FROM grants WHERE account_id = ?1 AND kind = 'trial'")
+    .bind(account.id)
+    .first();
+  assert.equal(Number(rows.n), 1, "one trial row, so revoking it revokes the trial");
+});
+
+test("a trial whose grant could not be written is not burned", async () => {
+  // The claim is taken before the grant, so a write that fails must put it
+  // back or somebody loses the one trial they will ever get. Only the worker
+  // being killed between the two writes still costs it, which is the stated
+  // price of this order.
+  const { env, account } = await withAccount();
+  const real = env.DB.prepare.bind(env.DB);
+  env.DB.prepare = (sql) => (String(sql).startsWith("INSERT INTO grants")
+    ? { bind: () => ({ run: async () => { throw new Error("D1 said no"); } }) }
+    : real(sql));
+  await assert.rejects(() => startTrial(env.DB, account, env, 5000), /D1 said no/);
+  env.DB.prepare = real;
+  const after = await env.DB.prepare("SELECT * FROM accounts WHERE id = ?1").bind(account.id).first();
+  assert.equal(after.trial_used_at, null, "the claim was put back");
+  assert.equal((await startTrial(env.DB, after, env, 5100)).ok, true, "and the trial still works");
 });

@@ -144,7 +144,7 @@ Anonymous usage events and A/B results (`src/events.js`; also need `DB`):
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/v1/events` | A batch of up to 25 events from the site's beacon (`text/plain` JSON). `200 {ok, accepted, dropped}`; `202` and nothing stored for GPC (`sec-gpc: 1`), automated user agents, or `EVENTS_ENABLED=false`; `403` from any origin but `SITE_ORIGIN`; `429` past a limit (below). |
+| POST | `/v1/events` | A batch of up to 25 events from the site's beacon (`text/plain` JSON). `200 {ok, accepted, dropped}`; `202` and nothing stored for GPC (`sec-gpc: 1`), automated user agents, `EVENTS_ENABLED=false`, or the day's `EVENTS_DAILY_CAP`; `403` from any origin but `SITE_ORIGIN`; `429` past a limit (below). |
 | POST | `/v1/events/forget` | `{cid}` → deletes every event and exposure for that browser id: `200 {ok, deleted: {events, exposures}}`. Sent by the guide's opt-out switch. Always allowed (GPC and the kill switch do not stop a deletion); origin-checked, 30 per address per hour. |
 | GET | `/v1/admin/experiments` | Every registered experiment with exposures per arm and the sample-ratio check, plus `ingest`: the last 7 days of ingest counters and when the last event arrived. |
 | GET | `/v1/admin/experiments/results?experiment=KEY` | The preset primary metric and guardrails per arm, the sample-ratio check, the instrumentation check (`eventMix`), where the test stands against its plan (`horizon`), and a one-word `readMe`. `event`/`kind`/`from`/`to` ask for one exploratory metric instead; `control` and `weights` override the registry's. `404` for a key not in the registry. |
@@ -220,14 +220,18 @@ Public, committed in `wrangler.toml`:
 | `SITE_ORIGIN` | Exact site origin, e.g. `https://pillb.github.io`. Token audience and the only allowed CORS origin. |
 | `LICENSE_KEY_ID` | `kid` in the token header and the JWKS. Bump on rotation. |
 | `LICENSE_TTL_SECONDS` | Token lifetime (clamped to 60…2592000). |
-| `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. |
+| `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. Filling either one in also makes it an **allow-list** — see below. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
+| `CREEM_PRODUCT_PRO_MONTHLY` / `CREEM_PRODUCT_PRO_YEARLY` | Optional Creem product id → plan mapping. Filling either one in makes it an **allow-list** too, as the Stripe prices do, and one that `metadata.plan` cannot get past (a buyer can write Creem metadata). |
+| `CREEM_ALLOW_TEST_MODE` | `"true"` lets a Creem event whose `mode` is `test`, `sandbox` or `local` entitle. Defaults off: a test purchase moves no money, so honouring one hands out the paid tier for nothing. Switch it on to prove the rail end to end, and off again before the first real sale. An unrecognised mode entitles either way, so a live value Creem renames cannot silently stop every sale. |
 | `TRIAL_DAYS` | Length of the free trial, in days. One per account, ever. Default 7. |
-| `ADMIN_EMAILS` | Comma-separated emails allowed to gift and revoke months, and to read A/B results. |
+| `TRIAL_LEN_EXPERIMENT` | `"on"` runs the trial-length A/B test (`trial_len_2026_11`): each account's trial is 7 or 14 days, assigned from its account id. **It overrides `TRIAL_DAYS`** — with the test on, that setting is ignored. Off (the default) everybody gets `TRIAL_DAYS`. It also needs `LICENSE_ID_KEY` or `LICENSE_PRIVATE_KEY_PKCS8_B64` to key the assignment with; without one the test stays off, because an arm anyone can predict is an arm anyone can pick. The browser cannot switch this on: the `enabled` flag in `js/experiments-config.js` governs only what the statistics record. |
 | `GOOGLE_CLIENT_ID` | Google Sign-In client id. Public by design. Empty disables Google sign-in. |
 | `EMAIL_PROVIDER` | `resend`, `brevo` or `mailersend`. Empty disables email sign-in rather than dropping codes silently. |
 | `EMAIL_FROM` / `EMAIL_FROM_NAME` | Sender of the code emails. Must be a verified sender at the provider. |
 | `EVENTS_ENABLED` | `"false"` stops recording anonymous events at once (nothing is stored, not even counters). Deletions still work. |
+| `REPORTS_ENABLED` | Problem reports and ideas from the site. Unlike `EVENTS_ENABLED` this defaults **on** when absent. `"false"` closes the route; the form then shows the reporter their own text to copy, so nothing they typed is lost. |
+| `EVENTS_DAILY_CAP` | Optional. Events stored per deployment per rolling day; `10000` when absent. It exists so analytics cannot spend D1's free 100,000 rows a day and take sign-in, saved progress and the trial down with it: one stored event is three rows now and three more when the 180-day sweep deletes it, so the default leaves about 40,000 rows a day for the account layer. Past it the route answers `202 {accepted: 0, reason: "daily_capped"}` and writes nothing but the counter. On the $5 Workers Paid plan the same ceiling is 500 times higher, so raise it there. |
 
 Secrets — **never** in this repo, only `wrangler secret put`:
 
@@ -235,8 +239,11 @@ Secrets — **never** in this repo, only `wrangler secret put`:
 |--------|---------|
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` for *this* endpoint (test and live differ). |
 | `MP_WEBHOOK_SECRET` | Mercado Pago webhook signing secret. |
+| `CREEM_WEBHOOK_SECRET` | Creem webhook signing secret, from Developers → Webhook. Empty refuses every Creem webhook with `secret_not_configured` rather than trusting an unsigned body. |
 | `MP_ACCESS_TOKEN` | Mercado Pago access token, used only for server-side reads. |
 | `LICENSE_PRIVATE_KEY_PKCS8_B64` | base64 PKCS#8 P-256 private key. |
+| `LICENSE_ID_KEY` | Optional. The key a new license id is derived under, so two webhooks for one new customer agree on one license. Without it a key derived from `LICENSE_PRIVATE_KEY_PKCS8_B64` is used; with neither, a new license gets a random id. Set it to keep derivation stable across a signing-key rotation. Any long random string. |
+| `ADMIN_EMAILS` | Comma-separated emails allowed to gift and revoke months, read A/B results and read problem reports. Not cryptographic, and the worker reads it from `env` either way — but **this repository is public**, so a value in `wrangler.toml` publishes the address in git history for ever. `secret put` it. |
 | `RESEND_API_KEY` / `BREVO_API_KEY` / `MAILERSEND_API_KEY` | Only the one named by `EMAIL_PROVIDER`. |
 | `EVENTS_IP_KEY` | Optional. The key the rate-limit buckets are an HMAC under. Without it a key derived from `LICENSE_PRIVATE_KEY_PKCS8_B64` is used; with neither, `/v1/events` answers `503`. Any long random string. |
 
@@ -246,14 +253,23 @@ KV: one namespace bound as `ENTITLEMENTS`.
 event:<provider>:<eventId>            "1"                             30d TTL   idempotency
 lic:<licenseId>                       record JSON                               the entitlement
 claim:<provider>:<sessionOrPaymentId> licenseId                       90d TTL   ?billing=success lookup
+pay:<provider>:<paymentId>            licenseId                      400d TTL   lets a refund or a dispute find what it paid for
 sub:<provider>:<subscriptionId>       licenseId                                 keeps one license per subscription
 paid:<licenseId>                      {paidAt?, periodEnd?}                     the latest payment confirmed (see below)
 ended:<licenseId>                     {endedAt, periodEnd, periodEndIfPaid?,    the Stripe subscription was deleted
                                        paidAtWhenEnded?}
-reversed:<licenseId>                  {reversedChargeAt, reversedAt}            a Mercado Pago charge's money went back
+reversed:<licenseId>                  {reversedChargeAt, reversedAt}            a charge's money went back (refund, chargeback)
 charged:<licenseId>                   chargedAt                                 when the latest charge that went through was made
-refused:mercadopago:<notification>    unix seconds                    30d TTL   when the API first refused that notification's resource
+refused:<provider>:<eventId>          unix seconds                    30d TTL   when that event was first unprocessable (an MP resource
+                                                                                its API refuses; a Stripe refund of a payment we do
+                                                                                not know). Retried for a day, then acknowledged
 ```
+
+`pay:` is a lookup rather than a repeated fact: money going back names its
+payment and nothing else this worker knows, so a payment is written down the
+first time it is seen beside something that does identify the license — a
+checkout session, or an invoice on an API version that still names one. It
+outlives a yearly plan plus the card networks' dispute windows (400 days).
 
 `paid:`, `ended:`, `reversed:` and `charged:` repeat facts the record also
 holds, each in a key nothing else writes, so that two webhooks processed at the
@@ -282,7 +298,7 @@ to forget — deploying is enough.
 | `grants` | **Trial, gift and comp are the same row.** `revoked_at` is how any of them is taken back. |
 | `gift_codes` / `gift_redemptions` | Codes and who used them. A unique index makes double redemption impossible. |
 | `license_links` | Which paid licenses belong to which account. |
-| `progress` | One document per `(account, profile)` with a `rev` for compare-and-swap. |
+| `progress` | One document per `(account, profile)` with a `rev` for compare-and-swap. A first write is one guarded `INSERT ... SELECT ... ON CONFLICT DO NOTHING`, so the profile cap and "is this profile already there" are decided by the write itself rather than by a count taken just before it. |
 | `rate_limits` | Per-IP and per-email counters for the sign-in routes, and the event route's buckets. |
 | `events` / `exposures` / `ingest_daily` | Anonymous usage events and A/B exposures; see "What the events tables hold" above. |
 
@@ -309,6 +325,7 @@ node scripts/generate-keys.mjs k1
 # 3. Secrets (each one reads from stdin; nothing touches the repo)
 wrangler secret put STRIPE_WEBHOOK_SECRET
 wrangler secret put MP_WEBHOOK_SECRET
+wrangler secret put CREEM_WEBHOOK_SECRET
 wrangler secret put MP_ACCESS_TOKEN
 wrangler secret put LICENSE_PRIVATE_KEY_PKCS8_B64
 wrangler secret put RESEND_API_KEY        # accounts only, matching EMAIL_PROVIDER
@@ -454,16 +471,44 @@ Consequences worth understanding before you ship:
   record: a subscription that then stops keeps the period its authorization
   set. A renewal's new period end comes back with the next event that
   carries it.
-  Worse, the first two events for a new license (a
-  checkout and its subscription's first event) processed at once can each
-  find no license and mint one. The claim
-  then points at one record and the subscription index, which every later
-  event follows, at the other, so the claimed copy never hears of a renewal
-  or a cancellation and does not heal: a cancelled customer could keep Pro
-  until the period it already holds runs out, or for good if it holds none.
-  Closing all of this needs one writer per license (a Durable Object, or a D1
-  row updated only when its stored `occurredAt` is older), which this worker
-  does not have.
+  What it can no longer do is split a new customer in two. The first events
+  for a new license (a checkout and its subscription's first event) processed
+  at once each find no license, because neither can see the other's write —
+  and each used to mint a random id, so the claim pointed at one record and
+  the subscription index, which every later event follows, at the other. The
+  claimed copy then never heard of a renewal or a cancellation and did not
+  heal. A new license's id is now derived from the subscription it belongs to
+  (or, for a one-off payment, from the payment), as an HMAC under
+  `LICENSE_ID_KEY` or the signing key, so writers who cannot see each other
+  agree with no registry and no extra read. An id is still looked up through
+  the indexes first, so nothing stored before this is affected, and without
+  either secret a new license still gets a random id.
+  Closing the rest of this needs one writer per license (a Durable Object, or
+  a D1 row updated only when its stored `occurredAt` is older), which this
+  worker does not have.
+- **A period an event names only counts if it was still running when the
+  charge was taken.** Every rail answers "what did this money buy?" twice: the
+  event names a period, and the charge inside it implies one. The named period
+  wins, because any payment taken mid-cycle (an upgrade, a proration, an
+  invoice retried after dunning) names the period it belongs to and counting
+  an interval from the charge would hand out a free month on each one. But a
+  named period that had *already ended* at the moment of the charge cannot be
+  what the charge bought, and trusting one of those takes a month away from
+  somebody who has just renewed: Creem's `subscription.paid` fires on every
+  renewal and its docs never say whether the snapshot carries the new period
+  or the one just paid off. So the period end and the charge time are compared,
+  and an already-closed period falls back to the interval. At the exact
+  boundary the interval is counted, which can give away a month that was
+  already paid for, because locking out a payer is the worse failure.
+- **A Stripe renewal's period comes from the subscription's own invoice line,
+  not the invoice's first.** Stripe sorts an invoice's lines with pending
+  invoice items *including prorations* first, so after any plan change the
+  renewal invoice's first line is a proration ending at the period that just
+  closed. Reading it recorded the wrong month, and on a monthly-to-yearly
+  upgrade read the plan off the credit line and stored a year's payment as a
+  month. The line picked is the one whose period ends last among the lines that
+  are the subscription's own, in both the pre- and post-`2025-03-31` payload
+  shapes; a longer add-on invoice item on the same invoice does not count.
 
 ## Registering the webhooks
 
@@ -482,8 +527,13 @@ Subscribe exactly these events:
 | `customer.subscription.created` | First subscription state |
 | `customer.subscription.updated` | Plan change, renewal, status change |
 | `customer.subscription.deleted` | Cancellation. A subscription paid up to it keeps the period it paid for; one cancelled while unpaid (in dunning, stopped or paused, never paid, or with `cancellation_details.reason` `payment_failed`/`payment_disputed`) ends at `ended_at`, whoever cancelled it |
-| `invoice.paid` | Successful renewal (moves `periodEnd` forward) |
+| `invoice.paid` | Successful renewal. Moves `periodEnd` **forward only**: an invoice reports one billing period, so a paid invoice for an earlier period redelivered after a later one cannot shorten access. A `customer.subscription.*` event carries `current_period_end` and does replace it |
 | `invoice.payment_failed` | Dunning → `past_due` |
+| `charge.refunded` | Money given back in full ends the access that charge paid for. A partial refund changes nothing |
+| `charge.dispute.created` | A chargeback was opened: access ends when it is opened, not when it is lost — **but only for a formal dispute.** An inquiry (`warning_*`), a `prevented` dispute and a `won` one take no money and change nothing |
+| `charge.dispute.updated` | An inquiry that became a formal dispute ends access here |
+| `charge.dispute.closed` | Closed as `lost` ends access; `won` and `warning_closed` leave it alone |
+| `charge.dispute.funds_withdrawn` | The money has left the balance, whatever the status says. Always ends access |
 
 Copy that endpoint's `whsec_…` into `STRIPE_WEBHOOK_SECRET`. **Test mode and
 live mode have different secrets and usually different endpoints.**
@@ -510,11 +560,121 @@ session names the plan only through a configured price id or its own
 subscription's events decide it, whichever order they arrive in. Only a
 one-time checkout with neither counts as `pro_monthly`.
 
+**The price table is also an allow-list, wherever it is filled in.** With
+`STRIPE_PRICE_PRO_*` empty — how this repository ships — nothing is gated and
+the mapping above is all it does. Fill either id in and a Stripe subscription
+on a price that is *not* named there is stored `suspended`: it issues no token,
+and a paid invoice on that price does not lift it. That is what stops anything
+else ever sold from the same Stripe account — a donation, a one-off lesson, a
+subscription at any price — from becoming Pro.
+
+The cost is a price you add in Stripe and forget here, which is then refused
+although the customer really paid. Two ways back, both of which have a test:
+
+1. **Name the plan in that subscription's `metadata.plan`** in the Stripe
+   dashboard (`pro_monthly` or `pro_yearly`). Metadata outranks the allow-list
+   because only the account's owner can set it, and editing it emits
+   `customer.subscription.updated`, so access returns within seconds and
+   nothing has to be deployed.
+2. **Add the price id to `wrangler.toml` and redeploy.** The next subscription
+   event — a renewal, or any edit in the dashboard — entitles it.
+
+Until either lands, the stop-gap is the one for every payment problem: give
+that account a gift from the admin page.
+
 Stripe's Billing settings decide what happens when every retry of a failed
 payment has failed. *Cancel the subscription* or *Mark the subscription as
 unpaid* both end access here. *Leave the subscription past-due* keeps it in
 the `past_due` grace with a period that rolls forward each cycle, so access
 would never end; do not pick it with this worker.
+
+### Creem
+
+This is the international rail. Creem is a **merchant of record**: it sells to
+the customer in its own name, charges and remits the tax, and pays us. That is
+the point of it — a Peru-registered seller cannot be a Stripe merchant (Peru is
+not a supported country on stripe.com/global, checked 2026-11-03), and a
+merchant of record needs no company in the customer's country. Mercado Pago
+stays the Peruvian and Latin American rail, where it takes the local methods
+Creem does not.
+
+Dashboard → Developers → *Webhook* → URL
+`https://<your-worker-host>/v1/webhooks/creem`, and copy the signing secret
+into `CREEM_WEBHOOK_SECRET` with `wrangler secret put`.
+
+Subscribe exactly these events:
+
+| Event | Why |
+|-------|-----|
+| `checkout.completed` | The checkout finished. `object.id` is the `ch_…` the browser comes back with, so this is what `/v1/claim` looks up |
+| `subscription.paid` | Money arrived for a period. **This is the one that entitles**, as Creem's own documentation says |
+| `subscription.active` | Synchronization only: a status and a period, and nothing about money |
+| `subscription.trialing` | A Creem-side trial. Entitles, like Stripe's `trialing` |
+| `subscription.update` | The subscription's own answer for its period, so a downgrade shortens it |
+| `subscription.paused` | Nothing is being charged: suspended until a payment brings it back |
+| `subscription.canceled` | Cancelled. The period already paid for is kept |
+| `subscription.expired` | Over. Terminal: Creem gives a new purchase a new subscription id |
+| `refund.created` | Money going back. A **full** refund ends the access its transaction bought |
+| `dispute.created` | A chargeback. Ends access the day it is raised |
+
+Then create **two products** — monthly and yearly — because Creem has no single
+link that offers both, and put their ids in `CREEM_PRODUCT_PRO_MONTHLY` and
+`CREEM_PRODUCT_PRO_YEARLY`. Filling either one in makes it an allow-list as
+well as a label, so a donation or a one-off lesson sold from the same Creem
+account cannot become Pro. Unlike Stripe, `metadata.plan` is no way past that
+list: a Creem payment link takes `?metadata[plan]=…` from whoever opens it and
+passes it to the webhook, so it is only read for a product the list does not
+refuse. A product of ours missing from the list is fixed by adding its id.
+Paste each product's share link into `js/billing-config.js` under
+`providers.creem.links`.
+
+Five things about this rail are not like Stripe's, and each one is a way to
+get it wrong:
+
+- **The signature has no timestamp.** It is the HMAC-SHA256 of the raw body
+  with the webhook secret, hex, in `creem-signature`. There is no replay window
+  to enforce, so a captured body verifies for ever and the `event:` marker is
+  the whole of the replay defence. What makes that enough is that no period is
+  ever counted from *now*: every instant in an update is read out of the body,
+  so a replay sets the period it set the first time. Creem retries an automatic
+  delivery with the same event id and gives a manual resend from the dashboard
+  a new one, which is exactly what the marker wants.
+- **A dispute carries no status and no reason.** Stripe's does, and there an
+  inquiry must be told from a chargeback or Pro is taken from somebody whose
+  money was never reversed. Creem sends an amount and a transaction whose
+  status is `chargeback`, so every `dispute.created` is a chargeback and there
+  is nothing to tell apart.
+- **Two time formats in one payload.** The envelope's `created_at`, and a
+  refund's and a dispute's own, are epoch **milliseconds**. A subscription's
+  `current_period_end_date`, `last_transaction_date` and `canceled_at` are
+  **ISO 8601 strings**. Reading one as the other is a thousand-fold error in a
+  date that decides access.
+- **"Was it a full refund" is three questions, not one.** The transaction's own
+  `status` is read first: `refunded` against `partialRefund`, Creem's verdict
+  and the only signal that sees a refund quoted net of a tax the customer paid
+  — the documented example pays 1210 for a 1000 product, so a 1000 refund of
+  one is the whole sale and looks like 83% of it. Then the transaction's
+  cumulative `refunded_amount`, which is the only signal that sees money
+  returned in two halves: comparing each refund's own amount with what was paid
+  calls each half a goodwill gesture and leaves a fully refunded month running.
+  Then this refund's own amount, which is right for the ordinary case. Any one
+  of the three is enough; a genuine part refund trips none of them.
+- **Test mode reaches the same endpoint.** Every Creem object carries a `mode`
+  — `test`, `prod` or `sandbox` in the API reference, and `local` in the
+  webhook examples. A test purchase moves no money, so an event from one of the
+  three non-production modes entitles nobody unless `CREEM_ALLOW_TEST_MODE` is
+  `"true"`, which is what you set while proving the rail works and put back
+  before the first real sale. A mode this worker does not recognise still
+  entitles, deliberately: refusing an unknown one would mean a production value
+  Creem renames stops every real payment, silently, which is the worse way to
+  be wrong.
+
+The payment identity on this rail is the **transaction id** (`tran_…`). Creem
+names it on the paying events and names the same one again when the money goes
+back, which is what lets a refund say whether it is the payment that bought the
+period the licence is in — the thing Stripe's current API versions no longer
+make possible for a renewal at all (see "A refunded Stripe subscription
+renewal" below).
 
 ### Mercado Pago
 
@@ -621,13 +781,13 @@ curl http://127.0.0.1:8787/v1/health
 
 # Stripe CLI: forwards real signed events and prints a local whsec_…
 stripe listen \
-  --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed \
+  --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed,charge.refunded,charge.dispute.created,charge.dispute.updated,charge.dispute.closed,charge.dispute.funds_withdrawn \
   --forward-to http://127.0.0.1:8787/v1/webhooks/stripe
 
 stripe trigger checkout.session.completed
 ```
 
-That is the same eight events as the live endpoint (see "Registering the
+That is the same eleven events as the live endpoint (see "Registering the
 webhooks"). `stripe listen` prints its own webhook secret — put *that* one in
 `workers/entitlements/.dev.vars` as `STRIPE_WEBHOOK_SECRET=whsec_…`, with
 `LICENSE_PRIVATE_KEY_PKCS8_B64` (a throwaway key from
@@ -717,12 +877,80 @@ webhook → claim → token flow through the router with a fake `fetch`.
 - **Sharing one license id.** A license id copied to a friend still verifies.
   There is no device binding and no account system; the mitigation is that a
   cancellation kills every copy at once.
-- **Refunds and disputes made in Stripe.** The worker does not subscribe to
-  `charge.refunded` or `charge.dispute.*`: a charge carries nothing the worker
-  can find a license by without a Stripe API key, which it does not hold. A
-  refunded Stripe customer keeps the period on record; cancelling their
-  subscription stops renewals but, like any paid cancellation, keeps the
-  period they had paid for.
+- **A refunded Stripe subscription renewal.** Refunds and disputes of a
+  *one-time* payment do end the access they bought: the checkout session names
+  its payment intent, that is kept in a `pay:` index, and the refunded charge
+  and the dispute both name the same payment intent. A subscription's renewal
+  is the gap. Its charge is paid against an invoice, and Stripe's current API
+  version carries no payment intent on an invoice webhook at all — the field
+  was removed, and the `payments` that replaced it is only sent when it is
+  expanded, which a webhook never does. So a renewal's payment is never seen
+  before its refund and cannot be matched to a license.
+
+  An account on an **older** API version does send `invoice.payment_intent`,
+  and there the renewal is covered, including a dispute of the latest
+  renewal's own charge. That claim used to be in this README and was not true:
+  the index was written, but the reversal then worked out which payment had
+  bought the period by arithmetic — one plan interval past the reversed charge
+  plus a week of slack — and a renewal's period is two intervals past the
+  first charge, so it read as somebody else's and access stayed on. The record
+  now remembers which payment moved the period end out, so a reversal naming
+  that payment ends the period and one naming a different payment leaves it
+  alone, with no sum to get wrong. The same change fixed a fully refunded
+  yearly pass whose delayed payment had settled eight days after the charge
+  was raised — one day past that week of slack — which had also stayed Pro.
+  The arithmetic remains for Mercado Pago, which indexes no payment intents,
+  and for a Stripe payment that confirmed money without lengthening anything.
+
+  An id is proof only while it names the period actually held, and getting
+  that wrong costs a customer access they paid for. Two shapes do it, both
+  found by re-attacking the identity rule itself (QA round 7), and both now
+  pinned by tests: money that moves the period end out and names **no**
+  payment clears the id rather than leaving the previous month's on it — an
+  invoice settled from a credit balance or marked paid out of band carries
+  none, and an account's API version can change between two months; and a
+  paid invoice for the very period the record **already** holds is recorded as
+  that period's payment even though it lengthened nothing, because a plan
+  change emits the subscription's new period end before the invoice that paid
+  for it. Without the first, the refund of month one ended a month two that
+  had been paid for. Without the second, the same refund ended a short
+  prorated month two, because the sum cannot tell a prorated period from an
+  unpaid one.
+
+  The second of those is narrowed, because as first written it was wrong in
+  both directions. A proration charged at once mid-cycle is an equal-end paid
+  invoice too, and it was taking the period over from the payment that bought
+  it: the refund of the proration then ended a month it had not bought, and
+  the refund of the real payment left that month running. When two payments
+  end the same period, the first one bought it and the later one topped it up,
+  so the record keeps the period its id was recorded for and an equal-end
+  invoice is taken only when no payment has claimed that period yet. A refund
+  of a top-up therefore ends nothing by identity and falls to the arithmetic,
+  which errs toward keeping access — the right side to err on for a credit the
+  customer did not ask to lose a month for.
+
+  The remedy for a current-API renewal is the one that always worked:
+  cancel the subscription in Stripe, which ends renewals, and revoke the grant
+  from the admin page if the current period should go too.
+
+  There is a route that would close this without any API call from the webhook
+  path, if the international rail ever is Stripe: the `InvoicePayment` object
+  that replaced the field carries both `invoice` and
+  `payment.payment_intent`, and it has its own `invoice_payment.paid` event.
+  Subscribing to it and keeping two indexes — payment intent → invoice from
+  that event, invoice → license from `invoice.paid` — lets a refund resolve
+  payment → invoice → license with no guessing and no ordering dependency.
+  It is not built, because a Peru-registered seller cannot be a Stripe
+  merchant (checked against `stripe.com/global` on 2026-11-03: Peru is not a
+  supported country) and the international rail is to be a merchant of record,
+  so this handler may never see a live event. Matching a refund by `customer`
+  instead was considered and rejected: a customer with any second purchase on
+  the account would have their Pro ended by the refund of something unrelated,
+  and taking paid access away on a guess is the wrong direction to be wrong
+  in.
+- **A dispute that is won.** Access ended when the dispute was opened and
+  nothing puts it back automatically: there is no "un-refund" in this store.
+  Give the time back from **Dar Pro** on the admin page.
 - **Protecting content that has already been downloaded.** Everything the site
   ships is public by definition. Only genuinely server-side value (data the
   worker holds back) can be withheld.

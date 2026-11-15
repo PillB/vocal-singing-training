@@ -504,3 +504,22 @@ one red.
 | 2026-11-12 | Four-note melody echo, interval singing, a pitch-discrimination game, a tube-in-water programme | open, the best-supported singing additions not yet built |
 | 2026-11-12 | The new analytics names (`sets_open`, `set_start`, `set_complete`) need the worker redeployed | open |
 | 2026-11-12 | Android Back does not close the picker (as with the other dialogs) | accepted |
+# Integration review — 2026-11-15
+
+PR #36 was reconciled with main after #40 (`ad5d35c`). The only conflicts were
+script cache references and the asset manifest. Main's newer scripts and boot
+sequence were retained; the three evidence-copy assets received fresh versions.
+The bilingual study texts and reading hashes were preserved exactly.
+
+Five review passes covered study attribution and numbers, preservation of newer
+catalog entries, Spanish/English agreement, boot/cache integration, and mutation
+registration. No new semantic conflict was found. The reading lock remains a
+change detector, not proof that a study was interpreted correctly.
+
+Local lint and catalog checks ran. The complete core command is blocked locally
+by `listen EPERM` in the redeploy checker, and Chromium exits at launch with a
+macOS Mach-port permission error. Desktop, mobile, zoom/keyboard and locale
+visual reviews therefore remain unverified locally; GitHub CI must validate the
+integrated head before merging. No real microphone or physical Safari check is
+claimed. This integration does not deploy the entitlement worker.
+

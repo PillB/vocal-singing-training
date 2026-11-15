@@ -188,18 +188,75 @@
   }
 
   /**
+   * Record an arm somebody else chose.
+   *
+   * One experiment's arm is not this file's to pick: the trial-length test
+   * decides how many days of Pro an account is given, so the worker assigns it
+   * from the account id and tells the page which arm it got
+   * (workers/entitlements/src/grants.js `trialArmFor`). This records that arm as
+   * the browser's exposure so the result can be read, without letting anything
+   * here choose it.
+   *
+   * Server arms are kept in their own slot rather than alongside the ones
+   * `assignment()` produced. They are two different claims — "this is the arm I
+   * computed" and "this is the arm I was given" — and `enabled` in
+   * js/experiments-config.js governs only the first, so a server arm has to
+   * survive that flag being false.
+   *
+   * The first arm a browser is handed is its arm, and a second one is ignored.
+   * That is not an edge case to tidy away: two accounts signing in on one
+   * browser can be in different arms, and the worker's exposure row is
+   * `INSERT OR IGNORE` on (experiment, browser), so the first one is what the
+   * result will be computed from. Keeping a different arm here would make this
+   * browser re-assert, on every later app_open, an arm the worker has already
+   * refused to store.
+   *
+   * @param {string} key Experiment key.
+   * @param {string} armId The arm the worker assigned.
+   * @returns {string|null} The arm this browser is recorded in, or null when
+   *   nothing was recorded.
+   */
+  function exposeServerArm(key, armId) {
+    // An ask-first country that has not answered: no id, no storage, no beacon.
+    if (inert()) return null;
+    const def = defs()[key];
+    const variants = def && Array.isArray(def.variants) ? def.variants : [];
+    // An arm this build has never heard of is a mismatched deploy, not data.
+    if (!variants.some((v) => v.id === armId)) return null;
+    const bag = readBag() || {};
+    bag.server = bag.server && typeof bag.server === "object" ? bag.server : {};
+    if (typeof bag.server[key] === "string") return bag.server[key];
+    bag.server[key] = armId;
+    writeBag(bag);
+    global.VTAnalytics?.track?.("experiment_expose", {
+      experiment: key,
+      variant: armId,
+      forced: false,
+      enabled: true
+    });
+    return armId;
+  }
+
+  /**
    * The arm this browser was exposed to, for each switched-on experiment it has
    * been exposed to. js/daily-loop.js repeats these on every app_open, so an
    * exposure whose first beacon never reached the worker is recorded late
    * rather than lost; the worker keeps whichever arrives first.
+   *
+   * Server-assigned arms are always included. Their experiment is switched on
+   * in the worker, which is the only place that knows, so filtering them on the
+   * local `enabled` flag would silently drop the re-assertion for the one
+   * experiment whose arm this file did not choose.
    * @returns {Record<string, string>} experiment key -> arm id
    */
   function exposedArms() {
     const bag = readBag() || {};
     const seen = bag.seen && typeof bag.seen === "object" ? bag.seen : {};
+    const server = bag.server && typeof bag.server === "object" ? bag.server : {};
     const out = {};
     Object.keys(defs()).forEach((key) => {
       if (defs()[key]?.enabled && typeof seen[key] === "string") out[key] = seen[key];
+      if (typeof server[key] === "string") out[key] = server[key];
     });
     return out;
   }
@@ -222,7 +279,10 @@
         enabled: a.enabled,
         assigned: a.variant,
         forced: a.forced,
-        exposed: (bag.seen && bag.seen[key]) || null
+        exposed: (bag.seen && bag.seen[key]) || null,
+        // Set only for an experiment the worker assigns; when it is set, it is
+        // the arm that counts and `assigned` above means nothing.
+        fromServer: (bag.server && bag.server[key]) || null
       };
     });
     out.events = global.VTAnalytics?.summary?.() || null;
@@ -237,5 +297,5 @@
     }
   }
 
-  global.VTExperiments = { assignment, variant, exposeOnce, exposedArms, report, reset, clientId };
+  global.VTExperiments = { assignment, variant, exposeOnce, exposeServerArm, exposedArms, report, reset, clientId };
 })(window);

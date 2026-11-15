@@ -438,6 +438,482 @@ function writeMarkdown(report) {
   return REPORT_MD;
 }
 
+/*
+ * One exercise in one format, step by step. `run`: { page, fmt, ex, entry,
+ * report, pushIssue }; each step adds its screenshots to entry.images, counts
+ * its actions and metrics in report.summary, and files issues with pushIssue.
+ */
+
+/** The exercise as it opened: Start must be visible. */
+async function probeOnOpen(run) {
+  const { page, fmt, ex, entry, report, pushIssue } = run;
+  const openProbe = await practiceProbe(page);
+  entry.mode = openProbe.mode;
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "00_open.png", {
+      action: "open_exercise",
+      expected: "Exercise view; Start visible",
+      actual: describeProbe(openProbe, { startVisible: openProbe.startVisible }),
+      verdict: openProbe.startVisible ? "PASS" : "FAIL"
+    })
+  );
+  report.summary.totalActions++;
+  if (!openProbe.startVisible) {
+    pushIssue(fmt.name, ex.id, "P0", "start_not_visible", "Start not visible after open", entry);
+  }
+}
+
+/** The screenshot after hovering Start: what changed, and whether the pointer landed on it. */
+function hoverAfterShot(fb, after, hit) {
+  return {
+    action: "hover_start_after",
+    expected: "Hover feedback and/or pointer; hit-self",
+    actual: `changed=[${(fb.changed || []).join(",")}] cursor=${after?.cursor} hit=${hit?.id || hit?.tag} hitSelf=${after?.hitSelf}`,
+    verdict: after?.hitSelf || after?.cursor === "pointer" ? "PASS" : "WARN"
+  };
+}
+
+async function hoverStart(run) {
+  const { page, fmt, ex, entry, report } = run;
+  const startPt = await centerIfVisible(page, "#btn-practice-start");
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "01_hover_start_before.png", {
+      action: "hover_start_before",
+      expected: "Start idle",
+      actual: startPt ? `at ${Math.round(startPt.x)},${Math.round(startPt.y)}` : "missing",
+      verdict: startPt ? "INFO" : "FAIL"
+    })
+  );
+  if (startPt) await hoverStartAt(run, startPt);
+  report.summary.totalActions++;
+}
+
+async function hoverStartAt(run, startPt) {
+  const { page, fmt, ex, entry, report, pushIssue } = run;
+  const before = await styleSnapshot(page, "#btn-practice-start");
+  await mouseHover(page, startPt.x, startPt.y, 14);
+  const after = await styleSnapshot(page, "#btn-practice-start");
+  const fb = hoverFeedback(before, after);
+  const hit = await hitAt(page, startPt.x, startPt.y);
+  entry.images.push(await capture(page, fmt.name, ex.id, "01_hover_start_after.png", hoverAfterShot(fb, after, hit)));
+  if (after?.hitSelf || fb.ok) report.summary.metrics.hover_ok++;
+  else {
+    report.summary.metrics.hover_fail++;
+    pushIssue(fmt.name, ex.id, "P2", "hover_start", "weak hover feedback", entry);
+  }
+  entry.actions.hoverStart = { fb, hit };
+}
+
+/** Whether the controls pass hovers and lightly uses this control. */
+function probedControl(c) {
+  if (SKIP_IDS.has(c.id)) return false;
+  if (!c.hasDomId || c.id.startsWith("anon-")) return false;
+  return [
+    "btn-toggle-guide",
+    "btn-toggle-metrics",
+    "btn-toggle-piano",
+    "btn-ui-help",
+    "mic-sensitivity"
+  ].includes(c.id);
+}
+
+async function hoverAndUseControls(run) {
+  const { page, fmt, ex, entry, report } = run;
+  const ctrls = await listExerciseControls(page);
+  for (const c of ctrls) {
+    if (!probedControl(c)) continue;
+    const sel = `#${c.id}`;
+    const pt = await centerIfVisible(page, sel);
+    if (!pt) continue;
+
+    await mouseHover(page, pt.x, pt.y, 10);
+    entry.images.push(
+      await capture(page, fmt.name, ex.id, `02_hover_${c.id}.png`, {
+        action: `hover_${c.id}`,
+        expected: "Hover lands on control",
+        actual: `center=${Math.round(pt.x)},${Math.round(pt.y)}`,
+        verdict: "PASS"
+      })
+    );
+    report.summary.totalActions++;
+
+    if (c.id === "mic-sensitivity") {
+      await dragMicSlider(run, sel);
+    } else if (
+      c.id === "btn-toggle-guide" ||
+      c.id === "btn-toggle-metrics" ||
+      c.id === "btn-toggle-piano"
+    ) {
+      await togglePanelTwice(run, c, sel, pt);
+    } else if (c.id === "btn-ui-help") {
+      await mouseClick(page, pt.x, pt.y, 8);
+      await page.waitForTimeout(120);
+      // close help with Escape (keyboard, not click spam)
+      await page.keyboard.press("Escape").catch(() => {});
+      await page.waitForTimeout(80);
+    }
+
+    // park mouse so hover styles clear
+    await page.mouse.move(12, 12, { steps: 6 });
+  }
+}
+
+async function dragMicSlider(run, sel) {
+  const { page, fmt, ex, entry, report } = run;
+  // Drag along track (not from center alone) — range snaps value to
+  // click X; a short -30px from center often leaves value unchanged.
+  const box = await page.evaluate((s) => {
+    const el = document.querySelector(s);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  }, sel);
+  let before = null;
+  let mid = null;
+  if (box && box.w >= 20) {
+    const y = box.y + box.h / 2;
+    const xHi = box.x + box.w * 0.92;
+    const xLo = box.x + box.w * 0.08;
+    // Seed low then drag high (always a delta even if already at floor)
+    await page.mouse.click(xLo, y);
+    await page.waitForTimeout(40);
+    before = await page.evaluate(
+      (s) => document.querySelector(s)?.value ?? null,
+      sel
+    );
+    await page.mouse.move(xLo, y, { steps: 4 });
+    await page.mouse.down();
+    await page.mouse.move(xHi, y, { steps: 18 });
+    await page.mouse.up();
+    await page.waitForTimeout(80);
+    mid = await page.evaluate(
+      (s) => document.querySelector(s)?.value ?? null,
+      sel
+    );
+  }
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "03_mic_drag.png", {
+      action: "mic_drag",
+      expected: "Mic value rises via track drag (low→high)",
+      actual: `before=${before} after=${mid} w=${box ? Math.round(box.w) : 0}`,
+      verdict:
+        before != null && mid != null && Number(mid) > Number(before)
+          ? "PASS"
+          : "FAIL"
+    })
+  );
+  report.summary.totalActions++;
+}
+
+async function togglePanelTwice(run, c, sel, pt) {
+  const { page, fmt, ex, entry, report } = run;
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, `04_${c.id}_before.png`, {
+      action: `${c.id}_before`,
+      expected: "Panel baseline",
+      actual: "before mouse click",
+      verdict: "INFO"
+    })
+  );
+  await mouseClick(page, pt.x, pt.y, 10);
+  await page.waitForTimeout(150);
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, `04_${c.id}_after.png`, {
+      action: `${c.id}_after`,
+      expected: "Panel toggles after mouse click",
+      actual: "after mouse click",
+      verdict: "PASS"
+    })
+  );
+  // restore with second mouse click
+  const pt2 = await centerIfVisible(page, sel);
+  if (pt2) await mouseClick(page, pt2.x, pt2.y, 8);
+  report.summary.totalActions++;
+}
+
+/** Practice's probe until it is live, for up to 7 s (a week plan is never live). */
+async function pollLive(page, entry) {
+  // Poll live without hammering layout
+  const deadline = Date.now() + 7000;
+  let liveProbe = null;
+  while (Date.now() < deadline) {
+    liveProbe = await practiceProbe(page);
+    if (liveProbe.live) break;
+    // weekPlan opens plan — not live
+    if (entry.mode === "weekPlan") break;
+    await page.waitForTimeout(250);
+  }
+  return liveProbe || (await practiceProbe(page));
+}
+
+/** Start by a real mouse click. Returns the probe that says whether practice went live. */
+async function startByMouse(run) {
+  const { page, fmt, ex, entry, report, pushIssue } = run;
+  console.log(`    … mouse Start`);
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "10_start_before.png", {
+      action: "start_before",
+      expected: "Ready; Start clickable",
+      actual: describeProbe(await practiceProbe(page)),
+      verdict: "INFO"
+    })
+  );
+  const startPt = await centerIfVisible(page, "#btn-practice-start");
+  if (startPt) {
+    await mouseClick(page, startPt.x, startPt.y, 14);
+  }
+  const liveProbe = await pollLive(page, entry);
+  entry.actions.start = { probe: liveProbe };
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "10_start_after.png", {
+      action: "start_after",
+      expected:
+        entry.mode === "weekPlan"
+          ? "Week plan may open instead of live"
+          : "Practice live after mouse Start",
+      actual: describeProbe(liveProbe),
+      verdict:
+        entry.mode === "weekPlan"
+          ? "PASS"
+          : liveProbe.live
+            ? "PASS"
+            : "FAIL"
+    })
+  );
+  report.summary.totalActions++;
+  if (entry.mode === "weekPlan") {
+    // close plan modal / return if needed via mouse Escape + back later
+    await page.keyboard.press("Escape").catch(() => {});
+  } else if (liveProbe.live) {
+    report.summary.metrics.start_ok++;
+  } else {
+    report.summary.metrics.start_fail++;
+    pushIssue(fmt.name, ex.id, "P0", "start_live", "Start mouse click did not go live", entry);
+  }
+  console.log(`    … live=${liveProbe.live} ${liveProbe.status}`);
+  return liveProbe;
+}
+
+/** Space held and released while live; practice must stay live, and on the silence after. */
+async function spaceHold(run) {
+  const { page, fmt, ex, entry, report, pushIssue } = run;
+  console.log(`    … Space hold`);
+  // Take focus off Start/Stop and put it on the stage, so Space cannot
+  // press a button. Not a click at a fixed point: at 390 px wide that
+  // point is "← Practicar", and the click leaves the exercise.
+  await page.evaluate(() => {
+    const el = document.getElementById("pitch-canvas") || document.getElementById("highway-stage");
+    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+    if (el && !el.hasAttribute("tabindex")) el.tabIndex = -1;
+    el?.focus({ preventScroll: true });
+  });
+  await page.waitForTimeout(80);
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "11_space_before.png", {
+      action: "space_before",
+      expected: "Live, assist idle",
+      actual: describeProbe(await practiceProbe(page)),
+      verdict: "INFO"
+    })
+  );
+  await page.keyboard.down("Space");
+  await page.waitForTimeout(Math.min(700, LIVE_SECS * 220));
+  const mid = await practiceProbe(page);
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "11_space_hold.png", {
+      action: "space_hold",
+      expected: mid.spaceAssistAllowed
+        ? "Manual assist active; still live"
+        : "Still live (pitch may ignore Space)",
+      actual: describeProbe(mid),
+      verdict: mid.live ? "PASS" : "FAIL"
+    })
+  );
+  await page.keyboard.up("Space");
+  await page.waitForTimeout(220);
+  const afterSp = await practiceProbe(page);
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "11_space_after.png", {
+      action: "space_release",
+      expected: "Still live after release",
+      actual: describeProbe(afterSp),
+      verdict: afterSp.live ? "PASS" : "FAIL"
+    })
+  );
+  entry.actions.space = { mid, after: afterSp };
+  report.summary.totalActions++;
+  if (afterSp.live) report.summary.metrics.space_ok++;
+  else {
+    report.summary.metrics.space_fail++;
+    pushIssue(fmt.name, ex.id, "P0", "space_stopped", "Space stopped session", entry);
+  }
+
+  await page.waitForTimeout(Math.max(300, LIVE_SECS * 120));
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "12_live_silence.png", {
+      action: "live_silence",
+      expected: "Remains live on silence",
+      actual: describeProbe(await practiceProbe(page)),
+      verdict: (await practiceProbe(page)).live ? "PASS" : "FAIL"
+    })
+  );
+}
+
+/** Stop by a real mouse click on the Stop button only. */
+async function stopByMouse(run) {
+  const { page, fmt, ex, entry, report, pushIssue } = run;
+  console.log(`    … mouse Stop`);
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "13_stop_before.png", {
+      action: "stop_before",
+      expected: "Stop button visible",
+      actual: describeProbe(await practiceProbe(page)),
+      verdict: "INFO"
+    })
+  );
+  const stopPt = await centerIfVisible(page, "#btn-practice-stop");
+  if (stopPt) {
+    await mouseClick(page, stopPt.x, stopPt.y, 12);
+  }
+  await page.waitForTimeout(350);
+  const stopped = await practiceProbe(page);
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "13_stop_after.png", {
+      action: "stop_after",
+      expected: "Stopped after mouse on Stop",
+      actual: describeProbe(stopped),
+      verdict: !stopped.live ? "PASS" : "FAIL"
+    })
+  );
+  report.summary.totalActions++;
+  if (!stopped.live) report.summary.metrics.stop_ok++;
+  else {
+    report.summary.metrics.stop_fail++;
+    pushIssue(fmt.name, ex.id, "P0", "stop_failed", "Stop mouse click did not end practice", entry);
+  }
+}
+
+/** Back home by a real mouse click (Discard in the leave dialog by mouse too). */
+async function backByMouse(run) {
+  const { page, fmt, ex, entry, report } = run;
+  console.log(`    … mouse Back`);
+  const backPt = await centerIfVisible(page, "#btn-back-home");
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "20_back_hover.png", {
+      action: "back_hover",
+      expected: "Back button in view",
+      actual: backPt
+        ? `center=${Math.round(backPt.x)},${Math.round(backPt.y)}`
+        : "missing",
+      verdict: backPt ? "PASS" : "WARN"
+    })
+  );
+  if (backPt) {
+    await mouseHover(page, backPt.x, backPt.y, 10);
+    await mouseClick(page, backPt.x, backPt.y, 10);
+    await page.waitForTimeout(150);
+    // leave modal: Discard by mouse
+    const discard = await centerIfVisible(page, "#leave-discard");
+    if (discard) {
+      await mouseClick(page, discard.x, discard.y, 8);
+      await page.waitForTimeout(120);
+    }
+  }
+  await page.waitForTimeout(150);
+  const home = await page.evaluate(
+    () => !!document.getElementById("view-home")?.classList.contains("active")
+  );
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "20_back_after.png", {
+      action: "back_home",
+      expected: "Home view active after mouse Back",
+      actual: `homeActive=${home}`,
+      verdict: home ? "PASS" : "WARN"
+    })
+  );
+  report.summary.totalActions++;
+  // If still not home, try brand mark mouse click
+  if (!home) {
+    const brand = await centerIfVisible(page, ".brand, .brand-mark, #btn-back-home");
+    if (brand) {
+      await mouseClick(page, brand.x, brand.y, 8);
+      const d2 = await centerIfVisible(page, "#leave-discard");
+      if (d2) await mouseClick(page, d2.x, d2.y, 6);
+    }
+  }
+}
+
+/** An exercise that threw: the error as an issue and a screenshot, then a mouse Back to recover. */
+async function recoverFromError(run, err) {
+  const { page, fmt, ex, entry, pushIssue } = run;
+  pushIssue(
+    fmt.name,
+    ex.id,
+    "P0",
+    "exercise_error",
+    String(err.message || err).slice(0, 160),
+    entry
+  );
+  entry.images.push(
+    await capture(page, fmt.name, ex.id, "99_error.png", {
+      action: "error",
+      expected: "No exception",
+      actual: String(err.message || err).slice(0, 120),
+      verdict: "FAIL"
+    }).catch(() => ({ file: "(shot failed)", action: "error", verdict: "FAIL" }))
+  );
+  // recover: try mouse back
+  const backPt = await centerIfVisible(page, "#btn-back-home");
+  if (backPt) {
+    await mouseClick(page, backPt.x, backPt.y, 6).catch(() => {});
+    const d = await centerIfVisible(page, "#leave-discard");
+    if (d) await mouseClick(page, d.x, d.y, 6).catch(() => {});
+  }
+}
+
+/** Every step of one exercise in one format, by mouse. Returns its report entry. */
+async function exerciseByMouse(page, fmt, ex, report, pushIssue) {
+  console.log(`  ▶ ${fmt.name} / ${ex.id}`);
+  const entry = {
+    id: ex.id,
+    track: ex.track,
+    title: ex.title,
+    mode: null,
+    images: [],
+    actions: {},
+    issues: []
+  };
+  const run = { page, fmt, ex, entry, report, pushIssue };
+
+  try {
+    await quietOverlays(page);
+    await openExerciseByMouse(page, ex.id);
+    console.log(`    … opened (mouse)`);
+    await probeOnOpen(run);
+
+    // ── Hover Start (real mouse path) ──
+    await hoverStart(run);
+
+    // ── Hover + light interact primary controls (mouse only) ──
+    await hoverAndUseControls(run);
+
+    // ── Start via real mouse click ──
+    const liveProbe = await startByMouse(run);
+    // ── Space hold (keyboard) while live ──
+    if (liveProbe.live) {
+      await spaceHold(run);
+      // ── Stop via real mouse on Stop button only ──
+      await stopByMouse(run);
+    }
+
+    // ── Back home via real mouse ──
+    await backByMouse(run);
+  } catch (err) {
+    await recoverFromError(run, err);
+  }
+  return entry;
+}
+
 test("headed mouse-only forensics: exercises × formats", async ({ page }) => {
   test.setTimeout(4 * 60 * 60 * 1000);
 
@@ -533,405 +1009,7 @@ test("headed mouse-only forensics: exercises × formats", async ({ page }) => {
     });
 
     for (const ex of catalog) {
-      console.log(`  ▶ ${fmt.name} / ${ex.id}`);
-      const entry = {
-        id: ex.id,
-        track: ex.track,
-        title: ex.title,
-        mode: null,
-        images: [],
-        actions: {},
-        issues: []
-      };
-
-      try {
-        await quietOverlays(page);
-        await openExerciseByMouse(page, ex.id);
-        console.log(`    … opened (mouse)`);
-
-        const openProbe = await practiceProbe(page);
-        entry.mode = openProbe.mode;
-        entry.images.push(
-          await capture(page, fmt.name, ex.id, "00_open.png", {
-            action: "open_exercise",
-            expected: "Exercise view; Start visible",
-            actual: describeProbe(openProbe, { startVisible: openProbe.startVisible }),
-            verdict: openProbe.startVisible ? "PASS" : "FAIL"
-          })
-        );
-        report.summary.totalActions++;
-        if (!openProbe.startVisible) {
-          pushIssue(fmt.name, ex.id, "P0", "start_not_visible", "Start not visible after open", entry);
-        }
-
-        // ── Hover Start (real mouse path) ──
-        {
-          const startPt = await centerIfVisible(page, "#btn-practice-start");
-          entry.images.push(
-            await capture(page, fmt.name, ex.id, "01_hover_start_before.png", {
-              action: "hover_start_before",
-              expected: "Start idle",
-              actual: startPt ? `at ${Math.round(startPt.x)},${Math.round(startPt.y)}` : "missing",
-              verdict: startPt ? "INFO" : "FAIL"
-            })
-          );
-          if (startPt) {
-            const before = await styleSnapshot(page, "#btn-practice-start");
-            await mouseHover(page, startPt.x, startPt.y, 14);
-            const after = await styleSnapshot(page, "#btn-practice-start");
-            const fb = hoverFeedback(before, after);
-            const hit = await hitAt(page, startPt.x, startPt.y);
-            entry.images.push(
-              await capture(page, fmt.name, ex.id, "01_hover_start_after.png", {
-                action: "hover_start_after",
-                expected: "Hover feedback and/or pointer; hit-self",
-                actual: `changed=[${(fb.changed || []).join(",")}] cursor=${after?.cursor} hit=${hit?.id || hit?.tag} hitSelf=${after?.hitSelf}`,
-                verdict: after?.hitSelf || after?.cursor === "pointer" ? "PASS" : "WARN"
-              })
-            );
-            if (after?.hitSelf || fb.ok) report.summary.metrics.hover_ok++;
-            else {
-              report.summary.metrics.hover_fail++;
-              pushIssue(fmt.name, ex.id, "P2", "hover_start", "weak hover feedback", entry);
-            }
-            entry.actions.hoverStart = { fb, hit };
-          }
-          report.summary.totalActions++;
-        }
-
-        // ── Hover + light interact primary controls (mouse only) ──
-        const ctrls = await listExerciseControls(page);
-        for (const c of ctrls) {
-          if (SKIP_IDS.has(c.id)) continue;
-          if (!c.hasDomId || c.id.startsWith("anon-")) continue;
-          if (
-            ![
-              "btn-toggle-guide",
-              "btn-toggle-metrics",
-              "btn-toggle-piano",
-              "btn-ui-help",
-              "mic-sensitivity"
-            ].includes(c.id)
-          ) {
-            continue;
-          }
-          const sel = `#${c.id}`;
-          const pt = await centerIfVisible(page, sel);
-          if (!pt) continue;
-
-          await mouseHover(page, pt.x, pt.y, 10);
-          entry.images.push(
-            await capture(page, fmt.name, ex.id, `02_hover_${c.id}.png`, {
-              action: `hover_${c.id}`,
-              expected: "Hover lands on control",
-              actual: `center=${Math.round(pt.x)},${Math.round(pt.y)}`,
-              verdict: "PASS"
-            })
-          );
-          report.summary.totalActions++;
-
-          if (c.id === "mic-sensitivity") {
-            // Drag along track (not from center alone) — range snaps value to
-            // click X; a short -30px from center often leaves value unchanged.
-            const box = await page.evaluate((s) => {
-              const el = document.querySelector(s);
-              if (!el) return null;
-              const r = el.getBoundingClientRect();
-              return { x: r.x, y: r.y, w: r.width, h: r.height };
-            }, sel);
-            let before = null;
-            let mid = null;
-            if (box && box.w >= 20) {
-              const y = box.y + box.h / 2;
-              const xHi = box.x + box.w * 0.92;
-              const xLo = box.x + box.w * 0.08;
-              // Seed low then drag high (always a delta even if already at floor)
-              await page.mouse.click(xLo, y);
-              await page.waitForTimeout(40);
-              before = await page.evaluate(
-                (s) => document.querySelector(s)?.value ?? null,
-                sel
-              );
-              await page.mouse.move(xLo, y, { steps: 4 });
-              await page.mouse.down();
-              await page.mouse.move(xHi, y, { steps: 18 });
-              await page.mouse.up();
-              await page.waitForTimeout(80);
-              mid = await page.evaluate(
-                (s) => document.querySelector(s)?.value ?? null,
-                sel
-              );
-            }
-            entry.images.push(
-              await capture(page, fmt.name, ex.id, "03_mic_drag.png", {
-                action: "mic_drag",
-                expected: "Mic value rises via track drag (low→high)",
-                actual: `before=${before} after=${mid} w=${box ? Math.round(box.w) : 0}`,
-                verdict:
-                  before != null && mid != null && Number(mid) > Number(before)
-                    ? "PASS"
-                    : "FAIL"
-              })
-            );
-            report.summary.totalActions++;
-          } else if (
-            c.id === "btn-toggle-guide" ||
-            c.id === "btn-toggle-metrics" ||
-            c.id === "btn-toggle-piano"
-          ) {
-            entry.images.push(
-              await capture(page, fmt.name, ex.id, `04_${c.id}_before.png`, {
-                action: `${c.id}_before`,
-                expected: "Panel baseline",
-                actual: "before mouse click",
-                verdict: "INFO"
-              })
-            );
-            await mouseClick(page, pt.x, pt.y, 10);
-            await page.waitForTimeout(150);
-            entry.images.push(
-              await capture(page, fmt.name, ex.id, `04_${c.id}_after.png`, {
-                action: `${c.id}_after`,
-                expected: "Panel toggles after mouse click",
-                actual: "after mouse click",
-                verdict: "PASS"
-              })
-            );
-            // restore with second mouse click
-            const pt2 = await centerIfVisible(page, sel);
-            if (pt2) await mouseClick(page, pt2.x, pt2.y, 8);
-            report.summary.totalActions++;
-          } else if (c.id === "btn-ui-help") {
-            await mouseClick(page, pt.x, pt.y, 8);
-            await page.waitForTimeout(120);
-            // close help with Escape (keyboard, not click spam)
-            await page.keyboard.press("Escape").catch(() => {});
-            await page.waitForTimeout(80);
-          }
-
-          // park mouse so hover styles clear
-          await page.mouse.move(12, 12, { steps: 6 });
-        }
-
-        // ── Start via real mouse click ──
-        {
-          console.log(`    … mouse Start`);
-          entry.images.push(
-            await capture(page, fmt.name, ex.id, "10_start_before.png", {
-              action: "start_before",
-              expected: "Ready; Start clickable",
-              actual: describeProbe(await practiceProbe(page)),
-              verdict: "INFO"
-            })
-          );
-          const startPt = await centerIfVisible(page, "#btn-practice-start");
-          if (startPt) {
-            await mouseClick(page, startPt.x, startPt.y, 14);
-          }
-          // Poll live without hammering layout
-          const deadline = Date.now() + 7000;
-          let liveProbe = null;
-          while (Date.now() < deadline) {
-            liveProbe = await practiceProbe(page);
-            if (liveProbe.live) break;
-            // weekPlan opens plan — not live
-            if (entry.mode === "weekPlan") break;
-            await page.waitForTimeout(250);
-          }
-          liveProbe = liveProbe || (await practiceProbe(page));
-          entry.actions.start = { probe: liveProbe };
-          entry.images.push(
-            await capture(page, fmt.name, ex.id, "10_start_after.png", {
-              action: "start_after",
-              expected:
-                entry.mode === "weekPlan"
-                  ? "Week plan may open instead of live"
-                  : "Practice live after mouse Start",
-              actual: describeProbe(liveProbe),
-              verdict:
-                entry.mode === "weekPlan"
-                  ? "PASS"
-                  : liveProbe.live
-                    ? "PASS"
-                    : "FAIL"
-            })
-          );
-          report.summary.totalActions++;
-          if (entry.mode === "weekPlan") {
-            // close plan modal / return if needed via mouse Escape + back later
-            await page.keyboard.press("Escape").catch(() => {});
-          } else if (liveProbe.live) {
-            report.summary.metrics.start_ok++;
-          } else {
-            report.summary.metrics.start_fail++;
-            pushIssue(fmt.name, ex.id, "P0", "start_live", "Start mouse click did not go live", entry);
-          }
-          console.log(`    … live=${liveProbe.live} ${liveProbe.status}`);
-
-          // ── Space hold (keyboard) while live ──
-          if (liveProbe.live) {
-            console.log(`    … Space hold`);
-            // focus canvas/body with a soft click away from buttons
-            await page.mouse.click(Math.min(60, fmt.width * 0.15), Math.min(100, fmt.height * 0.2));
-            await page.waitForTimeout(80);
-            entry.images.push(
-              await capture(page, fmt.name, ex.id, "11_space_before.png", {
-                action: "space_before",
-                expected: "Live, assist idle",
-                actual: describeProbe(await practiceProbe(page)),
-                verdict: "INFO"
-              })
-            );
-            await page.keyboard.down("Space");
-            await page.waitForTimeout(Math.min(700, LIVE_SECS * 220));
-            const mid = await practiceProbe(page);
-            entry.images.push(
-              await capture(page, fmt.name, ex.id, "11_space_hold.png", {
-                action: "space_hold",
-                expected: mid.spaceAssistAllowed
-                  ? "Manual assist active; still live"
-                  : "Still live (pitch may ignore Space)",
-                actual: describeProbe(mid),
-                verdict: mid.live ? "PASS" : "FAIL"
-              })
-            );
-            await page.keyboard.up("Space");
-            await page.waitForTimeout(220);
-            const afterSp = await practiceProbe(page);
-            entry.images.push(
-              await capture(page, fmt.name, ex.id, "11_space_after.png", {
-                action: "space_release",
-                expected: "Still live after release",
-                actual: describeProbe(afterSp),
-                verdict: afterSp.live ? "PASS" : "FAIL"
-              })
-            );
-            entry.actions.space = { mid, after: afterSp };
-            report.summary.totalActions++;
-            if (afterSp.live) report.summary.metrics.space_ok++;
-            else {
-              report.summary.metrics.space_fail++;
-              pushIssue(fmt.name, ex.id, "P0", "space_stopped", "Space stopped session", entry);
-            }
-
-            await page.waitForTimeout(Math.max(300, LIVE_SECS * 120));
-            entry.images.push(
-              await capture(page, fmt.name, ex.id, "12_live_silence.png", {
-                action: "live_silence",
-                expected: "Remains live on silence",
-                actual: describeProbe(await practiceProbe(page)),
-                verdict: (await practiceProbe(page)).live ? "PASS" : "FAIL"
-              })
-            );
-
-            // ── Stop via real mouse on Stop button only ──
-            console.log(`    … mouse Stop`);
-            entry.images.push(
-              await capture(page, fmt.name, ex.id, "13_stop_before.png", {
-                action: "stop_before",
-                expected: "Stop button visible",
-                actual: describeProbe(await practiceProbe(page)),
-                verdict: "INFO"
-              })
-            );
-            const stopPt = await centerIfVisible(page, "#btn-practice-stop");
-            if (stopPt) {
-              await mouseClick(page, stopPt.x, stopPt.y, 12);
-            }
-            await page.waitForTimeout(350);
-            const stopped = await practiceProbe(page);
-            entry.images.push(
-              await capture(page, fmt.name, ex.id, "13_stop_after.png", {
-                action: "stop_after",
-                expected: "Stopped after mouse on Stop",
-                actual: describeProbe(stopped),
-                verdict: !stopped.live ? "PASS" : "FAIL"
-              })
-            );
-            report.summary.totalActions++;
-            if (!stopped.live) report.summary.metrics.stop_ok++;
-            else {
-              report.summary.metrics.stop_fail++;
-              pushIssue(fmt.name, ex.id, "P0", "stop_failed", "Stop mouse click did not end practice", entry);
-            }
-          }
-        }
-
-        // ── Back home via real mouse ──
-        {
-          console.log(`    … mouse Back`);
-          const backPt = await centerIfVisible(page, "#btn-back-home");
-          entry.images.push(
-            await capture(page, fmt.name, ex.id, "20_back_hover.png", {
-              action: "back_hover",
-              expected: "Back button in view",
-              actual: backPt
-                ? `center=${Math.round(backPt.x)},${Math.round(backPt.y)}`
-                : "missing",
-              verdict: backPt ? "PASS" : "WARN"
-            })
-          );
-          if (backPt) {
-            await mouseHover(page, backPt.x, backPt.y, 10);
-            await mouseClick(page, backPt.x, backPt.y, 10);
-            await page.waitForTimeout(150);
-            // leave modal: Discard by mouse
-            const discard = await centerIfVisible(page, "#leave-discard");
-            if (discard) {
-              await mouseClick(page, discard.x, discard.y, 8);
-              await page.waitForTimeout(120);
-            }
-          }
-          await page.waitForTimeout(150);
-          const home = await page.evaluate(
-            () => !!document.getElementById("view-home")?.classList.contains("active")
-          );
-          entry.images.push(
-            await capture(page, fmt.name, ex.id, "20_back_after.png", {
-              action: "back_home",
-              expected: "Home view active after mouse Back",
-              actual: `homeActive=${home}`,
-              verdict: home ? "PASS" : "WARN"
-            })
-          );
-          report.summary.totalActions++;
-          // If still not home, try brand mark mouse click
-          if (!home) {
-            const brand = await centerIfVisible(page, ".brand, .brand-mark, #btn-back-home");
-            if (brand) {
-              await mouseClick(page, brand.x, brand.y, 8);
-              const d2 = await centerIfVisible(page, "#leave-discard");
-              if (d2) await mouseClick(page, d2.x, d2.y, 6);
-            }
-          }
-        }
-      } catch (err) {
-        pushIssue(
-          fmt.name,
-          ex.id,
-          "P0",
-          "exercise_error",
-          String(err.message || err).slice(0, 160),
-          entry
-        );
-        entry.images.push(
-          await capture(page, fmt.name, ex.id, "99_error.png", {
-            action: "error",
-            expected: "No exception",
-            actual: String(err.message || err).slice(0, 120),
-            verdict: "FAIL"
-          }).catch(() => ({ file: "(shot failed)", action: "error", verdict: "FAIL" }))
-        );
-        // recover: try mouse back
-        const backPt = await centerIfVisible(page, "#btn-back-home");
-        if (backPt) {
-          await mouseClick(page, backPt.x, backPt.y, 6).catch(() => {});
-          const d = await centerIfVisible(page, "#leave-discard");
-          if (d) await mouseClick(page, d.x, d.y, 6).catch(() => {});
-        }
-      }
-
-      fmtEntry.exercises.push(entry);
+      fmtEntry.exercises.push(await exerciseByMouse(page, fmt, ex, report, pushIssue));
       report.summary.totalExercises++;
       fs.writeFileSync(REPORT_JSON, JSON.stringify(report, null, 2));
     }

@@ -21,9 +21,11 @@ page has an **English** button in its top bar if you prefer.
 | Give a tester Pro | Admin page | [1](#1-give-a-tester-pro) |
 | Take Pro away | Admin page | [2](#2-remove-pro-from-someone) |
 | See what someone has | Admin page | [3](#3-see-what-someone-has) |
+| See who has Pro, and which kind | Admin page | [3.1](#31-who-has-pro-all-of-it-at-once) |
 | Add more days | Admin page | [4](#4-give-more-days) |
 | Hand out a code | Admin page | [5](#5-gift-codes) |
 | Answer a support message | This guide | [6](#6-support-answers) |
+| Read what people report as broken | Admin page | [6.1](#61-what-people-report) |
 | Add or remove an admin | Mac terminal | [7](#7-add-or-remove-an-admin) |
 | Health, clean-up, lists, deleting data, signing someone out, backups, logs, deploys | Admin page and Mac terminal | [8](#8-maintenance) |
 | See how sign-in and the free trial are doing | Admin page | [8.13](#813-read-the-statistics) |
@@ -110,12 +112,18 @@ any address someone made a Google account with).
 
 1. In **Dar Pro a una persona** (Give Pro to a person), type their address in
    **Correo** (Email).
-2. Set **Días** (Days), or press 7, 30, 90 or 365.
-3. Optionally write a **Nota** (Note) for yourself, such as "Beta round 2". The
+2. Set **Días** (Days), or press 7, 30, 90, 365 or **Sin fecha de fin** (No end
+   date).
+3. Under **Qué le estás dando** (What you are giving), leave **Regalo** (Gift)
+   for a real person, or pick **Cuenta de pruebas** (Test account) for one of
+   ours. Both give exactly the same Pro; the label is so
+   [3.1](#31-who-has-pro-all-of-it-at-once) can tell your own test accounts
+   apart from gifts you handed to people.
+4. Optionally write a **Nota** (Note) for yourself, such as "Beta round 2". The
    person doesn't see it, but can ask for it with the rest of their data
    ([8.14](#814-send-someone-the-data-we-hold)), so write only what you would
    show them.
-4. Press **Dar Pro** (Give Pro).
+5. Press **Dar Pro** (Give Pro).
 
 ![The Give Pro form, filled in for a tester](admin-guide/03-give-form.png)
 
@@ -133,6 +141,10 @@ expected until they sign in.
 Things to know:
 
 - **Days count from today**, not from when they first sign in.
+- **"Sin fecha de fin" is 3650 days**, not a missing end date. Ten years is
+  indistinguishable from forever for a tester, and it keeps taking it back the
+  same single press as any other gift. The lists say "sin fecha de fin" rather
+  than printing a date in 2036.
 - **The account does not need to exist yet.** Giving Pro creates it, and the
   person has Pro the moment they sign in with that address.
 - **The address must be the one they sign in with.** For Gmail, dots and
@@ -265,6 +277,33 @@ days) copies the address into the Give Pro form.
 On a phone, each row of the table becomes a small card:
 
 ![The same look-up on a phone](admin-guide/20-phone-lookup.png)
+
+### 3.1 Who has Pro, all of it at once
+
+Section 3 answers "what does this person have". **Quién tiene Pro** (Who has
+Pro) answers the other question: who has what. It is every trial, gift and test
+account this deployment ever handed out, newest first — not paid subscriptions,
+which live with the payment provider.
+
+Two rows of chips filter it:
+
+- **Tipo** (Kind): **Todo**, **Regalos** (gifts), **Pruebas** (our own test
+  accounts, the comps) or **Prueba gratis** (free trials).
+- **Estado** (State): **Vigentes** (running now, the default), **Vencidos**
+  (ended), **Quitados** (taken back) or **Todos**.
+
+The line above the table counts what is running: *"2 regalos y 4 cuentas de
+pruebas vigentes · 31 en total"*. **Pruebas + Vigentes** is the answer to "how
+many test accounts am I still paying attention to".
+
+Each row has the address, what they were given, the dates (or **Sin fecha de
+fin**), your note, its state, and **Quitar acceso** (Remove access) while it is
+still running. Removing from here asks the same question as section
+[2](#2-remove-pro-from-someone), warns about anything else that keeps them on
+Pro, and then shows you their account. Tapping an address looks that account up.
+
+**Ver más antiguos** (Show older) loads the next 25. Twenty-five is one screen,
+and the list is ordered so a page boundary can never repeat or skip a row.
 
 ## 4. Give more days
 
@@ -401,6 +440,38 @@ privately (the private notes say how).
 
 **"I paid and don't have Pro."** Checkout is not open yet, so nobody can have
 paid. Once it is, see the payments runbook, [docs/34](34-PERU-OPERATOR-RUNBOOK.md).
+
+### 6.1 What people report
+
+In the studio's footer, and in both halves of the user guide, there is
+**Reportar un problema** (Report a problem). It opens a short form — a fault or
+an idea, where in the site, how bad it is, what happened — and the reporter
+gets a number like **VS-7KQ4M2XPRD** to quote. They do not need an account.
+
+**Lo que nos cuenta la gente** (What people tell us) on the admin page is where
+those land, in the reporter's own words.
+
+- **Estado** (State) starts on **Sin cerrar** (not closed): what still needs
+  doing. The other chips are **Sin leer** (unread) and **Todos**.
+- **Tipo** (Kind) is **Fallos** (faults) or **Ideas**.
+- Each card shows what they wrote, the page they were on, the build, their
+  browser and screen size, and, if they left one, an address to answer — as a
+  **mailto:** link, so you don't retype it.
+- **Estado** and **Nota nuestra** (Our note) move it along: **Sin leer** →
+  **En curso** → **Arreglado**, **No se hará** or **Repetido**. The reporter can
+  see the state of their own reports; **they never see your note**.
+- **Ver más antiguos** loads the next 25.
+
+What we keep, and for how long, is in `privacy.html`: no IP address is stored
+with a report, only a fixed list of environment facts, card-shaped runs of
+digits are removed before the row is written, closed reports are deleted after
+180 days, and open ones are kept while they are open. If somebody asks for a
+report to be deleted, they quote their **VS-** number
+([8.5](#85-delete-someones-account-and-data) has the delete commands).
+
+Testers have their own page, **/qa/**, which says which build is live, what to
+look at, what is switched off on purpose, and turns a failed check into a filed
+report in one press. `qa/README.md` says how to add a charter to it.
 
 ## 7. Add or remove an admin
 
@@ -578,7 +649,11 @@ then, press it every few weeks.
 
 ### 8.3 Who has Pro right now
 
-In the Mac terminal ([8.0](#80-get-the-terminal-ready)), read-only:
+**The admin page does this now**: see
+[3.1](#31-who-has-pro-all-of-it-at-once), which is filterable and needs no
+terminal. The query below is the same list from the Mac terminal
+([8.0](#80-get-the-terminal-ready)), read-only, for when you want it as text or
+the page cannot be reached:
 
 ```bash
 npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "SELECT a.email, g.kind, g.note, datetime(g.ends_at, 'unixepoch') AS ends_utc FROM grants g JOIN accounts a ON a.id = g.account_id WHERE g.revoked_at IS NULL AND g.starts_at <= unixepoch() AND g.ends_at > unixepoch() ORDER BY g.ends_at"
@@ -706,49 +781,75 @@ page's look-up shows **Sesiones abiertas: 0** (Open sessions: 0).
 Needed only when a change to `workers/entitlements` is merged. The site itself
 redeploys on its own when `main` changes; the worker does not.
 
-**The first redeploy after the statistics and 7-day-trial changes** (September
-2026) turns on several things at once. Do it the same day those changes reach
-`main`, because until then the site asks the worker for routes it does not
-have yet:
+#### The short version
 
-- The look-up's sign-in lines (**Entra con Google · última vez …**) and
-  **Sesiones abiertas**.
-- New trials last 7 days. Trials already running keep their end date.
-- Anonymous statistics start being stored, with the delete switch and the
-  Europe consent check. The three tables they need are created on the first
-  request; there is no migration step.
-- The **Estadísticas** section of the admin page starts answering.
-- The daily clean-up at 09:17 UTC ([8.2](#82-clean-up-expired-data)).
+```bash
+cd ~/vocal-singing-training          # wherever your checkout is
+git checkout -m main && git pull --ff-only --autostash --no-stat
+workers/entitlements/scripts/redeploy.sh
+```
 
-1. Get ready as in [8.0](#80-get-the-terminal-ready), and write down what is
-   live now, so you can go back to it (8.10):
+That script is this whole section done in one command. It asks before each
+deploy, checks the worker's own health between them, and refuses to go on if
+anything comes back wrong. To see what is live without deploying anything:
+
+```bash
+workers/entitlements/scripts/redeploy.sh --check
+```
+
+`--check` needs no Cloudflare sign-in: `/v1/health` is public. It prints one
+line per feature, and it tells "off" apart from "this worker is older than the
+field", which is the difference that matters when you are deciding whether a
+redeploy is needed at all.
+
+#### Why two deploys and not one
+
+The first deploy goes up with `EVENTS_ENABLED=false`. Storing anonymous
+statistics is the only thing in this worker that writes a database row for
+every visitor action, and Cloudflare's free D1 plan has stopped accepting
+writes past 100,000 a day since 1 September 2026 — for the rest of the day,
+until midnight UTC, and for *every* query, so sign-in, gifts and progress
+saving fail too, not just statistics. (The free plan also caps rows *read* at
+5 million a day.) So: put the new code up with that firehose off, check it,
+then turn statistics on with a plain deploy. If something is wrong you find out
+on a worker that is barely writing, and 8.10 puts the old one back.
+
+A deploy never touches secrets, the database or the KV store — Cloudflare's own
+documentation says secrets are never deleted by a deployment. Admins, the
+licence signing key and everybody's Pro survive it. `--var EVENTS_ENABLED:false`
+overrides that one value for that one deploy, and the second, plain deploy puts
+`wrangler.toml`'s `"true"` back.
+
+#### What the script does, step by step
+
+Do it by hand if you prefer; these are the same commands in the same order.
+
+1. **Check you can.** Node 22 or newer (wrangler 4 refuses below that), `git`,
+   `curl`, and a terminal signed in to Cloudflare ([8.0](#80-get-the-terminal-ready)).
+2. **Check `wrangler.toml` still has the real ids** and not `TODO_REPLACE`.
+   They stay an uncommitted local change: this repository is public.
+
+   ```bash
+   grep -n 'id = ' workers/entitlements/wrangler.toml
+   ```
+3. **Write down what is live now**, so you can go back to it:
 
    ```bash
    npx --yes wrangler@4 deployments status
    ```
 
    On its `Version(s):` line, the id after `(100%)` is the version live now.
-   It goes in the private notes.
-2. Get the latest code. This keeps the real ids in `wrangler.toml` as a local
-   change, which is where they belong (it needs git 2.27 or newer):
+   It goes in your private notes; 8.10 rolls back to it.
+4. **Deploy with statistics off:**
 
    ```bash
-   git checkout -m main && git pull --ff-only --autostash --no-stat
-   ```
-
-   It should end with `Applied autostash.` or `Already up to date.`. If it says
-   `Not possible to fast-forward` or `resulted in conflicts`, stop. Never
-   commit the ids.
-3. Check the ids again (the `grep` in 8.0), then deploy:
-
-   ```bash
-   npx --yes wrangler@4 deploy
+   cd workers/entitlements && npx --yes wrangler@4 deploy --var EVENTS_ENABLED:false
    ```
 
    It lists the bindings: the store (`env.ENTITLEMENTS`) with its real id, and
-   the database (`env.DB`) by its name only, which is normal. Then it prints
-   the worker's address, the daily schedule `17 9 * * *`, and a new
-   **Current Version ID**. Note that id too. If it stops to ask:
+   the database (`env.DB`) by name only, which is normal. Then the worker's
+   address, the daily schedule `17 9 * * *`, and a new **Current Version ID**.
+   Note that id too. If it stops to ask:
 
    - **last updated via the script API**: answer `y`, unless someone changed
      the worker outside Wrangler and this guide. A deploy keeps every secret.
@@ -760,9 +861,50 @@ have yet:
      variable in `wrangler.toml` would replace that secret.
    - An offer to register a workers.dev subdomain: answer `n` and stop. You
      are signed in to the wrong account.
-4. Check health (8.1: **Estadísticas anónimas: activo**, **Prueba gratis: 7
-   días**), look someone up on the admin page, and press **Leer estadísticas**
-   (8.13).
+5. **Check it took.** Either `redeploy.sh --check`, or health on the admin page
+   ([8.1](#81-is-the-server-healthy)). All of these must be true:
+   **Cuentas y regalos: activo**, **Firma de licencias Pro: activo**,
+   **Prueba gratis: 7 días**, **Estadísticas anónimas: apagado** (on purpose,
+   at this stage), **Reportes: activo**.
+6. **Look at the admin page** before going on: look somebody up and see their
+   sign-in line, open **Quién tiene Pro**
+   ([3.1](#31-who-has-pro-all-of-it-at-once)), open **Lo que nos cuenta la
+   gente** ([6.1](#61-what-people-report)). Empty lists are fine; errors are
+   not.
+7. **Deploy again, plainly**, which turns statistics on:
+
+   ```bash
+   npx --yes wrangler@4 deploy
+   ```
+8. **Check again** (**Estadísticas anónimas: activo** now), then press
+   **Leer estadísticas** ([8.13](#813-read-the-statistics)): a table, or "no
+   data yet", never an error. Note the new version id.
+
+If anything looks wrong at any point: `npx --yes wrangler@4 rollback`, and
+section [8.10](#810-undo-a-bad-deploy). You can roll back to any of the last
+100 versions, and a rollback does not change the database, the store or the
+secrets.
+
+#### What the first redeploy after November 2026 turns on
+
+Do it the same day those changes reach `main`, because until then the site asks
+the worker for routes it does not have yet:
+
+- New trials last 7 days. Trials already running keep their end date.
+- The look-up's sign-in lines (**Entra con Google · última vez …**) and
+  **Sesiones abiertas**.
+- Anonymous statistics start being stored, with the delete switch and the
+  Europe consent check. The **Estadísticas** section starts answering.
+- **Reportar un problema** starts reaching us, and **Lo que nos cuenta la
+  gente** starts answering ([6.1](#61-what-people-report)).
+- **Quién tiene Pro** starts answering ([3.1](#31-who-has-pro-all-of-it-at-once)).
+- The daily clean-up at 09:17 UTC ([8.2](#82-clean-up-expired-data)).
+
+**There is no migration step.** Every table the worker needs is created on the
+first request that needs it, from one idempotent list of statements with a
+version number beside it (`workers/entitlements/src/schema.js`). Nothing has to
+be run against the database by hand, and a redeploy never drops or rewrites a
+table that is already there.
 
 **Optional, once:** give the statistics their own key for the per-network
 counters, instead of one derived from the licence signing key. Run
@@ -770,12 +912,11 @@ counters, instead of one derived from the licence signing key. Run
 and paste what the first command printed. Nothing needs to keep it: if it is
 ever lost, set a new one, which only restarts those counters.
 
-Deploying keeps every secret, the database and the store as they are: admins,
-the signing key and everyone's Pro are unaffected. `scripts/setup.sh` also
-deploys and is safe to re-run, but **run it without `ADMIN_EMAIL` set**: given
-that variable it replaces the whole admin list with that one address. Never
-pass it `--rotate-key` unless the private key leaked, because every Pro
-licence stops verifying until the site ships the new public key.
+`workers/entitlements/scripts/setup.sh` also deploys and is safe to re-run, but
+**run it without `ADMIN_EMAIL` set**: given that variable it replaces the whole
+admin list with that one address. Never pass it `--rotate-key` unless the
+private key leaked, because every Pro licence stops verifying until the site
+ships the new public key.
 
 ### 8.8 Back up the accounts database
 
@@ -911,23 +1052,37 @@ npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "DELETE
   CPU per request. Signing a licence is the heaviest step. If sign-in starts
   failing with errors under load, the fix is the $5-a-month Workers plan, not a
   code change.
-- **Statistics share the database with accounts.** The free plan allows
-  100,000 rows written a day. A browser sends about 65 statistics requests an
-  hour of practice, each writing a few rows (an estimate from the code, not
-  measured), so a few hundred hours of practice a day fit. If the database
-  runs out of writes, sign-in, gifts and progress saving fail too, not just
-  statistics. The database's page in the Cloudflare dashboard shows rows
+- **Statistics and reports share the database with accounts.** The free plan
+  allows **100,000 rows written and 5 million rows read a day**, and
+  Cloudflare has been enforcing both since 1 September 2026: past either one,
+  *every* query fails until midnight UTC, so sign-in, gifts and progress
+  saving go down with statistics, not just statistics. Stored data is not
+  affected, and Cloudflare emails the account when a limit is hit. A browser
+  sends about 65 statistics requests an hour of practice, each writing a few
+  rows (an estimate from the code, not measured), so a few hundred hours of
+  practice a day fit. Problem reports are capped on purpose — 10 an hour and
+  30 a day per address, 40 a day per account, 500 a day for the whole
+  deployment — so no amount of reporting, honest or not, can spend that
+  budget. The database's page in the Cloudflare dashboard shows rows read and
   written per day.
-- **The statistics kill switch:** in the Mac checkout's
-  `workers/entitlements/wrangler.toml`, change `EVENTS_ENABLED = "true"` to
-  `"false"` and deploy (8.7). The worker then stores nothing and writes no
-  counters for statistics, and health shows **Estadísticas anónimas:
-  apagado**. Browsers keep sending until the site stops too, which is a
-  change to `js/experiments-config.js`; the requests are cheap because they
-  are refused before anything is written. Set it back to `"true"` and deploy
-  to resume. **Never commit from the Mac checkout**: its `wrangler.toml` holds
-  the real ids. To make a switch-off permanent, change it in a pull request
-  from a clean copy of the repository.
+- **The statistics kill switch**, without editing anything:
+
+  ```bash
+  cd workers/entitlements && npx --yes wrangler@4 deploy --var EVENTS_ENABLED:false
+  ```
+
+  The worker then stores nothing and writes no counters for statistics, and
+  health shows **Estadísticas anónimas: apagado**. A later plain `deploy` puts
+  `wrangler.toml`'s `"true"` back, so this is a switch, not an edit. Browsers
+  keep sending until the site stops too, which is a change to
+  `js/experiments-config.js`; those requests are cheap because they are refused
+  before anything is written. **Never commit from the Mac checkout**: its
+  `wrangler.toml` holds the real ids. To make a switch-off permanent, change
+  `EVENTS_ENABLED` in a pull request from a clean copy of the repository.
+- **The reports kill switch** is the same shape:
+  `npx --yes wrangler@4 deploy --var REPORTS_ENABLED:false`. The form then
+  tells people the channel is closed and shows them their report as copyable
+  text with the issues link, so nothing anybody typed is lost.
 - The codes list on the admin page shows the latest 100 codes.
 - Look-ups show up to 200 history rows per person.
 
@@ -1159,11 +1314,13 @@ Three layers, from most to least automatic:
 | 2. Remove Pro | remove Pro: the tester loses it on their next load · removing one of two gifts warns… · remove a free trial… · blocking the free trial after removing a gift… | trial block, local |
 | 3. See what someone has | look up an address nobody has used… · notes and names are shown as text… | |
 | 4. More days | give more days: a shorter gift never shortens access… | |
+| 3.1 Who has Pro | who has Pro: a gift and a test account, told apart, and one taken back from the list · saying no to the confirmation… · tapping an address… · older grants come on asking, newest first · a worker older than this list says to redeploy it · the list reads in English too | |
 | 5. Gift codes | gift codes: create, redeem, used up, cancel · cancelling a code does not take days… | |
+| 6.1 What people report | reports: read one, triage it, and filter… · a signed-out reporter is named as one… · older ones are a button away… · a worker without the route leaves the section empty… | |
 | 7. Admin list | an admin taken off ADMIN_EMAILS is refused at once… · an admin added… after first signing in… | `secret put`, local |
 | 8.1–8.2 Health, clean-up | maintenance: server status and clean-up · maintenance: an old worker's missing statistics field… | `curl` shape checked against the code |
 | 8.3–8.6 Lists, delete, sign out everywhere | a session that ends mid-use returns to sign-in… | each query, local, with the address read by `read -r` (an apostrophe included), and deleting one browser's statistics |
-| 8.7–8.10 Deploy, backup, logs, rollback | the sandbox's trial length is the one wrangler.toml deploys · admin.html loads the same versions… | build checked with `deploy --dry-run`; the deploy and rollback prompts and what `deployments` prints, read from Wrangler 4's source; account-only export, restore and deleting again from the log, local; the rollback clean-up, local; others by `--help` only |
+| 8.7–8.10 Deploy, backup, logs, rollback | the sandbox's trial length is the one wrangler.toml deploys · admin.html loads the same versions… | `qa/check-redeploy.mjs` runs `redeploy.sh --check` against stub workers (deployed, pre-deploy, mid-deploy, non-JSON, down, absent) and proves its go/no-go probe refuses a worker that did not come back right; `--var`, `--keep-vars`, "secrets are never deleted by a deployment", `deployments status --json` and the 100-version rollback window checked against Cloudflare's docs on 2026-11-03, and the free-tier 100,000 writes / 5 million reads a day against D1's pricing page; build checked with `deploy --dry-run`; the deploy and rollback prompts read from Wrangler 4's source; account-only export, restore and deleting again from the log, local; the rollback clean-up, local |
 | 8.13 Statistics | statistics: the funnel and arrivals… · statistics: an empty window, a member, and a worker without the route | |
 | 8.14 Data export | | the export, local, checked as JSON |
 | Phone, English | on a phone… · works in English too | |

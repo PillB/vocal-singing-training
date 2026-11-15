@@ -140,7 +140,7 @@ test.describe("Copy & i18n (learner-facing)", () => {
         "pricing.toast.portalUnconfigured",
         "pricing.toast.checkoutError",
         "pricing.feat.all_exercises",
-        "pricing.feat.no_limits",
+        "pricing.feat.pro_insights",
         "auth.sub",
         "auth.adminUsers"
       ];

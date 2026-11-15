@@ -1,5 +1,5 @@
 /**
- * The side pages (privacy, guide) keep one h1 each and say which language
+ * The side pages (privacy, guide, terms, the testers' page) keep one h1 each and say which language
  * each half is in. (admin.html is not covered here: it has its own single h1
  * and no English half.)
  *
@@ -23,7 +23,12 @@ const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
 const PAGES = [
   { file: "privacy.html", title: "Tu privacidad, en claro", en: "Privacy (English)", enText: "Vocal Studio is a browser practice tool" },
-  { file: "guide.html", title: "Guía de uso", en: null, enText: null }
+  { file: "guide.html", title: "Guía de uso", en: null, enText: null },
+  // #26's two pages, held to the same rules on the merge into main: terms.html had privacy.html's old three h1s
+  // and an English half with no lang; the testers' page has bilingual paragraphs, one level-1 heading, and a
+  // folder of its own (its header is styled by qa/qa.css as well as css/styles.css).
+  { file: "terms.html", title: "Términos de uso", en: "Terms of use (English)", enText: "Vocal Studio is run by the person behind the repository" },
+  { file: "qa/index.html", title: "Probar Estudio Vocal", en: null, enText: "This page is for the people helping us test" }
 ];
 
 /** The language a screen reader would use for the element holding `text`. */
@@ -54,20 +59,22 @@ test.describe("Side pages keep one h1 and mark their English half (one h1)", () 
     }
   }
 
-  test("privacy.html: the English half is marked English, the Spanish half Spanish", async ({ page }) => {
-    const p = PAGES[0];
-    await page.goto(`${BASE}/${p.file}`, { waitUntil: "domcontentloaded" });
-    expect(await langOf(page, p.title), "control: the Spanish title").toBe("es");
-    expect(await langOf(page, p.en), "the English title").toBe("en");
-    expect(await langOf(page, p.enText), "the English text").toBe("en");
-    // The English title is a heading screen readers can jump to, one level under the page
-    await expect(page.getByRole("heading", { level: 2, name: p.en })).toHaveCount(1);
-  });
+  for (const p of PAGES.filter((x) => x.enText)) {
+    test(`${p.file}: the English half is marked English, the Spanish half Spanish`, async ({ page }) => {
+      await page.goto(`${BASE}/${p.file}`, { waitUntil: "domcontentloaded" });
+      expect(await langOf(page, p.title), "control: the Spanish title").toBe("es");
+      expect(await langOf(page, p.enText), "the English text").toBe("en");
+      if (!p.en) return;
+      expect(await langOf(page, p.en), "the English title").toBe("en");
+      // The English title is a heading screen readers can jump to, one level under the page
+      await expect(page.getByRole("heading", { level: 2, name: p.en })).toHaveCount(1);
+    });
+  }
 
-  for (const width of [390, 1280]) {
-    test(`privacy.html#en at ${width}px: the "English" link lands below the sticky header`, async ({ page }) => {
+  for (const [file, width] of ["privacy.html", "terms.html"].flatMap((f) => [390, 1280].map((w) => [f, w]))) {
+    test(`${file}#en at ${width}px: the "English" link lands below the sticky header`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
-      await page.goto(`${BASE}/privacy.html`, { waitUntil: "domcontentloaded" });
+      await page.goto(`${BASE}/${file}`, { waitUntil: "domcontentloaded" });
       await page.getByRole("link", { name: "English" }).click();
       await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 5000 }).toBeGreaterThan(100);
       // Smooth scrolling: wait until it rests

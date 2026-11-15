@@ -46,8 +46,10 @@ Everything is in `qa/design-test/`, with the commands in its README.
   screens one image per arm. Anything a still image cannot show, such as what
   a button does, is given as a neutral behaviour note per design number.
   Nothing says which design is today's.
-- **Judges.** Three independent evaluators per question, each able to read
-  only its brief and the images:
+- **Judges.** Three evaluators per question, each a separate call able to read
+  only its brief and the images (separate, but not independent in the
+  statistical sense: they are personas of the same model family and share its
+  blind spots):
   - Rosa, a Peruvian beginner on an Android phone
   - a senior product and usability designer
   - an accessibility specialist who runs sessions with adults over 60
@@ -129,6 +131,12 @@ with the judges' fix: the whole session no longer ends from an unlabelled ×.
   above today's by at least two of three judges. The designs were written to
   fix problems an audit had already found, so many wins are expected. But the
   rate is high enough that a narrow win should be read as a tie.
+- **Even 3 of 3 is not a significant result.** If three truly independent
+  judges had no preference, a challenger would get 3 of 3 one time in eight
+  (p = 0.125) and 2 of 3 or better half the time, so the ship rule cannot
+  reach p < 0.05 on any single question. Judges that share one model agree
+  more often than independent ones would, which makes 3 of 3 weaker still.
+  Read the verdicts as a structured expert review, not as a test.
 - **Context changes answers.** The round-1 pricing winner (one plan with a
   monthly/yearly toggle) beat today's dialog 3/3. In round 2 an honest
   pre-launch alternative was also shown, and the round-1 winner then lost 0/3,
@@ -201,6 +209,15 @@ All are sized for two-sided alpha 0.05 and 80% power, with arms weighted 1:1.
 | `loop_surprise_2026_10` | surprises / none | 250 | 28 | +1.5 days | practice days, 0–28 | finished routines 0–28 |
 | `loop_minimo_len_2026_10` | three / five | 565 | 28 | +1 day | practice days, 0–28 | unfinished Mínimo share 0–28 |
 | `site_layout_2026_11` | a / b | 355 | 21 | 30% → 40% | share with a practice day, days 7–14 | practice days 0–14; first-win share 0–7 |
+| `trial_len_2026_11` | seven / fourteen | 432 | 28 | 5% → 10% | share reaching a first paid period, days 0–28 | trial-start share 0–7; practice days 0–28 |
+
+Windows are half-open and counted in 24-hour periods from the first exposure,
+by the time an event reached the worker (`computeMetric` in
+`workers/entitlements/src/events.js`): "days 21–28" means from day 21 up to,
+not including, day 28, which [37-DAILY-LOOP.md](37-DAILY-LOOP.md) writes as
+days 21–27. The two "+N days" plans assume a mean of 6 and an SD of 6 practice
+days in 28 (`js/experiments-config.js`), a guess with no data behind it yet;
+the A/A test is the first chance to measure the real SD and resize them.
 
 At the traffic a friends-and-family beta brings, only large effects can be
 seen. Report "no detectable difference", never "no difference". Colours and
@@ -250,6 +267,107 @@ the visitor later chooses (intention to treat), and is off like the rest. With
 it off everybody starts on A. Trade-off: the control stays visible in both
 arms, so the test measures "default A" against "default B" with switching
 allowed, which is the decision the owner actually has to make.
+
+### The trial-length test is built, and probably not worth running
+
+`trial_len_2026_11` (added 2026-11-03) is the only experiment here whose
+treatment is money: the arm decides whether an account gets 7 or 14 free days
+of Pro. Three things follow from that, and they are why it does not look like
+the others.
+
+**The worker assigns the arm, not the browser.** Every other arm on this list
+is a hash of the browser id computed in `js/experiments.js`. A browser that
+could choose this one could choose fourteen days, or three thousand. So
+`workers/entitlements/src/grants.js` derives it from the account id under a
+worker secret (`trialArmFor`), writes it on the grant row it produced, and
+hands the page the arm it already applied. The page records the exposure with
+its own random browser id, so the `exposures` table still joins to nothing but
+a browser — the privacy promise on privacy.html is unchanged.
+
+**Two switches, and only one of them matters for what is given away.**
+
+| Switch | Where | Governs |
+|---|---|---|
+| `TRIAL_LEN_EXPERIMENT` | `wrangler.toml` (worker) | whether arms are assigned at all, and therefore how many days are given. **It overrides `TRIAL_DAYS`.** |
+| `enabled` in `js/experiments-config.js` | the site | nothing for this key. The local split is never consulted for it. Leave it false. |
+
+It also needs `LICENSE_ID_KEY` (or the signing key) to key the assignment. With
+neither, the test stays off rather than running with an arm anybody could work
+out in advance and farm addresses against.
+
+**It is exposed when the offer is shown, not when the trial starts.** The
+button says "Start 14 free days", so the offer is already the treatment.
+Counting only the people who went on to start would condition on something the
+treatment itself can move — a longer offer may well be taken up more often —
+and a difference in paid conversion could then be that sorting rather than the
+length. Everybody shown an offer belongs to the arm they were shown.
+
+**Now the honest part.** The primary metric is paid conversion, which is the
+2%-ish case this document already says nothing at this traffic can measure.
+432 per arm is sized for conversion *doubling* (5% → 10%). A believable 5% → 7%
+needs about 2,200 per arm; a 20% relative lift (5% → 6%) needs about 8,100.
+
+And the prior does not favour finding anything. The only large randomised test
+of trial length is Yoganarasimhan, Barzegary and Pani, *Design and Evaluation
+of Personalized Free Trials* (arXiv:2006.13420), cited in full in
+`docs/35-PRICING.md`: 337,724 new users across six markets, about 51,000 in
+each of the 7- and 14-day arms. It compared each arm **with a 30-day control**
+and found 7 days ahead by 5.59% more subscriptions (t = 2.58) while 14 days was
+not significantly different from 30 (+3.28%, t = 1.51).
+
+Be exact about what that licenses, because this document used to overclaim it.
+That experiment **never tested 7 against 14**, so it did not call this
+comparison null. Its own counts put the 7-vs-14 gap near 0.4 percentage points,
+which is z ≈ 1.7, p ≈ 0.09 — not significant, and not nothing — and seeing a
+gap that size at 80% power needs about 136,000 accounts per arm. Its arms are
+118 times this experiment's 432 per arm, not a thousand. The conclusion below
+survives all of that intact, and does not need the overstatement: the length
+that beat the control is the one already shipping, and the gap being looked for
+here is an order of magnitude smaller than anything a few hundred accounts can
+resolve.
+
+It is built anyway for two reasons. The first is that the same document records
+a real counter-argument that external data cannot settle: a daily singing habit
+plausibly needs longer than a week, and the mechanism behind short trials
+winning is people forgetting, which is worse in a practice product than in
+most. If that matters anywhere it matters here, and the only way to find out is
+locally. The second is that the mechanism — a worker-assigned arm, recorded on
+the row it changed — is the thing that was missing, and it is reusable for any
+later question about what an account is given rather than what it is shown.
+
+**So: do not switch it on at a few hundred users.** Read the trial funnel's
+steps one at a time with a Wilson interval, as the section above says, which
+finds a broken step. If the trial is disappointing, the lever the external
+evidence supports is re-entry — reminders, the comeback path — not length.
+
+**Four things about it that are true and are not defects.** They were measured
+by an attack on the mechanism (QA round 7) and are written down here rather
+than fixed, because each fix costs more than the thing it buys for a test that
+should not be run at this traffic:
+
+- **The result is browser-asserted.** `/v1/events` takes anonymous events with
+  no account, by design — that is what keeps the exposures table joined to
+  nothing but a browser id. A script with no account forged 440 exposures and a
+  22-against-44 split, and the results route reported p = 0.0049. So the
+  numbers are a measurement, not a count of money: privacy.html promises what
+  is *given* is keyed to an account, and says nothing about what is *measured*
+  being unforgeable. Anything that has to be trusted — what an account was
+  given, what it paid — is read from D1 and from the provider, never from this.
+  Making the paid half unforgeable means emitting it from the webhook, which is
+  a privacy.html change and a different promise.
+- **The offered arm is recomputed on every read.** Rotating `LICENSE_ID_KEY`
+  between the offer and the click changes it, so somebody can be shown one
+  length and given another across a rotation. What an account was *given* is
+  never recomputed: it is on the grant row, which is the number that matters
+  for a refund, a dispute, or an argument.
+- **The arm is readable before the trial is started**, so somebody who does not
+  like the length they are offered can register again for the other one. The
+  bound is a fresh address per re-roll, and the cost of one re-roll is seven
+  days of Pro.
+- **`/v1/auth/methods` names the shortest arm** while the test runs, because
+  there is no account yet to key on. Before, it named `TRIAL_DAYS`, which the
+  test overrides — a number no arm gives. The shortest, not the longest: a
+  promise broken at sign-up is worse than a pleasant surprise.
 
 ### Running the first test
 

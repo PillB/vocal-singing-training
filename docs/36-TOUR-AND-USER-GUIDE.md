@@ -4,6 +4,7 @@
 **Code:** `js/tour.js`, `js/experiments.js`, `js/experiments-config.js`, `guide.html`, `css/styles.css`, `js/i18n.js`, `js/app.js`, `index.html`
 **Scope:** onboarding and documentation only. No exercise, audio, scoring, billing or account behaviour was changed.
 **Tests:** `tests/tour-geometry.spec.js` (new, 10 cases), `tests/tour-behaviour.spec.js` (new, 25 cases), plus guide cases added to `tests/max-effort-journeys.spec.js`, `tests/viewport-overflow.spec.js` and `tests/live-pages.spec.js`.
+**Later changes (noted 2026-10-28):** the home tour now has five stops that open each place (site review round 4, `qa/design-test/site-review/rounds/r4-results.md`), not the four described below; and `tour_shape_2026_10` is now planned at 160 people per arm for a 30% → 45% effect ([38-AB-TESTING.md](38-AB-TESTING.md)), not ruled out as below.
 
 The site had a tour that described a home page deleted in the September
 redesign, and no written documentation of any kind. This is what was measured,
@@ -105,8 +106,26 @@ tour step. It documents what a user cannot work out by looking:
 
 - **The pitch highway's whole vocabulary** — green primary lane, amber active,
   grey dashed ghost, lane height = ±35 cents, the blue precision ribbon, the
-  800ms lock ring, and the 65–400 Hz detector range that is why a very high
-  soprano or a very low bass sees nothing.
+  800ms lock ring, and the detector's range: A1 to C6 (55–1050 Hz), less
+  surely up to F♯6 (about 1500 Hz), so a woman's or a child's voice reads in
+  its own octave. (Until 2026-10-28 the guide said 65–400 Hz and told a high
+  voice to drop an octave. Synthetic tones run through the old autocorrelation
+  `detectPitch` showed that was wrong twice: above about 400 Hz, G4, it did
+  not go blank but read an octave low, and from about 800 Hz an octave and a
+  fifth low, which octave folding cannot repair; 400 Hz sits in the middle of
+  most women's and children's singing range. `detectPitch` in
+  `js/pitch-visualizer.js` is now an NSDF (McLeod & Wyvill) detector over
+  50–1500 Hz; above that (a whistle, a G6) it reads nothing rather than an
+  octave of it. The engine's gate is 52–1600 Hz, so a bass's A1 still reads
+  sung up to 90 cents flat, a soft, dark one (little above 200 Hz) too. Noise,
+  breath, a hiss and a 50 or 60 Hz hum or buzz get no pitch, and a voice over
+  a hum 12 dB under it reads its own note; the price is that a pitch within
+  1 % of 50 or 60 Hz reads nothing, so a bass between A♯1 and B1 is blank
+  for the 34 cents around 60 Hz. A rectified buzz at 100 or 120 Hz, or a
+  whistle inside the range, still reads: a man sings there, a soprano too.
+  The guide's note "If your voice never appears" now says this and no
+  longer asks anyone to sing an octave lower. The guide names the octave
+  helper by its button, «A mi voz» / "My range".)
 - **What each number means**, including the ones whose names do not explain
   them.
 - **Which exercises need the microphone and which do not**, and what a denied

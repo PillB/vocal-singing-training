@@ -16,7 +16,7 @@ Self-paced practice website for **Vocal Training** (speaking foundations) and **
 - **12-week plan** dashboard (one focus element, check-ins, improve-or-continue) 
 - **Piano chords** — mid-lower male range (C2–E4) with **Arpeggio** and **Sustain note** (3–5s hold) 
 - **Pitch visualizer** — target trail, live voice dot, moving-average deviation band (accuracy + precision) 
-- **Subscriptions (Pro)** — Stripe (global) + Mercado Pago (Perú/LATAM); opt-in 7-day trial; entitlements signed by [`workers/entitlements/`](workers/entitlements/); see [docs/10-SUBSCRIPTIONS.md](docs/10-SUBSCRIPTIONS.md)
+- **Subscriptions (Pro)** — Mercado Pago (Perú/LATAM) and an international card rail through a merchant of record (a Peru-registered seller cannot be a Stripe merchant; see [docs/34-PERU-OPERATOR-RUNBOOK.md](docs/34-PERU-OPERATOR-RUNBOOK.md)); checkout is not public yet; opt-in 7-day trial; entitlements signed by [`workers/entitlements/`](workers/entitlements/); see [docs/10-SUBSCRIPTIONS.md](docs/10-SUBSCRIPTIONS.md)
 - **Internal auth** — 2 admin + 10 F&F tester accounts (hashes in repo; plaintext sheet gitignored); see [docs/11-AUTH-AND-HARDENING.md](docs/11-AUTH-AND-HARDENING.md)
 
 ## Using it
@@ -82,12 +82,16 @@ Vanilla HTML / CSS / JS — no build step. Web Audio API (piano), MediaRecorder 
 - [2026 production audit, issue ledger and release gates](docs/40-PRODUCTION-AUDIT-2026-11-01.md)
 - [Evidence-based technical vocal protocol: breath, steady pitch, and song transfer (2026-11-06)](docs/44-PROTOCOLO-TECNICO-VOCAL-EVIDENCIA-2026-11-06.md)
 - [Bilingual eight-drill vocal pilot: evidence mapping, test oracle and root-cause ledger](docs/45-EVIDENCE-TO-EXERCISE-VALIDATION.md)
+- [**The go-live gate**: what is built and off, and the order to switch it on](docs/40-GO-LIVE-GATE.md)
+- [Accounts, payments and gifted months](docs/33-ACCOUNTS-AND-PAYMENTS.md)
+- [What Pro is for, and what Free keeps](docs/41-PRO-VS-FREE.md)
+- [What this branch changed, section by section](docs/42-WHAT-THIS-BRANCH-CHANGED.md)
+- [**When it breaks**: what you can see, what it costs, and what to switch on](docs/43-WHEN-IT-BREAKS.md)
+- [Peru operator runbook: trámites, accounts and keys, in order](docs/34-PERU-OPERATOR-RUNBOOK.md)
+- [Admin guide](docs/ADMIN-GUIDE.md)
+- [Value gap registry: what is open, and why each open thing was left](docs/VALUE-GAP-REGISTRY.md)
 - [Goal sets and guided voice drills: what was built, the evidence, the trade-offs and what is not yet verified](docs/47-SESSION-SETS.md)
 
 ## Privacy
 
-Audio recordings are kept on this device. Practice history is stored in the
-browser by default; if you sign in and enable account features, some progress
-can sync with the account service. The app also sends anonymous usage
-statistics unless you opt out via the privacy control. See
-[privacy.html](privacy.html) for the scope, controls and retention information.
+Your progress and settings are kept in this browser. If you sign in, your saved progress is also kept in your account so it can follow you to another device. Recordings stay in this browser. Anonymous usage statistics are sent to our server unless you switch them off (in the European Economic Area only after you say yes). The full detail is in [`privacy.html`](privacy.html).

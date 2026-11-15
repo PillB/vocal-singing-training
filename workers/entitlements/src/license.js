@@ -157,6 +157,63 @@ export function generateLicenseId() {
 }
 
 /**
+ * The key license ids are derived under: `LICENSE_ID_KEY` when it is set,
+ * otherwise one derived from the signing key, so any deploy that can sell Pro
+ * can also agree with itself without a salt anybody could read in this
+ * repository. (`events.js` derives its address key the same way.)
+ *
+ * Rotating the signing key changes what a NEW license id would be derived as.
+ * It cannot orphan an existing one: a license is found through its indexes
+ * first, and derivation is only what two writers who find nothing agree on.
+ * Set `LICENSE_ID_KEY` to pin it across a rotation.
+ * @param {Object} env Worker env bindings.
+ * @returns {string} Key, or "" when neither secret exists.
+ */
+export function licenseIdSecret(env) {
+  const own = env && typeof env.LICENSE_ID_KEY === "string" ? env.LICENSE_ID_KEY.trim() : "";
+  if (own) {
+    return own;
+  }
+  const signing = env && typeof env.LICENSE_PRIVATE_KEY_PKCS8_B64 === "string"
+    ? env.LICENSE_PRIVATE_KEY_PKCS8_B64.trim()
+    : "";
+  return signing ? `license-id:${signing}` : "";
+}
+
+/**
+ * The license id for a thing the provider will keep naming.
+ *
+ * Two webhooks for a brand-new customer, processed at the same moment, each
+ * look for a license, each find none — KV has no compare-and-swap and is
+ * eventually consistent — and each used to mint a random id. The claim index
+ * then pointed at one record and the subscription index at the other, so the
+ * copy the customer holds never heard of a renewal or a cancellation (QA round
+ * 4, QA-W-01). Deriving the id from the subscription (or the one-off payment)
+ * it belongs to means writers who cannot see each other still agree, with no
+ * registry and no extra read.
+ *
+ * It is an HMAC, not a hash, so the id tells nobody what it was derived from:
+ * it travels in a signed token and in the browser's storage, and a Stripe
+ * subscription id is not something to publish.
+ * @param {string} secret Key from `licenseIdSecret`.
+ * @param {string} provider "stripe" | "mercadopago".
+ * @param {string} key The provider id this license belongs to.
+ * @returns {Promise<string|null>} A 43-character id, or null when it cannot be
+ *   derived (no secret, or nothing to derive from).
+ */
+export async function deriveLicenseId(secret, provider, key) {
+  if (!secret || typeof provider !== "string" || !provider || typeof key !== "string" || !key) {
+    return null;
+  }
+  const mac = await crypto.subtle.sign(
+    "HMAC",
+    await crypto.subtle.importKey("raw", textEncoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]),
+    textEncoder.encode(`license-id:v1:${provider}:${key}`)
+  );
+  return bytesToBase64Url(new Uint8Array(mac));
+}
+
+/**
  * True when a string looks like a license id we could have minted.
  * @param {unknown} value Candidate id.
  * @returns {boolean} Whether the shape is plausible.

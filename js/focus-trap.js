@@ -46,13 +46,15 @@
     return !!(container && container.isConnected && !container.closest("[hidden]"));
   }
 
-  function isFocusable(el) {
+  function isFocusable(el, allowScripted) {
     if (!el || el.nodeType !== 1) return false;
     if (el.disabled) return false;
     if (el.tagName === "INPUT" && el.type === "hidden") return false;
     if (el.getAttribute("aria-hidden") === "true") return false;
     const ti = el.getAttribute("tabindex");
-    if (ti !== null && Number(ti) < 0) return false;
+    // A heading made focusable by script (tabindex="-1") cannot be tabbed to,
+    // but it can take focus back when the opener is gone.
+    if (ti !== null && Number(ti) < 0 && !allowScripted) return false;
     if (el.closest("[hidden]")) return false;
     if (inCollapsedDisclosure(el)) return false;
     return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
@@ -131,8 +133,13 @@
   }
 
   function restore(trap) {
-    const el = trap.returnTo;
-    if (!el || !el.isConnected || !isFocusable(el)) return;
+    let el = trap.returnTo;
+    // The opener can be gone by now (a button on a screen that was left).
+    // fallbackFocus is read here, at the end, when its answer is the one that counts.
+    if (!el || !el.isConnected || !isFocusable(el)) {
+      el = resolve(trap.fallback, trap.container);
+      if (!el || !el.isConnected || !isFocusable(el, true)) return;
+    }
     const active = document.activeElement;
     // Only take focus back if the dialog still had it.
     if (active && active !== document.body && !trap.container.contains(active)) return;
@@ -191,10 +198,12 @@
   /**
    * Trap focus inside an open dialog.
    * @param {Element} container dialog element (already visible)
-   * @param {{ initialFocus?: any, returnFocus?: any }} [opts]
+   * @param {{ initialFocus?: any, returnFocus?: any, fallbackFocus?: any }} [opts]
    *   initialFocus: element, selector or getter to focus first (default: first
    *   tabbable control). returnFocus: what to focus on release (default: the
-   *   element focused right now); pass null to restore nothing.
+   *   element focused right now); pass null to restore nothing. fallbackFocus:
+   *   element, selector or getter, read on release, for when the opener is
+   *   hidden or gone by then.
    */
   function activate(container, opts) {
     const o = opts || {};
@@ -208,7 +217,7 @@
     let returnTo = "returnFocus" in o ? resolve(o.returnFocus, container) : document.activeElement;
     // A control inside the dialog (or the page body) is not a useful trigger.
     if (returnTo === document.body || (returnTo && container.contains(returnTo))) returnTo = null;
-    const trap = { container, returnTo };
+    const trap = { container, returnTo, fallback: o.fallbackFocus };
     stack.push(trap);
     bind();
     // A requested target that is hidden or disabled is no target at all: focus()

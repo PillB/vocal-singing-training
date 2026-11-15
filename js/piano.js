@@ -87,6 +87,7 @@
     prog1: {
       name: "I – vi – IV – V (C)",
       description: "C – Am – F – G · classic pop",
+      descriptionEs: "C – Am – F – G · pop clásico",
       chords: [
         { name: "C", notes: ["C2", "C3", "E3", "G3"] },
         { name: "Am", notes: ["A2", "C3", "E3", "A3"] },
@@ -136,7 +137,9 @@
     },
     songFeel: {
       name: "Song A progression (G area)",
+      nameEs: "Progresión canción A (G)",
       description: "G – Em – C – D · mid-low male",
+      descriptionEs: "G – Em – C – D · registro medio-bajo masculino",
       chords: [
         { name: "G", notes: ["G2", "B2", "D3", "G3"] },
         { name: "Em", notes: ["E2", "B2", "E3", "G3"] },
@@ -146,7 +149,9 @@
     },
     songBetter: {
       name: "Song B progression (C area)",
+      nameEs: "Progresión canción B (C)",
       description: "C – G – Am – F · mid-low male",
+      descriptionEs: "C – G – Am – F · registro medio-bajo masculino",
       chords: [
         { name: "C", notes: ["C2", "G2", "C3", "E3"] },
         { name: "G", notes: ["G2", "B2", "D3", "G3"] },
@@ -157,7 +162,9 @@
     /** Wider root jumps — trains larger intonation moves on the highway */
     progJump1: {
       name: "Wide jumps · C–E–Am–G",
+      nameEs: "Saltos · C–E–Am–G",
       description: "C – E – Am – G · bigger root leaps (3rds–5ths)",
+      descriptionEs: "C – E – Am – G · saltos de fundamental más grandes (3.ª–5.ª)",
       wide: true,
       chords: [
         { name: "C", notes: ["C2", "C3", "E3", "G3"] },
@@ -168,7 +175,9 @@
     },
     progJump2: {
       name: "Wide jumps · Am–F–C–E",
+      nameEs: "Saltos · Am–F–C–E",
       description: "Am – F – C – E · pop leap progression",
+      descriptionEs: "Am – F – C – E · progresión pop con saltos",
       wide: true,
       chords: [
         { name: "Am", notes: ["A2", "C3", "E3", "A3"] },
@@ -179,7 +188,9 @@
     },
     progJump3: {
       name: "Wide jumps · D–Bb–F–C",
+      nameEs: "Saltos · D–Bb–F–C",
       description: "D – Bb – F – C · larger horizontal jumps",
+      descriptionEs: "D – Bb – F – C · saltos horizontales más grandes",
       wide: true,
       chords: [
         { name: "D", notes: ["D2", "A2", "D3", "F3"] },
@@ -190,7 +201,9 @@
     },
     progJump4: {
       name: "Octave span · G–Em–C–D",
+      nameEs: "Octava · G–Em–C–D",
       description: "G – Em – C – D with open voicings (wide range on highway)",
+      descriptionEs: "G – Em – C – D con acordes abiertos (rango amplio en la autopista de notas)",
       wide: true,
       chords: [
         { name: "G", notes: ["G2", "B2", "D3", "G3", "B3"] },
@@ -202,7 +215,9 @@
     /** Pro-only packs — new content (does not lock free progressions) */
     progPro1: {
       name: "Pro · Modal colors (Am–F–G–Em)",
+      nameEs: "Pro · Color modal (Am–F–G–Em)",
       description: "Am – F – G – Em · color changes for expressive singing (Pro)",
+      descriptionEs: "Am – F – G – Em · cambios de color para cantar con expresión (Pro)",
       proOnly: true,
       wide: true,
       chords: [
@@ -214,7 +229,9 @@
     },
     progPro2: {
       name: "Pro · Ladder leaps (C–G–Am–Em)",
+      nameEs: "Pro · Escalera (C–G–Am–Em)",
       description: "C – G – Am – Em · larger horizontal jumps for pitch agility (Pro)",
+      descriptionEs: "C – G – Am – Em · saltos horizontales más grandes para la agilidad de afinación (Pro)",
       proOnly: true,
       wide: true,
       chords: [
@@ -888,8 +905,14 @@
           // Strict one-note-at-a-time: combobox duration applies to EACH note
           // (not divided across tones of a chord)
           const events = [];
+          const pitchClass = (n) => String(n).replace(/-?\d+$/, "");
           prog.chords.forEach((ch, cidx) => {
-            (ch.notes || []).forEach((n) => {
+            const notes = ch.notes || [];
+            notes.forEach((n, i) => {
+              // The voicing's left-hand bass doubles a chord tone an octave
+              // down (C2 under C3): it is under the lanes and not a note to
+              // sing, so one note at a time walks the tones above it.
+              if (i === 0 && notes.length > 3 && notes.slice(1).some((m) => pitchClass(m) === pitchClass(n))) return;
               events.push({ note: n, chord: ch, cidx });
             });
           });

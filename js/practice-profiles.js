@@ -331,7 +331,7 @@
       // Levels are relative to the learner (dB against their own treads), so
       // there are no absolute targets here: only the order of the steps.
       ladder: [
-        { label: "1 Whisper", labelEs: "1 Susurro" },
+        { label: "1 Very soft", labelEs: "1 Muy suave" },
         { label: "2 Soft", labelEs: "2 Suave" },
         { label: "3 Conversational", labelEs: "3 Conversación" },
         { label: "4 Projected", labelEs: "4 Proyectada" },

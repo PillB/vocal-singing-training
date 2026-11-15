@@ -16,9 +16,9 @@
  *   when it ends (an offset tick), a take gets its detailed map after Stop.
  * - Nothing red. A break, a pause, a note off target is described with a
  *   shape and a word ("salto", "sube ↑"), never judged.
- * - The pitch detector is reliable from about 65 to 400 Hz and reads an octave
- *   low above that: an octave match counts, and anything estimated says
- *   "aprox.".
+ * - The pitch detector reads from a bass's A1 to about C6 (55–1050 Hz), less
+ *   surely up to F#6: an octave match counts (the same note in another
+ *   voice), and anything estimated says "aprox.".
  *
  * Registers V.scenes.pitchKit (measuring helpers the pitch modes share) and
  * one overlay painter per exercise family: pitchSiren, pitchHold, pitchStones,
@@ -947,7 +947,7 @@
     );
     if (m.ceil.length) {
       rows.push(
-        L("Por encima de ~Sol4 el micrófono pierde el tono: ahí la línea es aprox.", "Above ~G4 the mic loses the pitch: the line is approx. there")
+        L("Por encima de ~Do6 el micrófono pierde el tono: ahí la línea es aprox.", "Above ~C6 the mic loses the pitch: the line is approx. there")
       );
     }
     if (!done) {

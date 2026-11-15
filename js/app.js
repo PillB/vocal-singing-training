@@ -247,6 +247,10 @@
     let lastKey = "";
     let lastAt = 0;
     const report = (kind, detail) => {
+      // Chrome reports "ResizeObserver loop completed with undelivered
+      // notifications" as a window error when a layout settles over two
+      // frames. Nothing failed, so it is not the learner's "Algo falló".
+      if (/ResizeObserver loop/.test(String(detail?.message ?? detail))) return;
       console.error("[VT]", kind, detail);
       // Quiet during automated e2e unless explicitly debugging
       if (sessionStorage.getItem("vt_e2e") === "1" && sessionStorage.getItem("vt_debug") !== "1") {
@@ -839,8 +843,12 @@
       const { vh, offsetTop, safeBottom } = getViewportMetrics();
       // Gap: short/landscape + safe-area (home indicator)
       const gap = (vh < 500 ? 12 : 8) + Math.max(0, safeBottom);
-      // Visual bottom of the usable screen (visualViewport may be offset)
-      const visualBottom = offsetTop + vh;
+      // Visual bottom of the usable screen (visualViewport may be offset), above
+      // the statistics question when the EEA bar is up (region-gate.js sets
+      // --region-consent-h on <html> while it is).
+      const consentH =
+        parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--region-consent-h")) || 0;
+      const visualBottom = offsetTop + vh - consentH;
       const top = stageRestTop(stage, vh);
       const maxH = Math.max(120, Math.floor(visualBottom - top - gap));
       const pianoCap = fitStageBesidePiano(stage, visualBottom, safeBottom);
@@ -853,10 +861,58 @@
       syncStageInsets();
       fitStageGuide();
       keepStartOnScreen(stage, visualBottom);
+      // Fitting the screen came first; the stage is never shorter than what is
+      // on it, so a very small screen scrolls instead of losing its lanes.
+      syncStageInsets();
       redrawPitchForStage();
     } catch {
       /* ignore */
     }
+  }
+
+  /** Fewest px of lanes a pitch stage keeps between its two rails. */
+  const STAGE_MIN_LANES = 60;
+
+  /**
+   * The stage is sized to the screen, but never to less than it holds: its top
+   * rail, its bottom rail and, between them, either lanes of STAGE_MIN_LANES or
+   * a speaking exercise's mode panel with its words whole. On the smallest
+   * phones (320x568) the rails alone take most of the screen, so the stage
+   * grows past it and the page scrolls; anywhere the content fits, nothing
+   * changes and the whole stage stays on one screen.
+   * @param {HTMLElement} stage #highway-stage.
+   * @param {number} railTop Px from the stage's top to the top rail's bottom.
+   * @param {number} railBottom Px the bottom rail and its gap take from the stage's bottom.
+   * @returns {boolean} True when the stage was made taller.
+   */
+  function growStageForContent(stage, railTop, railBottom) {
+    // A screen on its side (500px or less high) keeps the stage on one screen:
+    // growing it would push Start below the fold, and its rails fold and wrap
+    // to fit (see the short-landscape rules in css).
+    try {
+      if (window.matchMedia("(max-height: 500px)").matches) return false;
+    } catch {
+      /* ignore */
+    }
+    const h = stage.getBoundingClientRect().height;
+    let need = railTop + railBottom + STAGE_MIN_LANES;
+    // A mode panel that is cut off with no way to scroll to the rest (a picture's
+    // panel clips) gets the rows it lacks. A long step list is left alone: its
+    // wrapper scrolls, by design.
+    const focus = $("#mode-focus");
+    if (focus && !focus.hidden) {
+      const wrap = $("#mode-focus-panel");
+      const cutOff = (el) =>
+        el && /^(hidden|clip)$/.test(getComputedStyle(el).overflowY) ? el.scrollHeight - el.clientHeight : 0;
+      const over = Math.max(cutOff(wrap), cutOff(wrap?.querySelector(".mode-panel")));
+      // A few px of padding or rounding is not a row of words cut off.
+      if (over > 8) need = Math.max(need, h + over);
+    }
+    if (h >= need - 0.5) return false;
+    const px = `${Math.ceil(need)}px`;
+    stage.style.maxHeight = px;
+    stage.style.height = px;
+    return true;
   }
 
   /**
@@ -889,7 +945,8 @@
         stage.style.getPropertyValue("--rail-t") !== t || stage.style.getPropertyValue("--rail-h") !== b;
       stage.style.setProperty("--rail-t", t);
       stage.style.setProperty("--rail-h", b);
-      return moved;
+      const grew = growStageForContent(stage, Math.ceil(railBottom) + 4, clear);
+      return moved || grew;
     } catch {
       return false;
     }
@@ -1001,23 +1058,34 @@
       if (el) ro.observe(el);
     });
     // "🎹 Piano ▾" drops its word when it would take a row of its own.
+    // Measured a frame later, as the header's title is: dropping the word
+    // resizes the very box this observer reports on, which Chrome flags as a
+    // "ResizeObserver loop" when done inside the callback.
     const opts = $("#piano-mini-opts");
     if (opts) {
       let lastW = 0;
+      let optsRaf = 0;
       new ResizeObserver(() => {
-        const w = Math.round(opts.getBoundingClientRect().width);
-        if (w === lastW) return;
-        lastW = w;
-        fitPianoWord();
+        cancelAnimationFrame(optsRaf);
+        optsRaf = requestAnimationFrame(() => {
+          const w = Math.round(opts.getBoundingClientRect().width);
+          if (w === lastW) return;
+          lastW = w;
+          fitPianoWord();
+        });
       }).observe(opts);
     }
     // On a phone on its side the banner's Pausar and Terminar sit in the
     // exercise header's row, which keeps their width free (design: landscape).
     const ctl = $("#session-banner .controls-row");
     if (ctl) {
+      let ctlRaf = 0;
       new ResizeObserver(() => {
-        const w = Math.ceil(ctl.getBoundingClientRect().width);
-        if (w) document.body.style.setProperty("--session-ctl-w", `${w}px`);
+        cancelAnimationFrame(ctlRaf);
+        ctlRaf = requestAnimationFrame(() => {
+          const w = Math.ceil(ctl.getBoundingClientRect().width);
+          if (w) document.body.style.setProperty("--session-ctl-w", `${w}px`);
+        });
       }).observe(ctl);
     }
   }
@@ -1161,6 +1229,13 @@
     const title = $("#brand-title");
     if (!header || !title) return;
     const was = header.classList.contains("help-fold");
+    // Unfolded before measuring, always. Deleting this line survives the suite
+    // on purpose: measuring while folded only disagrees with measuring unfolded
+    // for titles in the narrow band where the room the two links vacate decides
+    // the wrap, and the width of that band is a property of the browser's text
+    // metrics rather than of this code. A case pinned to it would pass on one
+    // machine and fail on another, which is the exact fault that got the test
+    // above rewritten, so the redundancy is left unasserted and recorded here.
     header.classList.remove("help-fold");
     let fold = false;
     if (window.matchMedia?.("(min-width: 1100px)")?.matches) {
@@ -1191,7 +1266,96 @@
      was opened from steps the history back instead of adding an entry, so the
      phone's Back from Practicar still leaves the site rather than reopening
      the exercise. */
-  const route = { ready: false, silent: 0, backTo: null, pendingBack: false, pendingTimer: 0, leftY: 0, reopening: false };
+  const route = {
+    ready: false,
+    silent: 0,
+    backTo: null,
+    pendingBack: false,
+    pendingTimer: 0,
+    leftY: 0,
+    reopening: false,
+    restoring: false
+  };
+
+  /** Ends the restore in progress, if any (see restoreY). */
+  let stopRestore = null;
+
+  /**
+   * Put a page back at y once it is long enough to be there. Historial reads
+   * its list first and Practicar draws its lower sections over the next
+   * frames, so one scroll right after the render was clamped to the short
+   * page and then left behind by what arrived. Scrolls on each frame until the
+   * page is within 2px of y or 2 seconds have passed, and gives way at the
+   * learner's first wheel, touch, key or pointer press: a page that fights
+   * the person reading it is worse than one that never restored.
+   */
+  function restoreY(y, drawn) {
+    if (stopRestore) stopRestore();
+    if (!(y > 0)) return;
+    const quit = new AbortController();
+    let over = false;
+    const finish = () => {
+      if (over) return;
+      over = true;
+      quit.abort();
+      if (stopRestore === finish) {
+        stopRestore = null;
+        route.restoring = false;
+      }
+    };
+    stopRestore = finish;
+    route.restoring = true;
+    ["wheel", "touchstart", "keydown", "pointerdown"].forEach((ev) =>
+      window.addEventListener(ev, finish, { once: true, passive: true, signal: quit.signal })
+    );
+    Promise.resolve(drawn)
+      .catch(() => {})
+      .then(() => {
+        if (over) return;
+        const t0 = performance.now();
+        const step = () => {
+          if (over) return;
+          window.scrollTo({ top: y, behavior: "instant" });
+          if (Math.abs(window.scrollY - y) <= 2 || performance.now() - t0 > 2000) finish();
+          else requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      });
+  }
+
+  /**
+   * Keyboard focus the browser scrolled to the top edge of the page lands
+   * under the sticky header (Shift+Tab put catalogue cards and "Ver otros 11"
+   * there, hidden). One frame after a keyboard focus, move the page down by
+   * what the header covers. The header's own controls, dialogs, the tour and
+   * the exercise view (its stage is sized to the screen) are left alone, so
+   * focus returning to the header never scrolls the page. A root
+   * scroll-padding was tried first and rejected: it scrolled the page whenever
+   * focus went back to the header's tour button.
+   */
+  function keepFocusClearOfHeader() {
+    document.addEventListener("focusin", (e) => {
+      const el = e.target;
+      if (!(el instanceof Element) || document.body.classList.contains("view-exercise")) return;
+      if (el.closest(".app-header, #tour-root, .modal-overlay, [role='dialog'], .region-consent")) return;
+      let keyboard = true;
+      try {
+        keyboard = el.matches(":focus-visible");
+      } catch {
+        /* an old browser: treat it as the keyboard */
+      }
+      if (!keyboard) return;
+      requestAnimationFrame(() => {
+        if (document.activeElement !== el) return;
+        const hdr = document.querySelector(".app-header")?.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
+        if (!hdr || !hdr.height || !r.height) return;
+        if (r.top < hdr.bottom && r.bottom > 0) {
+          window.scrollBy({ top: r.top - hdr.bottom - 8, behavior: "instant" });
+        }
+      });
+    });
+  }
 
   function hashFor(name) {
     if (name === "plan") return "#plan";
@@ -1218,6 +1382,16 @@
   }
 
   /**
+   * An exercise's entry also keeps where it was opened from: the address
+   * (`from`) and the card or page to land on (`origin`). They live in memory
+   * too, but a reload drops the memory, and without them the way back from
+   * the reloaded exercise had nowhere to go.
+   */
+  function exerciseEntry(backTo) {
+    return { ...routeEntry("exercise"), from: backTo ?? null, origin: state.exOrigin || null };
+  }
+
+  /**
    * Whether an exercise an address reopens (a reload, Forward) is the guided
    * session's current step. Reopened as a single exercise it had no
    * "Siguiente", the catalog's timer, and finishing it did not move the
@@ -1230,32 +1404,48 @@
     return !!(s && s.status !== "completed" && s.order?.length && VTSession.currentExerciseId() === id);
   }
 
+  /** Where the way back from an exercise leads. After a reload only the exercise's own entry still knows the way back. */
+  function exerciseBackTo() {
+    const entryFrom = history.state?.vt === "exercise" && typeof history.state.from === "string" ? history.state.from : null;
+    return route.backTo ?? entryFrom;
+  }
+
+  /**
+   * The history step for a move from `prev` to `name`: back one entry, one
+   * entry replaced, or one added. Throws where addresses cannot be written
+   * (writeRoute catches it).
+   */
+  function stepRouteHistory(name, prev, want, url, backTo) {
+    if (prev === "exercise" && name !== "exercise" && backTo === want) {
+      // Back to where the exercise was opened from: the entry is already
+      // there, one step back. The URL follows when popstate arrives.
+      route.backTo = null;
+      route.pendingBack = true;
+      clearTimeout(route.pendingTimer);
+      route.pendingTimer = setTimeout(() => {
+        route.pendingBack = false;
+      }, 1500);
+      history.back();
+    } else if (prev === "exercise") {
+      // One exercise to the next, or out to somewhere else: one entry.
+      history.replaceState(name === "exercise" ? exerciseEntry(backTo) : routeEntry(name), "", url);
+      if (name !== "exercise") route.backTo = null;
+    } else {
+      if (name === "exercise") route.backTo = hashFor(prev);
+      history.pushState(name === "exercise" ? exerciseEntry(route.backTo) : routeEntry(name), "", url);
+    }
+  }
+
   function writeRoute(name, prev) {
     if (!route.ready || route.silent || route.pendingBack) return;
     const want = hashFor(name);
     if ((location.hash || "") === want || (!want && !parseRoute(location.hash))) return;
     const url = want || location.pathname + location.search;
+    const backTo = exerciseBackTo();
     try {
       // The page you leave keeps its scroll position, for when Back returns to it.
       if (prev && prev !== "exercise") history.replaceState({ ...(history.state || {}), y: route.leftY }, "");
-      if (prev === "exercise" && name !== "exercise" && route.backTo === want) {
-        // Back to where the exercise was opened from: the entry is already
-        // there, one step back. The URL follows when popstate arrives.
-        route.backTo = null;
-        route.pendingBack = true;
-        clearTimeout(route.pendingTimer);
-        route.pendingTimer = setTimeout(() => {
-          route.pendingBack = false;
-        }, 1500);
-        history.back();
-      } else if (prev === "exercise") {
-        // One exercise to the next, or out to somewhere else: one entry.
-        history.replaceState(routeEntry(name), "", url);
-        if (name !== "exercise") route.backTo = null;
-      } else {
-        if (name === "exercise") route.backTo = hashFor(prev);
-        history.pushState(routeEntry(name), "", url);
-      }
+      stepRouteHistory(name, prev, want, url, backTo);
     } catch {
       /* file:// or a sandboxed frame: the views still work without addresses */
     }
@@ -1267,34 +1457,65 @@
     return state.view === t.type;
   }
 
-  async function onRoute() {
-    if (route.pendingBack) {
-      // Our own history.back(): the view already changed. Anything opened
-      // while it was on its way gets its address now.
-      route.pendingBack = false;
-      clearTimeout(route.pendingTimer);
-      if (!routeMatchesView(parseRoute(location.hash))) writeRoute(state.view, null);
-      return;
+  /**
+   * The address of the page that is showing, in place of one that names
+   * nothing (an exercise that does not exist): Back and a reload then agree
+   * with the screen. The entry keeps its scroll.
+   */
+  function showShownAddress() {
+    try {
+      history.replaceState(
+        { ...(state.view === "exercise" ? exerciseEntry(route.backTo) : routeEntry(state.view)), y: history.state?.y },
+        "",
+        hashFor(state.view) || location.pathname + location.search
+      );
+    } catch {
+      /* file:// or a sandboxed frame */
     }
-    if (state.leavePromptOpen && state.view === "exercise") {
-      // Back or Forward with the leave question open answers it "Seguir
-      // practicando", as Escape does: the exercise and its take stay, and so
-      // does its address. When the question came from an earlier Back, that
-      // Back's own "Seguir aquí" below sees the address back and adds none.
-      $("#leave-cancel")?.click();
-      if (!routeMatchesView(parseRoute(location.hash))) {
-        try {
-          history.pushState(routeEntry("exercise"), "", hashFor("exercise"));
-        } catch {
-          /* ignore */
-        }
+  }
+
+  /**
+   * Our own history.back(): the view already changed. Anything opened
+   * while it was on its way gets its address now. The entry it landed on
+   * still holds the place the page had before it was left, and the page may
+   * be somewhere else now ("← Practicar" from a routine shows Practicar at its
+   * top): it is told where the page is, or the next reload jumps to the old
+   * place. A scroll still on its way (back to the card) writes its own end.
+   */
+  function settleOwnBack() {
+    route.pendingBack = false;
+    clearTimeout(route.pendingTimer);
+    if (!routeMatchesView(parseRoute(location.hash))) writeRoute(state.view, null);
+    else if (state.view !== "exercise" && !route.restoring) {
+      try {
+        history.replaceState({ ...(history.state || {}), y: Math.round(window.scrollY) }, "");
+      } catch {
+        /* file:// or a sandboxed frame */
       }
-      return;
     }
-    const t = parseRoute(location.hash);
-    if (routeMatchesView(t)) return;
+  }
+
+  /**
+   * Back or Forward with the leave question open answers it "Seguir
+   * practicando", as Escape does: the exercise and its take stay, and so
+   * does its address. When the question came from an earlier Back, that
+   * Back's own "Seguir aquí" (keepStayedExerciseAddress) sees the address
+   * back and adds none.
+   */
+  function answerLeavePromptStay() {
+    $("#leave-cancel")?.click();
+    if (!routeMatchesView(parseRoute(location.hash))) {
+      try {
+        history.pushState(exerciseEntry(route.backTo), "", hashFor("exercise"));
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  /** What is open over the page closes before the page under it changes. */
+  function closeOverPageForRoute() {
     setHeaderMenu(false);
-    if (window.VTTour?.isActive?.()) window.VTTour.end?.(false);
     if ($("#pricing-modal") && !$("#pricing-modal").hidden) closePricing();
     if ($("#account-modal") && !$("#account-modal").hidden) closeAccount();
     // The page under them is changing: the other dialogs close unanswered, as
@@ -1303,37 +1524,77 @@
     window.VTTour?.closeMicPrimer?.();
     closeReminders();
     window.VTLoop?.closeDialogs?.();
+  }
+
+  /** Forward into the exercise you just left: same way back as before. */
+  function reopenRoutedExercise(id) {
+    route.reopening = true;
+    try {
+      if (findExercise(id)) openExercise(id, guidedStep(id));
+      else showShownAddress();
+    } finally {
+      route.reopening = false;
+    }
+  }
+
+  /** Where an address other than an exercise's leads: Practicar from a catalog card goes back to that card. */
+  function routeDestination(t, fromExercise) {
+    return t ? { type: t.type } : { type: "home", restore: fromExercise && state.exOrigin?.catalog ? state.exOrigin : null };
+  }
+
+  /** "Seguir aquí": the exercise stays, so its address comes back, once. */
+  function keepStayedExerciseAddress(left) {
+    if (!left && state.view === "exercise" && !routeMatchesView(parseRoute(location.hash))) {
+      route.silent -= 1;
+      try {
+        history.pushState(exerciseEntry(route.backTo), "", hashFor("exercise"));
+      } catch {
+        /* ignore */
+      }
+      route.silent += 1;
+    }
+  }
+
+  function showRoutedPage(dest) {
+    const drawn = navigateDestination(dest);
+    // Back to a page you scrolled: the same place on it, and again once it
+    // is drawn (Historial reads its list first).
+    const y = history.state?.y;
+    if (y) {
+      window.scrollTo({ top: y, behavior: "instant" });
+      restoreY(y, drawn);
+    }
+  }
+
+  async function onRoute() {
+    if (route.pendingBack) {
+      settleOwnBack();
+      return;
+    }
+    if (state.leavePromptOpen && state.view === "exercise") {
+      answerLeavePromptStay();
+      return;
+    }
+    const t = parseRoute(location.hash);
+    // The tour shows pages without addresses of their own, so Back can land on
+    // the very page it is showing: close it first, then compare (ending it
+    // puts the page it opened on back).
+    if (window.VTTour?.isActive?.()) window.VTTour.end?.(false);
+    if (routeMatchesView(t)) return;
+    closeOverPageForRoute();
     route.silent += 1;
     try {
       if (t?.type === "exercise") {
-        // Forward into the exercise you just left: same way back as before.
-        route.reopening = true;
-        try {
-          if (findExercise(t.id)) openExercise(t.id, guidedStep(t.id));
-        } finally {
-          route.reopening = false;
-        }
+        reopenRoutedExercise(t.id);
         return;
       }
       const fromExercise = state.view === "exercise";
-      const dest = t ? { type: t.type } : { type: "home", restore: fromExercise && state.exOrigin?.catalog ? state.exOrigin : null };
+      const dest = routeDestination(t, fromExercise);
       if (fromExercise) {
         const left = await leaveExercise(dest);
-        // "Seguir aquí": the exercise stays, so its address comes back, once.
-        if (!left && state.view === "exercise" && !routeMatchesView(parseRoute(location.hash))) {
-          route.silent -= 1;
-          try {
-            history.pushState(routeEntry("exercise"), "", hashFor("exercise"));
-          } catch {
-            /* ignore */
-          }
-          route.silent += 1;
-        }
+        keepStayedExerciseAddress(left);
       } else {
-        navigateDestination(dest);
-        // Back to a page you scrolled: the same place on it.
-        const y = history.state?.y;
-        if (y) window.scrollTo({ top: y, behavior: "instant" });
+        showRoutedPage(dest);
       }
     } finally {
       route.silent -= 1;
@@ -1349,19 +1610,83 @@
     } catch {
       /* ignore */
     }
-    const t = parseRoute(location.hash);
+    let t = parseRoute(location.hash);
+    // An address for no exercise opens Practicar, so it says Practicar.
+    if (t?.type === "exercise" && !findExercise(t.id)) {
+      showShownAddress();
+      t = null;
+    }
+    let drawn = null;
     if (t?.type === "plan") renderPlan();
-    else if (t?.type === "history") renderHistory();
-    else if (t?.type === "exercise" && findExercise(t.id)) forceOpenExercise(t.id, guidedStep(t.id));
+    else if (t?.type === "history") drawn = renderHistory();
+    else if (t?.type === "exercise") forceOpenExercise(t.id, guidedStep(t.id));
+    // A reload (or the way back from another page) comes back where it was.
+    if (t?.type !== "exercise") restoreY(history.state?.y, drawn);
     route.ready = true;
     window.addEventListener("popstate", () => {
       onRoute();
     });
+    // The place on a page is kept in its history entry as the learner scrolls
+    // and as the page is left, so a reload or a Back from another page has it.
+    const keepY = () => {
+      try {
+        if (state.view === "exercise" || route.restoring || route.pendingBack || window.VTTour?.isActive?.()) return;
+        history.replaceState({ ...(history.state || {}), y: Math.round(window.scrollY) }, "");
+      } catch {
+        /* file:// or a sandboxed frame */
+      }
+    };
+    let keepTimer = 0;
+    window.addEventListener(
+      "scroll",
+      () => {
+        clearTimeout(keepTimer);
+        keepTimer = setTimeout(keepY, 250);
+      },
+      { passive: true }
+    );
+    window.addEventListener("pagehide", keepY);
+    keepFocusClearOfHeader();
+  }
+
+  /**
+   * On an exercise the header's guide opens beside it, as the exercise's own
+   * guide link does: leaving the tab mid-take dropped the take and its
+   * rating without the app's own question.
+   */
+  function syncHeaderGuideTarget(name) {
+    const guide = $("#link-guide");
+    if (guide && name === "exercise") {
+      guide.target = "_blank";
+      guide.rel = "noopener";
+    } else if (guide) {
+      guide.removeAttribute("target");
+      guide.removeAttribute("rel");
+    }
+  }
+
+  function renderViewAd(slot) {
+    try {
+      window.VTAds?.renderSlot?.(slot);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function clearViewAds() {
+    try {
+      window.VTAds?.clearSlot?.(document.getElementById("ad-slot-home"));
+      window.VTAds?.clearSlot?.(document.getElementById("ad-slot-history"));
+    } catch {
+      /* ignore */
+    }
   }
 
   function setView(name) {
     const prev = state.view;
     route.leftY = window.scrollY;
+    // A restore belongs to the page it was started for.
+    if (prev !== name && stopRestore) stopRestore();
     state.view = name;
     $$(".view").forEach((v) => v.classList.remove("active"));
     const map = {
@@ -1373,17 +1698,7 @@
     const target = $(map[name]);
     if (target) target.classList.add("active");
     document.body.classList.toggle("view-exercise", name === "exercise");
-    // On an exercise the header's guide opens beside it, as the exercise's own
-    // guide link does: leaving the tab mid-take dropped the take and its
-    // rating without the app's own question.
-    const guide = $("#link-guide");
-    if (guide && name === "exercise") {
-      guide.target = "_blank";
-      guide.rel = "noopener";
-    } else if (guide) {
-      guide.removeAttribute("target");
-      guide.removeAttribute("rel");
-    }
+    syncHeaderGuideTarget(name);
     syncHeaderNav(name);
     setHeaderMenu(false);
     setHelpMenu(false);
@@ -1407,27 +1722,12 @@
       renderValuePulse();
       renderRetentionChrome();
       renderNextStepCard();
-      try {
-        window.VTAds?.renderSlot?.("home");
-      } catch {
-        /* ignore */
-      }
+      renderViewAd("home");
     }
-    if (name === "history") {
-      try {
-        window.VTAds?.renderSlot?.("history");
-      } catch {
-        /* ignore */
-      }
-    }
+    if (name === "history") renderViewAd("history");
     if (name === "exercise") {
       // Never show home/history ads on exercise; clear post-session until complete
-      try {
-        window.VTAds?.clearSlot?.(document.getElementById("ad-slot-home"));
-        window.VTAds?.clearSlot?.(document.getElementById("ad-slot-history"));
-      } catch {
-        /* ignore */
-      }
+      clearViewAds();
     }
   }
 
@@ -1637,7 +1937,8 @@
    * guide.html holds both languages in one file, so a bare `guide.html` link
    * always lands an English reader on the Spanish half. Point every static
    * guide link at the right anchor for the current language. A link that
-   * names its section (data-guide-anchor) keeps it, in either language.
+   * names its section (data-guide-anchor) keeps it, in either language. The
+   * privacy page is the same, so its links are pointed here too.
    */
   function syncGuideLinks() {
     const href = window.VTTour?.guideHref?.() || "guide.html";
@@ -1649,6 +1950,11 @@
     $$('a[href^="guide.html"]').forEach((a) => {
       const anchor = a.getAttribute("data-guide-anchor");
       a.href = anchor ? window.VTTour?.guideHref?.(anchor) || `guide.html#${anchor}` : clean;
+    });
+    // privacy.html holds both languages in one file as well: an English reader
+    // opens the English half, and switching back takes the anchor off again.
+    $$('a[href^="privacy.html"]').forEach((a) => {
+      a.setAttribute("href", window.VTI18n?.lang === "en" ? "privacy.html#en" : "privacy.html");
     });
   }
 
@@ -1734,6 +2040,14 @@
     return tt("session.bannerTitle", { track: tt(s.track === "vocal" ? "tab.vocalShort" : "tab.singingShort") });
   }
 
+  /** The catalog route's name for the banner line, or "" when it has no name of its own there. */
+  function sessionRouteName(s) {
+    // The basics and the daily class say their own name in the title.
+    const routeKey = `home.path.${s.path}`;
+    const route = s.path && s.path !== "daily" && s.path !== "basics" ? pathName(s.path, s.track) : "";
+    return route && route !== routeKey ? route : "";
+  }
+
   function updateSessionBanner() {
     const banner = $("#session-banner");
     const s = VTSession.get();
@@ -1751,15 +2065,19 @@
     const status = tt(s.status === "paused" ? "session.statusPaused" : "session.statusActive");
     const name = sessionName(s);
     // One line (design: session-chrome): where you are first and never cut,
-    // then "En pausa" only when it is and the routine's name, which a narrow
-    // phone cuts with "…". The title keeps the whole line for a pointer.
+    // then "En pausa" only when it is, the route's name and the routine's
+    // name, which a narrow phone cuts with "…". The title keeps the whole line
+    // for a pointer. The route used to ride in the position, which cannot
+    // shrink, and ran on under Pausar and Terminar.
+    const total = s.order.length;
     const pos = document.createElement("span");
     pos.className = "session-banner-pos";
-    pos.textContent = VTSession.progressLabel();
+    pos.textContent = tt("session.progress", { n: Math.min(s.index + 1, total), total });
     const rest = document.createElement("span");
     rest.className = "session-banner-rest";
+    const route = sessionRouteName(s);
     // A no-break space: a flex item drops its leading space ("2· Básicos")
-    const restParts = [s.status === "paused" ? status : "", name].filter(Boolean);
+    const restParts = [s.status === "paused" ? status : "", route, name].filter(Boolean);
     rest.textContent = restParts.length ? "\u00a0· " + restParts.join(" · ") : "";
     const text = $("#session-banner-text");
     if (endAsking != null) {
@@ -2537,12 +2855,24 @@
       renderExerciseList();
       if (destination.restore) returnToCatalog(destination.restore);
     } else if (destination.type === "history") {
-      renderHistory();
+      // Resolves once the list is drawn, for restoreY.
+      return renderHistory();
     } else if (destination.type === "plan") {
       renderPlan();
     } else if (destination.type === "exercise" && destination.id) {
       forceOpenExercise(destination.id, destination.fromStructured);
     }
+  }
+
+  /**
+   * Opened by its address (a reload, Forward), the exercise's own entry still
+   * says where it was opened from. That origin, when it names a page an
+   * exercise is opened from; otherwise null.
+   */
+  function originInEntry() {
+    const kept = history.state?.vt === "exercise" && (route.reopening || !route.ready) ? history.state.origin : null;
+    const keptOk = !!kept && typeof kept === "object" && ["home", "plan", "history"].includes(kept.view);
+    return keptOk ? kept : null;
   }
 
   function forceOpenExercise(id, fromStructured) {
@@ -2561,7 +2891,10 @@
     state.pitchHeard = false;
     // Where this exercise was opened from, so the way back can name it and
     // land there: a catalog card brings you back to that card.
-    if (state.view !== "exercise" && !(route.reopening && state.exOrigin?.id === id)) {
+    const kept = originInEntry();
+    if (state.view !== "exercise" && kept) {
+      state.exOrigin = kept;
+    } else if (state.view !== "exercise" && !(route.reopening && state.exOrigin?.id === id)) {
       state.exOrigin = {
         view: state.view === "plan" || state.view === "history" ? state.view : "home",
         catalog: state.view === "home" && openingFromCatalog,
@@ -2581,7 +2914,7 @@
     state.recorder.clear();
     VTPiano.stopAll();
     resetSessionPractice();
-    renderExercise();
+    renderExerciseAfresh();
     setView("exercise");
     // Instant jump to top so game stage is the first viewport (no smooth lag).
     // "instant", not (0, 0): html has scroll-behavior: smooth, so that glided
@@ -2742,6 +3075,18 @@
     forceOpenExercise(id, fromStructured);
   }
 
+  /** The exercise's catalog copy in the language showing, or the catalog's own without VTI18n. */
+  function exerciseCopy(ex) {
+    const I = window.VTI18n;
+    return {
+      original: I?.exField ? I.exField(ex, "original") : ex.original,
+      research: I?.exField ? I.exField(ex, "research") : ex.research,
+      steps: I?.exField ? I.exField(ex, "steps") : ex.steps || [],
+      tips: I?.exField ? I.exField(ex, "tips") : ex.tips || [],
+      mistakes: I?.exField ? I.exField(ex, "mistakes") : ex.mistakes || []
+    };
+  }
+
   /**
    * The open exercise's own words: its name, badge, way back, original,
    * research, steps, tips and mistakes. Written on every open, and again on a
@@ -2749,7 +3094,11 @@
    * @returns {string[]} the steps, for the stage's guide
    */
   function renderExerciseText(ex) {
-    $("#ex-title").textContent = window.VTI18n ? VTI18n.exTitle(ex) : ex.title;
+    const name = window.VTI18n ? VTI18n.exTitle(ex) : ex.title;
+    const titleEl = $("#ex-title");
+    titleEl.textContent = name;
+    // The one-row header cuts a long name on a phone; the full one stays on hover and long press
+    titleEl.title = name;
     const tier = ex.tier || "basic";
     // Inside today's basics every step is a warm-up of the routine's track,
     // whatever catalog track and tier the exercise has on its own.
@@ -2760,12 +3109,7 @@
       : `${tt(ex.track === "vocal" ? "badge.vocal" : "badge.singing")} · ${tierLabel(tier, ex.track)}`;
     kind.dataset.track = routineTrack || ex.track;
     syncExerciseBack();
-    const I = window.VTI18n;
-    const original = I?.exField ? I.exField(ex, "original") : ex.original;
-    const research = I?.exField ? I.exField(ex, "research") : ex.research;
-    const steps = I?.exField ? I.exField(ex, "steps") : ex.steps || [];
-    const tips = I?.exField ? I.exField(ex, "tips") : ex.tips || [];
-    const mistakes = I?.exField ? I.exField(ex, "mistakes") : ex.mistakes || [];
+    const { original, research, steps, tips, mistakes } = exerciseCopy(ex);
     const origEl = $("#ex-original");
     if (origEl) {
       const label = tt("ex.original");
@@ -2788,6 +3132,22 @@
       .map((m) => `<li>${escapeHtml(m)}</li>`)
       .join("");
     return steps;
+  }
+
+  /**
+   * The open exercise drawn afresh (renderExercise), clear of what the last
+   * one left: every open and every rebuild goes through here. The two resets
+   * live outside renderExercise so that its text stays the one its
+   * qa/complexity-baseline.json exemption was hashed from.
+   */
+  function renderExerciseAfresh() {
+    if (state.exercise) {
+      // The last exercise's chord or note is not this one's
+      if ($("#chord-now")) $("#chord-now").textContent = "—";
+      // A microphone notice put away on the last visit shows again on this one
+      state.micBlockedClosed = false;
+    }
+    renderExercise();
   }
 
   function renderExercise() {
@@ -3133,22 +3493,8 @@
     );
   }
 
-  /**
-   * A language switch on an exercise under way: the same screen, in the other
-   * language. Rendering it again opened it fresh, which mid-take put Empezar
-   * over a live microphone and a running clock (the time sung after it was
-   * not counted), and after Stop removed the take's recording and its Save.
-   * The mode's own panel and the details form keep their words until the
-   * next open: rebuilding them would lose what they hold.
-   */
-  function relabelExercise() {
-    const ex = state.exercise;
-    if (!ex) return;
-    const profile = getProfile(ex);
-    renderStageGuide(renderExerciseText(ex), !profile.showPitch);
-    const cue = $("#mode-cue");
-    if (cue) cue.textContent = (window.VTI18n?.lang === "es" && profile.cueEs) || profile.cue || tt("practice.hint");
-    // The switch put these back to their defaults (data-i18n); say what is true now.
+  /** The exercise's status pill, Start and panel toggles, saying what is true now (relabelExercise). */
+  function relabelExerciseToggles() {
     const pill = $("#practice-status");
     if (pill) pill.textContent = tt(state.practiceLive ? "practice.live" : "practice.ready");
     const start = $("#btn-practice-start");
@@ -3166,6 +3512,10 @@
       piano.title = tt(state.pianoOpen ? "piano.hidePanel" : "piano.showPanel");
       piano.setAttribute("aria-label", piano.title);
     }
+  }
+
+  /** The rating card's take row, saying what is true now (relabelExercise). */
+  function relabelTakeButtons() {
     // The take's words, not its recording.
     const takeK = $("#rate-take-k");
     if (takeK) takeK.textContent = tt("rate.take");
@@ -3173,6 +3523,29 @@
     if (save) save.textContent = tt(save.disabled ? "rate.takeSaved" : "rate.takeSave");
     const discard = $("#btn-discard-rec");
     if (discard) discard.textContent = tt("rate.takeDiscard");
+  }
+
+  /**
+   * A language switch on an exercise under way: the same screen, in the other
+   * language. Rendering it again opened it fresh, which mid-take put Empezar
+   * over a live microphone and a running clock (the time sung after it was
+   * not counted), and after Stop removed the take's recording and its Save.
+   * The mode's own panel and the details form are not rebuilt (that would
+   * lose what they hold): the panel's words are swapped in place when the take
+   * stops (stopPractice), or at once when none is running (onChange).
+   */
+  function relabelExercise() {
+    const ex = state.exercise;
+    if (!ex) return;
+    const profile = getProfile(ex);
+    renderStageGuide(renderExerciseText(ex), !profile.showPitch);
+    relabelPianoPanel(ex);
+    updateOctaveUI();
+    const cue = $("#mode-cue");
+    if (cue) cue.textContent = (window.VTI18n?.lang === "es" && profile.cueEs) || profile.cue || tt("practice.hint");
+    // The switch put these back to their defaults (data-i18n); say what is true now.
+    relabelExerciseToggles();
+    relabelTakeButtons();
     paintRating();
     // A saved take's score card: the same numbers, worked out again for their words.
     const r = state.rate;
@@ -3240,6 +3613,75 @@
     if (sel.value !== mode) sel.value = mode;
   }
 
+  /** A progression's name and description in the page language (the data carries both). */
+  function progName(p, id) {
+    return (isEsLang() && p.nameEs) || p.name || id || "";
+  }
+  function progDesc(p) {
+    return (isEsLang() && p.descriptionEs) || p.description || "";
+  }
+
+  /**
+   * The line under the chips: the selected progression and, after ▶ or Bucle,
+   * how it plays (state.chordPlayHint). Written again by a language switch.
+   */
+  function paintChordDesc() {
+    const el = $("#chord-desc");
+    if (!el) return;
+    const p = (VTPiano?.getProgressions?.() || VT_PROGRESSIONS || {})[state.selectedProg];
+    if (!p) return;
+    const text = progDesc(p) || progName(p, state.selectedProg);
+    el.textContent = text + (state.chordPlayHint ? progressionHint(state.chordPlayHint) : "");
+  }
+
+  /** Song cards of a song exercise (s3), in the page language. */
+  function renderSongCards(ex) {
+    const row = $("#songs-row");
+    if (!row) return;
+    row.hidden = !ex?.songs;
+    if (!ex?.songs) return;
+    const keys = { feel: "piano.songFeel", better: "piano.songBetter" };
+    row.innerHTML = ex.songs
+      .map(
+        (s) => `
+        <div class="card" style="padding:0.75rem;">
+          <strong>${escapeHtml(keys[s.id] ? tt(keys[s.id]) : s.title)}</strong>
+          <p class="muted" style="margin:0.25rem 0 0.5rem;font-size:0.85rem;">${escapeHtml(tt("piano.songKey"))} · ${escapeHtml(tt("piano.songTip"))}</p>
+          <button type="button" class="btn btn-sm btn-singing" data-song-prog="${escapeHtml(s.prog)}">${escapeHtml(tt("piano.songPlay"))}</button>
+        </div>`
+      )
+      .join("");
+    $$("[data-song-prog]", row).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        selectProgression(btn.dataset.songProg);
+      });
+    });
+  }
+
+  /**
+   * A language switch on the piano panel: the chips, the select's options, the
+   * song cards and the description say it in the new language. Option text and
+   * chip text change; values, the choice and the playing piano do not.
+   */
+  function relabelPianoPanel(ex) {
+    const progs = VTPiano?.getProgressions?.() || VT_PROGRESSIONS || {};
+    $$("#sel-progression option").forEach((o) => {
+      const p = progs[o.value];
+      if (!p) return;
+      o.textContent = progName(p, o.value);
+      o.title = progDesc(p);
+    });
+    $$("#prog-buttons .prog-btn").forEach((b) => {
+      const p = progs[b.dataset.progId];
+      if (!p) return;
+      b.textContent = progName(p, b.dataset.progId);
+      b.title = progDesc(p);
+    });
+    renderSongCards(ex);
+    paintChordDesc();
+    syncSustainSecLabel();
+  }
+
   function fillProgressionSelect(keys) {
     const sel = $("#sel-progression");
     const bar = $("#hud-prog-bar");
@@ -3257,11 +3699,19 @@
       .map((id) => {
         const p = progs[id];
         if (!p) return "";
-        const label = p.name || id;
-        return `<option value="${id}" title="${(p.description || "").replace(/"/g, "&quot;")}">${label}</option>`;
+        const label = progName(p, id);
+        return `<option value="${id}" title="${progDesc(p).replace(/"/g, "&quot;")}">${label}</option>`;
       })
       .join("");
     sel.value = cur;
+  }
+
+  /** Whether the open exercise draws a pitch highway the progression locks (truthy) or not. */
+  function highwayFollowsProgression() {
+    return (
+      (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) &&
+      !(state.exercise && getProfile(state.exercise)?.noProgression)
+    );
   }
 
   function selectProgression(id, { silent, fromUi } = {}) {
@@ -3274,16 +3724,12 @@
     $$(".prog-btn").forEach((b) => {
       b.classList.toggle("active", b.dataset.progId === id);
     });
-    if ($("#chord-desc")) {
-      $("#chord-desc").textContent = p.description || p.name || "";
-    }
-    if (
-      (state.exercise?.audio?.pitchViz || state.exercise?.practice?.showPitch) &&
-      !(state.exercise && getProfile(state.exercise)?.noProgression)
-    ) {
+    state.chordPlayHint = null;
+    paintChordDesc();
+    if (highwayFollowsProgression()) {
       lockHighwayForProgression(id);
     }
-    if (!silent) applyPianoOptionsHot("prog:" + (p.name || id));
+    if (!silent) applyPianoOptionsHot("prog:" + progName(p, id));
   }
 
   /**
@@ -3293,9 +3739,20 @@
    */
   /** "Applied: one note at a time": the name of what the learner just changed. */
   function hotAppliedLabel(what) {
-    if (typeof what === "string" && what.startsWith("prog:")) return what.slice(5);
-    const modes = { oneNote: "piano.modeOneNote", arpeggio: "piano.modeArpeggio", chords: "piano.modeChords" };
-    return Object.hasOwn(modes, what) ? tt(modes[what]) : String(what);
+    const w = String(what);
+    if (w.startsWith("prog:")) return w.slice(5);
+    // Every option the toast can name, in the learner's language (the raw
+    // "oct:+1", "sustain" or "12s" never reaches the screen)
+    if (w.startsWith("oct:")) return tt("range.shiftedManual", { n: w.slice(4) });
+    if (/^\d+s$/.test(w)) return tt("piano.secsLabel", { n: parseInt(w, 10) });
+    const named = {
+      oneNote: "piano.modeOneNote",
+      arpeggio: "piano.modeArpeggio",
+      chords: "piano.modeChords",
+      sustain: "piano.sustain",
+      auto: "piano.auto"
+    };
+    return Object.hasOwn(named, w) ? tt(named[w]) : w;
   }
 
   /**
@@ -3356,8 +3813,8 @@
       b.type = "button";
       b.className = "prog-btn" + (state.selectedProg === id ? " active" : "");
       b.dataset.progId = id;
-      b.textContent = p.name;
-      b.title = p.description;
+      b.textContent = progName(p, id);
+      b.title = progDesc(p);
       b.addEventListener("click", () => selectProgression(id));
       progWrap.appendChild(b);
     });
@@ -3386,24 +3843,7 @@
       const b = $(s);
       if (b) b.hidden = ownNotes;
     });
-    if ($("#songs-row")) $("#songs-row").hidden = !ex.songs;
-    if (ex.songs) {
-      $("#songs-row").innerHTML = ex.songs
-        .map(
-          (s) => `
-        <div class="card" style="padding:0.75rem;">
-          <strong>${s.title}</strong>
-          <p class="muted" style="margin:0.25rem 0 0.5rem;font-size:0.85rem;">${s.keyHint} · Use stanzas you know. Practice with piano, not full copyrighted tracks.</p>
-          <button type="button" class="btn btn-sm btn-singing" data-song-prog="${s.prog}">Play song progression</button>
-        </div>`
-        )
-        .join("");
-      $$("[data-song-prog]").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          selectProgression(btn.dataset.songProg);
-        });
-      });
-    }
+    renderSongCards(ex);
   }
 
   function pianoOptions() {
@@ -3500,11 +3940,17 @@
     if (map[pick]) state.practice.setTargetFreq(map[pick]);
   }
 
-  /** The engine's target in a chord: its first note in the comfortable 120–280 Hz band, else its 2nd (or 1st) note. */
+  /**
+   * The engine's target in a chord: its first note in the comfortable
+   * 120–280 Hz band, else its 2nd (or 1st) note. The band moves with the
+   * material: the octave control has already shifted the chord's notes, so at
+   * +2 the tone to sing is C5, not the chord's bass note C4.
+   */
   function singableChordNote(ch, noteName, map) {
+    const reg = Math.pow(2, state.octaveShift || 0);
     for (const n of ch.notes || []) {
       const f = map[n];
-      if (f && f >= 120 && f <= 280) return n;
+      if (f && f >= 120 * reg && f <= 280 * reg) return n;
     }
     return noteName || ch.notes?.[1] || ch.notes?.[0];
   }
@@ -3528,7 +3974,9 @@
         ? ` · ${opts.sustainSec}s por nota`
         : ` · ${opts.sustainSec}s per note`
       : opts.sustain
-        ? ` · sustain ${opts.sustainSec}s`
+        ? es
+          ? ` · sostenido ${opts.sustainSec}s`
+          : ` · sustain ${opts.sustainSec}s`
         : "";
     return modeHint + holdHint;
   }
@@ -3568,7 +4016,14 @@
       // Re-apply same lock (same option) — never shrink to current chord
       // prog is already transposed by playProgression
       if (state.pitchViz) state.pitchViz.setProgressionRange(prog);
-      $("#chord-desc").textContent = prog.description + progressionHint(opts);
+      // Kept so a language switch can write the line again (paintChordDesc)
+      state.chordPlayHint = {
+        oneNote: !!opts.oneNote,
+        arpeggio: !!opts.arpeggio,
+        sustain: !!opts.sustain,
+        sustainSec: opts.sustainSec
+      };
+      paintChordDesc();
       toast(progressionToast(loop, opts));
     } catch (e) {
       toast(tt("toast.audioStartFail"));
@@ -3681,16 +4136,35 @@
     recordOnly: ["Grabar y revisar", "Record & review"],
     pauseDetect: ["Pausas", "Pauses"],
     fillerDetect: ["Muletillas", "Fillers"],
-    voiceDrill: ["Práctica guiada", "Guided practice"]
+    voiceDrill: ["Práctica guiada", "Guided practice"],
+    countPace: ["Cuenta a ritmo", "Paced counting"],
+    articulationContrast: ["Contraste con bolígrafo", "Pen contrast"],
+    speechEnergy: ["Conversación", "Conversation"],
+    reviewSession: ["Grabar y revisar", "Record & review"],
+    metronomeSpeech: ["Fluidez con metáforas", "Metaphor fluency"],
+    keyPointPace: ["Ritmo y punto clave", "Pace and key point"],
+    gestureReps: ["Gestos con intención", "Purposeful gestures"],
+    facePhases: ["Expresión facial", "Facial expression"],
+    concisionGate: ["Puerta de concisión", "Concision gate"],
+    storyTimer: ["Historia con pico", "Story with a peak"],
+    authorityLand: ["Cierre con autoridad", "Authority close"],
+    energyMatch: ["Ajustar la energía", "Energy match"],
+    releaseFlow: ["Soltar mandíbula y cuello", "Jaw & neck release"],
+    breathCycle: ["Respiración costo-abdominal", "Low rib & belly breath"],
+    openSpace: ["Espacio interno", "Inner space"],
+    vowelLadder: ["Cinco vocales", "Five vowels"],
+    resonanceZone: ["Zonas de resonancia", "Resonance zones"],
+    placementAB: ["Comparar colocaciones", "Placement compare"],
+    trillSolfege: ["Solfeo en trino de labios", "Lip-trill solfège"]
   };
 
   function modeDisplayName(modeId) {
     const es =
       (window.VTI18n && VTI18n.lang === "es") ||
       (document.documentElement.lang || "").startsWith("es");
-    if (!modeId) return es ? "práctica" : "practice";
     const names = MODE_NAMES[modeId];
-    return names ? names[es ? 0 : 1] : String(modeId).replace(/([A-Z])/g, " $1").trim();
+    // A mode with no name here is called plain "practice": its id never reaches the learner
+    return names ? names[es ? 0 : 1] : es ? "práctica" : "practice";
   }
 
   function setPracticeUI(live) {
@@ -3745,6 +4219,8 @@
     if (pill) {
       pill.textContent = live ? tt("practice.live") : tt("practice.ready");
       pill.classList.toggle("live", live);
+      // "Tiempo" labels the clock: an exercise with no clock has nothing to label
+      pill.hidden = !live && !(state.timer.total > 0);
     }
   }
 
@@ -3959,6 +4435,21 @@
     return !!VTPiano.ctx && VTPiano.ctx.state !== "running";
   }
 
+  /**
+   * "↻ Otra vez" after a rated take starts a new take: its own practice
+   * clock, its own history entry and an unanswered card. The saved flag
+   * used to carry over, so the second take was never recorded and leaving
+   * it did not ask.
+   */
+  function startNewTakeAfterSave() {
+    if (state.sessionPractice.saved) {
+      resetSessionPractice();
+      resetRating();
+      const scored = $("#score-result");
+      if (scored) scored.hidden = true;
+    }
+  }
+
   async function startPractice() {
     const ex = state.exercise;
     if (!ex || state.practiceLive || state.practiceStarting) return;
@@ -3973,6 +4464,7 @@
     try {
       if (startsElsewhere(ex, profile)) return;
 
+      startNewTakeAfterSave();
       state.practiceStarting = true;
       setPracticeUI(false); // hides/disables Start while bootstrapping
       trackPracticeStart(ex, profile);
@@ -4155,6 +4647,11 @@
       }
     };
     state.practice.onHoldLogged = (sec) => {
+      // Counting aloud is not a held note: the engine logs any voicing of
+      // 2 s or more, so a speaking drill (no hold readout) logs nothing.
+      // Every singing exercise still logs its holds, trills and sirens
+      // included.
+      if (!showHold && ex.track !== "singing") return;
       if (window.VTStorage) VTStorage.addHoldLog(sec);
       renderHoldHistory();
       const input = $('#metrics-form [name="maxHold"]');
@@ -4405,8 +4902,9 @@
     // The step clock runs whenever the step is live. It used to wait for the
     // mic, so with the mic refused and the piano playing the timer sat still
     // and a guided step could never end (VG-40).
-    if (ex.audio.timer && state.timer.total > 0) startTimer();
-    if ((needsMic || wantRecord) && !micOk) showMicBlocked(true);
+    const clockRuns = !!(ex.audio.timer && state.timer.total > 0);
+    if (clockRuns) startTimer();
+    if ((needsMic || wantRecord) && !micOk) showMicBlocked(true, { piano: soundOk, clock: clockRuns });
     else hideMicBlocked();
 
     // Keep piano awake while practicing (tab blur / OS audio policies)
@@ -4433,9 +4931,11 @@
   }
 
   function liveToast(profile, { micOk, soundOk, wantPiano, wantRecord }) {
-    if (!micOk && soundOk) return tt("toast.pianoOnly");
+    // "Allow the mic" cannot help when there is no microphone
+    if (!micOk && soundOk) return tt(isMicMissing(micFailure().name) ? "mic.missing.toast" : "toast.pianoOnly");
     if (wantPiano && !soundOk) return tt("toast.pianoFail");
-    return wantRecord
+    // "grabando" only when a stream is open to record from
+    return wantRecord && micOk
       ? tt("toast.liveRec", { mode: modeDisplayName(profile.mode) })
       : tt("toast.live", { mode: modeDisplayName(profile.mode) });
   }
@@ -4469,35 +4969,73 @@
     state._modeTicker = requestAnimationFrame(tick);
   }
 
-  /**
-   * A refused microphone, said where the learner is looking and kept there:
-   * how to allow it, a retry, and — inside a guided routine — a way on.
-   * @param {boolean} canRun true when the piano or the clock still runs
-   */
-  function micBlockMessageKey(canRun, reason) {
-    const failure = reason || state.practice.lastCaptureError;
-    const failureName = typeof failure === "string" ? failure : failure?.name;
-    const failureMessage = typeof failure === "object" ? failure?.message : "";
-    let messageKey = canRun ? "mic.blocked.partial" : "mic.blocked.none";
-    if (["interrupted", "AudioResumeTimeout"].includes(failureName)) messageKey = "mic.blocked.interrupted";
-    else if (["NotReadableError", "AbortError"].includes(failureName)) messageKey = "mic.blocked.busy";
-    else if (failureName === "NotFoundError") messageKey = "mic.blocked.missing";
-    else if (failureName === "TimeoutError") messageKey = "mic.blocked.pending";
-    else if (/no live audio track|AudioContext|MediaStreamSource|ended while Start built/i.test(failureMessage || "")) {
-      messageKey = "mic.blocked.disconnected";
-    }
-    return messageKey;
+  /** getUserMedia found no device (or none that fits): there is nothing to allow. */
+  function isMicMissing(reason) {
+    return reason === "NotFoundError" || reason === "OverconstrainedError";
   }
 
-  function showMicBlocked(canRun, reason) {
+  /** The microphone failure behind a notice: `reason`, else the engine's last capture error. */
+  function micFailure(reason) {
+    const failure = reason || state.practice.lastCaptureError;
+    return typeof failure === "string" ? { name: failure, message: "" } : { name: failure?.name, message: failure?.message || "" };
+  }
+
+  function micBlockMessageKey(canRun, reason) {
+    const { name, message } = micFailure(reason);
+    const generic = canRun ? "partial" : "none";
+    if (["interrupted", "AudioResumeTimeout"].includes(name)) return "mic.blocked.interrupted";
+    if (["NotReadableError", "AbortError"].includes(name)) return "mic.blocked.busy";
+    // No device at all: "allow it" cannot help, plugging one in can
+    if (isMicMissing(name)) return `mic.missing.${generic}`;
+    if (name === "TimeoutError") return "mic.blocked.pending";
+    if (/no live audio track|AudioContext|MediaStreamSource|ended while Start built/i.test(message)) {
+      return "mic.blocked.disconnected";
+    }
+    return `mic.blocked.${generic}`;
+  }
+
+  /**
+   * The failure itself rather than what keeps running: a name ("interrupted",
+   * from audio-recovery.js) or an error ({ name, message }, as main's callers
+   * and tests/safari-mobile-recovery.spec.js pass it).
+   */
+  function isMicFailure(why) {
+    return typeof why === "string" || (!!why && typeof why === "object" && ("name" in why || "message" in why));
+  }
+
+  /** What still runs without the microphone, for the notice's {runs}. */
+  function micRunsKey(why) {
+    if (why.piano && why.clock) return "mic.runs.both";
+    if (why.piano) return "mic.runs.piano";
+    return why.clock ? "mic.runs.clock" : "mic.runs.steps";
+  }
+
+  /**
+   * A refused, missing or interrupted microphone, said where the learner is
+   * looking and kept there: what still runs, how to get the mic back, a retry,
+   * and — inside a guided routine — a way on. When the exercise runs without
+   * the mic the notice can be put away (✕ or Escape) for this visit, since it
+   * sits over the stage's controls (VG-40 keeps it where it is).
+   * @param {boolean} canRun true when the piano or the clock still runs
+   * @param {string|{name?: string, message?: string}|{reason?: string|Object|null, piano?: boolean, clock?: boolean}} [why]
+   *   the failure (its name, as audio-recovery.js passes "interrupted", or the
+   *   error), or that failure as `reason` and what keeps going
+   */
+  function showMicBlocked(canRun, why = {}) {
+    const w = isMicFailure(why) ? { reason: why } : why || {};
     const box = $("#mic-blocked");
     if (!box) {
       toast(tt("toast.mic"));
       return;
     }
-    $("#mic-blocked-text").textContent = tt(micBlockMessageKey(canRun, reason));
+    // Put away (✕ or Escape) while the exercise runs without it: not again this visit
+    if (canRun && state.micBlockedClosed) return;
+    // Kept so a language switch can say it again (relabelMicBlocked)
+    state.micBlockedText = { key: micBlockMessageKey(canRun, w.reason), runs: micRunsKey(w) };
+    paintMicBlockedText();
     const retry = $("#btn-mic-retry");
     const skip = $("#btn-mic-skip");
+    const close = $("#btn-mic-close");
     if (retry) {
       retry.textContent = tt("mic.blocked.retry");
       retry.onclick = () => {
@@ -4511,6 +5049,20 @@
       skip.hidden = !state.structured;
       skip.onclick = () => advanceStructured("skip");
     }
+    // Only when the exercise goes on without the mic: otherwise the notice is
+    // the only way on.
+    if (close) {
+      close.hidden = !canRun;
+      close.setAttribute("aria-label", tt("a11y.close"));
+      close.onclick = closeMicBlocked;
+    }
+    box.onkeydown = (e) => {
+      if (e.key === "Escape" && canRun) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeMicBlocked();
+      }
+    };
     box.hidden = false;
     try {
       window.VTAnalytics?.track?.("mic_blocked", { exerciseId: state.exercise?.id, canRun: !!canRun });
@@ -4519,6 +5071,27 @@
     }
   }
 
+  /** Put the notice away for this visit and hand focus to the stage's own controls. */
+  function closeMicBlocked() {
+    const box = $("#mic-blocked");
+    const hadFocus = !!box && box.contains(document.activeElement);
+    state.micBlockedClosed = true;
+    hideMicBlocked();
+    if (!hadFocus && document.activeElement && document.activeElement !== document.body) return;
+    const next = ["#btn-practice-start", "#btn-practice-stop"]
+      .map((sel) => $(sel))
+      .find((el) => el && !el.hidden && !el.disabled && el.getBoundingClientRect().width > 0);
+    const stage = $("#highway-stage");
+    try {
+      if (next) next.focus({ preventScroll: true });
+      else if (stage) {
+        if (!stage.hasAttribute("tabindex")) stage.setAttribute("tabindex", "-1");
+        stage.focus({ preventScroll: true });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 
   function hideMicBlocked() {
     const box = $("#mic-blocked");
@@ -4556,16 +5129,21 @@
     if (state.pitchGame) {
       window.VTAppPitchGameSnap = state.pitchGame.snapshot();
     }
+    let result = null;
     try {
       if (state.modeInstance) {
-        return state.modeInstance.onStop({
+        result = state.modeInstance.onStop({
           pitchGame: window.VTAppPitchGameSnap || null
         });
+        // The language was switched during the take: the panel (built in the
+        // old one) and its review text now read in the new one
+        if (state.langChangedMidTake) state.modeInstance.relabel?.();
       }
     } catch (e) {
       console.warn(e);
     }
-    return null;
+    state.langChangedMidTake = false;
+    return result;
   }
 
   /** Stop the engine, the clock, the piano and the pitch picture. */
@@ -4890,6 +5468,40 @@
   }
 
   /**
+   * Chrome writes a recording's WebM with no length in it, so the player reports
+   * Infinity: no total time, and a bar that cannot be dragged until the take has
+   * played through. Asking for a time far past the end makes the browser read to
+   * the end and learn the length; once it reports one, the player goes back to
+   * the start. A player that was about to play, or already was, plays on from
+   * there: the seek itself ends the clip.
+   * @param {HTMLAudioElement|null} audio The player for a recording.
+   */
+  function fixUnknownDuration(audio) {
+    if (!audio) return;
+    const fix = () => {
+      if (audio.duration !== Infinity) return;
+      const resume = audio.autoplay || !audio.paused;
+      audio.autoplay = false;
+      const learned = () => {
+        if (!Number.isFinite(audio.duration)) return;
+        audio.removeEventListener("durationchange", learned);
+        audio.addEventListener(
+          "seeked",
+          () => {
+            if (resume) audio.play().catch(() => {});
+          },
+          { once: true }
+        );
+        audio.currentTime = 0;
+      };
+      audio.addEventListener("durationchange", learned);
+      audio.currentTime = 1e7;
+    };
+    if (audio.readyState >= 1) fix();
+    else audio.addEventListener("loadedmetadata", fix, { once: true });
+  }
+
+  /**
    * The take's recording, in the rating card: the stage-below strip it used to
    * sit in is covered by the sticky stage, so its player and Save could not be
    * reached. A recording means a take just ended, so the card opens (quietly:
@@ -4906,13 +5518,15 @@
         <button type="button" class="btn btn-sm btn-ghost" id="btn-discard-rec">${escapeHtml(tt("rate.takeDiscard"))}</button>
       </div>
     `;
+    fixUnknownDuration(area.querySelector("audio"));
     const save = $("#btn-save-rec");
     save?.addEventListener("click", async () => {
       try {
         await VTStorage.saveRecording({
           exerciseId: state.exercise.id,
           blob: result.blob,
-          label: `${state.exercise.title} · ${new Date().toLocaleString()}`,
+          // In the page's own language, as the rows in Historial are drawn.
+          label: `${exName(state.exercise)} · ${new Date().toLocaleString(locale())}`,
           meta: { durationMs: result.durationMs }
         });
         save.textContent = tt("rate.takeSaved");
@@ -5274,29 +5888,17 @@
     return { values, notes };
   }
 
-  /**
-   * Save this take with its rating and show the score.
-   * @param {{ feel?: "easy"|"ok"|"hard" }} [opts] feel: the one-tap answer
-   *   (rateFeel), shown on the score card; absent for "Guardar con estos detalles"
-   */
-  function completeExercise(opts = {}) {
-    const ex = state.exercise;
-    if (!ex) return;
-    // A self-rating describes a real attempt; merely opening this screen must
-    // never create a completed session, perfect score, streak day or first-win.
-    // The same threshold already guards the unrated auto-save path. Checking
-    // before stopPractice means an accidental early tap won't end the take.
-    if (!canSaveRatedTake()) return;
-    if (state.practiceLive) stopPractice(true);
-    else if (state.pitchRunning) stopPitchViz();
-    flushPracticeClock();
-    // Prefer best auto-hold into metrics
+  /** Prefer best auto-hold into metrics */
+  function fillBestHold() {
     const best = state.practice.bestHold?.() || 0;
     if (best > 0) {
       const input = $('#metrics-form [name="maxHold"]');
       if (input && !(Number(input.value) > best)) input.value = best;
     }
-    // Pitch game → self-scores
+  }
+
+  /** Pitch game → self-scores */
+  function fillPitchGameScores() {
     if (state.pitchGame && state.exercise?.audio?.pitchViz) {
       const snap = state.pitchGame.snapshot();
       const accInput = $('#metrics-form [name="accuracy"]');
@@ -5312,6 +5914,13 @@
         precInput.dispatchEvent(new Event("input"));
       }
     }
+  }
+
+  /**
+   * The rated take's numbers, read off the details form: the values to keep,
+   * the score worked out from them and the time the take took.
+   */
+  function rateTake(ex) {
     const { values, notes } = collectMetrics();
     if (ex.audio.reviewWorkflow) {
       values.stepsDone = Object.values(state.reviewChecks).filter(Boolean).length;
@@ -5338,7 +5947,15 @@
         : state.timer.total > 0
           ? state.timer.total - state.timer.remaining
           : 0;
+    return { values, notes, scored, result, elapsed };
+  }
 
+  /**
+   * Keeps the rated take in History and on its day, and says what it was
+   * before: whether this open had saved it already, the score to compare
+   * with, the day's record and whether it is the first rated take.
+   */
+  function storeRatedTake(ex, { values, notes, result, elapsed }) {
     // A take this open already recorded automatically is the same take: rate
     // it in place rather than adding a second one.
     const sp = state.sessionPractice;
@@ -5360,7 +5977,9 @@
       sec: Math.max(0, elapsedSec - (sp.creditedSec || 0)),
       saved: true,
       bump: insertedNow,
-      source: "save"
+      source: "save",
+      // The day the take was sung: a rating given after midnight is still for it.
+      day: savedEntry.day
     });
     sp.entryId = savedEntry.id;
     sp.creditedSec = Math.max(sp.creditedSec || 0, elapsedSec);
@@ -5369,6 +5988,11 @@
     // first-win card is about the first time somebody reviewed their own work.
     // A changed answer keeps the card its first save showed.
     const isFirstWin = wasSaved ? state.rate.firstWin : ratedSessionsSaved() === 1;
+    return { wasSaved, prevScore, dayRec, isFirstWin };
+  }
+
+  /** The saved take told to the daily loop, the analytics and the value pulse, and its soft moment. */
+  function announceRatedTake(ex, opts, { result, elapsed }, { wasSaved, dayRec, isFirstWin }) {
     window.VTLoop?.onPractice?.({
       exerciseId: ex.id,
       source: "save",
@@ -5396,15 +6020,14 @@
     if (!state.structured && !wasSaved) {
       setTimeout(() => showValueMoment(isFirstWin ? "first_save" : undefined), 600);
     }
+  }
 
-    state.sessionPractice.saved = true;
-    state.microSession = false;
-    const pending = state.pendingLeave;
-    state.pendingLeave = null;
-
-    // Inside a guided routine the next thing is the routine's next step; the
-    // generic suggestion used to hijack it with an unrelated exercise opened
-    // outside the session (no Next button, the wrong timer).
+  /**
+   * Inside a guided routine the next thing is the routine's next step; the
+   * generic suggestion used to hijack it with an unrelated exercise opened
+   * outside the session (no Next button, the wrong timer).
+   */
+  function nextAfterRatedTake(ex) {
     const sessionNow = state.structured ? VTSession.get() : null;
     const routineNextId =
       sessionNow && VTSession.currentExerciseId() === ex.id
@@ -5412,25 +6035,13 @@
         : sessionNow
           ? VTSession.currentExerciseId()
           : null;
-    const nextEx = state.structured
+    return state.structured
       ? (routineNextId && findExercise(routineNextId)) || null
       : suggestNextExercise({ excludeId: ex.id })?.ex || null;
+  }
 
-    // The rating card says "Guardado" itself; a toast on top covered the
-    // exercise's back and Ayuda buttons.
-    if (!state.metricsOpen || rateQuiet()) toast(tt("toast.sessionSaved"));
-    Object.assign(state.rate, {
-      feel: opts.feel || null,
-      result,
-      prevScore,
-      firstWin: isFirstWin,
-      scored,
-      nextId: nextEx?.id || null
-    });
-    paintScore(ex);
-    paintRating();
-    revealScore();
-
+  /** After the score card: the end-of-task ad, the routine's step done, and the way out the leave question asked for. */
+  function followRatedTake(ex, wasSaved, pending) {
     // Post-session native tip (free only; never mid-practice) — research: end-of-task ads only
     if (!wasSaved) {
       try {
@@ -5451,6 +6062,53 @@
     if (pending && pending.type && pending.type !== "next") {
       setTimeout(() => navigateDestination(pending), 400);
     }
+  }
+
+  /**
+   * Save this take with its rating and show the score.
+   * @param {{ feel?: "easy"|"ok"|"hard" }} [opts] feel: the one-tap answer
+   *   (rateFeel), shown on the score card; absent for "Guardar con estos detalles"
+   */
+  function completeExercise(opts = {}) {
+    const ex = state.exercise;
+    if (!ex) return;
+    // A self-rating describes a real attempt; merely opening this screen must
+    // never create a completed session, perfect score, streak day or first-win.
+    // The same threshold already guards the unrated auto-save path. Checking
+    // before stopPractice means an accidental early tap won't end the take.
+    if (!canSaveRatedTake()) return;
+    if (state.practiceLive) stopPractice(true);
+    else if (state.pitchRunning) stopPitchViz();
+    flushPracticeClock();
+    fillBestHold();
+    fillPitchGameScores();
+    const rating = rateTake(ex);
+    const kept = storeRatedTake(ex, rating);
+    announceRatedTake(ex, opts, rating, kept);
+
+    state.sessionPractice.saved = true;
+    state.microSession = false;
+    const pending = state.pendingLeave;
+    state.pendingLeave = null;
+
+    const nextEx = nextAfterRatedTake(ex);
+
+    // The rating card says "Guardado" itself; a toast on top covered the
+    // exercise's back and Ayuda buttons.
+    if (!state.metricsOpen || rateQuiet()) toast(tt("toast.sessionSaved"));
+    Object.assign(state.rate, {
+      feel: opts.feel || null,
+      result: rating.result,
+      prevScore: kept.prevScore,
+      firstWin: kept.isFirstWin,
+      scored: rating.scored,
+      nextId: nextEx?.id || null
+    });
+    paintScore(ex);
+    paintRating();
+    revealScore();
+
+    followRatedTake(ex, kept.wasSaved, pending);
   }
 
   /**
@@ -5796,9 +6454,14 @@
   }
 
   /** How long ago, in words: "hoy", "ayer", "hace 3 días", then a date. */
-  function relativeDay(iso) {
+  /**
+   * "hoy", "ayer", "hace 3 días" or a date, for a moment. `day` is the local day
+   * the take was saved on, when it says: counted from that day, "ayer" agrees
+   * with the calendar above it whatever zone the page is in now.
+   */
+  function relativeDay(iso, day) {
     const D = window.VTDays;
-    const d = new Date(iso);
+    const d = day && D?.parseDay?.(day) ? D.parseDay(day) : new Date(iso);
     if (!D || !Number.isFinite(d.getTime())) return "";
     const n = Math.max(0, D.diffDays(D.dayKey(d), D.dayKey()));
     if (n < 7 && typeof Intl.RelativeTimeFormat === "function") {
@@ -5845,6 +6508,20 @@
       </button>`;
   }
 
+  /** One day of Historial's calendar: its date, its mark, and what a screen reader hears. */
+  function historyDayCellHtml(d, track) {
+    if (!d || d.state === "future") return `<td class="is-future"></td>`;
+    // Practised and rest days carry a mark as well as a colour.
+    const mark = d.state === "done" ? "✓" : d.state === "rest" ? "☾" : "";
+    const said = d.state === "missed" || d.state === "before" ? "" : trackText("loop.dayState." + d.state, null, track);
+    // Today is outlined; a screen reader hears it as well.
+    // Today is named once: an open day's own words already start with "hoy".
+    const label = d.isToday && d.state !== "today" ? [tt("history.today"), said].filter(Boolean).join(", ") : said;
+    return `<td class="is-${d.state}${d.isToday ? " is-today" : ""}">${Number(d.key.slice(8))}${
+      mark ? `<span class="hist-mark" aria-hidden="true">${mark}</span>` : ""
+    }${label ? `<span class="sr-only">: ${escapeHtml(label)}</span>` : ""}</td>`;
+  }
+
   /**
    * The days practised: how many in the last five weeks, and those weeks as a
    * Monday-first calendar with today outlined. Empty until there is a day.
@@ -5870,19 +6547,7 @@
     for (let w = 0; w < 5; w += 1) {
       rows += "<tr>";
       for (let i = 0; i < 7; i += 1) {
-        const d = days[w * 7 + i];
-        if (!d || d.state === "future") {
-          rows += `<td class="is-future"></td>`;
-          continue;
-        }
-        // Practised and rest days carry a mark as well as a colour.
-        const mark = d.state === "done" ? "✓" : d.state === "rest" ? "☾" : "";
-        const said = d.state === "missed" ? "" : trackText("loop.dayState." + d.state, null, track);
-        // Today is outlined; a screen reader hears it as well.
-        const label = d.isToday ? [tt("history.today"), said].filter(Boolean).join(", ") : said;
-        rows += `<td class="is-${d.state}${d.isToday ? " is-today" : ""}">${Number(d.key.slice(8))}${
-          mark ? `<span class="hist-mark" aria-hidden="true">${mark}</span>` : ""
-        }${label ? `<span class="sr-only">: ${escapeHtml(label)}</span>` : ""}</td>`;
+        rows += historyDayCellHtml(days[w * 7 + i], track);
       }
       rows += "</tr>";
     }
@@ -5921,13 +6586,155 @@
   /** ["hoy", "3 veces", { line: "Último puntaje: 7/10" }] */
   function historyRowMeta(p) {
     const n = Number(p.completedCount) || 0;
-    const parts = [p.lastAt ? relativeDay(p.lastAt) : ""];
+    // The newest take says which day it was sung on; older records do not.
+    const last = p.lastAt ? (p.history || []).find((h) => h && h.at === p.lastAt) : null;
+    const parts = [p.lastAt ? relativeDay(p.lastAt, last?.day) : ""];
     if (n) parts.push(n === 1 ? tt("history.times1") : tt("history.timesN", { n }));
     if (p.lastScore != null && Number.isFinite(Number(p.lastScore))) {
       const score = Number(p.lastScore).toLocaleString(locale(), { maximumFractionDigits: 1 });
       parts.push({ line: tt("history.lastScore", { score: `${score}/10` }) });
     }
     return parts;
+  }
+
+  /** Historial's top: the days and the exercises practised, or, before any, a way to start. */
+  function historyTopHtml(daysHtml, recent) {
+    if (!daysHtml && !recent.length) {
+      return `<p class="muted">${tt("history.noSessions")}</p>
+          <p><button type="button" class="btn btn-practice btn-sm" id="history-empty-cta">${tt("history.emptyCta")}</button></p>`;
+    }
+    let html = `<div class="hist-top">${daysHtml}`;
+    if (recent.length) {
+      html += `<section class="hist-recent" aria-labelledby="hist-recent-h">
+            <h3 id="hist-recent-h">${tt("history.recent")}</h3>
+            <div class="history-list">${recent.map((r) => openRowHtml(r.ex, historyRowMeta(r.p), "history-item")).join("")}</div>
+          </section>`;
+    }
+    html += `</div>`;
+    return html;
+  }
+
+  /** The takes kept on this device, then a before-and-after pair for each exercise sung twice or more. */
+  function historyRecordingsHtml(recs) {
+    let html = `<h3 style="margin-top:1.5rem;">${tt("history.recordings")}</h3>`;
+    // Group by exercise for A/B compare (progress proof users love)
+    const byEx = {};
+    recs.forEach((r) => {
+      if (!byEx[r.exerciseId]) byEx[r.exerciseId] = [];
+      byEx[r.exerciseId].push(r);
+    });
+    html += `<div class="history-list">`;
+    for (const r of recs) {
+      const ex = findExercise(r.exerciseId);
+      // The name is drawn now, in the page's language: the label stored with
+      // the take is the language it was saved in (older ones, the English
+      // catalogue title). It is only shown for a take whose exercise has left
+      // the catalogue, and as text. The date and size are the meta line's.
+      html += `
+            <div class="history-item" data-id="${escapeHtml(r.id)}">
+              <div>
+                <strong>${escapeHtml(ex ? exName(ex) : r.label)}</strong>
+                <div class="meta">${escapeHtml(new Date(r.createdAt).toLocaleString(locale()))} · ${Math.round((r.size || 0) / 1024)} KB</div>
+              </div>
+              <div class="controls-row">
+                <button type="button" class="btn btn-sm" data-play="${escapeHtml(r.id)}">${tt("history.play")}</button>
+                <button type="button" class="btn btn-sm btn-danger" data-del="${escapeHtml(r.id)}">${tt("history.delete")}</button>
+              </div>
+            </div>`;
+    }
+    html += `</div>`;
+    // A/B compare blocks
+    const pairs = Object.entries(byEx).filter(([, arr]) => arr.length >= 2);
+    if (pairs.length) {
+      html += `<h3 style="margin-top:1.25rem;">${tt("retain.audioCompare")}</h3><div class="history-list">`;
+      pairs.forEach(([exId, arr]) => {
+        const sorted = arr.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+        const newer = sorted[0];
+        const older = sorted[1];
+        const ex = findExercise(exId);
+        html += `<div class="history-item">
+              <div><strong>${escapeHtml(ex ? exName(ex) : exId)}</strong>
+              <div class="meta">${tt("retain.audioCompareMeta")}</div></div>
+              <div class="controls-row">
+                <button type="button" class="btn btn-sm" data-ab-old="${escapeHtml(older.id)}" data-ab-new="${escapeHtml(newer.id)}">${tt("retain.audioCompareBtn")}</button>
+              </div>
+            </div>`;
+      });
+      html += `</div>`;
+    }
+    html += `<div id="history-player"></div>`;
+    return html;
+  }
+
+  /** Historial's buttons: open an exercise, play, delete or compare takes, and the empty page's start. */
+  function bindHistoryList(list) {
+    $$("[data-open-ex]", list).forEach((btn) => {
+      btn.addEventListener("click", () => openExercise(btn.dataset.openEx));
+    });
+
+    $$("[data-play]", list).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const blob = await VTStorage.getRecordingBlob(btn.dataset.play);
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const player = $("#history-player");
+        // Under the row that was tapped: at the foot of the list it played
+        // off screen on a phone.
+        btn.closest(".history-item")?.after(player);
+        // Object URL only — escape if ever concatenated with user text
+        player.replaceChildren();
+        const audio = document.createElement("audio");
+        audio.className = "audio-player";
+        audio.controls = true;
+        audio.autoplay = true;
+        audio.src = url;
+        fixUnknownDuration(audio);
+        player.appendChild(audio);
+      });
+    });
+    $("#history-empty-cta", list)?.addEventListener("click", () => {
+      setView("home");
+      continuePractice();
+    });
+    $$("[data-del]", list).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        if (!confirm(tt("history.confirmDelete"))) return;
+        await VTStorage.deleteRecording(btn.dataset.del);
+        renderHistory();
+        toast(tt("toast.deleted"));
+      });
+    });
+    $$("[data-ab-old]", list).forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const oldId = btn.dataset.abOld;
+        const newId = btn.dataset.abNew;
+        const [bOld, bNew] = await Promise.all([
+          VTStorage.getRecordingBlob(oldId),
+          VTStorage.getRecordingBlob(newId)
+        ]);
+        if (!bOld || !bNew) {
+          toast(tt("retain.audioCompareFail"));
+          return;
+        }
+        const uOld = URL.createObjectURL(bOld);
+        const uNew = URL.createObjectURL(bNew);
+        const player = $("#history-player");
+        btn.closest(".history-item")?.after(player);
+        player.innerHTML = `
+            <div class="ab-player">
+              <div><span class="muted">${tt("retain.audioOlder")}</span>
+                <audio class="audio-player" controls src="${uOld}"></audio></div>
+              <div><span class="muted">${tt("retain.audioNewer")}</span>
+                <audio class="audio-player" controls src="${uNew}"></audio></div>
+            </div>`;
+        $$("audio", player).forEach(fixUnknownDuration);
+        try {
+          window.VTAnalytics?.track?.("audio_compare", {});
+        } catch {
+          /* ignore */
+        }
+      });
+    });
   }
 
   async function renderHistory() {
@@ -5938,7 +6745,12 @@
     loading.textContent = tt("history.loading");
     list.replaceChildren(loading);
     try {
-      const recs = await VTStorage.listRecordings();
+      // The recordings are the only part of this page kept in IndexedDB. If they
+      // cannot be read, the days, the last practice and the progress still show.
+      const recs = await VTStorage.listRecordings().catch((e) => {
+        console.warn("[VT] recordings unavailable", e);
+        return [];
+      });
       const progress = VTStorage.getProgress();
       const reviews = VTStorage.getReviews();
       const track = pageTrack();
@@ -5951,65 +6763,10 @@
         .sort((a, b) => String(b.p.lastAt || "").localeCompare(String(a.p.lastAt || "")));
       const daysHtml = historyDaysHtml(track);
 
-      let html = "";
-      if (!daysHtml && !recent.length) {
-        html += `<p class="muted">${tt("history.noSessions")}</p>
-          <p><button type="button" class="btn btn-practice btn-sm" id="history-empty-cta">${tt("history.emptyCta")}</button></p>`;
-      } else {
-        html += `<div class="hist-top">${daysHtml}`;
-        if (recent.length) {
-          html += `<section class="hist-recent" aria-labelledby="hist-recent-h">
-            <h3 id="hist-recent-h">${tt("history.recent")}</h3>
-            <div class="history-list">${recent.map((r) => openRowHtml(r.ex, historyRowMeta(r.p), "history-item")).join("")}</div>
-          </section>`;
-        }
-        html += `</div>`;
-      }
+      let html = historyTopHtml(daysHtml, recent);
 
       if (recs.length) {
-        html += `<h3 style="margin-top:1.5rem;">${tt("history.recordings")}</h3>`;
-        // Group by exercise for A/B compare (progress proof users love)
-        const byEx = {};
-        recs.forEach((r) => {
-          if (!byEx[r.exerciseId]) byEx[r.exerciseId] = [];
-          byEx[r.exerciseId].push(r);
-        });
-        html += `<div class="history-list">`;
-        for (const r of recs) {
-          const ex = findExercise(r.exerciseId);
-          html += `
-            <div class="history-item" data-id="${r.id}">
-              <div>
-                <strong>${r.label}</strong>
-                <div class="meta">${ex ? exName(ex) : r.exerciseId} · ${new Date(r.createdAt).toLocaleString(locale())} · ${Math.round((r.size || 0) / 1024)} KB</div>
-              </div>
-              <div class="controls-row">
-                <button type="button" class="btn btn-sm" data-play="${r.id}">${tt("history.play")}</button>
-                <button type="button" class="btn btn-sm btn-danger" data-del="${r.id}">${tt("history.delete")}</button>
-              </div>
-            </div>`;
-        }
-        html += `</div>`;
-        // A/B compare blocks
-        const pairs = Object.entries(byEx).filter(([, arr]) => arr.length >= 2);
-        if (pairs.length) {
-          html += `<h3 style="margin-top:1.25rem;">${tt("retain.audioCompare")}</h3><div class="history-list">`;
-          pairs.forEach(([exId, arr]) => {
-            const sorted = arr.slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-            const newer = sorted[0];
-            const older = sorted[1];
-            const ex = findExercise(exId);
-            html += `<div class="history-item">
-              <div><strong>${ex ? exName(ex) : exId}</strong>
-              <div class="meta">${tt("retain.audioCompareMeta")}</div></div>
-              <div class="controls-row">
-                <button type="button" class="btn btn-sm" data-ab-old="${older.id}" data-ab-new="${newer.id}">${tt("retain.audioCompareBtn")}</button>
-              </div>
-            </div>`;
-          });
-          html += `</div>`;
-        }
-        html += `<div id="history-player"></div>`;
+        html += historyRecordingsHtml(recs);
       }
 
       if (reviews.length) {
@@ -6032,71 +6789,7 @@
       // Gentle trial and progress prompts live here, never during practice.
       setTimeout(() => showValueMoment(), 400);
 
-      $$("[data-open-ex]", list).forEach((btn) => {
-        btn.addEventListener("click", () => openExercise(btn.dataset.openEx));
-      });
-
-      $$("[data-play]", list).forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const blob = await VTStorage.getRecordingBlob(btn.dataset.play);
-          if (!blob) return;
-          const url = URL.createObjectURL(blob);
-          const player = $("#history-player");
-          // Under the row that was tapped: at the foot of the list it played
-          // off screen on a phone.
-          btn.closest(".history-item")?.after(player);
-          // Object URL only — escape if ever concatenated with user text
-          player.replaceChildren();
-          const audio = document.createElement("audio");
-          audio.className = "audio-player";
-          audio.controls = true;
-          audio.autoplay = true;
-          audio.src = url;
-          player.appendChild(audio);
-        });
-      });
-      $("#history-empty-cta", list)?.addEventListener("click", () => {
-        setView("home");
-        continuePractice();
-      });
-      $$("[data-del]", list).forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          if (!confirm(tt("history.confirmDelete"))) return;
-          await VTStorage.deleteRecording(btn.dataset.del);
-          renderHistory();
-          toast(tt("toast.deleted"));
-        });
-      });
-      $$("[data-ab-old]", list).forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const oldId = btn.dataset.abOld;
-          const newId = btn.dataset.abNew;
-          const [bOld, bNew] = await Promise.all([
-            VTStorage.getRecordingBlob(oldId),
-            VTStorage.getRecordingBlob(newId)
-          ]);
-          if (!bOld || !bNew) {
-            toast(tt("retain.audioCompareFail"));
-            return;
-          }
-          const uOld = URL.createObjectURL(bOld);
-          const uNew = URL.createObjectURL(bNew);
-          const player = $("#history-player");
-          btn.closest(".history-item")?.after(player);
-          player.innerHTML = `
-            <div class="ab-player">
-              <div><span class="muted">${tt("retain.audioOlder")}</span>
-                <audio class="audio-player" controls src="${uOld}"></audio></div>
-              <div><span class="muted">${tt("retain.audioNewer")}</span>
-                <audio class="audio-player" controls src="${uNew}"></audio></div>
-            </div>`;
-          try {
-            window.VTAnalytics?.track?.("audio_compare", {});
-          } catch {
-            /* ignore */
-          }
-        });
-      });
+      bindHistoryList(list);
     } catch (e) {
       console.error(e);
       list.innerHTML = `<p class="muted">${tt("history.loadError")}</p>`;
@@ -6172,11 +6865,21 @@
     return D.countDays(start, D.addDays(start, 6));
   }
 
+  /**
+   * A week is over seven days after it started, reviewed or not: the review
+   * below opens then, and the lines above it stop saying "this week".
+   */
+  function planWeekOver(plan, idle) {
+    const start = planStartDay(plan);
+    return !idle && !!start && (window.VTDays?.dayKey?.() || "") >= window.VTDays?.addDays?.(start, 7);
+  }
+
   function renderPlan() {
     setView("plan");
     const plan = VTStorage.getWeekPlan();
     const track = pageTrack();
     const idle = plan.status === "idle";
+    const weekOver = planWeekOver(plan, idle);
     renderPlanWeekRail(plan);
     $("#plan-week-num").textContent = tt("plan.weekN", { n: plan.weekNumber });
     // Before the week starts, "Elige el elemento" and the start button say it all.
@@ -6184,7 +6887,7 @@
     status.hidden = idle;
     status.textContent = idle
       ? ""
-      : plan.status === "active"
+      : plan.status === "active" && !weekOver
         ? tt("plan.statusActive", { element: weekElementLabel(plan.element) })
         : tt("plan.statusReview", { element: weekElementLabel(plan.element) });
 
@@ -6223,7 +6926,7 @@
     // Days are counted from practice, not logged by hand.
     const days = $("#plan-days");
     days.hidden = idle;
-    days.textContent = idle ? "" : tt("plan.days", { n: planWeekDays(plan) });
+    days.textContent = idle ? "" : tt(weekOver ? "plan.daysPast" : "plan.days", { n: planWeekDays(plan) });
     // Once the week is under way its exercises are the next step, not this button.
     $("#plan-start-row").hidden = !idle;
 
@@ -6306,10 +7009,10 @@
     const improved = plan.completedElements || [];
     $("#plan-completed-wrap").hidden = !improved.length;
     $("#plan-completed-elements").innerHTML = improved
-      .map((e) => `<span class="pill">${escapeHtml(weekElementLabel(e))}</span>`)
+      .map((e) => `<span class="pill pill-word">${escapeHtml(weekElementLabel(e))}</span>`)
       .join(" ");
 
-    const reviews = (plan.reviews || []).slice(0, 8);
+    const reviews = (plan.reviews || []).slice(0, 12);
     $("#plan-reviews-card").hidden = !reviews.length;
     $("#plan-reviews").innerHTML = reviews.map(planReviewRow).join("");
   }
@@ -6776,8 +7479,13 @@
     });
   }
 
-  /** Open or close the piano panel under the stage. */
-  function togglePianoPanel() {
+  /**
+   * Open or close the piano panel under the stage. Opened from its button, the
+   * panel is scrolled into view once it has opened; `reveal: false` opens it
+   * where it is, for a panel put back rather than asked for (a language switch
+   * rebuilding the screen, renderExerciseInPlace), whose page stays put.
+   */
+  function togglePianoPanel({ reveal = true } = {}) {
     state.pianoOpen = !state.pianoOpen;
     const block = $("#piano-block");
     const mini = $("#piano-mini-opts");
@@ -6792,6 +7500,7 @@
           if (!state.pianoOpen) return;
           block.classList.add("is-settled");
           fitHighwayToViewport();
+          if (!reveal) return;
           revealBelowStickyRows(block, scrollBehavior());
         });
       } else {
@@ -6822,7 +7531,8 @@
 
   function bindPianoPanel() {
     $("#piano-block")?.addEventListener("focusin", (e) => revealBelowStickyRows(e.target));
-    $("#btn-toggle-piano")?.addEventListener("click", togglePianoPanel);
+    // Not the bare function: the click event would arrive as its options
+    $("#btn-toggle-piano")?.addEventListener("click", () => togglePianoPanel());
   }
 
   /** Metrics form, timer and recorder. */
@@ -7046,7 +7756,9 @@
    * surfaces cannot disagree.
    *
    * @returns {{kind: "free"|"trialLocal"|"trialAccount"|"gift"|"paid"|"canceled",
-   *            days: number|null}} What to show, and days left where that is known.
+   *            days: number|null, until: string, pastDue?: boolean}} What to show, and
+   *            days left where that is known. `pastDue`: a "paid" access whose
+   *            last payment did not go through.
    */
   function headerPlanState() {
     const ent = window.VTBilling?.getEntitlement?.() || { pro: false, status: "free" };
@@ -7089,7 +7801,10 @@
     if (held.status === "canceled") return { kind: "canceled", days: planDaysLeft(held.periodEnd), until };
     if (held.source === "trial") return { kind: "trialAccount", days: planDaysLeft(held.periodEnd), until };
     if (held.source === "gift" || held.source === "comp") return { kind: "gift", days: planDaysLeft(held.periodEnd), until };
-    return { kind: "paid", days: null, until };
+    // A payment that failed still holds Pro until the period it paid for
+    // ends, and is the same "paid" access, but it is not "renewing": the
+    // label says so (planLabel), and promises nothing about what comes next.
+    return { kind: "paid", days: null, until, pastDue: held.status === "past_due" };
   }
 
   /** Signed out, or signed in with nothing: the browser's own view. Its dates are ISO strings rather than unix seconds. */
@@ -7097,7 +7812,7 @@
     const t = Date.parse(ent.expiresAt || "");
     const until = Number.isFinite(t) ? accountDate(t / 1000) : "";
     if (ent.status === "trial") return { kind: "trialLocal", days: planDaysLeft(ent.expiresAt), until };
-    if (ent.pro) return { kind: "paid", days: null, until };
+    if (ent.pro) return { kind: "paid", days: null, until, pastDue: ent.licenseStatus === "past_due" };
     return { kind: "free", days: null, until: "" };
   }
 
@@ -7120,7 +7835,7 @@
   /**
    * What the header's one Pro element says for a plan state, and how it looks.
    * Shared by the header button and anything that must say the same thing.
-   * @param {{kind: string, days: number|null}} plan From headerPlanState().
+   * @param {{kind: string, days: number|null, pastDue?: boolean}} plan From headerPlanState().
    * @returns {{text: string, title: string, cls: string}}
    */
   function planLabel(plan) {
@@ -7148,6 +7863,9 @@
           cls: "plan-ending"
         };
       case "paid":
+        if (plan.pastDue) {
+          return { text: tt("nav.planPastDue"), title: tt("nav.subscriptionTitle"), cls: "plan-ending" };
+        }
         return { text: tt("nav.planPaid"), title: tt("nav.subscriptionTitle"), cls: "plan-paid" };
       default:
         // The offer. "Probar" while a free trial is still on the table, "Ver"
@@ -7168,36 +7886,61 @@
     const prelaunch = isCheckoutPrelaunch();
     const btn = $("#btn-pricing");
     const plan = headerPlanState();
-    if (btn) {
-      // One element about Pro, never two. It used to be a status pill beside a
-      // button (on main, a "Pro" button beside a "PRO" badge; after that, a
-      // "Prueba · 5 d" pill beside "Suscripción"): two things about one plan,
-      // side by side, one pressable and one not, and on a phone the pair pushed
-      // "Historial" off the row. Now the button is the plan. With nothing held
-      // it is the offer, in words that say it is one; with something held its
-      // label is what you hold, and pressing it opens that plan, which is also
-      // where cancelling lives. Four kinds of access, four different words, so
-      // colour is never the only thing that tells them apart.
-      const label = planLabel(plan);
-      // Inside an exercise on a phone the header row has room for "Pro" but
-      // not "Probar Pro", so the verb sits in its own span that the stylesheet
-      // drops there. Everywhere else the button reads, and is named, in full.
-      const cut = plan.kind === "free" ? label.text.lastIndexOf("Pro") : -1;
-      if (cut > 0) {
-        const verb = document.createElement("span");
-        verb.className = "pro-verb";
-        verb.textContent = label.text.slice(0, cut);
-        btn.replaceChildren(verb, label.text.slice(cut));
-      } else {
-        btn.textContent = label.text;
-      }
-      btn.title = label.title;
-      // The accessible name is the visible label; the title says what opens.
-      btn.removeAttribute("aria-label");
-      btn.classList.remove("btn-pro", "btn-ghost", "plan-trial", "plan-gift", "plan-paid", "plan-ending");
-      btn.classList.add(label.cls);
-      btn.dataset.plan = plan.kind;
+    if (btn) paintPlanButton(btn, plan);
+    paintPlanSideButtons(B, ent, cfg, plan);
+    paintRecheckButton(B, ent);
+    // Free trial is opt-in. Once accounts exist the trial belongs to the
+    // account, not the browser — one per person rather than one per cleared
+    // localStorage — so the button leads to sign-in when nobody is signed in.
+    const trialBtn = $("#btn-start-trial");
+    if (trialBtn) paintPricingTrial(trialBtn, B, ent, cfg, prelaunch);
+    paintPayNote(prelaunch, trialBtn);
+    paintCancelNote(ent);
+    paintManageBilling(B, ent, cfg);
+    // Ads: Pro suppresses; free may refresh home slot
+    try {
+      window.VTAds?.refreshAllSafe?.();
+    } catch {
+      /* ignore */
     }
+    const healthNote = paintHealthNote(B);
+    paintPrelaunchStanding(ent, prelaunch, healthNote, trialBtn);
+  }
+
+  /** The header's one Pro element: the offer while nothing is held, the plan held once something is. */
+  function paintPlanButton(btn, plan) {
+    // One element about Pro, never two. It used to be a status pill beside a
+    // button (on main, a "Pro" button beside a "PRO" badge; after that, a
+    // "Prueba · 5 d" pill beside "Suscripción"): two things about one plan,
+    // side by side, one pressable and one not, and on a phone the pair pushed
+    // "Historial" off the row. Now the button is the plan. With nothing held
+    // it is the offer, in words that say it is one; with something held its
+    // label is what you hold, and pressing it opens that plan, which is also
+    // where cancelling lives. Four kinds of access, four different words, so
+    // colour is never the only thing that tells them apart.
+    const label = planLabel(plan);
+    // Inside an exercise on a phone the header row has room for "Pro" but
+    // not "Probar Pro", so the verb sits in its own span that the stylesheet
+    // drops there. Everywhere else the button reads, and is named, in full.
+    const cut = plan.kind === "free" ? label.text.lastIndexOf("Pro") : -1;
+    if (cut > 0) {
+      const verb = document.createElement("span");
+      verb.className = "pro-verb";
+      verb.textContent = label.text.slice(0, cut);
+      btn.replaceChildren(verb, label.text.slice(cut));
+    } else {
+      btn.textContent = label.text;
+    }
+    btn.title = label.title;
+    // The accessible name is the visible label; the title says what opens.
+    btn.removeAttribute("aria-label");
+    btn.classList.remove("btn-pro", "btn-ghost", "plan-trial", "plan-gift", "plan-paid", "plan-ending");
+    btn.classList.add(label.cls);
+    btn.dataset.plan = plan.kind;
+  }
+
+  /** The account panel's Pro link, the progress export and the demo unlock, for the plan held. */
+  function paintPlanSideButtons(B, ent, cfg, plan) {
     const acctPricing = $("#btn-account-pricing");
     if (acctPricing) {
       acctPricing.textContent = plan.kind === "free" ? tt("nav.proSee") : tt("nav.planOpen");
@@ -7208,6 +7951,10 @@
     if (demo) {
       demo.hidden = !cfg.demoUnlockEnabled || ent.source === "demo" || (ent.pro && ent.source === "paid");
     }
+  }
+
+  /** "Ya pagué": shown only while a checkout's licence is awaited and the worker can verify it. */
+  function paintRecheckButton(B, ent) {
     // Recovery for a checkout whose license never arrived.
     const recheck = $("#btn-recheck-payment");
     if (recheck) {
@@ -7217,50 +7964,66 @@
         !!B.verificationConfigured?.()
       );
     }
-    // Free trial is opt-in. Once accounts exist the trial belongs to the
-    // account, not the browser — one per person rather than one per cleared
-    // localStorage — so the button leads to sign-in when nobody is signed in.
-    const trialBtn = $("#btn-start-trial");
-    if (trialBtn) {
-      const acct = window.VTAccount?.getState?.() || null;
-      // A worker URL is not enough: the button has to name the length of the
-      // trial the press will actually start, and the press only goes to the
-      // account layer once the worker has said it can sign somebody in. Anything
-      // short of that — still asking, unreachable, no method wired up — is the
-      // browser-local trial, so the button says the browser-local length.
-      const accounts = accountSignIn().offered;
-      const canTrial = accounts
-        ? !ent.pro && !(acct.signedIn && acct.account?.trialUsed)
-        : !!B.canStartTrial?.() && !ent.pro;
-      trialBtn.hidden = !canTrial;
-      // Pre-launch the trial is the one thing this dialog can really do, so it
-      // moves up beside the payments note as the primary; once checkout is live
-      // it goes back to the foot. One element, so its id and listener stay.
-      const slot = prelaunch ? $("#pricing-launch") : $("#pricing-modal .pricing-foot");
-      if (slot && trialBtn.parentElement !== slot) {
-        // Once checkout is live the plan cards carry the primary action, so this
-        // goes back to being a secondary — but first in its row, not fourth
-        // behind export, manage and recheck. "Visual or language steering toward
-        // subscriptions" was the most common finding in the EU's 2023 sweep of
-        // 399 shops (54 shops, more than fake countdowns), and a trial buried
-        // under three controls that only Pro users ever see is that shape.
-        slot.insertBefore(trialBtn, prelaunch ? null : slot.firstElementChild);
-      }
-      trialBtn.classList.toggle("btn-primary", prelaunch);
-      trialBtn.classList.toggle("btn-sm", !prelaunch);
-      // Once per load, not once per render: this sits in a path that re-runs on
-      // every entitlement change and every language switch. The dialog's own
-      // visibility is the gate — see noteTrialCtaView.
-      noteTrialCtaView("pricing");
-      if (canTrial) {
-        const days = accounts
-          ? Number(acct.methods?.trialDays || 7) // the worker's TRIAL_DAYS, whose default is also 7
-          : Number(cfg.freeTrialDays || 0);
-        trialBtn.textContent = tt(prelaunch ? "pricing.startTrialFree" : "pricing.startTrial", {
-          n: String(days)
-        });
-      }
+  }
+
+  /** The Pro dialog's trial button: whether it is offered, where it sits and the length it names. */
+  function paintPricingTrial(trialBtn, B, ent, cfg, prelaunch) {
+    const acct = window.VTAccount?.getState?.() || null;
+    // A worker URL is not enough: the button has to name the length of the
+    // trial the press will actually start, and the press only goes to the
+    // account layer once the worker has said it can sign somebody in. Anything
+    // short of that — still asking, unreachable, no method wired up — is the
+    // browser-local trial, so the button says the browser-local length.
+    const accounts = accountSignIn().offered;
+    const canTrial = accounts
+      ? !ent.pro && !(acct.signedIn && acct.account?.trialUsed)
+      : !!B.canStartTrial?.() && !ent.pro;
+    trialBtn.hidden = !canTrial;
+    placePricingTrial(trialBtn, prelaunch);
+    // Once per load, not once per render: this sits in a path that re-runs on
+    // every entitlement change and every language switch. The dialog's own
+    // visibility is the gate — see noteTrialCtaView.
+    noteTrialCtaView("pricing");
+    if (canTrial) {
+      const days = pricingTrialDays(accounts, acct, cfg);
+      trialBtn.textContent = tt(prelaunch ? "pricing.startTrialFree" : "pricing.startTrial", {
+        n: String(days)
+      });
     }
+  }
+
+  /** Where the Pro dialog's trial button sits: the primary beside the payments note pre-launch, a secondary in the foot after. */
+  function placePricingTrial(trialBtn, prelaunch) {
+    // Pre-launch the trial is the one thing this dialog can really do, so it
+    // moves up beside the payments note as the primary; once checkout is live
+    // it goes back to the foot. One element, so its id and listener stay.
+    const slot = prelaunch ? $("#pricing-launch") : $("#pricing-modal .pricing-foot");
+    if (slot && trialBtn.parentElement !== slot) {
+      // Once checkout is live the plan cards carry the primary action, so this
+      // goes back to being a secondary — but first in its row, not fourth
+      // behind export, manage and recheck. "Visual or language steering toward
+      // subscriptions" was the most common finding in the EU's 2023 sweep of
+      // 399 shops (54 shops, more than fake countdowns), and a trial buried
+      // under three controls that only Pro users ever see is that shape.
+      slot.insertBefore(trialBtn, prelaunch ? null : slot.firstElementChild);
+    }
+    trialBtn.classList.toggle("btn-primary", prelaunch);
+    trialBtn.classList.toggle("btn-sm", !prelaunch);
+  }
+
+  /** How many days the Pro dialog's trial button promises: the account's own length, else this browser's. */
+  function pricingTrialDays(accounts, acct, cfg) {
+    return accounts
+      // This account's own length: TRIAL_DAYS normally, its arm's length
+      // while the trial-length test runs. Seven is the fallback for a
+      // worker that has not answered yet, and is also the default it would
+      // have given.
+      ? Number(acct.trialDays || 7)
+      : Number(cfg.freeTrialDays || 0);
+  }
+
+  /** The Pro dialog's foot note: how paying works, or pre-launch what the trial costs, and only while it is offered. */
+  function paintPayNote(prelaunch, trialBtn) {
     // The foot promised secure checkout and cancelling "the same way you
     // subscribed" while nobody can subscribe. Pre-launch it answers the
     // question the trial raises instead, and only while the trial is offered.
@@ -7271,6 +8034,46 @@
       payNote.textContent = tt(key);
       payNote.hidden = prelaunch && (!trialBtn || trialBtn.hidden);
     }
+  }
+
+  /** How to cancel, for the rail this person actually paid on; no line for a trial or a gift. */
+  function paintCancelNote(ent) {
+    // How to cancel, for the rail this person actually paid on.
+    //
+    // `pricing.note` used to end "Cancela cuando quieras desde el mismo sitio
+    // donde te suscribiste", which reads as a promise that this page can take
+    // you there. It cannot, on either rail that will ever be live: the only
+    // self-service control here is the Stripe Customer Portal button, and
+    // `isPortalUrl` accepts Stripe hosts only — on a product whose own
+    // conclusion (VG-19) is that a Peru-registered seller cannot be a Stripe
+    // merchant at all. Creem's portal link is generated per customer and
+    // emailed after each payment, so no single URL could be configured here,
+    // and Mercado Pago's recurring payments are managed inside the payer's own
+    // Mercado Pago account. Three rails, three different routes, and only one
+    // of them a button.
+    //
+    // So the page names the route instead of implying one. A trial or a gift
+    // gets no line at all, because there is nothing to cancel.
+    const cancelNote = $("#pricing-cancel-note");
+    if (cancelNote) {
+      const rail = String(ent.provider || "").toLowerCase();
+      const key = ent.pro && ["stripe", "creem", "mercadopago"].includes(rail)
+        ? "pricing.cancel." + rail
+        : "";
+      if (key) {
+        cancelNote.setAttribute("data-i18n", key);
+        cancelNote.textContent = tt(key);
+        cancelNote.hidden = false;
+      } else {
+        cancelNote.removeAttribute("data-i18n");
+        cancelNote.textContent = "";
+        cancelNote.hidden = true;
+      }
+    }
+  }
+
+  /** The Customer Portal button: for Pro or a trial, and only when a valid portal URL is configured. */
+  function paintManageBilling(B, ent, cfg) {
     // Customer Portal: show for Pro/trial when a valid portal URL is configured
     const manage = $("#btn-manage-billing");
     if (manage) {
@@ -7278,12 +8081,10 @@
       const portalOk = portalRaw && (B.isPortalUrl ? B.isPortalUrl(portalRaw) : true);
       manage.hidden = !(portalOk && (ent.pro || ent.status === "trial"));
     }
-    // Ads: Pro suppresses; free may refresh home slot
-    try {
-      window.VTAds?.refreshAllSafe?.();
-    } catch {
-      /* ignore */
-    }
+  }
+
+  /** The Pro dialog's checkout-health line, for free users only; returns the element so the launch box can read it. */
+  function paintHealthNote(B) {
     // Soft note for free users when checkout not live (no developer/issue jargon).
     // Only for free users: "Sigue practicando gratis; Pro se activará cuando
     // estén listos" was also told to people already holding Pro.
@@ -7309,6 +8110,11 @@
         healthNote.hidden = true;
       }
     }
+    return healthNote;
+  }
+
+  /** Pre-launch, the line for somebody whose trial is spent, and the launch box hidden once it holds nothing. */
+  function paintPrelaunchStanding(ent, prelaunch, healthNote, trialBtn) {
     // Somebody who has already spent their free trial while checkout is still
     // closed is the most interested person in the product, and the dialog used
     // to show them nothing at all: no plan they could buy, no explanation and
@@ -7412,25 +8218,43 @@
     renderProStudio(pulse, isProUser);
   }
 
-  function renderProStudio(pulse, isProUser) {
-    const es = isEsLang();
-    // Profiles
+  /**
+   * How a profile reads in the picker and in the rename prompt. The first one
+   * is stored as "Default" and reads as the main one; a name that is empty
+   * (stored so before names were checked) reads "Perfil 2", "Perfil 3", never
+   * as a second "Principal".
+   * @param {{id: string, name?: string}} p Profile.
+   * @param {number} index Its place in the list.
+   * @returns {string} What to show.
+   */
+  function profileLabel(p, index) {
+    if (p.name && !(p.id === "default" && p.name === "Default")) return p.name;
+    return p.id === "default" ? tt("pro.profileMain") : `${tt("pro.profile")} ${index + 1}`;
+  }
+
+  /** The profile picker: every profile on this device, the active one chosen. */
+  function renderProProfiles() {
     const sel = $("#sel-profile");
     if (sel && window.VTStorage?.getProfiles) {
       const { activeId, list } = VTStorage.getProfiles();
-      const prev = sel.value;
       sel.innerHTML = list
         .map(
-          (p) =>
+          (p, i) =>
             `<option value="${escapeHtml(p.id)}"${p.id === activeId ? " selected" : ""}>${escapeHtml(
-              // The first profile is stored as "Default"; it reads as the main one.
-              !p.name || p.name === "Default" ? tt("pro.profileMain") : p.name
+              profileLabel(p, i)
             )}</option>`
         )
         .join("");
-      if (list.some((p) => p.id === prev)) sel.value = prev;
-      else sel.value = activeId;
+      // The picker shows the profile that is active, always. It used to put
+      // the previous choice back when that profile still existed, so after
+      // "+ Perfil" it kept saying "Principal" while the new one was in use and
+      // "Renombrar" renamed the one nobody could see.
+      sel.value = activeId;
     }
+  }
+
+  /** The weekly goal's picker: the goal set, and whether this plan may change it. */
+  function renderProGoalPicker(isProUser) {
     const goalSel = $("#sel-week-goal");
     if (goalSel) {
       const g = VTStorage?.getGoals?.() || { weeklySessionsTarget: 3 };
@@ -7440,6 +8264,10 @@
       // Free can see default goal progress but not change
       if (!window.VTBilling?.can?.("studio_goals")) goalSel.disabled = true;
     }
+  }
+
+  /** The week's sessions against the goal, marked once it is met. */
+  function renderProGoalProgress(pulse) {
     const gp = $("#pro-goal-progress");
     if (gp) {
       gp.textContent = tt("pro.goalProgress", {
@@ -7448,8 +8276,10 @@
       });
       gp.classList.toggle("is-met", !!pulse.goalMet);
     }
+  }
 
-    // Insights panel
+  /** The insights panel's lock and its coach line: Pro's own reading, or the teaser. */
+  function renderProInsights(pulse, isProUser, es) {
     const lock = $("#pro-insights-lock");
     const panel = $("#pro-insights-panel");
     if (lock) lock.hidden = isProUser;
@@ -7464,6 +8294,10 @@
         ? VTValuePulse?.coachFocus?.(pulse, es) || ""
         : tt("pro.insightsTeaser");
     }
+  }
+
+  /** The sessions sparkline, shown to Pro only. */
+  function renderProSpark(pulse, isProUser) {
     const spark = $("#pro-spark");
     if (spark) {
       const arr = pulse.spark || [];
@@ -7479,6 +8313,10 @@
       // teaser text says what the chart would show instead.
       spark.hidden = !isProUser;
     }
+  }
+
+  /** The hold's trend, Pro only; what unlocks it, otherwise. */
+  function renderProHoldTrend(pulse, isProUser) {
     const ht = $("#pro-hold-trend");
     if (ht) {
       if (isProUser && pulse.holdTrend?.length) {
@@ -7490,8 +8328,10 @@
         ht.textContent = isProUser ? "" : tt("pro.unlockInsights");
       }
     }
+  }
 
-    // Achievements (earn free; labels always)
+  /** The achievement badges, each with its label, earned or not. */
+  function renderProAchievements(pulse) {
     const grid = $("#pro-ach-grid");
     if (grid && VTValuePulse?.achievements) {
       const ach = VTValuePulse.achievements(pulse);
@@ -7502,8 +8342,10 @@
         })
         .join("");
     }
+  }
 
-    // Practice heatmap (26 weeks)
+  /** Days practised over 26 weeks, once they go back further than Historial's calendar. */
+  function renderPracticeHeatmap() {
     const hm = $("#practice-heatmap");
     if (hm && VTValuePulse?.heatmap) {
       const data = VTValuePulse.heatmap(26);
@@ -7530,6 +8372,25 @@
       const firstCell = data.cells.find((c) => c.count > 0);
       if (wrap) wrap.hidden = !!calFrom && (!firstCell || String(firstCell.date) >= calFrom);
     }
+  }
+
+  function renderProStudio(pulse, isProUser) {
+    const es = isEsLang();
+    // Profiles
+    renderProProfiles();
+    renderProGoalPicker(isProUser);
+    renderProGoalProgress(pulse);
+
+    // Insights panel
+    renderProInsights(pulse, isProUser, es);
+    renderProSpark(pulse, isProUser);
+    renderProHoldTrend(pulse, isProUser);
+
+    // Achievements (earn free; labels always)
+    renderProAchievements(pulse);
+
+    // Practice heatmap (26 weeks)
+    renderPracticeHeatmap();
     updateHomeZeroClass();
   }
 
@@ -7553,11 +8414,8 @@
     return !!window.VTDays && !!window.VTLoop?.enabled?.();
   }
 
-  function renderRetentionChrome() {
-    if (!window.VTReminders) return;
-    const isEs = isEsLang();
-    const isPro = !!window.VTBilling?.can?.("extra_reminders") || !!window.VTBilling?.isPro?.();
-    const cfg = VTReminders.getConfig();
+  /** The reminder dialog's settings as stored: on or off, the times, and browser notifications. */
+  function renderReminderSettings(cfg, isPro) {
     const chk = $("#chk-reminders");
     if (chk) chk.checked = !!cfg.enabled;
     const t1 = $("#rem-time-1");
@@ -7568,55 +8426,105 @@
     if (t2 && cfg.times[1]) t2.value = cfg.times[1];
     const bn = $("#chk-browser-notify");
     if (bn) bn.checked = !!cfg.browserNotify;
+    // A browser without notifications (an iPhone outside the home screen) has
+    // nothing to tick: the row would only ever answer "permission not granted".
+    const notifyRow = bn?.closest(".retain-check");
+    if (notifyRow) notifyRow.hidden = !("Notification" in window);
+  }
 
-    const loopOn = loopArm();
-
-    // Rest days (the old "freeze"): the ledger spends them on real misses; this
-    // only reports one it has just spent, once. The week card already shows
-    // the days left, so the reminder dialog does not repeat them.
+  /**
+   * Rest days (the old "freeze"): the ledger spends them on real misses; this
+   * only reports one it has just spent, once. The week card already shows
+   * the days left, so the reminder dialog does not repeat them.
+   */
+  function reportRestDaysSpent(loopOn) {
     const fr = VTReminders.tryApplyFreeze();
     if (fr.applied) {
       // Rest days are the ledger's in both arms, and so is their event. In the
       // loop's arm the start panel says so in its own words, a guided
       // session's copy included; the classic arm keeps the toast.
       window.VTLoop?.noteRest?.(fr);
-      if (!loopOn) toast(tt("retain.freezeUsed", { n: String(fr.left) }), { durationMs: 3200 });
+      if (!loopOn) {
+        const used = fr.days?.length || 1;
+        toast(
+          used > 1
+            ? tt("retain.freezeUsedN", { d: String(used), n: String(fr.left) })
+            : tt("retain.freezeUsed", { n: String(fr.left) }),
+          { durationMs: 3200 }
+        );
+      }
     }
+  }
 
-    // The week card's way in to the reminder says whether one is set.
+  /** The week card's way in to the reminder says whether one is set. */
+  function renderReminderWayIn(cfg, loopOn) {
+    const remText =
+      cfg.enabled && cfg.times[0] ? tt("retain.openOn", { time: clockTime(cfg.times[0]) }) : tt("retain.open");
     const remLabel = $("#btn-reminder-label");
-    if (remLabel) {
-      remLabel.textContent =
-        cfg.enabled && cfg.times[0] ? tt("retain.openOn", { time: clockTime(cfg.times[0]) }) : tt("retain.open");
-    }
+    if (remLabel) remLabel.textContent = remText;
+    // The classic arm has no week card: its way in sits in the start panel.
+    const classicLabel = $("#btn-reminder-classic-label");
+    if (classicLabel) classicLabel.textContent = remText;
+    const classicRemind = $("#start-remind");
+    if (classicRemind) classicRemind.hidden = loopOn;
+  }
 
-    // Welcome back after ≥2 days. With the daily loop the start panel itself
-    // becomes the comeback screen, so this card would only repeat it lower
-    // down, and its "▶ 5 min" would compete with the panel's one button. A
-    // guided session left open keeps the panel's copy, so its kicker says it.
+  /**
+   * Welcome back after ≥2 days. With the daily loop the start panel itself
+   * becomes the comeback screen, so this card would only repeat it lower
+   * down, and its "▶ 5 min" would compete with the panel's one button. A
+   * guided session left open keeps the panel's copy, so its kicker says it.
+   * A gap the rest days covered is rest, not a lapse: the ledger says which.
+   */
+  function renderWelcomeBack(loopOn) {
     const days = VTReminders.daysSinceLastPractice();
+    const sumDays = window.VTDays?.summary?.();
+    const away = sumDays ? !sumDays.todayDone && sumDays.comeback : days != null && days >= 2;
     const wb = $("#welcome-back");
     if (wb) {
       const dismissed =
         sessionStorage.getItem("vt_wb_dismiss") === dayKeyLocal();
-      const show = !loopOn && days != null && days >= 2 && !dismissed;
+      const show = !loopOn && away && days != null && !dismissed;
       wb.hidden = !show;
       if (show) {
         const body = $("#welcome-back-body");
         if (body) body.textContent = tt("retain.welcomeBodyDays", { n: String(days) });
       }
     }
+  }
 
-    // Due reminder banner. Evaluating marks the day as notified, so the second
-    // render during page load used to hide the banner the first had just shown:
-    // it was never visible. What was shown today stays until dismissed or until
-    // practice makes it moot.
-    const ev = VTReminders.evaluate(isEs);
+  /** The due reminder's banner, kept for today: its sentence, its button, and one analytics event. */
+  function showRemindDue(isEs, loopOn, mins) {
+    const tx = $("#remind-due-text");
+    if (tx) tx.textContent = VTReminders.messageAt(state.remindDue.messageIndex, isEs, mins);
+    // The label names what the button starts (see #rd-start's click).
+    const go = $("#rd-start");
+    if (go) go.textContent = tt(loopOn ? "loop.remindCta" : "retain.micro5", { min: String(mins) });
+    try {
+      if (!state.remindDue.tracked) {
+        state.remindDue.tracked = true;
+        window.VTAnalytics?.track?.("remind_due_shown", {});
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /**
+   * Due reminder banner. Evaluating marks the day as notified, so the second
+   * render during page load used to hide the banner the first had just shown:
+   * it was never visible. What was shown today stays until dismissed or until
+   * practice makes it moot.
+   */
+  function renderRemindDue(cfg, isEs, loopOn) {
+    const mins = minimoMinutes();
+    const ev = VTReminders.evaluate(isEs, mins);
     const rd = $("#remind-due");
     if (rd) {
       const today = dayKeyLocal();
       if (ev.due && cfg.enabled) {
-        state.remindDue = { day: today, message: ev.message };
+        // The choice of sentence is kept, not its words: they follow the language.
+        state.remindDue = { day: today, messageIndex: ev.messageIndex };
         VTReminders.markNotified();
       }
       const keep =
@@ -7625,21 +8533,44 @@
         state.remindDue.day === today &&
         !VTReminders.practicedToday();
       rd.hidden = !keep;
-      if (keep) {
-        const tx = $("#remind-due-text");
-        if (tx) tx.textContent = state.remindDue.message;
-        // The label names what the button starts (see #rd-start's click).
-        const go = $("#rd-start");
-        if (go) go.textContent = tt(loopOn ? "loop.remindCta" : "retain.micro5");
-        try {
-          if (!state.remindDue.tracked) {
-            state.remindDue.tracked = true;
-            window.VTAnalytics?.track?.("remind_due_shown", {});
-          }
-        } catch {
-          /* ignore */
-        }
-      }
+      if (keep) showRemindDue(isEs, loopOn, mins);
+    }
+  }
+
+  function renderRetentionChrome() {
+    if (!window.VTReminders) return;
+    const isEs = isEsLang();
+    const isPro = !!window.VTBilling?.can?.("extra_reminders") || !!window.VTBilling?.isPro?.();
+    const cfg = VTReminders.getConfig();
+    renderReminderSettings(cfg, isPro);
+
+    const loopOn = loopArm();
+
+    reportRestDaysSpent(loopOn);
+    renderReminderWayIn(cfg, loopOn);
+    renderWelcomeBack(loopOn);
+    renderRemindDue(cfg, isEs, loopOn);
+  }
+
+  /** Minutes the reminder's button starts: the Mínimo of the track on screen in the loop, else 5. */
+  function minimoMinutes() {
+    return VTReminders.practiceMinutes(state.tab === "vocal" ? "vocal" : "singing");
+  }
+
+  /**
+   * Hand focus to home's next step (or its heading) before a card that holds
+   * it is hidden: a hidden control leaves focus on the page body, where Tab
+   * starts again from wherever the card was.
+   */
+  function moveFocusOutOf(box) {
+    const a = document.activeElement;
+    if (!box || !a || a === document.body || !box.contains(a)) return;
+    const cta = $("#btn-next-step");
+    const to = cta && cta.getClientRects().length && !cta.closest("[hidden]") ? cta : $("#start-title");
+    try {
+      to?.focus({ preventScroll: true });
+    } catch {
+      /* ignore */
     }
   }
 
@@ -7678,7 +8609,12 @@
     // the way to turn it off. A box and a button for the same thing read as
     // two steps.
     const toggle = $("#chk-reminders")?.closest(".retain-toggle");
-    if (toggle) toggle.hidden = !on;
+    if (toggle) {
+      // Unticking hides the row that holds focus: the button that replaces it
+      // takes focus first, or the dialog's Escape stops hearing the keyboard.
+      if (!on && toggle.contains(document.activeElement)) $("#reminder-done")?.focus();
+      toggle.hidden = !on;
+    }
     const done = $("#reminder-done");
     if (done) done.textContent = tt(on ? "retain.done" : "retain.turnOn");
     const cancel = $("#reminder-cancel");
@@ -7726,15 +8662,21 @@
 
   function bindRetention() {
     $("#btn-reminder")?.addEventListener("click", openReminders);
+    $("#btn-reminder-classic")?.addEventListener("click", openReminders);
     const saveTimes = () => {
       const isPro = !!window.VTBilling?.can?.("extra_reminders");
       const times = [$("#rem-time-1")?.value || "18:00"];
       if (isPro && $("#rem-time-2")?.value) times.push($("#rem-time-2").value);
-      VTReminders.setConfig({
+      const before = VTReminders.getConfig();
+      const next = VTReminders.setConfig({
         enabled: !!$("#chk-reminders")?.checked,
         times,
         browserNotify: !!$("#chk-browser-notify")?.checked
       });
+      // A reminder switched on, or moved, after its time has already passed
+      // today is not owed at once: the first one is tomorrow's.
+      const changed = (next.enabled && !before.enabled) || before.times.join() !== next.times.join();
+      if (changed && VTReminders.isDue(next)) VTReminders.markNotified();
     };
     $("#chk-reminders")?.addEventListener("change", async (e) => {
       if (e.target.checked) {
@@ -7770,21 +8712,21 @@
         const perm = await VTReminders.requestBrowserPermission();
         if (perm !== "granted") {
           e.target.checked = false;
-          toast(tt("retain.notifyDenied"));
+          // No Notification in this browser is not a refusal (the row is hidden then).
+          if (perm !== "unsupported") toast(tt("retain.notifyDenied"));
         }
       }
       saveTimes();
     });
     $("#btn-ics-daily")?.addEventListener("click", () => {
-      VTReminders.downloadIcs({ freq: "DAILY", time: $("#rem-time-1")?.value, isEs: isEsLang() });
+      VTReminders.downloadIcs({ freq: "DAILY", time: $("#rem-time-1")?.value, isEs: isEsLang(), min: minimoMinutes() });
       toast(tt("retain.icsDownloaded"));
     });
     $("#btn-ics-weekly")?.addEventListener("click", () => {
-      VTReminders.downloadIcs({ freq: "WEEKLY", time: $("#rem-time-1")?.value, isEs: isEsLang() });
+      VTReminders.downloadIcs({ freq: "WEEKLY", time: $("#rem-time-1")?.value, isEs: isEsLang(), min: minimoMinutes() });
       toast(tt("retain.icsDownloaded"));
     });
     $("#wb-micro")?.addEventListener("click", () => startMicroSession("s15-sh-air-ladder"));
-    $("#wb-air")?.addEventListener("click", () => startMicroSession("s15-sh-air-ladder"));
     $("#wb-last")?.addEventListener("click", () => {
       const prog = VTStorage.getProgress() || {};
       let lastId = null;
@@ -7800,6 +8742,7 @@
     $("#wb-dismiss")?.addEventListener("click", () => {
       sessionStorage.setItem("vt_wb_dismiss", dayKeyLocal());
       const wb = $("#welcome-back");
+      moveFocusOutOf(wb);
       if (wb) wb.hidden = true;
     });
     // The reminder's button starts today's Mínimo in the loop's arm; the old
@@ -7813,6 +8756,7 @@
     $("#rd-dismiss")?.addEventListener("click", () => {
       state.remindDue = null;
       const rd = $("#remind-due");
+      moveFocusOutOf(rd);
       if (rd) rd.hidden = true;
     });
     document.addEventListener("visibilitychange", () => {
@@ -7857,6 +8801,74 @@
     }
   }
 
+  /**
+   * A page left open does not hear about what happens outside it. Three ways
+   * it went stale, and what answers each:
+   *
+   *   another tab wrote   the browser says so ("storage"); redraw what shows
+   *                       the record, so a profile switched or a take saved in
+   *                       tab A is in tab B without a reload.
+   *   it is shown again   a sync (a read and a write, so at most once a
+   *                       minute), and /v1/me if it never answered, so a
+   *                       browser left open picks up another device's practice
+   *                       and the account panel stops saying "Plan gratis".
+   *   a new day began     Plan and Historial work out "today" when they draw,
+   *                       so the open one is drawn again on the new day. Home
+   *                       has its own redraw (bindRetention).
+   */
+  function watchOutsideChanges() {
+    // Keys that hold the learner's record, plan, settings or account. Counters
+    // and queues the app writes all the time (analytics, the mic slider) would
+    // redraw every other tab for nothing.
+    const RECORD_KEY = /(^|_)(profiles|progress|session|week_plan|reviews|hold_logs|goals|achievements|days|loop|reminders|streak_freeze|settings)_v1$/;
+    const PULL_EVERY_MS = 60 * 1000;
+    let redrawTimer = null;
+    let lastPull = 0;
+    let shownDay = window.VTDays?.dayKey?.() || "";
+
+    window.addEventListener("storage", (e) => {
+      if (e.storageArea && e.storageArea !== window.localStorage) return;
+      if (e.key && !RECORD_KEY.test(e.key)) return;
+      // A write is often several keys in a row; draw once.
+      clearTimeout(redrawTimer);
+      redrawTimer = setTimeout(() => showSyncedRecord(), 120);
+    });
+
+    // Shown again, signed in: /v1/me if it never answered, and a sync at most once a minute.
+    function catchUpAccount() {
+      const acct = window.VTAccount?.getState?.();
+      if (acct && acct.signedIn) {
+        // The first /v1/me may have been missed; the panel and the door both
+        // read the answer.
+        if (!acct.account) {
+          Promise.resolve(window.VTAccount.refresh?.())
+            .then(() => refreshAccountUI())
+            .catch(() => {});
+        }
+        if (Date.now() - lastPull >= PULL_EVERY_MS) {
+          lastPull = Date.now();
+          window.VTSync?.schedule?.(0);
+        }
+      }
+    }
+
+    // Shown again on a new day: the open Plan or Historial is drawn for it.
+    function catchUpDay() {
+      const today = window.VTDays?.dayKey?.() || "";
+      if (today && today !== shownDay) {
+        shownDay = today;
+        if (state.view === "plan") renderPlan();
+        else if (state.view === "history") renderHistory();
+      }
+    }
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      catchUpAccount();
+      catchUpDay();
+    });
+  }
+
   function bindProStudio() {
     $("#sel-profile")?.addEventListener("change", (e) => {
       const id = e.target.value;
@@ -7882,7 +8894,8 @@
       if (name == null) return;
       const res = VTStorage.createProfile(name, { maxSlots: max });
       if (!res.ok) {
-        toast(tt("pro.profileLimit", { n: String(max) }));
+        // A blank name is not a full house, and the limit message said so.
+        toast(res.reason === "blank" ? tt("pro.profileBlank") : tt("pro.profileLimit", { n: String(max) }));
         return;
       }
       showActiveProfile();
@@ -7891,10 +8904,13 @@
     $("#btn-profile-rename")?.addEventListener("click", () => {
       const p = VTStorage?.getActiveProfile?.();
       if (!p) return;
-      const shown = !p.name || p.name === "Default" ? tt("pro.profileMain") : p.name;
+      const list = VTStorage?.getProfiles?.()?.list || [];
+      const shown = profileLabel(p, Math.max(0, list.findIndex((x) => x.id === p.id)));
       const name = window.prompt(tt("pro.profileNamePrompt"), shown);
       if (name == null) return;
-      VTStorage.renameProfile(p.id, name);
+      const res = VTStorage.renameProfile(p.id, name);
+      // The old name stays when nothing is left of the new one.
+      if (res && res.reason === "blank") toast(tt("pro.profileBlank"));
       renderValuePulse();
     });
     $("#sel-week-goal")?.addEventListener("change", (e) => {
@@ -7911,6 +8927,72 @@
       renderValuePulse();
       toast(tt("pro.goalSet", { n: String(n) }), { durationMs: 1500 });
     });
+    watchOutsideChanges();
+  }
+
+  /**
+   * Put the banner away. Its buttons go with it, and when one of them had focus
+   * it would drop to the page: the next Tab would start again at the logo, and
+   * Pro's dialog, opened from "Ver Pro", would have no control to give focus
+   * back to. Focus moves to the nearest control that stays, the profile card's
+   * just above the banner.
+   */
+  function putAwayValueBanner(banner) {
+    const hadFocus = banner.contains(document.activeElement);
+    banner.hidden = true;
+    renderValuePulse();
+    if (!hadFocus) return;
+    ["#btn-profile-rename", "#btn-profile-add", "#sel-profile", "#btn-value-pro"]
+      .map((sel) => $(sel))
+      .find((el) => el && !el.disabled && el.offsetParent !== null)
+      ?.focus({ preventScroll: true });
+  }
+
+  /** True while an end-to-end run or a guided tour is on screen. */
+  function valueMomentPaused() {
+    try {
+      if (sessionStorage.getItem("vt_e2e") === "1") return true;
+      if (document.body.classList.contains("tour-active")) return true;
+    } catch {
+      /* ignore */
+    }
+    return false;
+  }
+
+  /** The plan as it stands and the moment worth a banner: the one asked for by name, or the pulse's pick. */
+  function valueMomentFor(forceId, VP, B) {
+    const ent = B?.getEntitlement?.() || { pro: false };
+    const stats = VP.compute();
+    const moment = forceId
+      ? { id: forceId, priority: 99, sessions: stats.sessions, bestHoldSec: stats.bestHoldSec, trialDaysLeft: B?.trialDaysLeft?.() }
+      : VP.suggestUpgradeMoment(stats, ent);
+    return { ent, moment };
+  }
+
+  /**
+   * The line for a moment. One day left reads "1 día", not "1 días": the
+   * singular has its own line, in the first drawing and in the relabel after a
+   * language switch alike (the relabel once missed it and read "1 días").
+   */
+  function valueMomentKey(id, n) {
+    return "value.moment." + id + (id === "trial_ending" && n === "1" ? "_one" : "");
+  }
+
+  /** Put the moment's line up, and step the other Pro offers aside for it. */
+  function showValueBanner(banner, text, moment) {
+    const vars = {
+      // The trial's own line counts days; the others count sessions. A moment
+      // asked for by name carries both figures.
+      n: String((moment.id === "trial_ending" ? moment.trialDaysLeft : moment.sessions) ?? 0),
+      s: moment.bestHoldSec != null ? Number(moment.bestHoldSec).toFixed(1) : "0"
+    };
+    text.textContent = tt(valueMomentKey(moment.id, vars.n), vars);
+    banner.hidden = false;
+    banner.dataset.momentId = moment.id;
+    const cta = $("#value-pulse-cta");
+    if (cta) cta.hidden = true;
+    const teaser = $("#pro-insights-panel");
+    if (teaser && teaser.classList.contains("is-locked")) teaser.hidden = true;
   }
 
   function showValueMoment(forceId) {
@@ -7918,35 +9000,23 @@
     const VP = window.VTValuePulse;
     if (!VP?.suggestUpgradeMoment) return;
     // Don't interrupt e2e / tours
-    try {
-      if (sessionStorage.getItem("vt_e2e") === "1") return;
-      if (document.body.classList.contains("tour-active")) return;
-    } catch {
-      /* ignore */
-    }
-    const ent = B?.getEntitlement?.() || { pro: false };
-    const stats = VP.compute();
-    let moment = forceId
-      ? { id: forceId, priority: 99, sessions: stats.sessions, bestHoldSec: stats.bestHoldSec, trialDaysLeft: B?.trialDaysLeft?.() }
-      : VP.suggestUpgradeMoment(stats, ent);
-    if (!moment || VP.isDismissed(moment.id)) return;
-    // If already full pro (paid/demo), skip soft upsells except trial ending
-    if (ent.pro && ent.source !== "trial" && moment.id !== "trial_ending") return;
-
+    if (valueMomentPaused()) return;
     const banner = $("#value-banner");
     const text = $("#value-banner-text");
     if (!banner || !text) return;
-    const vars = {
-      n: String(moment.sessions ?? moment.trialDaysLeft ?? 0),
-      s: moment.bestHoldSec != null ? Number(moment.bestHoldSec).toFixed(1) : "0"
+    const { ent, moment } = valueMomentFor(forceId, VP, B);
+    // Nothing to say for the record now open (another profile, a dismissed
+    // moment, Pro bought meanwhile): a banner left over from the last one is not
+    // true. It is put away without being dismissed, so it can come back for the
+    // record it was written for.
+    const nothingToSay = () => {
+      if (!banner.hidden) putAwayValueBanner(banner);
     };
-    text.textContent = tt("value.moment." + moment.id, vars);
-    banner.hidden = false;
-    banner.dataset.momentId = moment.id;
-    const cta = $("#value-pulse-cta");
-    if (cta) cta.hidden = true;
-    const teaser = $("#pro-insights-panel");
-    if (teaser && teaser.classList.contains("is-locked")) teaser.hidden = true;
+    if (!moment || VP.isDismissed(moment.id)) return nothingToSay();
+    // If already full pro (paid/demo), skip soft upsells except trial ending
+    if (ent.pro && ent.source !== "trial" && moment.id !== "trial_ending") return nothingToSay();
+
+    showValueBanner(banner, text, moment);
   }
 
   /** Keep an already visible upgrade message in the selected language.
@@ -7959,10 +9029,11 @@
     if (!banner || banner.hidden || !text || !id) return;
     const stats = window.VTValuePulse?.compute?.() || {};
     const trialDays = window.VTBilling?.trialDaysLeft?.();
-    text.textContent = tt("value.moment." + id, {
+    const vars = {
       n: String(id === "trial_ending" ? (trialDays ?? 0) : (stats.sessions ?? 0)),
       s: Number(stats.bestHoldSec || 0).toFixed(1)
-    });
+    };
+    text.textContent = tt(valueMomentKey(id, vars.n), vars);
   }
 
   function hideValueBanner() {
@@ -7970,9 +9041,12 @@
     if (!banner) return;
     const id = banner.dataset.momentId;
     if (id && window.VTValuePulse?.dismiss) VTValuePulse.dismiss(id);
-    banner.hidden = true;
-    renderValuePulse();
+    putAwayValueBanner(banner);
   }
+
+  // The coach summary (Análisis Pro, the downloaded .txt) names a weak metric by
+  // the label this page shows it under, not by its id.
+  window.VTValuePulse?.setMetricLabeler?.(metricLabel);
 
   function renderPricingModal() {
     const B = window.VTBilling;
@@ -7980,12 +9054,14 @@
     const es = isEsLang();
     const region = B.detectRegion();
     const market = B.marketFor(region);
-    if (!pricingRail) pricingRail = B.preferredRail(region);
+    const rails = B.checkoutRails(region);
+    pricingRail = choosePricingRail(rails);
+    const priceRegion = priceRegionFor(B, region);
     const cfg = B.cfg() || {};
     const prelaunch = isCheckoutPrelaunch();
     const regionEl = $("#pricing-region-label");
     if (regionEl) {
-      regionEl.textContent = `${tt("pricing.region")}: ${market.name} · ${market.currency}`;
+      regionEl.textContent = `${tt("pricing.region")}: ${market.name} · ${B.marketFor(priceRegion).currency}`;
     }
     const status = $("#pricing-status");
     if (status) {
@@ -7995,38 +9071,181 @@
       // shown to a reader, and a free trial described as a monthly
       // subscription. It now says which kind of access this is, in words, and it
       // reads the same source as the header so the two cannot disagree.
-      if (plan.kind === "trialAccount") {
-        status.textContent = plan.days === null
+      status.textContent = pricingStatusLine(plan, ent, B, prelaunch);
+    }
+    paintPricingPersonal();
+    paintPricingRails(cfg, es, prelaunch, rails);
+    const grid = $("#pricing-grid");
+    if (grid) {
+      const plans = cfg.plans || [];
+      const ent = B.getEntitlement();
+      // Which card is "Plan actual" follows the same reading as the header. The
+      // licence alone cannot tell a trial or a gift from a payment (both carry
+      // plan "pro_monthly"), so trial and gift holders were told the paid
+      // monthly card was their current plan, while the free card said so too.
+      const held = headerPlanState().kind;
+      // Computed from the two prices on the cards, so the badge can never
+      // disagree with the numbers printed next to it.
+      const savingPct = B.annualSavingPct(plans, priceRegion);
+      const ctx = { B, es, held, ent, prelaunch, savingPct, priceRegion };
+      grid.innerHTML = plans.map((p) => planCardHtml(p, ctx)).join("");
+      $$(".plan-cta", grid).forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const planId = btn.dataset.plan;
+          if (!planId || planId === "free") return;
+          const res = B.startCheckout(planId, pricingRail);
+          if (res.mode === "demo") {
+            toast(tt("pricing.toast.demo"));
+            updateBillingChrome();
+            renderPricingModal();
+          } else if (res.mode === "signin_required") {
+            // Same handling as the trial's needs_account branch below: the press
+            // worked, and it sent them one step back rather than nowhere.
+            toast(tt("pricing.checkoutNeedsAccount"), { durationMs: 4600 });
+            closePricing();
+            openAccount();
+          } else if (res.mode === "provider_unavailable") {
+            // The worker said it cannot honour this rail, so the press stops
+            // here rather than sending them to pay for something we could not
+            // then switch on.
+            toast(tt("pricing.toast.railUnavailable"), { durationMs: 6000 });
+          } else if (res.mode === "verification_unavailable") {
+            toast(tt("pricing.toast.verifyUnavailable"), { durationMs: 5200 });
+          } else if (res.mode === "unconfigured") {
+            toast(tt("pricing.toast.unconfigured"));
+          }
+          // redirect mode navigates away
+        });
+      });
+    }
+    updateBillingChrome();
+  }
+
+  /**
+   * One plan card of the Pro dialog, as HTML. Split out of renderPricingModal's
+   * map callback (complexity 29) when its price started following the rail.
+   * @param {object} p A plan from the billing config.
+   * @param {{B: object, es: boolean, held: string, ent: object, prelaunch: boolean, savingPct: number, priceRegion: string}} ctx
+   * @returns {string}
+   */
+  function planCardHtml(p, ctx) {
+    const price = ctx.B.formatPrice(p, ctx.priceRegion);
+    const interval =
+      p.interval === "month" ? tt("pricing.month") : p.interval === "year" ? tt("pricing.year") : "";
+    const name = ctx.es ? p.nameEs || p.name : p.name;
+    const { feats, moreFeats } = planFeaturesHtml(p);
+    const cta = planCta(p, ctx);
+    const ctaClass = p.id === "free" ? "btn-ghost" : cta.notYet ? "btn-ghost plan-cta-not-yet" : "btn-primary";
+    const hero = p.hero || p.id === "pro_yearly" ? " is-hero" : "";
+    return `
+            <article class="plan-card${p.popular ? " is-popular" : ""}${hero}" data-plan="${p.id}">
+              ${planBadgeHtml(p, ctx.savingPct)}
+              <h4>${name}</h4>
+              <div class="plan-price">${price.text}<span>${interval}</span></div>
+              <ul class="plan-features">${feats}</ul>
+              ${moreFeats}
+              <button type="button" class="btn ${ctaClass} btn-sm plan-cta" data-plan="${p.id}" ${cta.disabled ? 'disabled aria-disabled="true"' : ""}>
+                ${cta.label}
+              </button>
+            </article>`;
+  }
+
+  /** A plan card's feature bullets: the first five, and the rest behind a disclosure. */
+  function planFeaturesHtml(p) {
+    // Eleven bullets pushed every plan's button off the modal. Show the
+    // five that decide the purchase, keep the rest one click away.
+    const featList = p.features || [];
+    const FEAT_MAX = 5;
+    const item = (f) => `<li>${tt("pricing.feat." + f)}</li>`;
+    const feats = featList.slice(0, FEAT_MAX).map(item).join("");
+    const restFeats = featList.slice(FEAT_MAX).map(item).join("");
+    const moreFeats = restFeats
+      ? `<details class="plan-more"><summary>${tt("pricing.moreFeatures", { n: featList.length - FEAT_MAX })}</summary><ul class="plan-features">${restFeats}</ul></details>`
+      : "";
+    return { feats, moreFeats };
+  }
+
+  /** A plan card's badge: the annual saving where the plan claims one, a star on the popular plan. */
+  function planBadgeHtml(p, savingPct) {
+    if (p.badge === "saveAnnual" && savingPct) {
+      return `<span class="plan-badge">${tt("pricing.savePct", { n: String(savingPct) })}</span>`;
+    }
+    return p.popular ? `<span class="plan-badge">★</span>` : "";
+  }
+
+  /** A plan card's button: what it says, whether it can be pressed, and whether that is only for now. */
+  function planCta(p, ctx) {
+    const own = heldPlanCta(p, ctx.held, ctx.ent);
+    // A Subscribe button that can only answer with a toast is a dead end;
+    // say it on the button instead, and keep it out of the Tab order.
+    if (ctx.prelaunch && !own.disabled) return { label: tt("pricing.notYet"), disabled: true, notYet: true };
+    return { label: own.label, disabled: own.disabled, notYet: false };
+  }
+
+  /** A plan card's button as the plan held makes it, before pre-launch is considered. */
+  function heldPlanCta(p, held, ent) {
+    if (p.id === "free") {
+      return { label: held === "free" ? tt("pricing.current") : tt("pricing.freeAlways"), disabled: true };
+    }
+    const offer = { label: tt("pricing.subscribe"), disabled: false };
+    // Pro is held, but not by buying this card: leave it as an offer.
+    if (held === "trialAccount" || held === "gift") return offer;
+    const holdsThis = ent.pro && (ent.plan === p.id || ent.plan === "trial");
+    if (!holdsThis || !(ent.plan === p.id || ent.source === "demo")) return offer;
+    return { label: tt("pricing.current"), disabled: ent.plan === p.id || ent.source === "paid" };
+  }
+
+  /** "1 día" and "7 días": the line used to say "día(s)" for both. */
+  function trialDaysLeftText(n) {
+    return tt(n === 1 ? "pricing.trialLeftOne" : "pricing.trialLeft", { n: String(n) });
+  }
+
+  /** The Pro dialog's status line for a plan held, in words; anything else falls to unheldPricingStatus. */
+  function pricingStatusLine(plan, ent, B, prelaunch) {
+    switch (plan.kind) {
+      case "trialAccount":
+        return plan.days === null
           ? tt("pricing.statusTrial")
-          : `${tt("pricing.statusTrial")} · ${tt("pricing.trialLeft", { n: String(plan.days) })}`;
-      } else if (plan.kind === "trialLocal") {
+          : `${tt("pricing.statusTrial")} · ${trialDaysLeftText(plan.days)}`;
+      case "trialLocal": {
         const left = plan.days === null ? (B.trialDaysLeft?.() ?? 0) : plan.days;
-        status.textContent = `${tt("pricing.trial")} · ${tt("pricing.trialLeft", { n: String(left) })}`;
-      } else if (plan.kind === "gift") {
-        status.textContent = plan.until
+        return `${tt("pricing.trial")} · ${trialDaysLeftText(left)}`;
+      }
+      case "gift":
+        return plan.until
           ? tt("pricing.statusGiftUntil", { date: plan.until })
           : tt("pricing.statusGift");
-      } else if (plan.kind === "canceled") {
-        status.textContent = plan.until
+      case "canceled":
+        return plan.until
           ? tt("pricing.statusCanceled", { date: plan.until })
           : tt("pricing.statusCanceledNoDate");
-      } else if (plan.kind === "paid") {
+      case "paid": {
+        // A renewal that failed: still Pro, but say so rather than "active".
+        if (plan.pastDue) return tt("pricing.statusPastDue");
         const demo = ent.source === "demo" ? ` (${tt("pricing.statusDemo")})` : "";
-        status.textContent = (plan.until
+        return (plan.until
           ? tt("pricing.statusPaidUntil", { date: plan.until })
           : tt("pricing.proActive")) + demo;
-      } else if (ent.status === "pending") {
-        status.textContent = tt("pricing.verifying");
-      } else if (ent.status === "unverified") {
-        status.textContent = tt("pricing.unverified");
-      } else if (ent.status === "expired" || (!prelaunch && trialSpent())) {
-        // A month that has run out is not the same state as never having had
-        // one, and "Plan gratis" told those two people the same thing.
-        status.textContent = tt("pricing.statusEnded");
-      } else {
-        status.textContent = tt("pricing.free");
       }
+      default:
+        return unheldPricingStatus(ent, prelaunch);
     }
+  }
+
+  /** The Pro dialog's status line for somebody holding no plan: verifying, unverified, ended or free. */
+  function unheldPricingStatus(ent, prelaunch) {
+    if (ent.status === "pending") return tt("pricing.verifying");
+    if (ent.status === "unverified") return tt("pricing.unverified");
+    if (ent.status === "expired" || (!prelaunch && trialSpent())) {
+      // A month that has run out is not the same state as never having had
+      // one, and "Plan gratis" told those two people the same thing.
+      return tt("pricing.statusEnded");
+    }
+    return tt("pricing.free");
+  }
+
+  /** The Pro dialog's personal proof line: what this learner has already put in. */
+  function paintPricingPersonal() {
     // Personal proof line (Hormozi likelihood × investment)
     const personal = $("#pricing-personal");
     if (personal && window.VTValuePulse?.compute) {
@@ -8043,117 +9262,67 @@
         });
       }
     }
-    const rails = $("#pricing-rails");
-    if (rails) {
-      // Choosing how to pay means nothing while nobody can pay.
-      rails.hidden = prelaunch;
-      const stripeLab = es ? (cfg.providers?.stripe?.labelEs || tt("pricing.railStripe")) : (cfg.providers?.stripe?.label || tt("pricing.railStripe"));
-      const mpLab = es ? (cfg.providers?.mercadopago?.labelEs || tt("pricing.railMp")) : (cfg.providers?.mercadopago?.label || tt("pricing.railMp"));
-      rails.innerHTML = `
-        <button type="button" class="rail-btn${pricingRail === "stripe" ? " active" : ""}" data-rail="stripe">${stripeLab}</button>
-        <button type="button" class="rail-btn${pricingRail === "mercadopago" ? " active" : ""}" data-rail="mercadopago">${mpLab}</button>
-      `;
-      $$(".rail-btn", rails).forEach((b) => {
-        b.addEventListener("click", () => {
-          pricingRail = b.dataset.rail;
-          renderPricingModal();
-        });
-      });
-    }
-    const grid = $("#pricing-grid");
-    if (grid) {
-      const plans = cfg.plans || [];
-      const ent = B.getEntitlement();
-      // Which card is "Plan actual" follows the same reading as the header. The
-      // licence alone cannot tell a trial or a gift from a payment (both carry
-      // plan "pro_monthly"), so trial and gift holders were told the paid
-      // monthly card was their current plan, while the free card said so too.
-      const held = headerPlanState().kind;
-      // Computed from the two prices on the cards, so the badge can never
-      // disagree with the numbers printed next to it.
-      const savingPct = B.annualSavingPct(plans, region);
-      grid.innerHTML = plans
-        .map((p) => {
-          const price = B.formatPrice(p, region);
-          const interval =
-            p.interval === "month" ? tt("pricing.month") : p.interval === "year" ? tt("pricing.year") : "";
-          const name = es ? p.nameEs || p.name : p.name;
-          // Eleven bullets pushed every plan's button off the modal. Show the
-          // five that decide the purchase, keep the rest one click away.
-          const featList = p.features || [];
-          const FEAT_MAX = 5;
-          const feats = featList
-            .slice(0, FEAT_MAX)
-            .map((f) => `<li>${tt("pricing.feat." + f)}</li>`)
-            .join("");
-          const restFeats = featList
-            .slice(FEAT_MAX)
-            .map((f) => `<li>${tt("pricing.feat." + f)}</li>`)
-            .join("");
-          const moreFeats = restFeats
-            ? `<details class="plan-more"><summary>${tt("pricing.moreFeatures", { n: featList.length - FEAT_MAX })}</summary><ul class="plan-features">${restFeats}</ul></details>`
-            : "";
-          const badge =
-            p.badge === "saveAnnual" && savingPct
-              ? `<span class="plan-badge">${tt("pricing.savePct", { n: String(savingPct) })}</span>`
-              : p.popular
-                ? `<span class="plan-badge">★</span>`
-                : "";
-          let ctaLabel = tt("pricing.subscribe");
-          let disabled = false;
-          let notYet = false;
-          if (p.id === "free") {
-            ctaLabel = held === "free" ? tt("pricing.current") : tt("pricing.freeAlways");
-            disabled = true;
-          } else if (held === "trialAccount" || held === "gift") {
-            // Pro is held, but not by buying this card: leave it as an offer.
-          } else if (ent.pro && (ent.plan === p.id || (ent.plan === "trial" && p.id !== "free"))) {
-            if (ent.plan === p.id || ent.source === "demo") {
-              ctaLabel = tt("pricing.current");
-              disabled = ent.plan === p.id || ent.source === "paid";
-            }
-          }
-          // A Subscribe button that can only answer with a toast is a dead end;
-          // say it on the button instead, and keep it out of the Tab order.
-          if (prelaunch && !disabled) {
-            ctaLabel = tt("pricing.notYet");
-            disabled = true;
-            notYet = true;
-          }
-          const ctaClass = p.id === "free" ? "btn-ghost" : notYet ? "btn-ghost plan-cta-not-yet" : "btn-primary";
-          const hero = p.hero || p.id === "pro_yearly" ? " is-hero" : "";
-          return `
-            <article class="plan-card${p.popular ? " is-popular" : ""}${hero}" data-plan="${p.id}">
-              ${badge}
-              <h4>${name}</h4>
-              <div class="plan-price">${price.text}<span>${interval}</span></div>
-              <ul class="plan-features">${feats}</ul>
-              ${moreFeats}
-              <button type="button" class="btn ${ctaClass} btn-sm plan-cta" data-plan="${p.id}" ${disabled ? 'disabled aria-disabled="true"' : ""}>
-                ${ctaLabel}
-              </button>
-            </article>`;
-        })
-        .join("");
-      $$(".plan-cta", grid).forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const planId = btn.dataset.plan;
-          if (!planId || planId === "free") return;
-          const res = B.startCheckout(planId, pricingRail);
-          if (res.mode === "demo") {
-            toast(tt("pricing.toast.demo"));
-            updateBillingChrome();
-            renderPricingModal();
-          } else if (res.mode === "verification_unavailable") {
-            toast(tt("pricing.toast.verifyUnavailable"), { durationMs: 5200 });
-          } else if (res.mode === "unconfigured") {
-            toast(tt("pricing.toast.unconfigured"));
-          }
-          // redirect mode navigates away
-        });
-      });
-    }
-    updateBillingChrome();
+  }
+
+  /**
+   * The region whose prices the cards show: the visitor's own on the visitor's
+   * own rail, the worldwide (dollar) one on any other. The money follows the
+   * rail: a Peruvian who picks the card rail pays Creem, which cannot charge
+   * soles, so showing S/ 19.90 there promised a price nobody would charge.
+   * Whether the euro markets' Creem products are priced in euros is the
+   * operator's to say (docs/VALUE-GAP-REGISTRY.md VG-85).
+   */
+  function priceRegionFor(B, region) {
+    return pricingRail === B.preferredRail(region) ? region : "WW";
+  }
+
+  /**
+   * The rail the dialog sells on: the one the buyer chose while it can sell,
+   * else the region's own when it can, else the first that can. With nothing
+   * sellable yet (pre-launch) it stays on the region's own.
+   * @param {{rail: string, sellable: boolean}[]} rails From VTBilling.checkoutRails, region's own first.
+   * @returns {string} Provider id.
+   */
+  function choosePricingRail(rails) {
+    const sellable = rails.filter((r) => r.sellable).map((r) => r.rail);
+    if (pricingRail && (sellable.includes(pricingRail) || !sellable.length)) return pricingRail;
+    return sellable[0] || rails[0].rail;
+  }
+
+  /**
+   * The Pro dialog's choice of payment rail: one button per rail a market sells
+   * on that has a checkout link, the one in use marked; pressing one redraws
+   * the dialog for it. Before any rail can sell, every market rail is drawn and
+   * the row is hidden: choosing how to pay means nothing while nobody can pay.
+   */
+  function paintPricingRails(cfg, es, prelaunch, rails) {
+    const row = $("#pricing-rails");
+    if (!row) return;
+    row.hidden = prelaunch;
+    const live = rails.filter((r) => r.sellable);
+    row.replaceChildren(...(live.length ? live : rails).map(({ rail }) => railButton(cfg, es, rail)));
+  }
+
+  /** One rail's button in the Pro dialog. */
+  function railButton(cfg, es, rail) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "rail-btn" + (rail === pricingRail ? " active" : "");
+    b.dataset.rail = rail;
+    b.setAttribute("aria-pressed", rail === pricingRail ? "true" : "false");
+    b.textContent = railLabel(cfg, es, rail, rail === "mercadopago" ? "pricing.railMp" : "pricing.railStripe");
+    b.addEventListener("click", () => {
+      pricingRail = rail;
+      renderPricingModal();
+    });
+    return b;
+  }
+
+  /** A payment rail's button label: the operator's own wording from the config, else ours. */
+  function railLabel(cfg, es, rail, fallbackKey) {
+    return es
+      ? (cfg.providers?.[rail]?.labelEs || tt(fallbackKey))
+      : (cfg.providers?.[rail]?.label || tt(fallbackKey));
   }
 
   function openPricing() {
@@ -8163,6 +9332,10 @@
     // means the card is right by the time anyone reads it, and — as with the
     // account panel — only because somebody opened the panel.
     window.VTAccount?.ensureMethods?.();
+    // And which rails it can honour, for the same reason: asked when the panel
+    // opens, so the answer is there by the time a plan is pressed, and never
+    // asked of somebody who never looks at the prices.
+    window.VTAccount?.ensureRails?.();
     // Remember the trigger before renderPricingModal() rebuilds the card.
     const opener = document.activeElement;
     renderPricingModal();
@@ -8270,14 +9443,47 @@
     const btn = $(sel.btn);
     if (!modal || modal.hidden || !btn || btn.hidden) return;
     trackFunnel("trial_cta_view", { where }, `cta:${where}`);
+    noteTrialArmExposure();
+  }
+
+  /** The trial-length test. Same key in the worker and in js/experiments-config.js. */
+  const TRIAL_LEN_EXPERIMENT = "trial_len_2026_11";
+
+  /**
+   * Where the trial-length test is exposed: the offer now on screen names the
+   * number of free days, so this is the moment the treatment is applied.
+   *
+   * Not when the trial starts, which would be the easier hook. Starting is
+   * something the treatment itself can move — a longer offer may well be taken
+   * up more often — so counting only the people who went on to start would
+   * compare two groups the test had already sorted, and a difference in paid
+   * conversion could be that sorting rather than the length. Everybody shown an
+   * offer belongs to the arm they were shown.
+   *
+   * The arm is the worker's, because it decides how much Pro is given away, and
+   * it is null while the test is off; this does nothing at all until then.
+   */
+  function noteTrialArmExposure() {
+    const acct = window.VTAccount?.getState?.() || null;
+    if (!acct || !acct.signedIn) return;
+    const arm = typeof acct.trialArm === "string" ? acct.trialArm : "";
+    if (!arm) return;
+    try {
+      window.VTExperiments?.exposeServerArm?.(TRIAL_LEN_EXPERIMENT, arm);
+    } catch {
+      /* analytics never breaks the page */
+    }
   }
 
   const ACCOUNT_ERROR_KEYS = {
     bad_email: "auth.err.email",
     bad_code: "auth.err.code",
-    no_code: "auth.err.code",
+    // The fifth wrong try burns the code (workers/entitlements/src/accounts.js):
+    // waiting does not bring it back, and even the right digits get "no_code"
+    // after that. Both say so, and the code step offers a new one.
+    no_code: "auth.err.codeBurned",
     expired: "auth.err.code",
-    too_many_attempts: "auth.err.rate",
+    too_many_attempts: "auth.err.codeBurned",
     rate_limited: "auth.err.rate",
     offline: "auth.err.offline",
     not_found: "auth.err.giftNotFound",
@@ -8340,19 +9546,55 @@
       return tt("auth.planExpired");
     }
     if (!entitlement || !entitlement.pro) return tt("auth.planFree");
-    const date = accountDate(entitlement.periodEnd);
-    if (entitlement.status === "canceled" && date) return tt("auth.planCanceled", { date });
-    if (entitlement.source === "trial") return tt("auth.planTrial", { date });
-    if (entitlement.source === "gift" || entitlement.source === "comp") {
-      return tt("auth.planGift", { date });
+    return planLineFor(entitlement.status, entitlement.source, accountDate(entitlement.periodEnd));
+  }
+
+  /**
+   * The line for access that is held: where it came from, and how it stands.
+   * @param {string} status "active", "canceled" or "past_due".
+   * @param {string} source "trial", "gift", "comp" or a payment.
+   * @param {string} date When it ends, already written out; "" when unknown.
+   * @returns {string} The line.
+   */
+  function planLineFor(status, source, date) {
+    // A payment that failed is not renewing, and nothing is promised about
+    // what happens next: the licence simply runs to the end of the period paid.
+    if (status === "past_due") return tt("auth.planPastDue");
+    if (status === "canceled" && date) return tt("auth.planCanceled", { date });
+    if (source === "trial") return date ? tt("auth.planTrial", { date }) : tt("nav.planTrial");
+    if (source === "gift" || source === "comp") {
+      return date ? tt("auth.planGift", { date }) : tt("nav.planGift");
     }
     return date ? tt("auth.planPaid", { date }) : tt("auth.planPaidOpen");
+  }
+
+  /**
+   * The plan line for the signed-in account. The worker's entitlement is the
+   * authority. Until it has answered (a /v1/me that failed or is still out)
+   * the header's own reading stands in, so this panel cannot say "Plan gratis"
+   * under a header that says Pro.
+   * @param {object|null} account VTAccount.getState().
+   * @returns {string} The line.
+   */
+  function accountPlanLineFor(account) {
+    if (account.entitlement) return accountPlanLine(account.entitlement);
+    const plan = headerPlanState();
+    if (plan.kind === "free") return accountPlanLine(null);
+    const source =
+      plan.kind === "trialAccount" || plan.kind === "trialLocal" ? "trial" : plan.kind === "gift" ? "gift" : "paid";
+    const status = plan.kind === "canceled" ? "canceled" : plan.pastDue ? "past_due" : "active";
+    return planLineFor(status, source, plan.until || "");
   }
 
   function accountSyncLine() {
     const status = window.VTSync?.getStatus?.();
     if (!status || !status.available) return "";
     if (status.syncing) return tt("auth.syncing");
+    if (status.lastError === "refused") {
+      // Turned down for what it is, and the same write would be turned down
+      // again, so no line here may promise another try.
+      return tt(status.refusedReason === "profile_limit" ? "auth.syncRefused" : "auth.syncRefusedOther");
+    }
     if (status.lastError) return tt("auth.syncError");
     // "Aún no guardado" is only true of a device that has never synced. After a
     // reload `lastSyncedAt` starts empty, but a revision on file means this
@@ -8442,6 +9684,40 @@
     const signedIn = !!(account && account.signedIn) || !!session;
     const out = $("#account-logged-out");
     const inn = $("#account-logged-in");
+    paintAccountLedes(signedIn);
+    const admin = $("#admin-panel");
+    const who = $("#account-who");
+    const btnAcc = $("#btn-account");
+
+    if (btnAcc) paintAccountDoor(btnAcc, account, session);
+    if (!out || !inn) return;
+
+    // Signed out: offer real sign-in when an operator has wired the worker up,
+    // and say so plainly when they have not, rather than showing a form that
+    // cannot work.
+    const offer = accountSignIn();
+    paintSignInStates(offer);
+    paintSignInControls(offer);
+    paintAccountOffer(account, offer, signedIn);
+    paintStaffLogin(offer);
+
+    if (!signedIn) {
+      showSignedOutPanel(out, inn, admin);
+      return;
+    }
+
+    out.hidden = true;
+    inn.hidden = false;
+    paintAccountWho(who, account, session);
+    paintAccountPlanAndSync(account);
+    paintOwnerQuestion(account);
+    paintAccountTrial(account);
+    paintAccountTools(account);
+    paintStaffAdmin(A, session, admin);
+  }
+
+  /** The account panel's lede and title, Start's step 3 and Historial's lede, each worded for signed in or out. */
+  function paintAccountLedes(signedIn) {
     // "Entra para guardar tu progreso" stayed on screen after signing in, so the
     // panel asked for something already done.
     const sub = $("#account-sub");
@@ -8471,63 +9747,64 @@
     // layer down: a room, not a reason. Signed out it names what you get.
     const title = $("#account-title");
     if (title) title.textContent = signedIn ? tt("auth.title") : tt("auth.titleOut");
-    const admin = $("#admin-panel");
-    const who = $("#account-who");
-    const btnAcc = $("#btn-account");
+  }
 
-    if (btnAcc) {
-      // Signed out, this is the only door into accounts, so it is named for the
-      // act and not for the room: "Cuenta" is a destination nobody who has no
-      // account has a reason to press. Signed in it becomes who you are, which
-      // is what tells you at a glance that you are.
-      //
-      // Signed in, a bare name read as a label rather than a button, and it
-      // could be any length ("pablo.illescas.buendia") on a phone row that has
-      // none to spare. So it is drawn as an account button everywhere: your
-      // initial in a circle, the name beside it where there is room (CSS hides
-      // the name on phones). The accessible name starts with the name.
-      // A Google name is a full name ("Maria Fernanda de la Torre"); the
-      // header only needs the given name. Without one, the address's local part.
-      const acc = account && account.signedIn && account.account ? account.account : null;
-      const who = acc
-        ? ((acc.displayName || "").trim().split(/\s+/)[0] || (acc.email || "").split("@")[0])
-        : session
-          ? session.username.split(".")[0]
-          : "";
-      btnAcc.classList.toggle("is-signed-in", !!(who || (account && account.signedIn)));
-      if (who || (account && account.signedIn) || session) {
-        const name = who || tt("nav.account");
-        const initial = (name.trim()[0] || "?").toLocaleUpperCase();
-        btnAcc.replaceChildren();
-        const dot = document.createElement("span");
-        dot.className = "door-avatar";
-        dot.setAttribute("aria-hidden", "true");
-        dot.textContent = initial;
-        const label = document.createElement("span");
-        label.className = "door-name";
-        label.textContent = name;
-        btnAcc.append(dot, label);
-        btnAcc.title = tt("nav.accountTitle");
-        btnAcc.setAttribute("aria-label", tt("nav.accountNamed", { name }));
-      } else {
-        btnAcc.textContent = tt("nav.signIn");
-        btnAcc.title = tt("nav.signInTitle");
-        // The visible word leads the accessible name (WCAG 2.5.3).
-        btnAcc.setAttribute("aria-label", btnAcc.title);
-      }
+  /** The header's account button: "Entrar" signed out; signed in, your initial in a circle and your name. */
+  function paintAccountDoor(btnAcc, account, session) {
+    // Signed out, this is the only door into accounts, so it is named for the
+    // act and not for the room: "Cuenta" is a destination nobody who has no
+    // account has a reason to press. Signed in it becomes who you are, which
+    // is what tells you at a glance that you are.
+    //
+    // Signed in, a bare name read as a label rather than a button, and it
+    // could be any length ("pablo.illescas.buendia") on a phone row that has
+    // none to spare. So it is drawn as an account button everywhere: your
+    // initial in a circle, the name beside it where there is room (CSS hides
+    // the name on phones). The accessible name starts with the name.
+    const who = accountDoorName(account, session);
+    btnAcc.classList.toggle("is-signed-in", !!(who || (account && account.signedIn)));
+    if (who || (account && account.signedIn) || session) {
+      const name = who || tt("nav.account");
+      const initial = (name.trim()[0] || "?").toLocaleUpperCase();
+      btnAcc.replaceChildren();
+      const dot = document.createElement("span");
+      dot.className = "door-avatar";
+      dot.setAttribute("aria-hidden", "true");
+      dot.textContent = initial;
+      const label = document.createElement("span");
+      label.className = "door-name";
+      label.textContent = name;
+      btnAcc.append(dot, label);
+      btnAcc.title = tt("nav.accountTitle");
+      btnAcc.setAttribute("aria-label", tt("nav.accountNamed", { name }));
+    } else {
+      btnAcc.textContent = tt("nav.signIn");
+      btnAcc.title = tt("nav.signInTitle");
+      // The visible word leads the accessible name (WCAG 2.5.3).
+      btnAcc.setAttribute("aria-label", btnAcc.title);
     }
-    if (!out || !inn) return;
+  }
 
-    // Signed out: offer real sign-in when an operator has wired the worker up,
-    // and say so plainly when they have not, rather than showing a form that
-    // cannot work.
+  /** The name the account button shows: the given name, else the address's local part, else the staff username. */
+  function accountDoorName(account, session) {
+    // A Google name is a full name ("Maria Fernanda de la Torre"); the
+    // header only needs the given name. Without one, the address's local part.
+    const acc = account && account.signedIn && account.account ? account.account : null;
+    return acc
+      ? ((acc.displayName || "").trim().split(/\s+/)[0] || (acc.email || "").split("@")[0])
+      : session
+        ? session.username.split(".")[0]
+        : "";
+  }
+
+  /** Which signed-out state the account panel draws: the sign-in, checking, offline, blocked or switched off. */
+  function paintSignInStates(offer) {
     const signIn = $("#account-signin");
     const unconfigured = $("#account-unconfigured");
     // Exactly one of the four states is drawn, and which one is the whole point
     // of accountSignIn(): a deploy with neither an email provider nor a Google
     // client can take nobody's sign-in, and showing the form anyway means
     // typing an address and being told afterwards that it cannot be sent.
-    const offer = accountSignIn();
     const hasRealSignIn = offer.offered;
     if (signIn) signIn.hidden = !hasRealSignIn;
     const checking = $("#account-checking");
@@ -8540,6 +9817,10 @@
       unconfigured.hidden =
         hasRealSignIn || offer.checking || offer.unreachable || offer.blocked;
     }
+  }
+
+  /** The sign-in controls: the email form, the "or" divider between two methods and the retry row. */
+  function paintSignInControls(offer) {
     const emailForm = $("#account-email-form");
     if (emailForm) emailForm.hidden = !offer.canEmail;
     // The divider only separates two things. On a Google-only deploy — which is
@@ -8553,21 +9834,29 @@
     // all there is nothing to ask, so it stays hidden there.
     const retryRow = $("#account-retry-row");
     if (retryRow) {
-      retryRow.hidden = !offer.configured || hasRealSignIn || offer.checking;
+      retryRow.hidden = !offer.configured || offer.offered || offer.checking;
     }
+  }
+
+  /** What the account is for, above the button that makes one, with the trial length the worker names. */
+  function paintAccountOffer(account, offer, signedIn) {
     // What the account is for, above the button that makes one. Only where a
     // sign-in can really be performed: promising a free trial beside a notice
     // saying sign-in is off would be the worst of both.
     const offerLine = $("#account-offer");
     if (offerLine) {
-      offerLine.hidden = !hasRealSignIn || signedIn;
+      offerLine.hidden = !offer.offered || signedIn;
       if (!offerLine.hidden) {
-        const days = Number(account && account.methods && account.methods.trialDays);
+        const days = Number(account && account.trialDays);
         offerLine.textContent = days > 0
           ? tt("auth.offer", { n: String(days) })
           : tt("auth.offerNoTrial");
       }
     }
+  }
+
+  /** The internal staff login: never opened for anybody, and on a deploy with accounts shown only to staff who ask. */
+  function paintStaffLogin(offer) {
     // The internal staff login is never opened for anybody. It used to expand
     // itself whenever no public sign-in could be offered, on the reasoning that
     // it was then the only way in — but it is not a way in for the person
@@ -8595,19 +9884,19 @@
       }
       internal.hidden = offer.configured && !staffAsked;
     }
+  }
 
-    if (!signedIn) {
-      out.hidden = false;
-      inn.hidden = true;
-      if (admin) admin.hidden = true;
-      const serverAdmin = $("#account-admin");
-      if (serverAdmin) serverAdmin.hidden = true;
-      return;
-    }
+  /** Signed out: the sign-in half of the panel, with both admin tools hidden. */
+  function showSignedOutPanel(out, inn, admin) {
+    out.hidden = false;
+    inn.hidden = true;
+    if (admin) admin.hidden = true;
+    const serverAdmin = $("#account-admin");
+    if (serverAdmin) serverAdmin.hidden = true;
+  }
 
-    out.hidden = true;
-    inn.hidden = false;
-
+  /** Who is signed in: the account's address, or the staff session's name and role. */
+  function paintAccountWho(who, account, session) {
     if (who) {
       if (account && account.signedIn && account.account) {
         who.textContent = tt("auth.signedInAs", { email: account.account.email });
@@ -8616,13 +9905,21 @@
           name: session.displayName || session.username,
           role: session.role
         });
+      } else {
+        // Signed in, but /v1/me has not said who: no line rather than the
+        // previous person's.
+        who.textContent = "";
       }
+      who.hidden = !who.textContent;
     }
+  }
 
+  /** The signed-in account's plan line and the line saying when its progress last synced. */
+  function paintAccountPlanAndSync(account) {
     const planEl = $("#account-plan");
     if (planEl) {
       planEl.hidden = !(account && account.signedIn);
-      if (account && account.signedIn) planEl.textContent = accountPlanLine(account.entitlement);
+      if (account && account.signedIn) planEl.textContent = accountPlanLineFor(account);
     }
 
     const syncEl = $("#account-sync");
@@ -8631,7 +9928,22 @@
       syncEl.hidden = !line;
       syncEl.textContent = line;
     }
+  }
 
+  /**
+   * This browser holds practice another account saved here: one question,
+   * asked before anything is merged or sent (VTSync decides, see ownerState).
+   */
+  function paintOwnerQuestion(account) {
+    const ownerBox = $("#account-other-owner");
+    if (ownerBox) {
+      const status = window.VTSync?.getStatus?.();
+      ownerBox.hidden = !(account && account.signedIn && status && status.otherOwner);
+    }
+  }
+
+  /** The panel's trial button: only for an account that has never used it, naming the length the worker will give. */
+  function paintAccountTrial(account) {
     // The trial is offered only to a signed-in account that has never used it.
     const trialBtn = $("#btn-account-trial");
     if (trialBtn) {
@@ -8646,7 +9958,13 @@
       // same way the Pro dialog's button does. The neutral label is the fallback
       // for a worker that has not said yet; no label may name a month, because
       // the trial is seven days.
-      const trialDays = Number(account && account.methods && account.methods.trialDays);
+      //
+      // `account.trialDays` and not `account.methods.trialDays`: the public
+      // route answers before anybody signs in and can only report the
+      // configured default, while the trial-length test gives this account
+      // either seven days or fourteen. The button is where the number is
+      // promised, so the promise has to be the one that will be kept.
+      const trialDays = Number(account && account.trialDays);
       noteTrialCtaView("panel");
       if (trialDays > 0) {
         // The generic [data-i18n] applier calls t(key) with no params, so a key
@@ -8660,6 +9978,10 @@
         trialBtn.textContent = tt("auth.startTrial");
       }
     }
+  }
+
+  /** The redeem form and sync button for a signed-in account, and the studio's gifting tools for one the worker calls an admin. */
+  function paintAccountTools(account) {
     const redeemForm = $("#account-redeem-form");
     if (redeemForm) redeemForm.hidden = !(account && account.signedIn);
     const syncBtn = $("#btn-account-sync");
@@ -8670,7 +9992,10 @@
     if (serverAdmin) {
       serverAdmin.hidden = !(account && account.account && account.account.role === "admin");
     }
+  }
 
+  /** The staff admin panel and its user list, for a staff session with the admin role. */
+  function paintStaffAdmin(A, session, admin) {
     if (admin) {
       admin.hidden = !session || session.role !== "admin";
       if (session && session.role === "admin") {
@@ -8728,6 +10053,21 @@
     });
   }
 
+  /**
+   * Signed in but never told who: the /v1/me at load was missed (offline, a
+   * restart). Ask again now that somebody is looking, or this panel keeps
+   * saying nothing about who is signed in, and "Plan gratis" under a header
+   * that says Pro.
+   */
+  function askWhoIsSignedIn() {
+    const acctNow = window.VTAccount?.getState?.();
+    if (acctNow && acctNow.signedIn && !acctNow.account) {
+      Promise.resolve(window.VTAccount.refresh?.())
+        .then(() => refreshAccountUI())
+        .catch(() => {});
+    }
+  }
+
   function openAccount() {
     const modal = $("#account-modal");
     if (!modal) return;
@@ -8744,6 +10084,7 @@
     // never touches it. The answer redraws the panel through onChange.
     const asking = window.VTAccount?.ensureMethods?.();
     mountGoogleButton();
+    askWhoIsSignedIn();
     // What the visitor ends up looking at is the state worth counting, and on
     // the first open of a page load that is not knowable yet: nothing probes
     // /v1/auth/methods before this, so accountPanelState() would read "checking"
@@ -8785,7 +10126,21 @@
     $("#account-modal")?.addEventListener("click", (e) => {
       if (e.target === $("#account-modal")) closeAccount();
     });
-    $("#btn-logout")?.addEventListener("click", async () => {
+    $("#btn-logout")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      // The practice saved a moment ago may still be waiting out the quiet
+      // period before it is sent. It belongs to the account that is leaving,
+      // so it goes there first, for a few seconds at most; after that this
+      // browser holds it, and the next account to sign in is asked about it.
+      btn.disabled = true;
+      try {
+        await Promise.race([
+          Promise.resolve(window.VTSync?.flush?.()).catch(() => null),
+          new Promise((resolve) => setTimeout(resolve, 3000))
+        ]);
+      } finally {
+        btn.disabled = false;
+      }
       // One button, both layers: an internal QA session and a real account can
       // both be live, and "Salir" has to mean signed out of everything.
       window.VTAuth?.logout?.();
@@ -8857,20 +10212,21 @@
     });
     $("#admin-clear-billing")?.addEventListener("click", () => {
       if (!window.VTAuth?.isAdmin?.()) return;
+      if (!window.confirm(tt("auth.confirmClearBilling"))) return;
       window.VTBilling?.clearEntitlement?.();
       updateBillingChrome();
     });
     $("#admin-clear-progress")?.addEventListener("click", () => {
       if (!window.VTAuth?.isAdmin?.()) return;
-      try {
-        localStorage.removeItem("vt_progress_v1");
-        localStorage.removeItem("vt_session_v1");
-        localStorage.removeItem("vt_hold_logs_v1");
-      } catch {
-        /* ignore */
-      }
+      // The active profile's record, whole: it used to remove the main
+      // profile's three keys whoever was active, and nothing else.
+      if (!window.confirm(tt("auth.confirmClearProgress"))) return;
+      const done = window.VTStorage?.clearProfileData?.(window.VTStorage.getActiveProfileId?.());
+      if (done && !done.ok) return;
       toast(tt("auth.toast.cleared"));
+      renderValuePulse();
       renderExerciseList();
+      if (state.view === "history") renderHistory();
     });
     window.VTAuth?.onChange?.(() => {
       refreshAccountUI();
@@ -8897,6 +10253,8 @@
         codeForm.dataset.email = email;
       }
       accountError(null);
+      const resend = $("#account-code-resend");
+      if (resend) resend.hidden = true;
       const sent = $("#account-or");
       if (sent) sent.hidden = true;
       const google = $("#account-google");
@@ -8910,6 +10268,8 @@
       const codeForm = $("#account-code-form");
       if (emailForm) emailForm.hidden = false;
       if (codeForm) codeForm.hidden = true;
+      const resend = $("#account-code-resend");
+      if (resend) resend.hidden = true;
       const google = $("#account-google");
       if (google) google.hidden = false;
       accountError(null);
@@ -8944,16 +10304,71 @@
       } else {
         trackFunnel("signin_fail", { method: "email", reason: funnelReason(res && res.reason) });
         accountErrorFor(res && res.reason);
+        // A burned code stays burned: the only way on is a new one, so the
+        // step offers it where the message is.
+        const resend = $("#account-code-resend");
+        if (resend) resend.hidden = !(res && (res.reason === "too_many_attempts" || res.reason === "no_code"));
       }
     });
 
     $("#account-code-back")?.addEventListener("click", showEmailStep);
+
+    $("#account-code-resend")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const email = $("#account-code-form")?.dataset.email || "";
+      btn.disabled = true;
+      try {
+        const res = await window.VTAccount?.startEmailSignIn?.(email);
+        if (res && res.ok) {
+          if ($("#account-code")) $("#account-code").value = "";
+          showCodeStep(email);
+        } else {
+          accountErrorFor(res && res.reason);
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // This browser holds practice another account saved here. Neither choice
+    // sends anything before it is made (see ownerState in sync.js).
+    $("#btn-owner-add")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      accountError(null);
+      try {
+        const res = await window.VTSync?.addDeviceToAccount?.();
+        if (res && res.ok) toast(tt("auth.ownerAdded"));
+        else if (res) accountErrorFor(res.reason);
+      } finally {
+        btn.disabled = false;
+        refreshAccountUI();
+      }
+    });
+    $("#btn-owner-mine")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      accountError(null);
+      try {
+        const res = await window.VTSync?.useAccountOnly?.();
+        if (res && res.ok) toast(tt("auth.ownerMineDone"));
+        else if (res) accountErrorFor(res.reason);
+      } finally {
+        btn.disabled = false;
+        refreshAccountUI();
+        showSyncedRecord();
+      }
+    });
 
     $("#btn-account-trial")?.addEventListener("click", async () => {
       trackFunnel("trial_click", { where: "panel" });
       const res = await window.VTAccount?.startTrial?.();
       if (res && res.ok) {
         trackFunnel("trial_result", { outcome: "started", where: "panel", kind: "account" });
+        // `trial_result` fires on every outcome and a metric counts an event
+        // rather than reading its props, so "started" needs an event of its
+        // own to be measurable. It is a guardrail of the trial-length test.
+        trackFunnel("trial_started", { where: "panel", kind: "account" });
         toast(tt("pricing.toast.trialStarted", { n: res.days ?? "" }));
         refreshAccountUI();
         updateBillingChrome();
@@ -8985,7 +10400,8 @@
     $("#btn-account-sync")?.addEventListener("click", async () => {
       const res = await window.VTSync?.syncNow?.();
       refreshAccountUI();
-      if (res && !res.ok) accountErrorFor(res.reason);
+      // Waiting for the answer to the question above is not a failure.
+      if (res && !res.ok && res.reason !== "other_owner") accountErrorFor(res.reason);
     });
 
     function giftResult(text) {
@@ -9229,6 +10645,14 @@
       const t = ingest.totals || {};
       const sum = (keys) => keys.reduce((n, k) => n + (Number(t[k]) || 0), 0);
       const dropped = sum(["unknown_event", "bad_cid", "not_an_object"]);
+      // `daily_capped` is an event-level reason too, and it is deliberately NOT
+      // in that sum: those three are events this worker could not read, and a
+      // capped one is an event it could read and chose not to store because the
+      // day's D1 write allowance was nearly gone. Summing them would put the
+      // one condition an operator has to act on inside a number labelled "mal
+      // formados", which sends them hunting a client bug. It is counted and
+      // named on its own below, and it colours the line.
+      const capped = Number(t.daily_capped) || 0;
       // Every request-level reason the worker counts (INGEST_REASONS.request in
       // workers/entitlements/src/events.js) except "forget", which is a deletion
       // asked for rather than a batch turned away. eu_no_consent was missing
@@ -9246,7 +10670,7 @@
         "eu_no_consent"
       ];
       const refused = sum(refusedKeys);
-      if (!t.accepted && !dropped && !refused) return `<p class="muted ab-ingest">${esc(tt("ab.ingestNone"))}</p>`;
+      if (!t.accepted && !dropped && !refused && !capped) return `<p class="muted ab-ingest">${esc(tt("ab.ingestNone"))}</p>`;
       let line = tt("ab.ingest", { accepted: count(t.accepted), dropped: count(dropped), refused: count(refused) });
       const reasons = refusedKeys.filter((k) => t[k]).map((k) => `${k} ${count(t[k])}`);
       if (reasons.length) line += ` ${tt("ab.ingestReasons", { list: reasons.join(", ") })}`;
@@ -9257,6 +10681,7 @@
         .filter((k) => t[k])
         .map((k) => `${k} ${count(t[k])}`);
       if (exposures.length) line += ` ${tt("ab.ingestExposures", { list: exposures.join(", ") })}`;
+      if (capped) line += ` ${tt("ab.ingestCapped", { n: count(capped) })}`;
       if (ingest.lastAcceptedAt) line += ` ${tt("ab.ingestLast", { when: date(ingest.lastAcceptedAt) })}`;
       // A wrong origin or a stuck limit is a broken pipeline; opted-out,
       // automated and eu_no_consent refusals are the system working, so they are
@@ -9266,11 +10691,19 @@
       // only recorded if that browser comes back another day, so it can skew
       // who is counted. An unregistered one is forged traffic or a site and
       // worker deployed out of step, the registry doing its job, so it is named
-      // but not coloured.
-      const broken = sum(["origin_not_allowed", "rate_limited", "exposure_capped"]) > 0;
+      // but not coloured. A capped *event* does colour it: unlike the others it
+      // is data already lost, and the remedy is Pablo's (raise EVENTS_DAILY_CAP
+      // on the paid plan, or send fewer events), so a quiet readout would be a
+      // decision taken by silence.
+      const broken = sum(["origin_not_allowed", "rate_limited", "exposure_capped"]) > 0 || capped > 0;
       return `<p class="${broken ? "ab-warn" : "muted"} ab-ingest">${esc(line)}</p>`;
     }
 
+    watchAccountChanges();
+  }
+
+  /** Redraw the panel, the header and the home card whenever the account or its synced record changes. */
+  function watchAccountChanges() {
     window.VTAccount?.onChange?.(() => {
       refreshAccountUI();
       updateBillingChrome();
@@ -9280,7 +10713,7 @@
       renderValuePulse();
     });
     window.VTSync?.onChange?.(() => refreshAccountUI());
-    // Whatever started the sync: signing in, a save, the button above.
+    // Whatever started the sync: signing in, a save, the panel's sync button.
     window.VTSync?.onDataChange?.(() => showSyncedRecord());
   }
 
@@ -9340,6 +10773,7 @@
     const res = await window.VTAccount.startTrial();
     if (res && res.ok) {
       trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "account" });
+      trackFunnel("trial_started", { where: "pricing", kind: "account" });
       toast(tt("pricing.toast.trialStarted", { n: String(res.days ?? "") }));
     } else {
       trackFunnel("trial_result", { outcome: funnelReason(res && res.reason), where: "pricing", kind: "account" });
@@ -9358,6 +10792,7 @@
       toast(tt("pricing.toast.trialUsed"), { durationMs: 4200 });
     } else {
       trackFunnel("trial_result", { outcome: "started", where: "pricing", kind: "local" });
+      trackFunnel("trial_started", { where: "pricing", kind: "local" });
       toast(tt("pricing.toast.trialStarted", { n: String(VTBilling.trialDaysLeft?.() ?? 0) }));
     }
     updateBillingChrome();
@@ -9560,18 +10995,93 @@
     goHome: () => (state.view === "exercise" ? leaveExercise({ type: "home" }) : setView("home"))
   };
 
+  /**
+   * A language switch on an exercise that has not started: rebuilt in the new
+   * language like a fresh open, but the panels the learner had open (steps and
+   * tips, the rating card, the piano), the microphone notice and the scroll
+   * position stay where they were.
+   */
+  function renderExerciseInPlace() {
+    const keep = {
+      guide: !!state.guideOpen,
+      metrics: !!state.metricsOpen,
+      piano: !!state.pianoOpen,
+      mic: !!$("#mic-blocked") && !$("#mic-blocked").hidden,
+      y: window.scrollY
+    };
+    renderExerciseAfresh();
+    if (keep.guide) $("#btn-toggle-guide")?.click();
+    if (keep.metrics) openMetricsPanel(true, { reveal: false });
+    // Put back, not asked for: opened from its button the panel scrolls into
+    // view once it has opened (after the page is put back below), so the
+    // switch would end at the piano instead of where the learner was
+    if (keep.piano && !$("#btn-toggle-piano")?.hidden) togglePianoPanel({ reveal: false });
+    if (keep.mic) {
+      relabelMicBlocked();
+      const box = $("#mic-blocked");
+      if (box) box.hidden = false;
+    }
+    // Opening the panels brought them into view; put the page back
+    const back = () => {
+      if (Math.abs(window.scrollY - keep.y) > 2) window.scrollTo({ top: keep.y, behavior: "instant" });
+    };
+    requestAnimationFrame(() => {
+      back();
+      requestAnimationFrame(back);
+    });
+    setTimeout(back, 250);
+  }
+
+  /**
+   * The microphone notice's sentence in the page language: its cause and what
+   * still runs, as showMicBlocked chose them, so a language switch says the
+   * same thing in the new language (every cause, the Safari ones included).
+   */
+  function paintMicBlockedText() {
+    const textEl = $("#mic-blocked-text");
+    const said = state.micBlockedText;
+    if (textEl && said) textEl.textContent = tt(said.key, { runs: tt(said.runs) });
+  }
+
+  function relabelMicBlocked() {
+    paintMicBlockedText();
+    const retry = $("#btn-mic-retry");
+    if (retry) retry.textContent = tt("mic.blocked.retry");
+    const skip = $("#btn-mic-skip");
+    if (skip) skip.textContent = tt("mic.blocked.skip");
+    const close = $("#btn-mic-close");
+    if (close) close.setAttribute("aria-label", tt("a11y.close"));
+  }
+
+  /** A language switch on the open exercise: relabelled in place once under way, rebuilt otherwise. */
+  function switchExerciseLanguage() {
+    if (exerciseUnderWay()) {
+      relabelExercise();
+      // A take is running: its panel changes when it stops. Otherwise now.
+      if (state.practiceLive || state.practiceStarting) state.langChangedMidTake = true;
+      else {
+        try {
+          state.modeInstance?.relabel?.();
+        } catch (err) {
+          console.warn("[VT] relabel", err);
+        }
+      }
+      if (!$("#mic-blocked")?.hidden) relabelMicBlocked();
+    } else {
+      state.langChangedMidTake = false;
+      renderExerciseInPlace();
+    }
+  }
+
   function init() {
     ensureRangeAdapter();
-    updateOctaveUI();
     installGlobalErrorHandlers();
     if (window.VTI18n) {
       VTI18n.init();
       VTI18n.onChange = () => {
         renderExerciseList();
-        if (state.view === "exercise" && state.exercise) {
-          if (exerciseUnderWay()) relabelExercise();
-          else renderExercise();
-        }
+        updateOctaveUI();
+        if (state.view === "exercise" && state.exercise) switchExerciseLanguage();
         if ($("#step-done") && !$("#step-done").hidden) renderStepDone();
         // Plan and history build their copy at render time, so a language
         // switch has to re-render them or they stay in the old language.
@@ -9599,6 +11109,7 @@
         if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
       };
     }
+    updateOctaveUI();
     syncGuideLinks();
     const settings = VTStorage.getSettings();
     state.tab = settings.lastTab || "vocal";

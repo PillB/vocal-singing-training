@@ -616,7 +616,10 @@ test.describe("Saved progress follows the learner", () => {
 
     // Deleted while its own read is out: what comes back is not written for it.
     const p3 = await page.evaluate(() => {
-      const made = window.VTStorage.createProfile("Luis");
+      // `maxSlots` named explicitly: this case is about a read that is out
+      // when its profile is deleted, not about what a plan allows, and
+      // `createProfile` now defaults to the free allowance of one.
+      const made = window.VTStorage.createProfile("Luis", { maxSlots: 3 });
       window.VTStorage.setActiveProfile("default");
       return made.id;
     });

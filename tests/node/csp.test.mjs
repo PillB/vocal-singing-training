@@ -10,7 +10,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-const PAGES = ["index.html", "guide.html", "privacy.html", "admin.html"];
+// Every page the site serves (the cache gate's list, which tests/node/csp-pins.test.mjs checks against git).
+import { PAGES } from "../../qa/asset-versions.mjs";
 const read = (f) => readFileSync(new URL(`../../${f}`, import.meta.url), "utf8");
 
 export function policyOf(html) {

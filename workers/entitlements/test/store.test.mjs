@@ -20,7 +20,7 @@ import {
   toPublicEntitlement,
   upsertEntitlement
 } from "../src/store.js";
-import { isAwaitingPayment, isTokenIssuable, periodEndForPlan } from "../src/license.js";
+import { deriveLicenseId, isAwaitingPayment, isLicenseIdShape, isTokenIssuable, licenseIdSecret, periodEndForPlan } from "../src/license.js";
 import { mapMercadoPagoResource } from "../src/mercadopago.js";
 import { createFakeKv } from "./fixtures.mjs";
 
@@ -1887,6 +1887,109 @@ test("a payment a Stripe deletion already knew of does not restore the period it
   assert.equal(read.status, "canceled");
   assert.equal(read.periodEnd, NOW - 2 * DAY);
   assert.equal(isTokenIssuable(read, NOW), false);
+});
+
+/** A KV fake whose every call yields, so concurrent callers really interleave. */
+function slowKv() {
+  const kv = createFakeKv();
+  const get = kv.get.bind(kv);
+  const put = kv.put.bind(kv);
+  kv.get = async (key) => {
+    await new Promise((resolve) => setImmediate(resolve));
+    return get(key);
+  };
+  kv.put = async (key, value, options) => {
+    await new Promise((resolve) => setImmediate(resolve));
+    return put(key, value, options);
+  };
+  return kv;
+}
+
+const SECRET = "test-license-id-key";
+
+test("the id a license is derived under says nothing about what it was derived from", async () => {
+  const id = await deriveLicenseId(SECRET, "stripe", "sub_secret_123");
+  assert.equal(isLicenseIdShape(id), true, "it has to look like any other license id");
+  assert.equal(id.includes("sub_secret"), false, "it travels in a token and in the browser");
+  assert.equal(id, await deriveLicenseId(SECRET, "stripe", "sub_secret_123"), "and it is stable");
+  assert.notEqual(id, await deriveLicenseId(SECRET, "mercadopago", "sub_secret_123"), "per provider");
+  assert.notEqual(id, await deriveLicenseId("another-key", "stripe", "sub_secret_123"), "and per key");
+  assert.equal(await deriveLicenseId("", "stripe", "sub_x"), null, "no secret, nothing derived");
+  assert.equal(await deriveLicenseId(SECRET, "stripe", ""), null, "nothing to derive from");
+  // Set LICENSE_ID_KEY to pin it; otherwise it follows the signing key.
+  assert.equal(licenseIdSecret({ LICENSE_ID_KEY: " pinned " }), "pinned");
+  assert.equal(licenseIdSecret({ LICENSE_PRIVATE_KEY_PKCS8_B64: "abc" }), "license-id:abc");
+  assert.equal(licenseIdSecret({}), "");
+});
+
+test("two writers that cannot see each other still agree on one license", async () => {
+  // The three events Stripe sends for a new subscription arrive together. Each
+  // looks for a license, each finds none, and KV has no compare-and-swap — so
+  // each used to mint a random id, the claim index ended up pointing at one
+  // record and the subscription index at the other, and the copy the customer
+  // holds never heard of a cancellation (QA round 4, QA-W-01).
+  for (let trial = 0; trial < 25; trial += 1) {
+    const kv = slowKv();
+    const base = { provider: "stripe", subscriptionId: `sub_${trial}`, customerId: "cus_r" };
+    const results = await Promise.all([
+      upsertEntitlement(kv, { ...base, claimId: `cs_${trial}`, status: "active", paid: true, occurredAt: NOW }, { now: NOW, idSecret: SECRET }),
+      upsertEntitlement(kv, { ...base, claimId: null, status: "active", plan: "pro_monthly", planSource: "price_id", periodEnd: NOW + 2592000, occurredAt: NOW }, { now: NOW, idSecret: SECRET }),
+      upsertEntitlement(kv, { ...base, claimId: null, status: "active", paid: true, periodEnd: NOW + 2592000, occurredAt: NOW }, { now: NOW, idSecret: SECRET })
+    ]);
+    const ids = new Set(results.map((r) => r.record.licenseId));
+    assert.equal(ids.size, 1, `trial ${trial}: ${[...ids].join(", ")}`);
+    const licenses = [...kv.store.keys()].filter((k) => k.startsWith("lic:"));
+    assert.equal(licenses.length, 1, `trial ${trial} stored ${licenses.length} licenses`);
+    // And both indexes point at that one, so every later event lands on the
+    // record the customer holds.
+    const byClaim = await getLicenseIdForClaim(kv, "stripe", `cs_${trial}`);
+    const bySubscription = await getLicenseIdForSubscription(kv, "stripe", `sub_${trial}`);
+    assert.equal(byClaim, bySubscription, `trial ${trial}: the two indexes disagree`);
+  }
+});
+
+test("a license that already exists keeps the id it was minted with", async () => {
+  // Everything stored before ids were derived has a random one. Derivation is
+  // what two writers who find nothing agree on, never a second name for a
+  // record that is already there.
+  const kv = createFakeKv();
+  const base = { provider: "stripe", subscriptionId: "sub_old", claimId: "cs_old", customerId: "cus_old" };
+  const first = await upsertEntitlement(kv, { ...base, status: "active", occurredAt: NOW }, {
+    now: NOW,
+    generateId: idSequence("lic_")
+  });
+  assert.equal(first.record.licenseId, "lic_1");
+
+  const later = await upsertEntitlement(kv, { ...base, status: "canceled", occurredAt: NOW + 10 }, {
+    now: NOW + 10,
+    idSecret: SECRET
+  });
+  assert.equal(later.record.licenseId, "lic_1", "the index found it, so nothing was derived");
+  assert.equal([...kv.store.keys()].filter((k) => k.startsWith("lic:")).length, 1);
+  assert.equal(later.record.status, "canceled");
+});
+
+test("without a secret a new license still gets a random id", async () => {
+  // A deployment with no signing key cannot sell anything, so this is only
+  // about not changing what an unconfigured worker does.
+  const kv = createFakeKv();
+  const { record } = await upsertEntitlement(
+    kv,
+    { provider: "stripe", subscriptionId: "sub_plain", claimId: "cs_plain", status: "active", occurredAt: NOW },
+    { now: NOW }
+  );
+  assert.equal(isLicenseIdShape(record.licenseId), true);
+  assert.notEqual(record.licenseId, await deriveLicenseId(SECRET, "stripe", "sub_plain"));
+});
+
+test("a one-off payment with no subscription is derived from the payment", async () => {
+  const kv = createFakeKv();
+  const { record } = await upsertEntitlement(
+    kv,
+    { provider: "mercadopago", subscriptionId: null, claimId: "pay_991", status: "active", occurredAt: NOW },
+    { now: NOW, idSecret: SECRET }
+  );
+  assert.equal(record.licenseId, await deriveLicenseId(SECRET, "mercadopago", "pay_991"));
 });
 
 test("the client view carries no provider-internal ids", () => {

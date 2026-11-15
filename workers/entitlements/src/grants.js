@@ -22,8 +22,8 @@
 "use strict";
 
 import { getEntitlement } from "./store.js";
-import { isTokenIssuable, PLAN_IDS } from "./license.js";
-import { mintId, nowSec } from "./db.js";
+import { isTokenIssuable, licenseIdSecret, PLAN_IDS } from "./license.js";
+import { changedRows, hmacSha256Hex, mintId, nowSec } from "./db.js";
 
 /** Grant kinds an operator (or the trial flow) can create. */
 export const GRANT_KINDS = ["trial", "gift", "comp"];
@@ -33,6 +33,39 @@ export const DEFAULT_TRIAL_DAYS = 7;
 
 /** Upper bound on any single grant, so a typo cannot comp somebody for a decade. */
 export const MAX_GRANT_DAYS = 3650;
+
+/**
+ * What the admin page means by "no end date".
+ *
+ * A grant is always a row with an `ends_at`, and that is on purpose: one shape,
+ * one resolver, and revoking is one column whatever the length. So "open-ended"
+ * is the longest grant we allow rather than a null end, which would need a
+ * second path through `grantIsActive`, `toPublicGrant` and `resolveEntitlement`
+ * — three places where a bug grants Pro forever instead of ending it.
+ *
+ * Ten years is indistinguishable from forever for a tester, and it is still one
+ * tap to take back. `grantIsOpenEnded` is what the page reads to say so rather
+ * than printing a date in 2036.
+ */
+export const OPEN_ENDED_DAYS = MAX_GRANT_DAYS;
+
+/**
+ * Whether a grant was handed over with no end date in mind.
+ *
+ * Read from its length, not from a flag: a flag would be a second source of
+ * truth that an older row could not have, and the length is the thing the page
+ * is really asking about.
+ *
+ * @param {Object} row Grant row.
+ * @returns {boolean} True when it runs to the maximum we allow.
+ */
+export function grantIsOpenEnded(row) {
+  if (!row) {
+    return false;
+  }
+  const days = (Number(row.ends_at) - Number(row.starts_at)) / 86400;
+  return Number.isFinite(days) && days >= OPEN_ENDED_DAYS;
+}
 
 /** Gift codes use an unambiguous alphabet: no O/0, no I/1, no U (reads as V). */
 export const GIFT_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTVWXYZ23456789";
@@ -50,6 +83,146 @@ export function trialSeconds(env) {
   const raw = Number.parseInt(String(env && env.TRIAL_DAYS), 10);
   const days = Number.isFinite(raw) && raw > 0 ? Math.min(raw, MAX_GRANT_DAYS) : DEFAULT_TRIAL_DAYS;
   return days * 86400;
+}
+
+/**
+ * The arms of the trial-length test, and how many days each one gives.
+ *
+ * The day counts live here and nowhere else, because this is the one
+ * experiment whose treatment is money: the arm decides how much Pro an account
+ * is given away. js/experiments-config.js and EXPERIMENT_PRESETS carry the same
+ * key and the same arm ids so the statistics can be read, and neither carries a
+ * day count — a day count in a file the browser loads is a day count somebody
+ * can edit.
+ *
+ * The ids are words rather than numbers so that a stored result cannot be
+ * misread as a length if the lengths are ever changed.
+ *
+ * Equal weights are assumed by `trialArmFor` below, which picks with a modulo.
+ * Giving an arm a different share would need a weighted walk here and a
+ * matching weight in the two registries, which test/events.test.mjs pins.
+ */
+export const TRIAL_ARMS = [
+  { id: "seven", days: 7 },
+  { id: "fourteen", days: 14 }
+];
+
+/** The experiment key. The same string appears in both registries. */
+export const TRIAL_EXPERIMENT = "trial_len_2026_11";
+
+/** How an applied arm is written on the grant row it produced. */
+const TRIAL_SOURCE_PREFIX = "trial:arm:";
+
+/**
+ * Is the trial-length test running?
+ *
+ * Two conditions, both deliberate:
+ *
+ *  - `TRIAL_LEN_EXPERIMENT` is on. It is a worker setting rather than the
+ *    `enabled` flag in js/experiments-config.js, because a browser must not be
+ *    able to decide how long a free trial is. The client flag governs what the
+ *    statistics record; this one governs what is given away.
+ *  - there is a secret to key the assignment with. Without one the arm could
+ *    only come from a plain hash of the account id, which anybody can compute
+ *    in advance: they would grind addresses until one landed in the longer arm
+ *    before ever signing up. No secret therefore means no test rather than a
+ *    predictable one.
+ *
+ * @param {Object} env Worker env bindings.
+ * @returns {boolean} True when arms are assigned.
+ */
+export function trialExperimentOn(env) {
+  const flag = String((env && env.TRIAL_LEN_EXPERIMENT) || "").trim().toLowerCase();
+  if (flag !== "1" && flag !== "on" && flag !== "true" && flag !== "yes") {
+    return false;
+  }
+  return !!licenseIdSecret(env);
+}
+
+/**
+ * Which arm an account's trial goes in.
+ *
+ * Keyed on the account id and not the browser id: the trial is one per account
+ * (`accounts.trial_used_at`), so an arm per browser would offer one person two
+ * different lengths in two browsers and `startTrial` would have to pick one
+ * anyway.
+ *
+ * HMAC and not a bare hash, domain-separated from the licence-id derivation
+ * that shares the same secret, so that neither use can be made to reveal the
+ * other.
+ *
+ * @param {Object} env Worker env bindings.
+ * @param {string} accountId Account id.
+ * @returns {Promise<{id: string, days: number}|null>} The arm, or null when one
+ *   cannot be derived.
+ */
+export async function trialArmFor(env, accountId) {
+  const secret = licenseIdSecret(env);
+  const id = String(accountId === undefined || accountId === null ? "" : accountId);
+  if (!secret || !id) {
+    return null;
+  }
+  const mac = await hmacSha256Hex(secret, `trial-arm:v1:${TRIAL_EXPERIMENT}:${id}`);
+  const point = Number.parseInt(mac.slice(0, 8), 16);
+  if (!Number.isFinite(point)) {
+    return null;
+  }
+  return TRIAL_ARMS[point % TRIAL_ARMS.length];
+}
+
+/**
+ * How long this account's trial would run, and the arm that decided it.
+ *
+ * With the test off this is `TRIAL_DAYS` (default seven) for everybody, which
+ * is exactly today's behaviour. With it on the arm's length wins and
+ * `TRIAL_DAYS` is ignored — stated in the README, because an operator who sets
+ * both deserves to know which one loses.
+ *
+ * @param {Object} env Worker env bindings.
+ * @param {string} accountId Account id.
+ * @returns {Promise<{days: number, arm: string|null}>} Length and arm.
+ */
+export async function trialPlanFor(env, accountId) {
+  const configured = Math.floor(trialSeconds(env) / 86400);
+  if (!trialExperimentOn(env)) {
+    return { days: configured, arm: null };
+  }
+  const arm = await trialArmFor(env, accountId);
+  if (!arm) {
+    return { days: configured, arm: null };
+  }
+  return { days: Math.min(Math.max(1, arm.days), MAX_GRANT_DAYS), arm: arm.id };
+}
+
+/**
+ * The arm a trial grant was actually created under, read back off the row.
+ *
+ * The arm is written down when it is applied rather than recomputed later, and
+ * this is the only reader. A recomputed arm would change its answer when the
+ * secret is rotated or an arm is added, and the account would then be counted
+ * in an arm it was never given; it would also invent an arm for every account
+ * that trialled before the test was switched on, whose trial was the
+ * configured length whatever a hash says now.
+ *
+ * @param {unknown} source A grant row's `source`.
+ * @returns {string|null} The arm id, or null when the row names none.
+ */
+export function trialArmFromSource(source) {
+  const raw = String(source === undefined || source === null ? "" : source);
+  if (!raw.startsWith(TRIAL_SOURCE_PREFIX)) {
+    return null;
+  }
+  const arm = raw.slice(TRIAL_SOURCE_PREFIX.length);
+  return TRIAL_ARMS.some((a) => a.id === arm) ? arm : null;
+}
+
+/**
+ * The `source` to store on a trial grant for an arm.
+ * @param {string|null} arm Arm id, or null when the test is off.
+ * @returns {string} Row value.
+ */
+export function trialSourceFor(arm) {
+  return arm ? `${TRIAL_SOURCE_PREFIX}${arm}` : "trial";
 }
 
 /**
@@ -123,6 +296,8 @@ export function toPublicGrant(row, at) {
     note: row.note || null,
     source: row.source || null,
     revokedAt: revoked ? Number(row.revoked_at) : null,
+    // So the page can say "no end date" instead of a date ten years out.
+    openEnded: grantIsOpenEnded(row),
     status: revoked ? "revoked" : active ? "active" : Number(row.ends_at) <= at ? "expired" : "scheduled"
   };
 }
@@ -225,12 +400,124 @@ export async function listGrants(db, accountId, options) {
   return (res && res.results) || [];
 }
 
+/** The states a grant can be in, as the admin list filters on them. */
+export const GRANT_STATES = ["active", "scheduled", "expired", "revoked"];
+
+/**
+ * Every grant this deployment has handed out, newest first, with the address it
+ * was handed to — "who holds Pro, and which kind".
+ *
+ * The per-account lookup answers "what does this person hold". This answers the
+ * other question, the one that has no answer today: which of our testers are
+ * still comped, which gifts are about to run out, who did we give something to
+ * and forget. It joins `accounts` for the address because a list of account ids
+ * is not something anybody can act on.
+ *
+ * `before`/`beforeId` page by key rather than OFFSET, with the id breaking ties
+ * on the same second so a page boundary cannot repeat or skip a row.
+ *
+ * @param {Object} db D1 binding.
+ * @param {{kind?: string, state?: string, limit?: number, before?: number,
+ *          beforeId?: string, at?: number}} [options] Filters.
+ * @returns {Promise<{grants: Object[], more: boolean}>} A page of grant rows,
+ *   each with `email`.
+ */
+export async function listAllGrants(db, options) {
+  const opts = options || {};
+  const at = nowSec(opts.at);
+  const limit = Math.min(200, Math.max(1, Math.floor(Number(opts.limit) || 50)));
+  const where = [];
+  const binds = [];
+  if (GRANT_KINDS.includes(opts.kind)) {
+    binds.push(opts.kind);
+    where.push(`g.kind = ?${binds.length}`);
+  }
+  if (opts.state === "revoked") {
+    where.push("g.revoked_at IS NOT NULL");
+  } else if (opts.state === "active") {
+    binds.push(at);
+    where.push(`g.revoked_at IS NULL AND g.starts_at <= ?${binds.length} AND g.ends_at > ?${binds.length}`);
+  } else if (opts.state === "scheduled") {
+    binds.push(at);
+    where.push(`g.revoked_at IS NULL AND g.starts_at > ?${binds.length}`);
+  } else if (opts.state === "expired") {
+    binds.push(at);
+    where.push(`g.revoked_at IS NULL AND g.ends_at <= ?${binds.length}`);
+  }
+  if (Number.isFinite(Number(opts.before)) && Number(opts.before) > 0) {
+    binds.push(Math.floor(Number(opts.before)));
+    const cursor = binds.length;
+    if (typeof opts.beforeId === "string" && opts.beforeId) {
+      binds.push(opts.beforeId);
+      where.push(`(g.created_at < ?${cursor} OR (g.created_at = ?${cursor} AND g.id < ?${binds.length}))`);
+    } else {
+      where.push(`g.created_at < ?${cursor}`);
+    }
+  }
+  binds.push(limit + 1);
+  const res = await db
+    .prepare(
+      `SELECT g.id, g.account_id, g.kind, g.plan, g.starts_at, g.ends_at, g.note, g.source,
+              g.revoked_at, g.created_at, a.email AS email
+       FROM grants g JOIN accounts a ON a.id = g.account_id
+       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY g.created_at DESC, g.id DESC
+       LIMIT ?${binds.length}`
+    )
+    .bind(...binds)
+    .all();
+  const rows = (res && res.results) || [];
+  return { grants: rows.slice(0, limit), more: rows.length > limit };
+}
+
+/**
+ * How many grants are in each state, by kind — the one line that says "four
+ * testers comped, two gifts running out".
+ * @param {Object} db D1 binding.
+ * @param {number} [now] Injected clock.
+ * @returns {Promise<Object<string, Object<string, number>>>} kind -> state -> count.
+ */
+export async function countGrants(db, now) {
+  const at = nowSec(now);
+  const res = await db
+    .prepare(
+      `SELECT kind,
+              CASE WHEN revoked_at IS NOT NULL THEN 'revoked'
+                   WHEN starts_at > ?1 THEN 'scheduled'
+                   WHEN ends_at <= ?1 THEN 'expired'
+                   ELSE 'active' END AS state,
+              COUNT(*) AS n
+       FROM grants GROUP BY kind, state`
+    )
+    .bind(at)
+    .all();
+  const out = {};
+  for (const kind of GRANT_KINDS) {
+    out[kind] = {};
+    for (const state of GRANT_STATES) {
+      out[kind][state] = 0;
+    }
+  }
+  for (const row of (res && res.results) || []) {
+    if (!out[row.kind]) {
+      out[row.kind] = {};
+    }
+    out[row.kind][row.state] = Number(row.n) || 0;
+  }
+  return out;
+}
+
 /**
  * Start the free trial for an account.
  *
  * One per account, enforced by `accounts.trial_used_at` rather than by counting
  * grant rows, so revoking a trial grant (say, for abuse) does not silently hand
  * the account a fresh one.
+ *
+ * The length comes from `trialPlanFor`, so it is the configured `TRIAL_DAYS`
+ * normally and the account's arm while the trial-length test runs. The arm is
+ * recorded on the row it produced, which is what makes "what was this account
+ * actually given" answerable later without recomputing anything.
  *
  * @param {Object} db D1 binding.
  * @param {Object} account Account row.
@@ -243,17 +530,57 @@ export async function startTrial(db, account, env, now) {
   if (account.trial_used_at !== null && account.trial_used_at !== undefined) {
     return { ok: false, reason: "trial_used" };
   }
-  const days = Math.floor(trialSeconds(env) / 86400);
-  const grant = await createGrant(
-    db,
-    { accountId: account.id, kind: "trial", plan: "pro_monthly", days, source: "trial", note: null },
-    at
-  );
-  await db
-    .prepare("UPDATE accounts SET trial_used_at = ?2, updated_at = ?2 WHERE id = ?1")
+  // Claim the one trial this account will ever get BEFORE writing the grant it
+  // buys. `account.trial_used_at` was read before any of this, and the marker
+  // used to be written after the grant, so two requests arriving together both
+  // read null, both wrote a grant, and the account held two trials; five at
+  // once held five (QA round 7). The part that costs money is what happens
+  // next: revoking "the trial" leaves the duplicate entitling, so the account
+  // still answers pro.
+  //
+  // A guarded UPDATE and its changed-row count is the only condition test D1
+  // has that two requests cannot both pass.
+  const claimed = await db
+    .prepare(
+      `UPDATE accounts SET trial_used_at = ?2, updated_at = ?2
+       WHERE id = ?1 AND trial_used_at IS NULL`
+    )
     .bind(account.id, at)
     .run();
-  return { ok: true, grant };
+  if (changedRows(claimed) === 0) {
+    return { ok: false, reason: "trial_used" };
+  }
+  const plan = await trialPlanFor(env, account.id);
+  try {
+    const grant = await createGrant(
+      db,
+      {
+        accountId: account.id,
+        kind: "trial",
+        plan: "pro_monthly",
+        days: plan.days,
+        source: trialSourceFor(plan.arm),
+        note: null
+      },
+      at
+    );
+    return { ok: true, grant, days: plan.days, arm: plan.arm };
+  } catch (error) {
+    // A claim is only worth holding if it bought something, so put it back.
+    // Guarded on the instant this request wrote, so a trial somebody else has
+    // since started is not taken off them.
+    //
+    // What this does not cover is the worker being killed between the two
+    // writes, which burns the trial without a grant. That is the cost of this
+    // order, and it is the right way round: the old order failed by giving a
+    // trial away twice, and the remedy for this one is a gift from the admin
+    // page.
+    await db
+      .prepare("UPDATE accounts SET trial_used_at = NULL WHERE id = ?1 AND trial_used_at = ?2")
+      .bind(account.id, at)
+      .run();
+    throw error;
+  }
 }
 
 /**
@@ -398,13 +725,32 @@ export async function redeemGiftCode(db, accountId, code, now) {
 
   // Counted only after the redemption row exists, so a rejected duplicate never
   // burns one of the code's uses.
-  await db
+  //
+  // This UPDATE is the only atomic test of "is there a use left": the SELECT
+  // above is a fast path that two accounts redeeming the last use of a code at
+  // the same moment both pass, because each reads the count before either
+  // writes it. Its changed-row count is therefore the real answer, and ignoring
+  // it is what granted a one-use code twice. The unique index on
+  // (code, account) catches the same account twice; nothing but this catches
+  // two different ones.
+  const counted = await db
     .prepare(
       `UPDATE gift_codes SET redeemed_count = redeemed_count + 1
        WHERE code_normalized = ?1 AND redeemed_count < max_redemptions`
     )
     .bind(normalized)
     .run();
+  if (changedRows(counted) < 1) {
+    // Somebody else took the last use between our read and this write. Undo
+    // both speculative writes, in the order that cannot leave a redemption row
+    // pointing at a grant that is gone.
+    await db
+      .prepare("DELETE FROM gift_redemptions WHERE code_normalized = ?1 AND account_id = ?2")
+      .bind(normalized, accountId)
+      .run();
+    await db.prepare("DELETE FROM grants WHERE id = ?1").bind(grant.id).run();
+    return { ok: false, reason: "exhausted" };
+  }
 
   return { ok: true, grant, days: Number(row.days) };
 }

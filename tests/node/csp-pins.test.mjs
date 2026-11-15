@@ -4,12 +4,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { references, PAGES as GATE_PAGES } from "../../qa/asset-versions.mjs";
 
 const ROOT = new URL("../../", import.meta.url);
 const read = (f) => readFileSync(new URL(f, ROOT), "utf8");
-const HTML = readdirSync(ROOT).filter((f) => f.endsWith(".html")).sort();
+// Every html file GitHub Pages would serve, read from git here rather than from the gate under test. It was the
+// root folder only until #26 added qa/index.html, the one page in a folder, which a root listing cannot see.
+const HTML = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "*.html"], {
+  cwd: ROOT,
+  encoding: "utf8"
+})
+  .split("\0")
+  .filter(Boolean)
+  .sort();
 const WORKER = new URL(/apiBaseUrl:\s*"([^"]+)"/.exec(read("js/billing-config.js"))[1]).origin;
 
 const policy = (html) => {
@@ -37,8 +46,10 @@ const EXPECTED = {
   "form-action": ["'self'"]
 };
 
-test("every html file in the repo root is covered by both gates' page lists", () => {
-  // Wrong behaviour rejected: a fifth page (GitHub Pages serves any .html) with no policy and unversioned scripts.
+test("every html file the site serves is covered by both gates' page lists", () => {
+  // Wrong behaviour rejected: a fifth page (GitHub Pages serves any .html, in any folder) with no policy and
+  // unversioned scripts.
+  assert.ok(HTML.includes("qa/index.html"), "control: the page in a folder is in the list");
   assert.deepEqual([...GATE_PAGES].sort(), HTML);
 });
 
@@ -68,8 +79,9 @@ test("the cache gate sees every local script and stylesheet a page loads, howeve
   // the gate then skips the file, and an edit to it never asks for a new ?v=.
   for (const page of HTML) {
     const tags = [...read(page).matchAll(/<(?:script|link)\b[^>]*>/gi)].map((m) => m[0]);
-    const local = tags.filter((t) => /(?:src|href)\s*=\s*["']?(?:\.\/|\/vocal-singing-training\/)?(?:js|css)\//i.test(t));
-    const seen = references(read(page)).length;
+    // local: a path with no scheme and no leading //, ending in .js or .css (`../js/app.js` and `qa.js` from qa/)
+    const local = tags.filter((t) => /(?:src|href)\s*=\s*["']?(?![a-z][a-z0-9+.-]*:|\/\/)[^"'\s>?#]+\.(?:js|css)\b/i.test(t));
+    const seen = references(read(page), page).length;
     assert.equal(seen, local.length, `${page}: ${local.length} local script/style tags, the gate sees ${seen}`);
   }
 });

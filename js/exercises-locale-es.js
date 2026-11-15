@@ -78,7 +78,8 @@
     "tips": [
       "Usa el contraste para notar la articulación, sin forzar la mandíbula ni asumir ganancias de fuerza.",
       "Trabaja punta de lengua y labios para consonantes nítidas.",
-      "Solo objetos seguros y limpios."
+      "Solo objetos seguros y limpios.",
+      "Si te duele la mandíbula, para."
     ],
     "mistakes": [
       "Apretar la mandíbula",
@@ -213,7 +214,7 @@
     "research": "Los rellenos restan credibilidad. La solución no es hablar más rápido: es tolerar el silencio.",
     "steps": [
       "Elige un tema y habla 2 minutos sin cortarte a mitad.",
-      "Repasa o anota cada eh, ah, o sea, digamos, entonces…",
+      "Repasa o anota cada eh, este, ah, o sea, digamos, entonces…",
       "Repite el mismo tema: cada vez que quieras un relleno, cierra la boca y pausa 1 s.",
       "Haz 3 rondas. Busca menos rellenos cada vez, no la perfección.",
       "Anota tu mejor conteo de rellenos."
@@ -231,7 +232,7 @@
   },
   "v12-melodic-speech": {
     "original": "Amplía la tonalidad: el habla puede usar melodía como la música.",
-    "research": "La monotomía pierde atención. Variedad (subidas, bajadas, color) mantiene el interés.",
+    "research": "La monotonía pierde atención. Variedad (subidas, bajadas, color) mantiene el interés.",
     "steps": [
       "Lee un párrafo corto en monótono plano (base).",
       "Vuelve a leer con melodía exagerada: eleva palabras clave, cierra hacia abajo al final.",
@@ -242,7 +243,7 @@
     "tips": [
       "Cadencia hacia abajo al final suena a confianza; subir siempre puede sonar inseguro.",
       "Cambia la melodía por el significado, no al azar.",
-      "Grábate: el oído caza monotomía mejor que la memoria."
+      "Grábate: el oído caza monotonía mejor que la memoria."
     ],
     "mistakes": [
       "Sobreactuar sin sentido",
@@ -255,7 +256,7 @@
     "research": "El volumen con control transmite confianza; el grito tenso no.",
     "steps": [
       "Elige una frase corta que uses a menudo (8–12 palabras).",
-      "Dila en 5 niveles: 1 casi susurro → 2 suave → 3 conversación → 4 proyectada → 5 sala llena (sin gritar).",
+      "Dila en 5 niveles: 1 voz muy suave (no susurro) → 2 suave → 3 conversación → 4 proyectada → 5 sala llena (sin gritar).",
       "Vuelve 5 → 3 → 1 con la misma frase; repite la escalera 3 veces.",
       "Luego cuenta una historia de 60 s usando al menos 3 niveles, con intención.",
       "Mantén la misma claridad y dicción en todos los niveles."
@@ -844,7 +845,7 @@
   },
   "s17-jaw-neck-release": {
     "original": "Antes de vocalizar, suelta mandíbula y cuello para que no interfieran con la colocación.",
-    "research": "La relajación muscular baja la resistencia al alargamiento del músculo y mejora la respuesta a las órdenes motoras: por eso va antes del trabajo de aire y de colocación.",
+    "research": "Soltar la mandíbula y el cuello puede hacer que la tensión sea más fácil de notar y de soltar: por eso va antes del trabajo de aire y de colocación.",
     "steps": [
       "De pie, hombros bajos, nada apretado en la cintura ni en el cuello.",
       "Deja colgar la mandíbula: dos dedos en la bisagra y que la boca caiga sola, sin empujar.",
@@ -982,7 +983,7 @@
     ]
   },
   "s23-mask-ya": {
-    "original": "«YA, YA, YA» deliberadamente nasal y brillante para localizar la máscara superior: nariz, frente, senos paranasales.",
+    "original": "«YA, YA, YA» deliberadamente nasal y brillante para encontrar la máscara superior, el zumbido que puedes sentir en la nariz, en la parte delantera de la cara, en los senos paranasales y en la frente.",
     "research": "Un sonido nasal exagerado es la forma más rápida de localizar la zona de resonancia superior. La exageración es el buscador, no el sonido final: una vez encontrado el lugar, el color se equilibra.",
     "steps": [
       "Exagera a propósito: «YA, YA, YA» lo más nasal y brillante que puedas.",

@@ -154,12 +154,26 @@ test("plan mapping prefers price ids, then metadata, then the interval", () => {
   );
   assert.deepEqual(byMetadata, { plan: "pro_yearly", planSource: "metadata" });
 
-  const byInterval = planForSubscription(
+  // With a price table configured, a price that is not in it is not ours, and
+  // its interval says nothing: reading the interval is how anything else sold
+  // from the same Stripe account became Pro (QA round 4, QA-W-03).
+  const unlisted = planForSubscription(
     { items: { data: [{ price: { id: "price_x", recurring: { interval: "year" } } }] } },
     env
   );
-  assert.deepEqual(byInterval, { plan: "pro_yearly", planSource: "interval" });
+  assert.deepEqual(unlisted, { plan: undefined, planSource: "unlisted_price", unlisted: true });
 
+  // Without one — which is how the repository ships — the interval and then a
+  // default are all there is to go by, and nothing changes.
+  const open = {};
+  const byInterval = planForSubscription(
+    { items: { data: [{ price: { id: "price_x", recurring: { interval: "year" } } }] } },
+    open
+  );
+  assert.deepEqual(byInterval, { plan: "pro_yearly", planSource: "interval" });
+  assert.deepEqual(planForSubscription({}, open), { plan: "pro_monthly", planSource: "default" });
+  // A subscription with no price id at all is not "unlisted": there is nothing
+  // to check against the table, so it falls through as it always did.
   assert.deepEqual(planForSubscription({}, env), { plan: "pro_monthly", planSource: "default" });
 });
 
@@ -203,7 +217,7 @@ test("a subscription's checkout that names no plan leaves the plan to the subscr
   assert.deepEqual([once.plan, once.planSource], ["pro_monthly", "default"], "a one-time payment has nothing else to go by");
 });
 
-test("a checkout with no subscription behind it is entitled for one interval from the payment", () => {
+test("a checkout whose money arrived is entitled for one interval from it, subscription or not", () => {
   const once = mapStripeEvent({
     id: "evt_once",
     type: "checkout.session.completed",
@@ -213,14 +227,19 @@ test("a checkout with no subscription behind it is entitled for one interval fro
   assert.equal(once.update.subscriptionId, null);
   assert.equal(once.update.periodEndFromCharge, NOW);
 
-  // A subscription's checkout leaves the period to the subscription's events.
+  // A subscription's checkout is bounded by the same interval, and used to be
+  // left to the subscription's own events. That was right whenever they
+  // arrived and wrong when they did not: `periodEnd` stayed null, which is for
+  // ever (QA round 4, QA-W-05). It is a floor, not a ceiling — each of those
+  // events sets a longer period and wins — so the only case it changes is the
+  // one where none of them ever comes.
   const recurring = mapStripeEvent({
     id: "evt_rec",
     type: "checkout.session.completed",
     created: NOW,
     data: { object: { id: "cs_rec", mode: "subscription", subscription: "sub_rec", payment_status: "paid" } }
   }, {});
-  assert.equal(recurring.update.periodEndFromCharge, undefined);
+  assert.equal(recurring.update.periodEndFromCharge, NOW);
 
   // Money that has not arrived, or never will, buys no interval.
   for (const [type, paymentStatus] of [

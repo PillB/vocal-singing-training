@@ -211,6 +211,26 @@ than it sounds, because not one of those providers documents whether a
 100%-off coupon is even possible. Whichever rail Pablo ends up on, and if he
 changes rails later, gifting works the same way.
 
+### When money goes back
+
+A refund or a chargeback ends the access that payment bought, on both rails.
+Mercado Pago reports it on the payment itself; Stripe as a refunded charge or
+as a dispute, matched to the licence through the payment it names. Three things
+about it are worth knowing before you use it:
+
+- **A partial refund changes nothing.** Giving somebody a fifth of their money
+  back is a goodwill gesture, not the end of what they bought, so access stays.
+- **A chargeback ends access when it is opened**, not when it is lost, which is
+  also Stripe's own advice. **A dispute you then win restores nothing by
+  itself** — there is no un-refund — so give the time back with *Dar Pro* on
+  the admin page.
+- **Refunding a Stripe subscription renewal does not reach us.** Stripe's
+  current API carries no payment identifier on an invoice webhook, so a
+  renewal's charge is never seen before its refund and cannot be matched.
+  Cancel the subscription in Stripe, which stops renewals, and revoke the
+  grant from the admin page if the period they are in should go too. A
+  one-time pass — the yearly one — is matched and does end.
+
 ---
 
 ## What it costs to run
@@ -218,6 +238,44 @@ changes rails later, gifting works the same way.
 Zero, until it is not. Cloudflare Workers, KV and D1 all have free tiers this
 workload sits well inside at small numbers; the sign-in emails are the first
 thing likely to need a paid plan. Exact current limits are in the runbook.
+
+---
+
+## Decisions still open, and what the code does meanwhile
+
+Three questions about payments are the operator's to answer; they are not bugs
+waiting on a fix. Each is written down here with the behaviour that is live
+until he answers, so nobody has to work out from the code which parts are
+deliberate.
+
+**A renewal is declined. How long does Pro last after that?** Today the
+entitlement keeps `past_due`, which still entitles, and `periodEnd` moves to
+the end of the period the customer did *not* pay for. On a yearly plan that is
+up to a free year if the provider's next event never arrives. A short fixed
+grace is safer for the business and a long one is kinder to a card that is
+merely retrying, so the number is a business choice rather than a correct
+answer. (QA round 4, QA-W-07.)
+
+**What is the smallest payment that may buy Pro?** Half of this is now closed:
+`STRIPE_PRICE_PRO_*` is an allow-list wherever it is filled in, so a Stripe
+subscription on a price that is not ours no longer entitles. What is left is
+the amount. A Mercado Pago payment of one sol, approved, still buys whatever
+its description says — and the description is free text. A floor would stop
+that, and the number is one only the operator can name, because it depends on
+what the plans cost in soles and on what a legitimate partial or promotional
+payment might be. (QA round 4, QA-W-03; the open half has a failing test of its
+own in `workers/entitlements/test/price-table.test.mjs`.)
+
+**Do gifted months stack or overlap?** They overlap: whichever access runs
+longest wins, so two gifted months handed out on the same day are one month,
+not two. That is intended and is how "One mechanism for trial, gift and comp"
+above works, but it surprises somebody who thought they were adding time.
+(QA round 4, QA-W-09.)
+
+The goal-behaviour tests for the first two live in
+`workers/entitlements/test/qa-round4-defects.test.mjs`, marked `todo` so the
+suite stays green while the question is open instead of being deleted and
+forgotten.
 
 ---
 
@@ -236,15 +294,25 @@ feature runs in the browser, so devtools can still reach them. What is closed is
 forged, shared and post-cancellation entitlements — not a determined person with
 a debugger.
 
+**Signing in before paying is a gate on our own page, not on the payment.** A
+checkout started from the pricing panel refuses while nobody is signed in, which
+is where essentially everybody starts. The payment links themselves are ordinary
+public URLs, so somebody who goes straight to one still pays anonymously; that
+payment is tied to their browser, and `POST /v1/me/link` attaches it to an
+account afterwards. The gate exists so the common path produces an account, not
+because the link could be made private.
+
 ---
 
 ## Tests
 
 | Command | Covers |
 |---------|--------|
-| `npm run test:worker` | 212 node cases: schema, sessions, grants, gift codes, progress CAS, Google token verification, email, the API router, and one asserting the old anonymous flow is unchanged. |
-| `npx playwright test tests/accounts.spec.js` | 19 browser cases: sign-in, gifts, admin tools, the trial, sync and merge, phone layout and tap targets. |
-| `npx playwright test tests/billing.spec.js` | The existing 22, unchanged. |
+| `npm run test:worker` | 410 node cases: schema, sessions, grants, gift codes, progress CAS, Google token verification, email, the API router, the webhooks of both providers, money going back, which prices are ours, and one asserting the old anonymous flow is unchanged. 408 pass; the 2 marked `todo` are the grace-period question above and the amount floor, both of which are yours to answer. |
+| `npx playwright test tests/accounts.spec.js` | 32 browser cases: sign-in, gifts, admin tools, the trial, sync and merge, phone layout and tap targets. |
+| `npx playwright test tests/billing.spec.js` | 28 browser cases: the pricing panel, region detection, the sign-in gate before checkout. |
+| `npx playwright test tests/admin.spec.js` | 41 browser cases, one per procedure in the admin guide, against the real worker on a real database. |
+| `npx playwright test tests/checkout-rail.spec.js` | 10 browser cases: nobody is sent to pay on a rail the worker cannot honour, and no answer from the worker is not read as a no. |
 
 The worker tests run the **real SQL** against `node:sqlite` through a D1-shaped
 adapter, not a hand-written fake, so a statement that D1 would reject fails

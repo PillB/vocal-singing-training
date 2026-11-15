@@ -958,40 +958,92 @@ test.describe("The menu, read by someone who has never seen it", () => {
     }
   }
 
-  test("1280px: the tour and the guide fold into Ayuda only while the row needs the room", async ({ page }) => {
+  /** How many lines the site title currently occupies. */
+  const titleLines = (page) =>
+    page.evaluate(() => {
+      const range = document.createRange();
+      range.selectNodeContents(document.getElementById("brand-title"));
+      return new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.bottom))).size;
+    });
+
+  test("1280px: the longest row keeps the title short and both help links reachable", async ({ page }) => {
     // "Ver el tour" and "Leer la guía" beside a long name and "Pro · termina
-    // en 10 días" left the title three lines tall (93px header). That row
-    // folds them into "Ayuda ▾"; signed out, both sit in the row.
+    // en 10 días" once left the title three lines tall (93px header), so the
+    // row folds them into "Ayuda ▾" when it has to.
+    //
+    // This case used to assert the fold itself at this width, and that was a
+    // mistake: whether the title wraps past two lines depends on the browser's
+    // own text metrics, so the assertion passed on the author's machine and
+    // failed in CI, where the same row renders two lines and 67px. Worse, it
+    // was testing the remedy instead of the complaint. `.door-name` caps a
+    // display name at 6.5rem with an ellipsis, so no name can widen this row
+    // any further, and the fold is the safety net underneath that cap rather
+    // than this state's expected outcome.
+    //
+    // So this case asserts what a person actually gets: the title never three
+    // lines tall, a header that stays one row deep, and both the tour and the
+    // guide reachable — whichever way the row chose to arrange them. The case
+    // below it drives the fold directly, on the one condition that fires it.
     await page.setViewportSize({ width: 1280, height: 800 });
     const license = await mintLicense({ origin: BASE });
     await install(page, { ...STATES.ending, account: member({ displayName: "Maximiliano Alejandro de la Torre" }) }, license);
     await boot(page);
     await expect(page.locator("#btn-pricing")).not.toHaveAttribute("data-plan", "free");
+    expect(await titleLines(page), "the complaint this row exists to answer").toBeLessThanOrEqual(2);
+    expect(
+      await page.evaluate(() => Math.round(document.querySelector("header.app-header").getBoundingClientRect().height))
+    ).toBeLessThanOrEqual(90);
+
+    // Either arrangement is correct; both links have to be one click away.
     const help = page.locator("#btn-help");
-    const lines = () =>
-      page.evaluate(() => {
-        const range = document.createRange();
-        range.selectNodeContents(document.getElementById("brand-title"));
-        return new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.bottom))).size;
-      });
-    // Whether this row needs the room depends on the machine's font: a wide
-    // one (CI's) wraps the title to three lines here, a narrow one (Inter)
-    // fits it in two and nothing folds. With a narrow font the title is
-    // widened until the row does need the room, so the fold itself is tested
-    // on every machine instead of failing where the font is narrow (SD-9).
-    await page.waitForTimeout(150); // the fit runs a frame after the title is measured
-    if (!(await help.isVisible())) {
-      expect(await lines()).toBeLessThanOrEqual(2);
-      await expect(page.locator("#btn-tour")).toBeVisible();
-      await page.addStyleTag({ content: "#brand-title { letter-spacing: 0.3em !important; }" });
+    if (await help.isVisible()) {
+      await expect(page.locator("#btn-tour")).toBeHidden();
+      await help.click();
+      await expect(page.locator("#link-guide")).toBeVisible();
+    } else {
+      await expect(page.locator("#link-guide")).toBeVisible();
     }
-    await expect(help).toBeVisible();
-    await expect(page.locator("#btn-tour")).toBeHidden();
-    expect(await lines()).toBeLessThanOrEqual(2);
-    await help.click();
-    await expect(page.locator("#link-guide")).toBeVisible();
     await page.locator("#btn-tour").click();
     await expect(page.locator(".tour-card")).toBeVisible();
+  });
+
+  test("a title that does wrap past two lines folds the help links away", async ({ page }) => {
+    // The fold's own condition, driven directly instead of hoped for: a title
+    // long enough to wrap. The ResizeObserver on #brand-title is what runs the
+    // measurement, so changing its text is the real trigger, not a stub.
+    //
+    // The starting point is a short name and a short title, so the row is
+    // unfolded whatever the fonts. It used to start from the longest row (the
+    // long name beside "Pro · termina en 10 días") and assert it unfolded,
+    // which is the case above's mistake again: once main's header gained its
+    // own controls, CI's fonts wrapped that row's title to three lines at boot
+    // and folded it, correctly, before this case had changed anything.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const license = await mintLicense({ origin: BASE });
+    await install(page, { ...STATES.ending, account: member({ displayName: "Ana" }) }, license);
+    await boot(page);
+    await page.evaluate(() => {
+      document.getElementById("brand-title").textContent = "Canto";
+    });
+    await expect(page.locator("#btn-tour")).toBeVisible();
+    await expect(page.locator("#btn-help")).toBeHidden();
+
+    await page.evaluate(() => {
+      document.getElementById("brand-title").textContent =
+        "Entrenamiento vocal y de canto en casa para voces de todos los registros y edades";
+    });
+    await expect(page.locator("#btn-help")).toBeVisible();
+    await expect(page.locator("#btn-tour")).toBeHidden();
+    await page.locator("#btn-help").click();
+    await expect(page.locator("#link-guide")).toBeVisible();
+
+    // And it unfolds again when the row stops needing the room, which is the
+    // half a one-way fold would get wrong.
+    await page.evaluate(() => {
+      document.getElementById("brand-title").textContent = "Canto";
+    });
+    await expect(page.locator("#btn-tour")).toBeVisible();
+    await expect(page.locator("#btn-help")).toBeHidden();
   });
 
   test("the account panel names its plan button for what it opens", async ({ page }) => {
@@ -1054,5 +1106,106 @@ test.describe("One way in, and the panel says true things about saving", () => {
     await install(page, {}, license);
     await boot(page);
     await expect(page.locator("#start-step3-sub")).toContainText("Con Entrar lo llevas");
+  });
+});
+
+// The account panel and the Pro dialog were split into small functions to get
+// under the complexity ceiling (merging #26 into main). Thirteen mutants were
+// planted in the split; seven lived. Three of those are equivalent and are not
+// pinned here: the offer line and the studio's gifting tools sit inside
+// containers that are already hidden in the states those mutants touch, and the
+// "Probar" span is split out for a stylesheet rule that no stylesheet has (so
+// the visible words are the same either way). These four are the real ones.
+test.describe("What the split of the account panel and the Pro dialog must keep", () => {
+  const account = (over) => ({
+    id: "acct_split",
+    email: "pablo@example.test",
+    displayName: null,
+    locale: null,
+    role: "member",
+    trialUsed: false,
+    createdAt: 1,
+    ...(over || {})
+  });
+  /** Every rail linked, so checkout is live and the dialog is past pre-launch. */
+  const LIVE_LINKS = {
+    links: {
+      stripe: { pro_monthly: "https://buy.stripe.com/test_m", pro_yearly: "https://buy.stripe.com/test_y" },
+      creem: { pro_monthly: "https://checkout.creem.io/ch_m", pro_yearly: "https://checkout.creem.io/ch_y" },
+      mercadopago: { pro_monthly: "https://www.mercadopago.com.pe/subscriptions/checkout?preapproval_plan_id=m" }
+    }
+  };
+
+  test("SP13 once checkout is live, an account whose trial is spent is told it ended, not that it is on a plain free plan", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await patchBillingConfig(page, LIVE_LINKS);
+    await install(page, {
+      signedIn: true,
+      account: account({ trialUsed: true }),
+      entitlement: { pro: false, plan: null, status: "free", source: null, periodEnd: null }
+    }, license);
+    await boot(page);
+    await page.click("#btn-pricing");
+    await expect(page.locator("#pricing-modal")).toBeVisible();
+    await expect(page.locator("#pricing-rails")).toBeVisible();
+    await expect(page.locator("#pricing-status")).toHaveText("Tu prueba terminó · estás en el plan gratis");
+  });
+
+  test("SP13 control: an account that never trialled is on the free plan", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await patchBillingConfig(page, LIVE_LINKS);
+    await install(page, {
+      signedIn: true,
+      account: account({ trialUsed: false }),
+      entitlement: { pro: false, plan: null, status: "free", source: null, periodEnd: null }
+    }, license);
+    await boot(page);
+    await page.click("#btn-pricing");
+    await expect(page.locator("#pricing-status")).toHaveText("Plan gratis");
+  });
+
+  test("SP16 the payment rails are named in the page's language, from the config's own wording", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await patchBillingConfig(page, LIVE_LINKS);
+    await install(page, {}, license);
+    await boot(page);
+    await page.click("#btn-pricing");
+    // The card rail is Creem's: no market sells on Stripe since #26.
+    const card = page.locator('#pricing-rails [data-rail="creem"]');
+    const mp = page.locator('#pricing-rails [data-rail="mercadopago"]');
+    await expect(page.locator('#pricing-rails [data-rail="stripe"]')).toHaveCount(0);
+    await expect(card).toHaveText("Tarjeta internacional");
+    await expect(mp).toHaveText("Mercado Pago (Perú / LATAM)");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#pricing-modal")).toBeHidden();
+    await page.click("#btn-lang");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await page.click("#btn-pricing");
+    await expect(card).toHaveText("International card");
+    await expect(mp).toHaveText("Mercado Pago");
+  });
+
+  test("SP14 the header door shows the given name of a full Google name, and is named by it", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {
+      signedIn: true,
+      account: { ...account({}), displayName: "Maria Fernanda de la Torre" },
+      entitlement: { pro: false, plan: null, status: "free", source: null, periodEnd: null }
+    }, license);
+    await boot(page);
+    const door = page.locator("#btn-account");
+    await expect(door.locator(".door-name")).toHaveText("Maria");
+    await expect(door.locator(".door-avatar")).toHaveText("M");
+    expect(await door.getAttribute("aria-label")).toMatch(/^Maria\b/);
+    expect(await door.getAttribute("aria-label")).not.toContain("Fernanda");
+  });
+
+  test("SP15 a working sign-in has no retry row beside it; an unreachable worker does", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, {}, license);
+    await boot(page);
+    await openPanel(page);
+    await expect(page.locator("#account-signin")).toBeVisible();
+    await expect(page.locator("#account-retry-row")).toBeHidden();
   });
 });

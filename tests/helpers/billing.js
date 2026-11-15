@@ -20,8 +20,15 @@ function b64url(buf) {
 
 /**
  * Mint an ES256 license token with a fresh keypair.
+ *
+ * `provider` is the payment rail the worker recorded, and it is what
+ * getEntitlement() reports as `.provider`. It used to be hard-coded to
+ * "stripe", which is the one rail a Peru-registered seller cannot use
+ * (VG-19), so any test about per-rail behaviour was testing the one case
+ * that will never happen. Default kept for the callers that do not care.
+ *
  * @param {{origin: string, plan?: string, status?: string, ttlSeconds?: number,
- *          iatOffsetSeconds?: number, audience?: string}} opts
+ *          iatOffsetSeconds?: number, audience?: string, provider?: string}} opts
  * @returns {Promise<{token: string, publicKeyJwk: object, claims: object,
  *                    sign: (claims: object) => Promise<string>}>}
  */
@@ -32,7 +39,8 @@ async function mintLicense(opts) {
     status = "active",
     ttlSeconds = 72 * 3600,
     iatOffsetSeconds = 0,
-    audience
+    audience,
+    provider = "stripe"
   } = opts || {};
   const pair = await webcrypto.subtle.generateKey(
     { name: "ECDSA", namedCurve: "P-256" },
@@ -50,7 +58,7 @@ async function mintLicense(opts) {
     aud: audience || origin,
     plan,
     status,
-    provider: "stripe",
+    provider,
     iat,
     exp: iat + ttlSeconds,
     periodEnd: iat + 30 * 86400
@@ -84,8 +92,15 @@ function tamperToken(token, patch) {
  * other script reads it. Survives reloads because it is an init script. The
  * page freezes its config once assigned (QA-05), so this is the only way a
  * test changes it; patches compose (enableQaPro plus a trial patch both hold).
+ *
+ * Two keys reach inside without replacing what they do not name, because
+ * replacing `providers` or `markets` wholesale drops the rails and markets a
+ * test did not mean to touch (Creem, most of all):
+ * - `links: { rail: { plan: url } }` sets checkout links on rails that exist;
+ * - `extraMarkets: [market]` appends markets to the shipped list.
  * @param {import('@playwright/test').Page} page
- * @param {object} patch shallow merge, `verification` merged one level deeper
+ * @param {object} patch shallow merge, `verification` merged one level deeper,
+ *   `links` and `extraMarkets` as above
  */
 async function patchBillingConfig(page, patch) {
   await page.addInitScript((p) => {
@@ -98,11 +113,21 @@ async function patchBillingConfig(page, patch) {
         if (earlier && earlier.set) earlier.set(value);
         held = value;
         if (!value) return;
-        const { verification, ...rest } = p || {};
+        const { verification, links, extraMarkets, ...rest } = p || {};
         Object.assign(value, rest);
         if (verification) {
           value.verification = Object.assign({}, value.verification, verification);
         }
+        for (const [rail, byPlan] of Object.entries(links || {})) {
+          const provider = value.providers && value.providers[rail];
+          // Loud, not skipped: a link for a rail the config does not have
+          // (a typo, a renamed rail) used to vanish, and the test that set it
+          // went on checking nothing. Thrown here, the page's config never
+          // loads and every assertion after it fails.
+          if (!provider) throw new Error(`patchBillingConfig: no rail "${rail}" in VT_BILLING_CONFIG.providers`);
+          provider.links = Object.assign({}, provider.links, byPlan);
+        }
+        if (extraMarkets) value.markets = (value.markets || []).concat(extraMarkets);
       }
     });
   }, patch);

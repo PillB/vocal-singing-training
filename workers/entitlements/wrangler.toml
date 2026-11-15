@@ -29,16 +29,52 @@ database_id = "TODO_REPLACE_WITH_D1_DATABASE_ID"
 SITE_ORIGIN = "https://pillb.github.io"
 # Key id advertised in the token header and in /v1/jwks. Bump on rotation.
 LICENSE_KEY_ID = "k1"
+# LICENSE_ID_KEY is a SECRET, not set here. It is the key a new licence id is
+# derived under so that two webhooks for one new customer agree on one licence.
+# Unset, a key derived from the signing key is used, which is fine; set it with
+# `wrangler secret put LICENSE_ID_KEY` only to keep derivation stable across a
+# signing-key rotation.
 # Token lifetime in seconds (72h). Clamped to 60..2592000 by the worker.
 LICENSE_TTL_SECONDS = "259200"
 # Optional: map provider price/plan ids onto our plan ids. Leave empty to fall
 # back to checkout metadata, then to the subscription interval.
+#
+# Filling EITHER Stripe id in also turns this into an allow-list: a Stripe
+# subscription on a price that is not named here no longer entitles, so
+# anything else ever sold from the same Stripe account cannot become Pro. The
+# cost of that is a price you add in Stripe and forget here, which is then
+# refused — add the id and redeploy, or name the plan in that subscription's
+# metadata in the Stripe dashboard, which takes effect at once. See the
+# README's "Registering the webhooks" section.
 STRIPE_PRICE_PRO_MONTHLY = ""
 STRIPE_PRICE_PRO_YEARLY = ""
 MP_PLAN_PRO_MONTHLY = ""
 MP_PLAN_PRO_YEARLY = ""
+# The Creem products, read the same way: a label, and an allow-list wherever
+# either is filled in. Creem is the merchant of record for the international
+# rail (it sells in its own name and handles the tax), which is why it is here
+# and a direct Stripe account is not: a Peru-registered seller cannot be a
+# Stripe merchant.
+CREEM_PRODUCT_PRO_MONTHLY = ""
+CREEM_PRODUCT_PRO_YEARLY = ""
+# Whether a Creem event from a non-production environment may entitle. Creem's
+# `mode` is test, prod or sandbox in its API docs and `local` in its webhook
+# examples; a purchase in any of the three non-production ones moves no money,
+# so by default it buys nothing here. Set to "true" while you are proving the
+# rail works end to end, and put it back before the first real sale. A mode
+# this worker does not recognise still entitles, deliberately: refusing an
+# unknown mode would mean a production value Creem renames silently stops
+# every real payment, which is the worse way to be wrong.
+CREEM_ALLOW_TEST_MODE = "false"
 # Length of the free trial, in days. One per account, ever.
 TRIAL_DAYS = "7"
+# The trial-length A/B test. "on" gives each account 7 or 14 free days,
+# assigned from its account id in the worker, and IGNORES TRIAL_DAYS above.
+# Needs LICENSE_ID_KEY (or the signing key) to key the assignment; without
+# one it stays off rather than assigning an arm anybody could predict.
+# Read docs/38-AB-TESTING.md before switching it on: it gives away twice the
+# Pro to half the accounts, and it needs hundreds of them to say anything.
+TRIAL_LEN_EXPERIMENT = "off"
 # Comma-separated emails allowed to gift and revoke months. Read on every
 # request, so removing an address takes effect on the next deploy.
 # Set it with `wrangler secret put ADMIN_EMAILS`, NOT here: this repository is
@@ -56,14 +92,24 @@ EMAIL_PROVIDER = ""
 EMAIL_FROM = ""
 EMAIL_FROM_NAME = "Vocal Studio"
 # Anonymous usage events for A/B tests (POST /v1/events, stored in D1). Set to
-# "false" to stop recording at once; the site keeps working either way.
+# "false" to stop recording at once; the site keeps working either way. A
+# one-off switch-off needs no edit here: `wrangler deploy --var
+# EVENTS_ENABLED:false`, and the next plain deploy puts this value back.
 EVENTS_ENABLED = "true"
+# Problem reports and ideas from the site's "Reportar un problema" (POST
+# /v1/reports, stored in D1). Unlike events this defaults ON when the value is
+# absent, because a report costs a handful of rows a day and the route is capped
+# per address, per account and per deployment. "false" closes it; the form then
+# shows the reporter their own report as copyable text with the issues link, so
+# nothing they typed is lost.
+REPORTS_ENABLED = "true"
 
 # --- Secrets (NEVER put values in this file) ----------------------------
 # Set each one with `wrangler secret put <NAME>`:
 #   STRIPE_WEBHOOK_SECRET          whsec_... for THIS endpoint (test and live differ)
 #   MP_WEBHOOK_SECRET              Mercado Pago webhook signing secret
 #   MP_ACCESS_TOKEN                Mercado Pago access token (server-side API reads)
+#   CREEM_WEBHOOK_SECRET           Creem webhook signing secret (Developers > Webhook)
 #   LICENSE_PRIVATE_KEY_PKCS8_B64  base64 PKCS#8 P-256 private key
 #                                  (scripts/generate-keys.mjs prints it)
 # Accounts only, and only for the provider named in EMAIL_PROVIDER:

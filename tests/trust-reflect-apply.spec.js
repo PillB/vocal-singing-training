@@ -7,9 +7,9 @@
  * T5/T5b-d stub SubtleCrypto.prototype.{verify,importKey} and Function.prototype.call, but never Reflect.apply itself,
  * so `const APPLY = (f, t, a) => Reflect.apply(f, t, a)` (a per-call lookup) left every one of them green.
  *
- *   R1 a stubbed Reflect.apply answers "valid" for the signature check     -> a forged token must not be Pro
- *   R2 a stubbed Reflect.apply hands the page the attacker's public key    -> a token signed by the attacker must not be Pro
- *   R3 control: the instrument. A pass-through Reflect.apply stub that counts calls is installed and the license
+ *   RA1 a stubbed Reflect.apply answers "valid" for the signature check     -> a forged token must not be Pro
+ *   RA2 a stubbed Reflect.apply hands the page the attacker's public key    -> a token signed by the attacker must not be Pro
+ *   RA3 control: the instrument. A pass-through Reflect.apply stub that counts calls is installed and the license
  *      check still verifies a REAL token (so the stub is live and the page works), and it was called 0 times by the
  *      page's license code (it is invoked through the copy taken at load).
  *
@@ -48,7 +48,7 @@ const ATTACKER = `
   const attackerJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
 `;
 
-test("R1 stubbing Reflect.apply cannot fake the signature check", async ({ page }) => {
+test("RA1 stubbing Reflect.apply cannot fake the signature check", async ({ page }) => {
   await boot(page);
   await run(page, FORGE + `
     const verify = SubtleCrypto.prototype.verify, real = Reflect.apply;
@@ -57,7 +57,7 @@ test("R1 stubbing Reflect.apply cannot fake the signature check", async ({ page 
   expect(await page.evaluate(() => window.VTBilling.isPro()), "a forged signature passed with Reflect.apply stubbed").toBe(false);
 });
 
-test("R2 stubbing Reflect.apply cannot make the page trust the attacker's key", async ({ page }) => {
+test("RA2 stubbing Reflect.apply cannot make the page trust the attacker's key", async ({ page }) => {
   await boot(page);
   await run(page, FORGE + ATTACKER + `
     const importKey = SubtleCrypto.prototype.importKey, real = Reflect.apply;
@@ -66,7 +66,7 @@ test("R2 stubbing Reflect.apply cannot make the page trust the attacker's key", 
   expect(await page.evaluate(() => window.VTBilling.isPro()), "the attacker's key was trusted with Reflect.apply stubbed").toBe(false);
 });
 
-test("R3 control: a counting Reflect.apply stub is live, the real token still verifies, and the license code never calls it", async ({ page }) => {
+test("RA3 control: a counting Reflect.apply stub is live, the real token still verifies, and the license code never calls it", async ({ page }) => {
   const license = await mintLicense({ origin: BASE, plan: "pro_yearly" });
   await boot(page);
   await installLicense(page, license);

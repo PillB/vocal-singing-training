@@ -1476,12 +1476,23 @@
 
   /**
    * Our own history.back(): the view already changed. Anything opened
-   * while it was on its way gets its address now.
+   * while it was on its way gets its address now. The entry it landed on
+   * still holds the place the page had before it was left, and the page may
+   * be somewhere else now ("← Practicar" from a routine shows Practicar at its
+   * top): it is told where the page is, or the next reload jumps to the old
+   * place. A scroll still on its way (back to the card) writes its own end.
    */
   function settleOwnBack() {
     route.pendingBack = false;
     clearTimeout(route.pendingTimer);
     if (!routeMatchesView(parseRoute(location.hash))) writeRoute(state.view, null);
+    else if (state.view !== "exercise" && !route.restoring) {
+      try {
+        history.replaceState({ ...(history.state || {}), y: Math.round(window.scrollY) }, "");
+      } catch {
+        /* file:// or a sandboxed frame */
+      }
+    }
   }
 
   /**
@@ -8958,6 +8969,15 @@
     return { ent, moment };
   }
 
+  /**
+   * The line for a moment. One day left reads "1 día", not "1 días": the
+   * singular has its own line, in the first drawing and in the relabel after a
+   * language switch alike (the relabel once missed it and read "1 días").
+   */
+  function valueMomentKey(id, n) {
+    return "value.moment." + id + (id === "trial_ending" && n === "1" ? "_one" : "");
+  }
+
   /** Put the moment's line up, and step the other Pro offers aside for it. */
   function showValueBanner(banner, text, moment) {
     const vars = {
@@ -8966,9 +8986,7 @@
       n: String((moment.id === "trial_ending" ? moment.trialDaysLeft : moment.sessions) ?? 0),
       s: moment.bestHoldSec != null ? Number(moment.bestHoldSec).toFixed(1) : "0"
     };
-    // One day left reads "1 día", not "1 días": the singular has its own line.
-    const oneDay = moment.id === "trial_ending" && vars.n === "1";
-    text.textContent = tt("value.moment." + moment.id + (oneDay ? "_one" : ""), vars);
+    text.textContent = tt(valueMomentKey(moment.id, vars.n), vars);
     banner.hidden = false;
     banner.dataset.momentId = moment.id;
     const cta = $("#value-pulse-cta");
@@ -9011,10 +9029,11 @@
     if (!banner || banner.hidden || !text || !id) return;
     const stats = window.VTValuePulse?.compute?.() || {};
     const trialDays = window.VTBilling?.trialDaysLeft?.();
-    text.textContent = tt("value.moment." + id, {
+    const vars = {
       n: String(id === "trial_ending" ? (trialDays ?? 0) : (stats.sessions ?? 0)),
       s: Number(stats.bestHoldSec || 0).toFixed(1)
-    });
+    };
+    text.textContent = tt(valueMomentKey(id, vars.n), vars);
   }
 
   function hideValueBanner() {

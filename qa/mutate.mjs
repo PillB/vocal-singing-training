@@ -80,7 +80,8 @@ const CONTROL_SPECS = {
   orphan: ["tests/safari-mobile-recovery.spec.js", "-g", "Start replaced|lets go of the piano|piano option changed|held session and stopped"],
   focus: ["tests/exercise-viz-guided.spec.js", "-g", "Enter on Next past the last step|ends while Next has keyboard focus"],
   banner: ["tests/safari-mobile-recovery.spec.js", "-g", "sound-paused banner"],
-  reach: ["tests/sweep-reachability.spec.js", "-g", "real pointer reaches"]
+  reach: ["tests/sweep-reachability.spec.js", "-g", "real pointer reaches"],
+  shortfit: ["tests/sweep-reachability.spec.js", "-g", "tablet to short desktop"]
 };
 
 // QA-45. Every a11y mutant (A6 on) used to be judged by all six browser specs together, ~70 s each; 21 of them
@@ -347,6 +348,7 @@ export const MUTANTS = {
   // Controls ported from PR #24: each says what it does, or is off when it cannot act.
   controls: [
     ["NS4 below-fold controls are hit-tested before scrolling into view", "tests/helpers/mouse-control.js", '    await page.locator(selector).click({ trial: true, timeout: 5000 });\n', "", "reach"],
+    ["NS5 picture overflow is measured before the optional guide can fold", "js/app.js", '      fitStageGuide(); // release optional guide rows before measuring the picture\n', "", "shortfit"],
     ["R12 octave -2 shown without its caution", "js/app.js", "if (moved && !opts.silent && state.octaveShift === -2) cautionLowOctave();", "if (moved && !opts.silent && state.octaveShift === -9) cautionLowOctave();", "range"],
     ["R4 in a take the piano's restart toast replaces the caution at once", "js/app.js", "    if (state.practiceLive && state._hotApplyPromise) state._hotApplyPromise.then(say, say);\n    else say();", "    say();", "range"],
     ["R5 the label forgets octave -2 once the toast is gone", "js/app.js", "      lab.classList.toggle(\"oct-caution\", low);\n", "", "range"],

@@ -9,7 +9,7 @@ run [43721497915](https://github.com/PillB/vocal-singing-training/actions/runs/4
 | --- | --- | --- |
 | Voice/live job | Stopped after 4,800 seconds before all formats completed | Two large serial specs shared one budget. Run the live spec alone and each of the six headed formats in its own job, preserving all 52 exercises per format. |
 | Fullscreen solfège metrics | `btn-toggle-metrics` reported `hit_miss`, top element null | The sweep scrolled the target into view, then immediately called `fit()`, which scrolls back to the top. A shared pointer helper performs a trial action to scroll and check actionability, then verifies the real hit target and clicks with the mouse, without resetting scroll. |
-| Short-screen diction | Stage bottom 566.7 px against a 560 px viewport | Reproduce after #40 using a focused tablet-to-short-screen test. Its geometry diagnostic remains a hard assertion; no tolerance was widened. |
+| Short-screen diction | Stage bottom 566.7 px against a 560 px viewport | CI reproduced this after #40: a fitted 433 px stage grew to 448 px while the optional guide still occupied 115 px. Fit the guide before testing whether picture content needs more stage height. Keep both screen bounds and picture clipping as hard assertions. |
 
 Playwright's [actionability contract](https://playwright.dev/docs/actionability)
 requires visible, stable, enabled targets receiving events. Its
@@ -31,6 +31,11 @@ deadlines and partitions coverage instead of discarding it.
   checkout and its uncommitted worker bindings were left untouched.
 
 ## Verification and review ledger
+
+The focused GitHub job passed both real metrics clicks and the occlusion
+control, and failed on the same 566.7 px diction stage as the nightly run.
+Extra measurements showed the premature growth before the guide could fold.
+NS5 restores that ordering and must fail the same geometry test in CI.
 
 The partition guard was red on the combined job, then passed with all six
 formats exactly once. Three deliberately broken schedules were caught: a

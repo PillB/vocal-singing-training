@@ -49,4 +49,6 @@ test("tablet to short desktop: the diction stage stays within the screen", async
     });
   })));
   expect(layout.issues.filter((issue) => ["stage_overflow_y", "start_offscreen"].includes(issue.code))).toEqual([]);
+  const clipped = await page.locator("#mode-focus-panel .mode-panel").evaluate((el) => el.scrollHeight - el.clientHeight);
+  expect(clipped, "fitting the stage must not cut a row off the picture").toBeLessThanOrEqual(8);
 });

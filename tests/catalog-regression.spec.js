@@ -210,7 +210,11 @@ test.describe("Per-exercise open + HUD regression", () => {
 
       await expect(page.locator("#practice-cockpit")).toBeVisible();
       await expect(page.locator("#highway-stage")).toBeVisible();
-      await expect(page.locator(".hud-tl")).toBeVisible();
+      // The top-left corner holds the time and the chord badge. A format with no
+      // clock (listen-and-record, the 12-week plan) has neither, so the corner is
+      // not drawn rather than shown as an empty box.
+      if (ex.mode === "recordOnly" || ex.mode === "weekPlan") await expect(page.locator(".hud-tl")).toBeHidden();
+      else await expect(page.locator(".hud-tl")).toBeVisible();
       await expect(page.locator(".hud-bl #btn-practice-start")).toBeVisible();
       await expect(page.locator(".hud-bc #mic-sensitivity")).toBeVisible();
       await expect(page.locator("#btn-back-home")).toBeVisible();

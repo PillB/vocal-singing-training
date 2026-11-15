@@ -22,6 +22,16 @@
  * 20261104d for exactly this content, committed 2026-11-06) and passes one
  * changed twice on the same day, so it was retired for the content hash.
  *
+ * The tree alone cannot see one more failure: a version that once served other
+ * content. A merge that keeps one side's `?v=` for the other side's file, or a
+ * manifest written by hand, pairs an old stamp with a new hash and the tree is
+ * coherent, yet a browser that cached the old copy under that stamp keeps it.
+ * PR #39 shipped four of these (js/app.js at main's live 20261113c among them),
+ * so the check also reads every manifest in HEAD's history, both sides of every
+ * merge, and a version may only ever name one content. A shallow clone holds
+ * part of that history: the check says so, and in CI it fails rather than pass
+ * unverified (the contracts job checks out with fetch-depth: 0).
+ *
  *   node qa/asset-versions.mjs           # check (part of npm run lint)
  *   node qa/asset-versions.mjs --bump    # new ?v= for changed files, in every page
  */
@@ -112,6 +122,94 @@ export function check(pages, manifest, read) {
   return problems;
 }
 
+/** `git cat-file --batch` output, as the text of each object in order. */
+function batchBodies(out) {
+  const bodies = [];
+  let at = 0;
+  while (at < out.length) {
+    const nl = out.indexOf(10, at);
+    const size = Number(out.subarray(at, nl).toString().split(" ")[2]);
+    if (!Number.isFinite(size)) break;
+    bodies.push(out.subarray(nl + 1, nl + 1 + size).toString("utf8"));
+    at = nl + 1 + size + 1;
+  }
+  return bodies;
+}
+
+/** Record every (file, v, sha) of one manifest's text into `seen`. */
+function recordManifest(seen, text) {
+  let m;
+  try {
+    m = JSON.parse(text);
+  } catch {
+    return;
+  }
+  for (const [file, rec] of Object.entries(m)) {
+    if (!seen.has(file)) seen.set(file, new Map());
+    const byV = seen.get(file);
+    if (!byV.has(rec.v)) byV.set(rec.v, new Set());
+    byV.get(rec.v).add(rec.sha);
+  }
+}
+
+/**
+ * What every manifest in HEAD's history recorded: { seen: Map(file -> Map(v ->
+ * Set(sha))), commits, shallow }. Every commit reachable from HEAD that touched
+ * the manifest is read, the second parent of a merge as much as the first,
+ * through one `git cat-file --batch`. `--full-history` is what makes that true:
+ * by default a path-limited log follows only the parent a merge's manifest
+ * matches, so a side whose manifest the merge discarded, the very side a reused
+ * stamp comes from, is never listed. No git, or no commit yet, is no history.
+ */
+export function stampHistory(root = HERE_ROOT) {
+  const seen = new Map();
+  const git = (args, input) =>
+    execFileSync("git", args, { cwd: root, input, maxBuffer: 1 << 28, stdio: ["pipe", "pipe", "ignore"] });
+  let revs;
+  try {
+    revs = git(["log", "--full-history", "--format=%H", "HEAD", "--", MANIFEST]).toString().split("\n").filter(Boolean);
+  } catch {
+    return { seen, commits: 0, shallow: false };
+  }
+  const shallow = git(["rev-parse", "--is-shallow-repository"]).toString().trim() === "true";
+  if (revs.length) {
+    const out = git(["cat-file", "--batch"], revs.map((r) => `${r}:${MANIFEST}`).join("\n") + "\n");
+    for (const text of batchBodies(out)) recordManifest(seen, text);
+  }
+  return { seen, commits: revs.length, shallow };
+}
+
+/** The contents history recorded for `file` at `v` other than `sha`. */
+function otherContents(history, file, v, sha) {
+  const shas = history.seen.get(file)?.get(v);
+  return shas ? [...shas].filter((s) => s !== sha) : [];
+}
+
+/**
+ * Problems with the manifest against its own history: a version that once
+ * served other content, and, in CI, a history too shallow to say.
+ */
+export function reuseProblems(manifest, history, env = process.env) {
+  const problems = [];
+  if (history.shallow && env.CI) {
+    problems.push(`the clone is shallow, so a reused ?v= cannot be ruled out (check out with fetch-depth: 0)`);
+  }
+  for (const [file, { v, sha }] of Object.entries(manifest)) {
+    const other = otherContents(history, file, v, sha);
+    if (other.length) {
+      problems.push(`${file} is ?v=${v}, which once served other content (${other.join(", ")}); a browser that cached it keeps it (run: npm run assets:bump)`);
+    }
+  }
+  return problems;
+}
+
+/** `v`, or the first version after it that history never recorded for other content than `sha`. */
+export function freeVersion(v, history, file, sha, today) {
+  let next = v;
+  while (otherContents(history, file, next, sha).length) next = nextVersion(next, today);
+  return next;
+}
+
 /** Next version string for today: 20261101a, then b, c ... after today's last. */
 export function nextVersion(prev, today) {
   if (prev && prev.startsWith(today)) {
@@ -162,6 +260,7 @@ function rewritePages(pages, targets) {
 
 function bump(root, pages, manifest, today) {
   const read = (f) => (existsSync(path.join(root, f)) ? readFileSync(path.join(root, f), "utf8") : null);
+  const history = stampHistory(root);
   const next = { ...manifest };
   const targets = new Map();
   const changed = [];
@@ -169,7 +268,7 @@ function bump(root, pages, manifest, today) {
     const text = read(file);
     if (text == null) continue;
     const sha = hashOf(text);
-    const nv = targetVersion(seen, manifest[file], sha, today);
+    const nv = freeVersion(targetVersion(seen, manifest[file], sha, today), history, file, sha, today);
     next[file] = { v: nv, sha };
     targets.set(file, nv);
     for (const v of seen) if (v !== nv) changed.push([file, v, nv]);
@@ -192,10 +291,12 @@ export function main(args, root = process.cwd()) {
     return 0;
   }
   const read = (f) => (existsSync(path.join(root, f)) ? readFileSync(path.join(root, f), "utf8") : null);
-  const problems = check(pages, manifest, read);
+  const history = stampHistory(root);
+  const problems = [...check(pages, manifest, read), ...reuseProblems(manifest, history)];
   for (const p of problems) console.error(`ASSET ${p}`);
   if (problems.length) return 1;
-  console.log(`PASS: ${Object.keys(collect(pages).used).length} versioned assets match their content.`);
+  const reach = history.shallow ? `${history.commits} manifest(s) of a shallow clone, older ones unread` : `${history.commits} manifest(s) in history`;
+  console.log(`PASS: ${Object.keys(collect(pages).used).length} versioned assets match their content; no ?v= reused (${reach}).`);
   return 0;
 }
 

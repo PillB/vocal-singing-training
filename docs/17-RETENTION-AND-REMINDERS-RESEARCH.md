@@ -1,13 +1,13 @@
 # Retention & reminders — user research + product map
 
-**Shipped with:** kind reminders, ICS calendar, welcome-back, streak freezes, 5‑min micro-session, score compare.
+**Shipped with:** kind reminders, ICS calendar, welcome-back, streak freezes, 5‑min micro-session, score compare. (The freezes were later replaced by rest days: [37-DAILY-LOOP.md](37-DAILY-LOOP.md).)
 
 ## What users say (forums / social)
 
 ### Reconfirmed
 - **Consistency beats intensity** (r/singing practice threads).
 - **Streaks pull people back** (Duolingo culture).
-- **Reminders raise retention** when opt-in and relevant ([Airship](https://www.airship.com/blog/push-notification-strategy-customer-retention/)).
+- **Reminders raise retention** when opt-in and relevant ([Airship](https://www.airship.com/blog/push-notification-strategy-customer-retention/)). Caveat (checked 2026-10-28): Airship sells push, and its figure ("⅓ higher retention" for users who got a push in their first 90 days) compares users who received pushes with users who did not, with no method given, so it shows correlation at best. A 2026 trial in language learning found reminders raised daily practice while they ran and consistency fell sharply once they stopped ([Aliakbari et al.](https://journals.kmanpub.com/index.php/aitechbesosci/article/view/4724)).
 - **Progress visibility** is emotional gold (same song years later on r/singing).
 
 ### Surprising

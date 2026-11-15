@@ -101,13 +101,18 @@ function pianoView() {
   return { sticky, stageH: Math.round(s.height), lanes: Math.round(s.height - rails), stageBottom: s.bottom, chrome, top: p.top, bottom: p.bottom, vh: innerHeight, controls: controls.length, nestedScroll, covered };
 }
 
-for (const [exercise, viewport, staysSticky] of [
+// `longList`: the song list is longer than the 420 px the panel opens to, so
+// a cap left on the opened panel makes it a scroll box of its own (S4). On
+// main that was s2 at 360 px wide (451 px); #21's panel is 90 px shorter
+// there (361 px), which left no case to judge S4 until 320 px was added.
+for (const [exercise, viewport, staysSticky, longList] of [
   ["s4-lip-trills", { width: 1280, height: 800 }, true],
   ["s4-lip-trills", { width: 1366, height: 768 }, true],
   ["s9-pitch-match", { width: 1280, height: 800 }, true],
   ["s9-pitch-match", { width: 390, height: 844 }, false],
   ["s4-lip-trills", { width: 390, height: 844 }, false],
   ["s2-solfege-chords", { width: 360, height: 740 }, false],
+  ["s2-solfege-chords", { width: 320, height: 568 }, false, true],
   ["s4-lip-trills", { width: 844, height: 390 }, false]
 ]) {
   test(`expanded piano opens in view, above the stage, clickable: ${exercise} ${viewport.width}x${viewport.height}`, async ({ page }) => {
@@ -131,6 +136,7 @@ for (const [exercise, viewport, staysSticky] of [
     }, { timeout: 4000 }).toBe("shown");
     const open = await page.evaluate(pianoView);
     expect(open.controls, "control: the panel has controls to check").toBeGreaterThanOrEqual(3);
+    if (longList) expect(open.bottom - open.top, "control: the song list is longer than the panel's opening cap").toBeGreaterThan(420);
     // Where the screen has room the stage stays in sight beside the piano
     // (VG-30); where it has not, it scrolls away rather than cover the panel.
     if (staysSticky !== null) expect(open.sticky, "stage sticky beside the piano").toBe(staysSticky);

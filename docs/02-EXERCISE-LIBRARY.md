@@ -49,7 +49,7 @@ Deepen each homework exercise with clarity, research-backed tips, metrics, and a
 |-------|---------|
 | **Original** | Count to 60 with pen in mouth focusing on clarity. |
 | **Enhanced** | Place clean pen/chopstick horizontally between teeth (safe, not biting hard). Count 1–60 aiming for **intelligible** consonants. Then remove pen and count 1–20 noticing ease. |
-| **Tips** | Over-work tongue tip and lips; this is resistance training for speech muscles. |
+| **Tips** | Over-work tongue tip and lips. Not "resistance training": speech uses only about 10–20% of the lips' maximum force, and strengthening the articulators has not been shown to improve speech (G. Lof's review of non-speech oral-motor exercises in speech therapy, mostly for children, reprinted by Apraxia Kids, citing Bunton & Weismer 1994). The pen is a perturbation that makes you work for clarity; the "pen-off" contrast is the point. Stop if the jaw joint hurts. |
 | **Mistakes** | Clenching jaw; unsafe objects; skipping the “pen-off” contrast. |
 | **Metrics** | Clarity with pen 1–5; clarity after 1–5; completion. |
 

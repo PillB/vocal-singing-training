@@ -159,6 +159,35 @@
     };
   }
 
+  /** The local calendar day of a moment, as the day ledger names it; null for a time that is not one. */
+  function takeDayOf(when) {
+    const d = new Date(when);
+    if (!Number.isFinite(d.getTime())) return null;
+    return (
+      global.VTDays?.dayKey?.(d) ||
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+    );
+  }
+
+  /**
+   * One take as Storage.saveExerciseResult() keeps it: a new one, or `prev`
+   * rated again, which keeps its id, its time and its day.
+   */
+  function takeEntry(prev, result, now) {
+    const entry = {
+      id: prev ? prev.id : crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+      at: prev ? prev.at : now,
+      day: prev ? prev.day || takeDayOf(prev.at) : takeDayOf(now),
+      metrics: result.metrics || {},
+      score: result.score ?? null,
+      notes: result.notes || "",
+      durationSec: result.durationSec || 0
+    };
+    if (prev) entry.updatedAt = now;
+    if (result.auto) entry.auto = true;
+    return entry;
+  }
+
   const Storage = {
     MAX_PROFILES_FREE,
     MAX_PROFILES_PRO,
@@ -218,12 +247,15 @@
       const max = opts.maxSlots != null ? opts.maxSlots : MAX_PROFILES_FREE;
       const count = Object.keys(bag.profiles).length;
       if (count >= max) return { ok: false, reason: "limit", count, max };
+      // A blank name is refused rather than replaced: the fallback used to be
+      // the English word "Profile", on the Spanish site too.
+      const label = Storage.cleanProfileName(name);
+      if (!label) return { ok: false, reason: "blank" };
       const id =
         "p_" +
         (crypto.randomUUID
           ? crypto.randomUUID().slice(0, 8)
           : String(Date.now()).slice(-8));
-      const label = String(name || "Profile").trim().slice(0, 32) || "Profile";
       bag.profiles[id] = { id, name: label, createdAt: new Date().toISOString() };
       bag.activeId = id;
       write(LS.profiles, bag);
@@ -231,10 +263,17 @@
       return { ok: true, id, profile: bag.profiles[id] };
     },
 
+    /**
+     * Rename a profile. A name that is blank once cleaned keeps the old one:
+     * it used to be stored as "", which the picker then showed as a second
+     * "Principal".
+     */
     renameProfile(id, name) {
       const bag = ensureProfiles();
       if (!bag.profiles[id]) return { ok: false, reason: "missing" };
-      bag.profiles[id].name = String(name || bag.profiles[id].name).trim().slice(0, 32);
+      const label = Storage.cleanProfileName(name);
+      if (!label) return { ok: false, reason: "blank", profile: bag.profiles[id] };
+      bag.profiles[id].name = label;
       write(LS.profiles, bag);
       return { ok: true, profile: bag.profiles[id] };
     },
@@ -262,6 +301,53 @@
       return { ok: true };
     },
 
+    /**
+     * A profile name as it is kept: trimmed, at most 32 characters, and never
+     * cut through the middle of one (an emoji is two UTF-16 units, and a flag
+     * or a family emoji is several code points). "" when nothing is left.
+     * @param {unknown} name What was typed.
+     * @returns {string} The name to store, or "".
+     */
+    cleanProfileName(name) {
+      const text = String(name ?? "").trim();
+      const chars = Array.from(text);
+      if (chars.length <= 32) return text;
+      // Cut between whole characters as a person sees them (a flag or a family
+      // emoji is several code points) when the browser can say where they end.
+      if (typeof Intl !== "undefined" && Intl.Segmenter) {
+        let out = "";
+        let count = 0;
+        for (const part of new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)) {
+          const n = Array.from(part.segment).length;
+          if (count + n > 32) break;
+          out += part.segment;
+          count += n;
+        }
+        return out.trim();
+      }
+      return chars.slice(0, 32).join("").trim();
+    },
+
+    /**
+     * Forget one profile's practice on this browser and keep the profile:
+     * the same keys deleteProfile() removes, for any profile, the main one
+     * included (its keys are the unscoped ones). Writes nothing a sync would
+     * hear about.
+     * @param {string} [profileId] Whose record; the active profile when omitted.
+     * @returns {{ ok: boolean }} Result.
+     */
+    clearProfileData(profileId) {
+      const id = profileId || this.getActiveProfileId();
+      try {
+        [LS.progress, LS.holdLogs, LS.weekPlan, LS.reviews, LS.goals, LS.achievements, LS.days, LS.loop].forEach(
+          (base) => localStorage.removeItem(scopedKey(base, id))
+        );
+      } catch {
+        return { ok: false };
+      }
+      return { ok: true };
+    },
+
     getProgress() {
       return read(scopedKey(LS.progress), {});
     },
@@ -275,6 +361,11 @@
      *
      * `auto: true` marks a take that was recorded without a rating. It has no
      * score, so it must not overwrite the last real score.
+     *
+     * `day` is the local calendar day the take happened on, written once when
+     * it is inserted and kept when it is rated again. Working it out again from
+     * `at` whenever it is read put a take rated after midnight on the next day,
+     * and moved practice to another day for anyone who changed time zone.
      */
     saveExerciseResult(exerciseId, result) {
       const all = this.getProgress();
@@ -285,16 +376,7 @@
       const now = new Date().toISOString();
       const i = result.replaceId ? row.history.findIndex((h) => h && h.id === result.replaceId) : -1;
       const prev = i >= 0 ? row.history[i] : null;
-      const entry = {
-        id: prev ? prev.id : crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-        at: prev ? prev.at : now,
-        metrics: result.metrics || {},
-        score: result.score ?? null,
-        notes: result.notes || "",
-        durationSec: result.durationSec || 0
-      };
-      if (prev) entry.updatedAt = now;
-      if (result.auto) entry.auto = true;
+      const entry = takeEntry(prev, result, now);
       if (prev) row.history[i] = entry;
       else {
         row.history.unshift(entry);
@@ -474,6 +556,11 @@
       });
     },
 
+    /**
+     * Keep a take. Recordings live in one IndexedDB store for the whole browser,
+     * so each carries the profile it was made in: "Cada perfil guarda su propio
+     * historial" has to hold for the audio too.
+     */
     async saveRecording({ exerciseId, blob, label, meta }) {
       const db = await this.openDb();
       const id = crypto.randomUUID ? crypto.randomUUID() : `rec_${Date.now()}`;
@@ -481,6 +568,7 @@
       const record = {
         id,
         exerciseId,
+        profileId: this.getActiveProfileId(),
         label: label || "Practice take",
         mimeType: blob.type || "audio/webm",
         createdAt: new Date().toISOString(),
@@ -491,19 +579,32 @@
       return new Promise((resolve, reject) => {
         const tx = db.transaction(DB_STORE, "readwrite");
         tx.objectStore(DB_STORE).put(record);
-        tx.oncomplete = () => resolve({ id, createdAt: record.createdAt, size: record.size, exerciseId, label: record.label });
+        tx.oncomplete = () =>
+          resolve({ id, createdAt: record.createdAt, size: record.size, exerciseId, label: record.label, profileId: record.profileId });
         tx.onerror = () => reject(tx.error);
       });
     },
 
+    /**
+     * The active profile's takes, newest first. A take saved before recordings
+     * knew about profiles has no profileId and belongs to the main one, where it
+     * was made. With site data blocked the database never opens: there is
+     * nothing to list, and Historial still has its record to show.
+     */
     async listRecordings(exerciseId = null) {
-      const db = await this.openDb();
+      let db;
+      try {
+        db = await this.openDb();
+      } catch {
+        return [];
+      }
+      const active = this.getActiveProfileId();
       return new Promise((resolve, reject) => {
         const tx = db.transaction(DB_STORE, "readonly");
         const store = tx.objectStore(DB_STORE);
         const req = store.getAll();
         req.onsuccess = () => {
-          let rows = req.result || [];
+          let rows = (req.result || []).filter((r) => recordingProfile(r) === active);
           rows = rows
             .map((r) => ({
               id: r.id,
@@ -522,30 +623,50 @@
       });
     },
 
+    /** One take's audio, or null for an id that is not the active profile's. */
     async getRecordingBlob(id) {
       const db = await this.openDb();
+      const active = this.getActiveProfileId();
       return new Promise((resolve, reject) => {
         const tx = db.transaction(DB_STORE, "readonly");
         const req = tx.objectStore(DB_STORE).get(id);
         req.onsuccess = () => {
           const r = req.result;
-          if (!r) return resolve(null);
+          if (!r || recordingProfile(r) !== active) return resolve(null);
           resolve(new Blob([r.data], { type: r.mimeType || "audio/webm" }));
         };
         req.onerror = () => reject(req.error);
       });
     },
 
+    /**
+     * Delete one take. An id from another profile is left where it is.
+     * @returns {Promise<boolean>} Whether a take was deleted.
+     */
     async deleteRecording(id) {
       const db = await this.openDb();
+      const active = this.getActiveProfileId();
       return new Promise((resolve, reject) => {
         const tx = db.transaction(DB_STORE, "readwrite");
-        tx.objectStore(DB_STORE).delete(id);
-        tx.oncomplete = () => resolve();
+        const store = tx.objectStore(DB_STORE);
+        let removed = false;
+        const req = store.get(id);
+        req.onsuccess = () => {
+          if (req.result && recordingProfile(req.result) === active) {
+            store.delete(id);
+            removed = true;
+          }
+        };
+        tx.oncomplete = () => resolve(removed);
         tx.onerror = () => reject(tx.error);
       });
     }
   };
+
+  /** The profile a stored take belongs to: the main one when it predates profiles. */
+  function recordingProfile(record) {
+    return (record && record.profileId) || "default";
+  }
 
   global.VTStorage = Storage;
 })(window);

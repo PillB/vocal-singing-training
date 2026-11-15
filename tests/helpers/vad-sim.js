@@ -57,10 +57,12 @@
    * Parts, each { kind, sec, ... }:
    *  silence — the room alone
    *  speech  — syllables at `rate` a second: a consonant at `dip` dB, then a
-   *            vowel rising to `peak` dB (±3 dB from one to the next) and
-   *            sagging; `voicedCons` keeps the pitch through the consonant,
-   *            and `stops` is the share of consonants that are a stop's
-   *            closure, the room alone. `whisper` has no period anywhere;
+   *            vowel rising to `peak` dB and sagging. From one syllable to
+   *            the next the peak moves ±3 dB and the dip ±2 dB, times
+   *            `spread` (default 1; 0 puts every syllable at one level, a
+   *            very flat whisper). `voicedCons` keeps the pitch through the
+   *            consonant, and `stops` is the share of consonants that are a
+   *            stop's closure, the room alone. `whisper` has no period anywhere;
    *            `breathy` is the share of a vowel's power that has one
    *            (default 1), the rest is breath; `hf` is how high that
    *            breath sits (default 0.58, see above)
@@ -76,71 +78,86 @@
     const per = [];
     const hf2 = [];
     const manual = [];
+    const out = { p, hz, per, hf2, manual };
     const truth = [];
     let t = 0;
     parts.forEach((s) => {
       const n = Math.round(s.sec * 1000);
       const start = t;
-      if (s.kind === "speech") {
-        const peak = s.peak != null ? s.peak : -25;
-        const dip = s.dip != null ? s.dip : -42;
-        const rate = s.rate || 5;
-        const hfNoise = s.hf != null ? s.hf : HF_NOISE;
-        let i = 0;
-        let semis = 0;
-        while (i < n) {
-          const sylMs = Math.round((1000 / rate) * (0.75 + 0.5 * rnd()));
-          const consMs = Math.round(sylMs * (0.2 + 0.2 * rnd()));
-          const pk = peak + (rnd() - 0.5) * 6;
-          const dp = dip + (rnd() - 0.5) * 4;
-          const stop = s.stops ? rnd() < s.stops : false;
-          // Intonation moves a little from one syllable to the next
-          semis = Math.max(-4, Math.min(4, semis + (rnd() - 0.5) * 3));
-          const f0 = 135 * Math.pow(2, semis / 12);
-          for (let k = 0; k < sylMs && i < n; k++, i++) {
-            let db;
-            let voiced;
-            if (k < consMs) {
-              db = stop ? -Infinity : dp;
-              voiced = !!s.voicedCons && !stop;
-            } else {
-              const u = (k - consMs) / Math.max(1, sylMs - consMs);
-              const shape = u < 0.2 ? u / 0.2 : 1 - 0.35 * ((u - 0.2) / 0.8);
-              db = dp + (pk - dp) * Math.max(0, shape);
-              voiced = true;
-            }
-            // The periodic share of the sound, the rest noise
-            const sh = voiced && !s.whisper ? (s.breathy != null ? s.breathy : 1) : 0;
-            p.push(db2p(db));
-            hz.push(sh > 0 ? f0 : 0);
-            per.push(sh);
-            hf2.push(sh * HF_VOICE * HF_VOICE + (1 - sh) * hfNoise * hfNoise);
-            manual.push(0);
-          }
-        }
-      } else if (s.kind === "tone") {
-        const level = s.level != null ? s.level : -24;
-        for (let i = 0; i < n; i++) {
-          const w = Math.sin(2 * Math.PI * 5.5 * ((start + i) / 1000));
-          p.push(db2p(level + (s.vibDb != null ? s.vibDb : 1.5) * w));
-          hz.push((s.hz || 220) * Math.pow(2, ((s.vibCents != null ? s.vibCents : 15) * w) / 1200));
-          per.push(1);
-          hf2.push(HF_VOICE * HF_VOICE);
-          manual.push(0);
-        }
-      } else {
-        for (let i = 0; i < n; i++) {
-          p.push(0);
-          hz.push(0);
-          per.push(0);
-          hf2.push(0);
-          manual.push(s.kind === "space" ? 1 : 0);
-        }
-      }
+      if (s.kind === "speech") speechPart(s, n, rnd, out);
+      else if (s.kind === "tone") tonePart(s, n, start, out);
+      else quietPart(s, n, out);
       t += n;
       truth.push({ kind: s.kind, start: start / 1000, end: t / 1000 });
     });
     return { p, hz, per, hf2, manual, truth, ms: t };
+  }
+
+  /** A speech part's settings, defaults filled in (see build). */
+  function speechOf(s) {
+    return {
+      peak: s.peak != null ? s.peak : -25,
+      dip: s.dip != null ? s.dip : -42,
+      rate: s.rate || 5,
+      hfNoise: s.hf != null ? s.hf : HF_NOISE,
+      spread: s.spread != null ? s.spread : 1
+    };
+  }
+  /** Millisecond k of a syllable: its level (dB) and whether it has a pitch. */
+  function syllableAt(s, syl, k) {
+    if (k < syl.consMs) return { db: syl.stop ? -Infinity : syl.dp, voiced: !!s.voicedCons && !syl.stop };
+    const u = (k - syl.consMs) / Math.max(1, syl.sylMs - syl.consMs);
+    const shape = u < 0.2 ? u / 0.2 : 1 - 0.35 * ((u - 0.2) / 0.8);
+    return { db: syl.dp + (syl.pk - syl.dp) * Math.max(0, shape), voiced: true };
+  }
+  /** `n` ms of a speech part, a millisecond at a time, onto out's envelopes. */
+  function speechPart(s, n, rnd, out) {
+    const { peak, dip, rate, hfNoise, spread } = speechOf(s);
+    let i = 0;
+    let semis = 0;
+    while (i < n) {
+      const sylMs = Math.round((1000 / rate) * (0.75 + 0.5 * rnd()));
+      const consMs = Math.round(sylMs * (0.2 + 0.2 * rnd()));
+      const pk = peak + (rnd() - 0.5) * 6 * spread;
+      const dp = dip + (rnd() - 0.5) * 4 * spread;
+      const stop = s.stops ? rnd() < s.stops : false;
+      // Intonation moves a little from one syllable to the next
+      semis = Math.max(-4, Math.min(4, semis + (rnd() - 0.5) * 3));
+      const f0 = 135 * Math.pow(2, semis / 12);
+      const syl = { sylMs, consMs, pk, dp, stop };
+      for (let k = 0; k < sylMs && i < n; k++, i++) {
+        const { db, voiced } = syllableAt(s, syl, k);
+        // The periodic share of the sound, the rest noise
+        const sh = voiced && !s.whisper ? (s.breathy != null ? s.breathy : 1) : 0;
+        out.p.push(db2p(db));
+        out.hz.push(sh > 0 ? f0 : 0);
+        out.per.push(sh);
+        out.hf2.push(sh * HF_VOICE * HF_VOICE + (1 - sh) * hfNoise * hfNoise);
+        out.manual.push(0);
+      }
+    }
+  }
+  /** `n` ms of a held note that starts at `start` ms, onto out's envelopes. */
+  function tonePart(s, n, start, out) {
+    const level = s.level != null ? s.level : -24;
+    for (let i = 0; i < n; i++) {
+      const w = Math.sin(2 * Math.PI * 5.5 * ((start + i) / 1000));
+      out.p.push(db2p(level + (s.vibDb != null ? s.vibDb : 1.5) * w));
+      out.hz.push((s.hz || 220) * Math.pow(2, ((s.vibCents != null ? s.vibCents : 15) * w) / 1200));
+      out.per.push(1);
+      out.hf2.push(HF_VOICE * HF_VOICE);
+      out.manual.push(0);
+    }
+  }
+  /** `n` ms of the room alone (silence), or of the Space assist held (space). */
+  function quietPart(s, n, out) {
+    for (let i = 0; i < n; i++) {
+      out.p.push(0);
+      out.hz.push(0);
+      out.per.push(0);
+      out.hf2.push(0);
+      out.manual.push(s.kind === "space" ? 1 : 0);
+    }
   }
 
   const during = (x, i) => i / 1000 >= (x.from || 0) && i / 1000 < (x.until != null ? x.until : Infinity);

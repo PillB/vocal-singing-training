@@ -140,7 +140,7 @@ async function open(browser, o = {}) {
   await page.route("https://events.test/**", async (route) => {
     if (route.request().url().endsWith("/v1/geo")) {
       sent.geo += 1;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, country: "ES", placed: true, askFirst: true }) });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(o.geo || { ok: true, country: "ES", placed: true, askFirst: true }) });
       return;
     }
     sent.batches.push(route.request().postData());
@@ -552,6 +552,26 @@ const shiftWatch = () => {
     watch.disconnect();
   }).observe(document, { subtree: true, attributes: true, attributeFilter: ["class"] });
 };
+/**
+ * Every frame until the hold ends: how the first load's hero is drawn (its
+ * view's opacity, the title's top), so a hero that fades or rises in is seen.
+ */
+const frameWatch = () => {
+  window.__heroFrames = [];
+  const sample = () => {
+    const html = document.documentElement;
+    const t = document.getElementById("start-title");
+    const view = document.getElementById("view-home");
+    if (t && view && html.classList.contains("vt-boot-hero") && getComputedStyle(t).visibility === "visible") {
+      window.__heroFrames.push({ top: Math.round(t.getBoundingClientRect().top * 10) / 10, opacity: getComputedStyle(view).opacity });
+    }
+    if (window.__heroFrames.length && !html.classList.contains("vt-boot-pending")) return;
+    requestAnimationFrame(sample);
+  };
+  requestAnimationFrame(sample);
+};
+/** Frames drawn otherwise than the last one: faded, or the title elsewhere. */
+const unsteady = (frames) => frames.filter((f) => f.opacity !== "1" || Math.abs(f.top - frames[frames.length - 1].top) > 0.5);
 const heldNow = () => ({
   app: !!window.VTApp,
   main: getComputedStyle(document.querySelector("main")).visibility,
@@ -573,6 +593,9 @@ const heroNow = () => {
   return {
     strings: !!window.VTI18n,
     kicker: document.getElementById("start-kicker").textContent.trim(),
+    kickerShown: shown(document.getElementById("start-kicker")),
+    intro: shown(document.getElementById("start-sub")),
+    otherWays: document.getElementById("more-ways").getClientRects().length,
     title: { text: t.textContent.trim(), size: getComputedStyle(t).fontSize, top: Math.round(box.top), width: Math.round(box.width), shown: shown(t) },
     controls: [...document.querySelectorAll(".main :is(button, a, select, input)")].filter(shown).map((el) => el.id || el.textContent.trim().slice(0, 24))
   };
@@ -605,10 +628,42 @@ async function titlePainted(page) {
   return shown !== hidden;
 }
 /**
- * Open a page with these scripts held back until go() lets them through (one
- * by name, or all), so it is certainly painted before they run (the race the
- * review lost on half its loads, made certain), and report what is held a
- * moment after the page has been read to its footer.
+ * The kicker and the title as drawn: a capture of the box around both
+ * (Chromium's own, as in titlePainted). Equal before and after the app has
+ * started, nothing in them has changed: not the words, their weight, colour,
+ * spacing or place, and nothing has come over them. The card behind them is
+ * painted plain black for the capture: its gradients are sized to the card,
+ * which the app makes taller, so the tint behind the words shifts by up to
+ * 13/255 (5%) when it starts. That shift is accepted; the words are what is
+ * read.
+ */
+async function heroPixels(page) {
+  const cdp = await page.context().newCDPSession(page);
+  const clip = await page.evaluate(() => {
+    const panel = document.getElementById("start-panel");
+    panel.style.background = "#000";
+    panel.style.boxShadow = "none";
+    const a = document.getElementById("start-kicker").getBoundingClientRect();
+    const b = document.getElementById("start-title").getBoundingClientRect();
+    const x = Math.min(a.left, b.left);
+    const y = Math.min(a.top, b.top);
+    return { x, y, width: Math.max(a.right, b.right) - x, height: Math.max(a.bottom, b.bottom) - y, scale: 1 };
+  });
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const { data } = await cdp.send("Page.captureScreenshot", { format: "png", clip });
+  await page.evaluate(() => {
+    const panel = document.getElementById("start-panel");
+    panel.style.background = "";
+    panel.style.boxShadow = "";
+  });
+  await cdp.detach();
+  return { clip, data };
+}
+/**
+ * Open a page (or reload it, path null) with these scripts held back until
+ * go() lets them through (one by name, or all), so it is certainly painted
+ * before they run (the race the review lost on half its loads, made certain),
+ * and report what is held a moment after the page has been read to its footer.
  */
 async function heldBack(page, path, scripts = ["app.js"]) {
   const gates = {};
@@ -622,7 +677,7 @@ async function heldBack(page, path, scripts = ["app.js"]) {
     });
   }
   const go = (name) => (name ? [gates[name]] : Object.values(gates)).forEach((open) => open());
-  await page.goto(BASE + path, { waitUntil: "commit" });
+  await (path === null ? page.reload({ waitUntil: "commit" }) : page.goto(BASE + path, { waitUntil: "commit" }));
   await page.waitForSelector(".app-footer", { state: "attached" });
   await page.waitForTimeout(350);
   return { held: await page.evaluate(heldNow), go };
@@ -645,12 +700,12 @@ async function expectStill(page) {
   expect(clsOf(after.shifts), `layout shifts: ${JSON.stringify(after.shifts)}`).toBeLessThan(0.1);
 }
 /** A later load: nothing below the header is shown while the app has not started. */
-function expectAllHeld(held, lang = "es") {
+function expectAllHeld(held) {
   expect(held.app, "control: the app has not started yet").toBe(false);
   expect(held.main, "the markup's home is not on screen").toBe("hidden");
   expect(held.hero, "nor its hero: the scripts are cached and the app starts at once").toBe("hidden");
   expect(held.footer).toBe("hidden");
-  if (lang === "es") expect(held.header, "the header is, at once").toBe("visible");
+  expect(held.header, "the header is, at once").toBe("visible");
 }
 const MID_DESKTOP = { width: 900, height: 700 };
 
@@ -664,7 +719,7 @@ test.describe("the first paint is the app's own home", () => {
       const { ctx, page } = await open(browser, { vp, lang, days });
       await page.addInitScript(shiftWatch);
       const { held, go } = await heldBack(page, "/");
-      expectAllHeld(held, lang);
+      expectAllHeld(held);
       go();
       await settled(page);
       await expectStill(page);
@@ -691,13 +746,15 @@ test.describe("the first paint is the app's own home", () => {
     test(`es ${vp.width}px, this browser's first load: the hero's words show at once, painted, where and as the app keeps them, and nothing moves`, async ({ browser }) => {
       const { ctx, page } = await open(browser, { vp, fresh: true });
       await page.addInitScript(shiftWatch);
+      await page.addInitScript(frameWatch);
       // The strings held back too: what shows first is the markup itself
       const { held, go } = await heldBack(page, "/", ["i18n.js", "app.js"]);
       const hero = await page.evaluate(heroNow);
       expect({ app: held.app, strings: hero.strings }, "control: neither the strings nor the app have run yet").toEqual({ app: false, strings: false });
       expect(held.hero, "the hero shows at once: nothing is cached and the app starts seconds later").toBe("visible");
-      expect(hero.title.shown).toBe(true);
+      expect({ kicker: hero.kickerShown, title: hero.title.shown, intro: hero.intro, otherWays: hero.otherWays }, "its kicker, title and intro line show; the other ways in, not wired yet, take no room").toEqual({ kicker: true, title: true, intro: true, otherWays: 0 });
       expect(await titlePainted(page), "and its title is painted").toBe(true);
+      const pixels = await heroPixels(page);
       expect(held.catalog, "what the app's hero pushes down waits").toBe("hidden");
       expect(held.footer).toBe("hidden");
       expect(hero.controls, "no button shows before it works").toEqual([]);
@@ -716,15 +773,27 @@ test.describe("the first paint is the app's own home", () => {
       expect(words(after), "the words are the ones the app writes for someone new, at the same size").toEqual(words(hero));
       expect(Math.abs(after.title.width - hero.title.width), `in a column as wide (${hero.title.width} -> ${after.title.width} px)`).toBeLessThanOrEqual(1);
       expect(Math.abs(after.title.top - hero.title.top), `and where they were (${hero.title.top} -> ${after.title.top})`).toBeLessThanOrEqual(1);
+      const now = await heroPixels(page);
+      expect({ box: now.clip, same: now.data === pixels.data }, "the kicker and title are drawn exactly as they were: words, weight, colour, spacing, place").toEqual({ box: pixels.clip, same: true });
+      const frames = await page.evaluate(() => window.__heroFrames);
+      expect(frames.length, "control: the hero's frames were seen").toBeGreaterThan(0);
+      expect(unsteady(frames), "from its first frame the hero is drawn as it stays: no fade, no rise").toEqual([]);
       await expectStill(page);
       await ctx.close();
     });
   }
 
-  test("es 390px, a first load straight from the guide: the guide's own keys are no sign of the app, so the hero shows at once", async ({ browser }) => {
-    const { ctx, page } = await open(browser, { vp: PHONE, fresh: true });
+  /*
+   * As a person, not an automated browser: outside the regions that are asked
+   * first, the guide's statistics keep a browser id (vt_ab_v1) as well as the
+   * site design. Run as an automated browser (no statistics) the guide kept
+   * neither, and a check that took any vt_ key for the app's passed here while
+   * holding every real reader of the guide (review of PR #42, red team 1 and 3).
+   */
+  test("es 390px, a person's first load straight from the guide: the guide's own keys are no sign of the app, so the hero shows at once", async ({ browser }) => {
+    const { ctx, page } = await open(browser, { vp: PHONE, fresh: true, human: true, e2e: false, endpoint: ENDPOINT, timezoneId: "America/Lima", geo: { ok: true, country: "PE", placed: true, askFirst: false } });
     await page.goto(BASE + "/guide.html", { waitUntil: "load" });
-    await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter((k) => /^vt_/.test(k))), { message: "control: the guide stored keys of its own", timeout: 4000 }).not.toEqual([]);
+    await expect.poll(() => page.evaluate(() => Object.keys(localStorage)), { message: "control: the guide kept its statistics' browser id", timeout: 6000 }).toContain("vt_ab_v1");
     const { held, go } = await heldBack(page, "/");
     expect(held.app, "control: the app has not started yet").toBe(false);
     expect(held.hero).toBe("visible");
@@ -733,15 +802,34 @@ test.describe("the first paint is the app's own home", () => {
     await ctx.close();
   });
 
+  test("es 390px, site data blocked: the first load shows the hero (nothing can be stored), a reload does not (the app goes back to the place it kept)", async ({ browser }) => {
+    const { ctx, page } = await open(browser, { vp: PHONE, blocked: true });
+    const first = await heldBack(page, "/");
+    expect(first.held.app, "control: the app has not started yet").toBe(false);
+    expect(first.held.hero, "nothing is stored, so the app draws the hero for someone new").toBe("visible");
+    first.go();
+    await settled(page);
+    expect(await page.evaluate(() => { try { localStorage.setItem("vt_x", "1"); return "stored"; } catch { return "blocked"; } }), "control: the page's own storage is the in-memory one").toBe("stored");
+    await page.unroute("**/js/app.js*");
+    const again = await heldBack(page, null);
+    expect(again.held.app, "control: the app has not started yet").toBe(false);
+    expect(again.held.hero, "a reload is held whole").toBe("hidden");
+    again.go();
+    await ctx.close();
+  });
+
   // Each address the app draws something else at: another view, a place on the
-  // home it scrolls to, an experiment's arm forced (the classic arm and the
-  // five-minute Mínimo write another title; any arm may)
+  // home it scrolls to (a search result's text link among them, never in
+  // location.hash), an experiment's arm forced, however the address spells it
+  // (the classic arm and the five-minute Mínimo write another title; any arm may)
   for (const [address, check] of [
     ["#plan", { view: "plan" }],
     ["#historial", { view: "history" }],
     ["#ejercicio/s4-lip-trills", { view: "exercise" }],
     ["#catalog-panel", { view: "home", scrolled: true }],
+    ["#:~:text=Cat%C3%A1logo%20de%20ejercicios", { view: "home", scrolled: true }],
     ["?ab_loop_home_2026_10=classic", { view: "home", title: "Tu primera práctica" }],
+    ["?%61b_loop_home_2026_10=classic", { view: "home", title: "Tu primera práctica" }],
     ["?ab_loop_minimo_len_2026_10=five", { view: "home", title: "5 minutos" }]
   ]) {
     test(`this browser's first load at ${address}: all of it waits, as the markup's hero would only flash`, async ({ browser }) => {
@@ -753,11 +841,40 @@ test.describe("the first paint is the app's own home", () => {
       await settled(page);
       const at = await page.evaluate(() => ({ view: window.VTApp.getState().view, y: scrollY, title: document.getElementById("start-title").textContent }));
       expect(at.view, "control: the address opened its view").toBe(check.view);
-      if (check.scrolled) expect(at.y, "control: the app scrolled away from the hero").toBeGreaterThan(200);
+      if (check.scrolled) expect(at.y, "control: the page scrolled away from the hero").toBeGreaterThan(200);
       if (check.title) expect(at.title, "control: the app's hero has other words").toContain(check.title);
       await ctx.close();
     });
   }
+
+  /*
+   * A slow phone: the scripts arrive one by one (Chromium stops looking ahead
+   * after the page's CSP <meta>), 11-14 s on a 4G or Lighthouse mobile
+   * profile. Let go eight seconds after the start, the markup's home showed
+   * under the hero with its buttons not wired, and jumped when the app
+   * replaced it (layout shift 0.11 on a phone, 0.27-0.70 from 820 px; review
+   * of PR #42). Correct: held while the scripts keep arriving, let go when
+   * nothing new has come for eight seconds (the next test).
+   */
+  test("[L] es 390px, a first load whose scripts arrive one by one for twelve seconds: held until the app has started, and nothing moves", async ({ browser }) => {
+    test.setTimeout(60000);
+    const { ctx, page } = await open(browser, { vp: PHONE, fresh: true });
+    await page.addInitScript(shiftWatch);
+    let queue = Promise.resolve();
+    await page.route("**/js/**", (route) => {
+      queue = queue.then(() => new Promise((r) => setTimeout(r, 220))).then(() => route.continue());
+      return queue;
+    });
+    await page.goto(BASE + "/", { waitUntil: "commit" });
+    await page.waitForFunction(() => performance.now() > 9500, null, { timeout: 20000, polling: 250 });
+    const late = await page.evaluate(heldNow);
+    expect(late.app, "control: nine and a half seconds in, the app has not started").toBe(false);
+    expect({ hero: late.hero, catalog: late.catalog, footer: late.footer }, "the hero shows; what it pushes down still waits").toEqual({ hero: "visible", catalog: "hidden", footer: "hidden" });
+    await page.waitForFunction(() => !!window.VTApp && document.readyState !== "loading", null, { timeout: 30000 });
+    await page.waitForTimeout(1200);
+    await expectStill(page);
+    await ctx.close();
+  });
 
   test("released when the app has started, not when the last image has loaded", async ({ browser }) => {
     const { ctx, page } = await open(browser, { vp: LAPTOP, lang: "es" });
@@ -786,7 +903,7 @@ test.describe("the first paint is the app's own home", () => {
     await ctx.close();
   });
 
-  test("[L] released after eight seconds at the most, when a script never arrives", async ({ browser }) => {
+  test("[L] released eight seconds after the page stops arriving, when a script never arrives", async ({ browser }) => {
     test.setTimeout(60000);
     const { ctx, page } = await open(browser, { vp: LAPTOP, lang: "es" });
     // The last script is asked for and never answered: the page is never read to the end

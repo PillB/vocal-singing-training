@@ -8342,3 +8342,10 @@ html.vt-boot-pending.vt-boot-hero #start-panel {
 html.vt-boot-pending.vt-boot-hero #more-ways {
   display: none;
 }
+/* The first load's hero is painted as it stays. The view's entrance (fadeIn:
+   0.22 s, rising 6 px) would make it rise under the reader's eye and delay its
+   paint. Off for that page's life, not only during the hold: changed when the
+   hold ends, the animation would start again over the words being read. */
+html.vt-boot-hero #view-home {
+  animation: none;
+}

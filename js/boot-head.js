@@ -24,14 +24,17 @@
  *    jumped (a layout shift of 0.5-0.7 on about half the desktop loads once
  *    #21 was merged), and a tap on it landed on whatever moved under the
  *    finger. js/boot-ready.js lets go when the app has started; this lets go
- *    when the page has loaded (boot-ready.js missing) and after eight seconds
- *    (a script that never arrives), whichever comes first.
+ *    when the page has loaded (boot-ready.js missing), and when nothing new has
+ *    been read for eight seconds (a script that never arrives) or twenty have
+ *    passed, whichever comes first.
  *    On this browser's first load (html.vt-boot-hero) the hero's words show at
  *    once and only its buttons and what lies below it wait. Nothing is cached
- *    then: the app starts after about 1.8 s on a fast line and 5 s on a 4G
- *    phone, and holding the whole page made that the time anything showed
- *    (0.3 and 0.8 s before). Every later load has the scripts cached and the
- *    app starts in about half a second, so all of it waits.
+ *    then, and the scripts arrive one after another (Chromium looks no further
+ *    ahead after the page's CSP <meta>): the app starts after about 3.3 s on a
+ *    desktop line and 5.5-11 s on a 4G phone (70-170 ms round trips), and
+ *    holding the whole page made that the time anything showed. Every later
+ *    load has the scripts cached and the app starts in about 0.3 s on a
+ *    desktop and 0.8-1 s on a phone, so all of it waits.
  */
 (function () {
   "use strict";
@@ -81,25 +84,48 @@
     }
   });
 
-  /** Written by the guide, terms and privacy pages too: no sign that the app has run here */
-  var PAGE_KEYS = { vt_site_version_v1: 1, vt_analytics_v1: 1, vt_analytics_optout_v1: 1, vt_eu_consent_v1: 1 };
+  /**
+   * Kept only by the app's own scripts (js/storage.js, js/tour.js, js/app.js),
+   * which no other page loads; its first start writes several of them. The
+   * guide's statistics keep keys of their own (a browser id among them), so
+   * "any vt_ key" took a reader of the guide for a returning visitor.
+   */
+  var APP_KEYS = ["vt_settings_v1", "vt_days_v1", "vt_profiles_v1", "vt_progress_v1", "vt_tour_v1", "vt_mic_sens"];
 
   /**
-   * This browser's first load of the app: none of the app's own vt_ keys in
-   * storage (its first load writes several), so its scripts are not cached,
-   * which is seconds on a phone, and it draws the home for someone new.
-   * Arriving from the guide counts: the guide caches none of the app's
-   * scripts. Blocked storage counts too: nothing is stored, so the app draws
-   * the same. Not with an address (another view, or a place on the home the
-   * app scrolls to) nor with an experiment arm forced by ?ab_..., where the
-   * app draws something else.
+   * Where the page was asked for and how: a reload or a step back is not a
+   * first visit (the app restores the place it kept), and a text fragment
+   * (#:~:text=..., from a search result) is in the navigation's address but
+   * never in location.hash.
+   */
+  function addressed() {
+    var nav = (window.performance && performance.getEntriesByType && performance.getEntriesByType("navigation")[0]) || {};
+    if (nav.type === "reload" || nav.type === "back_forward") return true;
+    if (location.hash || String(nav.name || "").indexOf("#") !== -1) return true;
+    var query = location.search;
+    try {
+      query = decodeURIComponent(query);
+    } catch (e) {
+      /* read as it is */
+    }
+    return /[?&]ab_/.test(query);
+  }
+
+  /**
+   * This browser's first load of the app: none of the app's own keys in
+   * storage, so its scripts are not cached, which is seconds on a phone, and
+   * it draws the home for someone new. Arriving from the guide counts: the
+   * guide caches none of the app's scripts. Blocked storage counts too:
+   * nothing is stored, so the app draws the same. Not at an address (another
+   * view, or a place on the home the app scrolls to), with an experiment arm
+   * forced by ?ab_..., on a reload or a step back: the app draws something
+   * else there.
    */
   function firstLoad() {
-    if (location.hash || /[?&]ab_/.test(location.search)) return false;
+    if (addressed()) return false;
     try {
-      for (var i = 0; i < localStorage.length; i++) {
-        var key = String(localStorage.key(i));
-        if (key.indexOf("vt_") === 0 && !PAGE_KEYS[key]) return false;
+      for (var i = 0; i < APP_KEYS.length; i++) {
+        if (localStorage.getItem(APP_KEYS[i]) !== null) return false;
       }
       return true;
     } catch (e) {
@@ -116,11 +142,35 @@
 
   html.classList.add("vt-boot-pending");
   if (firstLoad()) html.classList.add("vt-boot-hero");
+
+  /*
+   * The last resort, for a script that never arrives: let go once nothing new
+   * has been read for eight seconds, and after twenty in any case. Not eight
+   * seconds after the start: on a slow phone the scripts arrive one by one for
+   * longer than that (11-14 s on a 4G or Lighthouse mobile profile), and let
+   * go then the markup's home showed under the hero, its buttons not wired,
+   * until the app replaced it and the page jumped (review of PR #42).
+   */
+  var STALL_MS = 8000;
+  var CAP_MS = 20000;
+  var began = Date.now();
+  var last = began;
+  var reading = new MutationObserver(function () {
+    last = Date.now();
+    if (!html.classList.contains("vt-boot-pending")) reading.disconnect();
+  });
+  reading.observe(document, { childList: true, subtree: true });
   var show = function () {
     html.classList.remove("vt-boot-pending");
+    reading.disconnect();
   };
   window.addEventListener("load", show);
-  setTimeout(show, 8000);
+  (function stalled() {
+    if (!html.classList.contains("vt-boot-pending")) return reading.disconnect();
+    var now = Date.now();
+    if (now - last >= STALL_MS || now - began >= CAP_MS) return show();
+    setTimeout(stalled, Math.min(STALL_MS - (now - last), CAP_MS - (now - began)));
+  })();
 
   try {
     if (localStorage.getItem("vt_lang") !== "en") return;

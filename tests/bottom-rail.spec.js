@@ -225,36 +225,28 @@ function micSqueeze() {
  * side by side the options take a row of their own (#21's design for a phone
  * on its side). Wrong behaviour rejected (design pass on PR #40): with #21's
  * no-grow rule dropped, the box was measured at its 8rem basis when the row
- * was laid out, all three went on one row, and at 740x360 the slider was
- * squeezed to 71 px against 129 px on main.
+ * was laid out, all three went on one row, and from 740 to 790 px wide the
+ * slider was squeezed to 71-111 px against 129 px on main. Where that band
+ * falls depends on the fonts (CI's put it elsewhere, and a check at 740 px
+ * alone passed there with the bug in), so every width from 560 to 1000 px is
+ * tried, 10 px apart, on a phone-height screen.
  */
-for (const vp of [
-  { width: 740, height: 360 },
-  { width: 844, height: 390 },
-  { width: 568, height: 320 },
-  { width: 1280, height: 800 }
-]) {
-  test(`es ${vp.width}x${vp.height}: beside the speech drills' options the mic slider is never squeezed below its own width`, async ({ page }) => {
-    test.setTimeout(120000);
-    await page.setViewportSize(vp);
-    await boot(page, { lang: "es" });
-    await page.waitForFunction(() => !!window.VTApp?.openExercise && !!window.VT_EXERCISES);
-    const ids = await page.evaluate(() =>
-      Object.values(window.VT_EXERCISES)
-        .flat()
-        .map((e) => e.id)
-    );
-    const squeezed = [];
-    const seen = [];
-    for (const id of ids) {
-      await page.evaluate((x) => window.VTApp.openExercise(x), id);
-      await page.evaluate(() => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))));
-      const m = await page.evaluate(micSqueeze);
-      if (!m) continue;
-      seen.push(id);
-      if (m.now < m.own - 2) squeezed.push(`${id}: slider ${m.now} px, ${m.own} px at its own width`);
-    }
-    expect(seen, "control: v12, the drill with sound options and no piano, is measured").toContain("v12-melodic-speech");
-    expect(squeezed, squeezed.join("\n")).toEqual([]);
-  });
-}
+test("es, a phone on its side at every width: beside v12's options the mic slider is never squeezed below its own width", async ({ page }) => {
+  test.setTimeout(120000);
+  await page.setViewportSize({ width: 740, height: 360 });
+  await boot(page, { lang: "es" });
+  await page.waitForFunction(() => !!window.VTApp?.openExercise);
+  await page.evaluate(() => window.VTApp.openExercise("v12-melodic-speech"));
+  const squeezed = [];
+  let measured = 0;
+  for (let width = 560; width <= 1000; width += 10) {
+    await page.setViewportSize({ width, height: 360 });
+    await page.evaluate(() => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))));
+    const m = await page.evaluate(micSqueeze);
+    if (!m) continue;
+    measured += 1;
+    if (m.now < m.own - 2) squeezed.push(`${width}x360: slider ${m.now} px, ${m.own} px at its own width`);
+  }
+  expect(measured, "control: v12's rail, sound options without a piano, at every width").toBe(45);
+  expect(squeezed, squeezed.join("\n")).toEqual([]);
+});

@@ -49,7 +49,7 @@ const browserPath = (testInfo) => testInfo.project.use?.launchOptions?.executabl
 /* ------------------------------------------------------------------ setup */
 
 /** Language, tour seen, optional quiet mode and a few practised days, before the app loads. */
-function seedScript({ lang, e2e, days, progress, blocked, human, endpoint, fresh }) {
+function seedScript({ lang, e2e, days, progress, blocked, human, endpoint, fresh, store }) {
   try {
     if (human) Object.defineProperty(Navigator.prototype, "webdriver", { get: () => false, configurable: true });
     if (endpoint) window.VT_ANALYTICS_ENDPOINT = endpoint;
@@ -64,6 +64,8 @@ function seedScript({ lang, e2e, days, progress, blocked, human, endpoint, fresh
       return;
     }
     if (e2e) sessionStorage.setItem("vt_e2e", "1");
+    // Keys another page keeps (admin.html's language switch writes vt_lang alone)
+    for (const [k, v] of Object.entries(store || {})) localStorage.setItem(k, v);
     // This browser's first load: nothing of the site's stored yet
     if (fresh) return;
     localStorage.setItem("vt_tour_v1", "1");
@@ -113,6 +115,7 @@ async function open(browser, o = {}) {
     viewport: o.vp || LAPTOP,
     ...(o.timezoneId ? { timezoneId: o.timezoneId } : {}),
     ...(o.locale ? { locale: o.locale } : {}),
+    ...(o.reducedMotion ? { reducedMotion: o.reducedMotion } : {}),
     ...(o.forcedColors ? { forcedColors: o.forcedColors, colorScheme: "dark" } : {})
   });
   const page = await ctx.newPage();
@@ -124,7 +127,8 @@ async function open(browser, o = {}) {
     blocked: !!o.blocked,
     human: !!o.human,
     endpoint: o.endpoint || null,
-    fresh: !!o.fresh
+    fresh: !!o.fresh,
+    store: o.store || null
   });
   if (o.zoom) {
     await page.addInitScript((pct) => {
@@ -553,25 +557,67 @@ const shiftWatch = () => {
   }).observe(document, { subtree: true, attributes: true, attributeFilter: ["class"] });
 };
 /**
- * Every frame until the hold ends: how the first load's hero is drawn (its
- * view's opacity, the title's top), so a hero that fades or rises in is seen.
+ * Every frame from the first load's hero's first until 30 frames after the
+ * hold ends: how it is drawn (its view's opacity, the title's top and whether
+ * it is visible), so a hero that fades or rises in, or blinks out as the app
+ * starts, is seen.
  */
 const frameWatch = () => {
   window.__heroFrames = [];
+  let after = 0;
   const sample = () => {
     const html = document.documentElement;
     const t = document.getElementById("start-title");
     const view = document.getElementById("view-home");
-    if (t && view && html.classList.contains("vt-boot-hero") && getComputedStyle(t).visibility === "visible") {
-      window.__heroFrames.push({ top: Math.round(t.getBoundingClientRect().top * 10) / 10, opacity: getComputedStyle(view).opacity });
+    const shown = !!t && getComputedStyle(t).visibility === "visible";
+    if (t && view && !window.__probing && html.classList.contains("vt-boot-hero") && (shown || window.__heroFrames.length)) {
+      const held = html.classList.contains("vt-boot-pending");
+      window.__heroFrames.push({ top: Math.round(t.getBoundingClientRect().top * 10) / 10, opacity: getComputedStyle(view).opacity, shown, held });
     }
-    if (window.__heroFrames.length && !html.classList.contains("vt-boot-pending")) return;
+    if (window.__heroFrames.length && !html.classList.contains("vt-boot-pending") && ++after > 30) return;
     requestAnimationFrame(sample);
   };
   requestAnimationFrame(sample);
 };
-/** Frames drawn otherwise than the last one: faded, or the title elsewhere. */
-const unsteady = (frames) => frames.filter((f) => f.opacity !== "1" || Math.abs(f.top - frames[frames.length - 1].top) > 0.5);
+/** Frames drawn otherwise than the last one: faded, hidden, or the title elsewhere. */
+const unsteady = (frames) => frames.filter((f) => f.opacity !== "1" || !f.shown || Math.abs(f.top - frames[frames.length - 1].top) > 0.5);
+/**
+ * What fades in when the hold ends (html.vt-boot-reveal): the targets of the
+ * vt-boot-reveal animations over the first six frames after it.
+ */
+const revealWatch = () => {
+  window.__revealed = null;
+  let held = false;
+  let frames = 0;
+  const found = new Set();
+  const sample = () => {
+    const html = document.documentElement;
+    if (html && html.classList.contains("vt-boot-pending")) held = true;
+    else if (held) {
+      for (const a of document.getAnimations()) if (a.animationName === "vt-boot-reveal") found.add(a.effect.target.id || String(a.effect.target.className));
+      if (++frames >= 6) {
+        window.__revealed = [...found].sort();
+        return;
+      }
+    }
+    requestAnimationFrame(sample);
+  };
+  requestAnimationFrame(sample);
+};
+/** Every frame, until the app has started, in which the Spanish title is on screen under lang="en". */
+const langWatch = () => {
+  window.__spanishShown = [];
+  const sample = () => {
+    const t = document.getElementById("start-title");
+    if (t && document.documentElement.lang === "en" && getComputedStyle(t).visibility === "visible" && /Entrena/.test(t.textContent)) {
+      window.__spanishShown.push(Math.round(performance.now()));
+    }
+    if (!window.VTApp) requestAnimationFrame(sample);
+  };
+  requestAnimationFrame(sample);
+};
+/** Equal to within a pixel, rounding aside. */
+const near = (a, b) => Math.abs(a - b) <= 1;
 const heldNow = () => ({
   app: !!window.VTApp,
   main: getComputedStyle(document.querySelector("main")).visibility,
@@ -620,10 +666,16 @@ async function titlePainted(page) {
     return (await cdp.send("Page.captureScreenshot", { format: "png", clip })).data;
   };
   const shown = await shot();
-  await page.evaluate(() => (document.getElementById("start-title").style.visibility = "hidden"));
+  // frameWatch leaves out the frames this hides the title in on purpose
+  await page.evaluate(() => {
+    window.__probing = true;
+    document.getElementById("start-title").style.visibility = "hidden";
+  });
   await frame();
   const hidden = await shot();
   await page.evaluate(() => (document.getElementById("start-title").style.visibility = ""));
+  await frame();
+  await page.evaluate(() => (window.__probing = false));
   await cdp.detach();
   return shown !== hidden;
 }
@@ -776,9 +828,245 @@ test.describe("the first paint is the app's own home", () => {
       const now = await heroPixels(page);
       expect({ box: now.clip, same: now.data === pixels.data }, "the kicker and title are drawn exactly as they were: words, weight, colour, spacing, place").toEqual({ box: pixels.clip, same: true });
       const frames = await page.evaluate(() => window.__heroFrames);
-      expect(frames.length, "control: the hero's frames were seen").toBeGreaterThan(0);
-      expect(unsteady(frames), "from its first frame the hero is drawn as it stays: no fade, no rise").toEqual([]);
+      expect(frames.filter((f) => !f.held).length, "control: the hero's frames were seen, after the hold ended too").toBeGreaterThan(20);
+      expect(unsteady(frames), "from its first frame the hero is drawn as it stays: no fade, no rise, no blink as the app starts").toEqual([]);
       await expectStill(page);
+      await ctx.close();
+    });
+  }
+
+  /*
+   * Chromium's preload scanner stops at the page's CSP <meta>, so it found each
+   * body script only once the one before it had run: 53 round trips in a row,
+   * the app started after 11 s on a 4G phone (3.3 s on a desktop line), and
+   * the first load's hero stood alone for that long (review of PR #42, rt6).
+   * Correct: all of them are asked for together, from <head>. Each answer is
+   * held 600 ms here, so a script asked for only once another had arrived
+   * starts at least that much later than the first.
+   */
+  test("es 390px, this browser's first load asks for every script at once, not each once the one before it has run", async ({ browser }) => {
+    test.setTimeout(90000);
+    const { ctx, page } = await open(browser, { vp: PHONE, fresh: true });
+    await page.route("**/js/**", async (route) => {
+      await new Promise((r) => setTimeout(r, 600));
+      await route.continue();
+    });
+    await page.goto(BASE + "/", { waitUntil: "commit" });
+    await page.waitForFunction(() => !!window.VTApp && document.readyState !== "loading", null, { timeout: 60000, polling: 250 });
+    const asked = await page.evaluate(() => {
+      const run = new Set([...document.querySelectorAll("body script[src]")].map((el) => el.src));
+      return performance
+        .getEntriesByType("resource")
+        .filter((e) => run.has(e.name))
+        .map((e) => ({ file: e.name.replace(location.origin + "/", ""), start: Math.round(e.startTime) }));
+    });
+    expect(asked.length, "control: the body's scripts were fetched").toBeGreaterThanOrEqual(50);
+    const first = Math.min(...asked.map((a) => a.start));
+    expect(asked.filter((a) => a.start - first > 300), "none asked for after another had arrived").toEqual([]);
+    await ctx.close();
+  });
+
+  /*
+   * Where scrollbars take room (Windows, Linux, a Mac with a mouse) the held
+   * page, one screen tall, had none and the app's has one: everything centred
+   * moved 7.5 px sideways as the app started, the hero under the reader's eye
+   * on a first load, the header on every load (review of PR #42, ae2). The
+   * suite's browser hides its scrollbars, so this one is started with them.
+   */
+  for (const fresh of [true, false]) {
+    test(`es 1280px, ${fresh ? "this browser's first load" : "a later load"}, scrollbars that take room: nothing moves sideways as the app starts`, async ({}, testInfo) => {
+      const b = await chromium.launch({ executablePath: browserPath(testInfo), ignoreDefaultArgs: ["--hide-scrollbars"] });
+      try {
+        const { page } = await open(b, { vp: LAPTOP, fresh });
+        const lefts = () =>
+          page.evaluate(() => {
+            const left = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().left * 10) / 10;
+            return { brand: left(".app-header .brand"), hero: left("#start-kicker"), room: innerWidth - document.documentElement.clientWidth };
+          });
+        const { held, go } = await heldBack(page, "/");
+        expect(held.hero, `control: the hero is ${fresh ? "shown" : "held"}`).toBe(fresh ? "visible" : "hidden");
+        const before = await lefts();
+        go();
+        await settled(page);
+        const after = await lefts();
+        expect(after.room, "control: the app's page has a scrollbar, and it takes room").toBeGreaterThan(0);
+        const seen = (l) => (fresh ? { brand: l.brand, hero: l.hero } : { brand: l.brand });
+        expect(seen(after), "the header and the hero stay where they were").toEqual(seen(before));
+      } finally {
+        await b.close();
+      }
+    });
+  }
+
+  /*
+   * Under reduced motion every transition lasts 0.01 ms, and a change of the
+   * inherited visibility is drawn hidden in its first frame. When the hold
+   * ended the hero, shown until then by a rule of its own, turned visible
+   * through its ancestors one level per frame: it blinked out for 6-7 frames
+   * as the app started (review of PR #42, ae3). Nor does anything fade in there.
+   */
+  test("es 390px, reduced motion, this browser's first load: the hero does not blink out as the app starts, and nothing fades in", async ({ browser }) => {
+    const { ctx, page } = await open(browser, { vp: PHONE, fresh: true, reducedMotion: "reduce" });
+    await page.addInitScript(frameWatch);
+    await page.addInitScript(revealWatch);
+    const { held, go } = await heldBack(page, "/");
+    expect({ app: held.app, hero: held.hero }, "control: the hero shows while held").toEqual({ app: false, hero: "visible" });
+    go();
+    await settled(page);
+    const frames = await page.evaluate(() => window.__heroFrames);
+    expect(frames.filter((f) => !f.held).length, "control: frames after the hold ended were seen").toBeGreaterThan(20);
+    expect(unsteady(frames), "drawn as it stays, in every frame").toEqual([]);
+    expect(await page.evaluate(() => window.__revealed), "nothing fades in").toEqual([]);
+    await ctx.close();
+  });
+
+  /*
+   * When the app starts it replaces the hero's intro line with the first
+   * routine's question, under the words read until then: in one frame, it was
+   * a hard cut (review of PR #42, ae3). What it adds fades in (opacity only,
+   * 0.2 s); the kicker and the title, which do not change, do not.
+   */
+  test("es 390px, this browser's first load: what the app adds to the hero fades in under its words, which stay as they are", async ({ browser }) => {
+    const { ctx, page } = await open(browser, { vp: PHONE, fresh: true });
+    await page.addInitScript(revealWatch);
+    const { held, go } = await heldBack(page, "/");
+    expect(held.hero, "control: the hero shows while held").toBe("visible");
+    go();
+    await settled(page);
+    const revealed = await page.evaluate(() => window.__revealed);
+    expect(await page.evaluate(() => getComputedStyle(document.getElementById("track-pick")).display), "control: the app shows the first routine's question").not.toBe("none");
+    expect(revealed, "the question fades in").toContain("track-pick");
+    expect(revealed.filter((t) => /start-kicker|start-title/.test(t)), "the kicker and title do not").toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.classList.contains("vt-boot-reveal")), "and the moment is over").toBe(false);
+    await ctx.close();
+  });
+
+  /*
+   * A browser that keeps only the English choice (admin.html's language switch
+   * writes vt_lang alone) has none of the app's keys, so its first load shows
+   * the hero. The page is held for its English strings, and the hero's own
+   * rule showed it through the hidden body: the Spanish hero alone, under
+   * lang="en", for 0.7 s on a 4G phone (review of PR #42, ae4, rt6).
+   */
+  test("en 390px, this browser's first load with only the English choice stored: the hero shows once it is English, never in Spanish", async ({ browser }) => {
+    const { ctx, page } = await open(browser, { vp: PHONE, fresh: true, store: { vt_lang: "en" } });
+    await page.addInitScript(langWatch);
+    const { held, go } = await heldBack(page, "/", ["i18n.js", "app.js"]);
+    const lang = await page.evaluate(() => document.documentElement.lang);
+    expect({ app: held.app, lang }, "control: held for its English strings").toEqual({ app: false, lang: "en" });
+    expect(held.hero, "the Spanish hero is not shown").toBe("hidden");
+    go("i18n.js");
+    await page.waitForFunction(() => !!document.querySelector('script[src*="js/i18n-early.js"]')?.nextElementSibling);
+    const translated = await page.evaluate(heroNow);
+    expect(await page.evaluate(() => !!window.VTApp), "control: the strings have run, the app has not").toBe(false);
+    const title = translated.title.text.replace(/\s+/g, " ");
+    expect({ shown: translated.title.shown, title }, "shown once it is English, before the app has started").toEqual({ shown: true, title: "Train your voice 3 minutes a day." });
+    go();
+    await settled(page);
+    expect(words(await page.evaluate(heroNow)), "the app writes the same words").toEqual(words(translated));
+    expect(await page.evaluate(() => window.__spanishShown), "no frame showed the Spanish title under lang=en").toEqual([]);
+    await ctx.close();
+  });
+
+  /*
+   * The first load's hero is drawn without the view's entrance (fadeIn). Turned
+   * off for the page's life, the home view was the one view that never faded
+   * in again on a first visit (review of PR #42, ae1, ae3, rt6).
+   */
+  test("es 390px, this browser's first load: the home view fades in when it is opened again, like every view", async ({ browser }) => {
+    const { ctx, page } = await open(browser, { vp: PHONE, fresh: true });
+    await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
+    await settled(page);
+    expect(await page.evaluate(() => document.documentElement.classList.contains("vt-boot-hero")), "control: this browser's first load").toBe(true);
+    const entrance = (button, view) =>
+      page.evaluate(
+        async ([b, v]) => {
+          document.getElementById(b).click();
+          const names = new Set();
+          for (let i = 0; i < 12; i++) {
+            await new Promise((r) => requestAnimationFrame(r));
+            for (const a of document.getElementById(v).getAnimations()) names.add(a.animationName);
+          }
+          return [...names];
+        },
+        [button, view]
+      );
+    expect(await entrance("btn-plan", "view-plan"), "control: another view fades in").toContain("fadeIn");
+    expect(await entrance("btn-nav-home", "view-home"), "and so does the home view").toContain("fadeIn");
+    await ctx.close();
+  });
+
+  /*
+   * When the hold is let go before the app has started (a script stalled for
+   * eight seconds), the markup's home shows under the hero. The hero kept its
+   * held layout only while held: from 861 px its title grew and its column
+   * widened at the release, the other ways in appeared, and all of it changed
+   * back as the app started (layout shift 0.54 at 1280 px; review of PR #42,
+   * rt6). Correct: it is laid out once, until the app has started.
+   */
+  test("[L] es 1280px, this browser's first load whose early script stalls: the hero keeps its layout when the hold is let go before the app, and after", async ({ browser }) => {
+    test.setTimeout(60000);
+    const { ctx, page } = await open(browser, { vp: LAPTOP, fresh: true });
+    await page.route("**/js/exercises-data.js*", async (route) => {
+      await new Promise((r) => setTimeout(r, 11000));
+      await route.continue();
+    });
+    await page.goto(BASE + "/", { waitUntil: "commit" });
+    await page.waitForSelector(".app-footer", { state: "attached" });
+    await page.waitForTimeout(500);
+    const layout = async () => {
+      const h = await page.evaluate(heroNow);
+      return { size: h.title.size, width: h.title.width, top: h.title.top, otherWays: h.otherWays };
+    };
+    const same = (a, b) => a.size === b.size && a.otherWays === b.otherWays && near(a.width, b.width) && near(a.top, b.top);
+    const held = await page.evaluate(heldNow);
+    expect({ hero: held.hero, catalog: held.catalog }, "control: the hero shows, the rest is held").toEqual({ hero: "visible", catalog: "hidden" });
+    const before = await layout();
+    await page.waitForFunction(() => getComputedStyle(document.querySelector("main")).visibility === "visible", null, { timeout: 15000, polling: 100 });
+    expect(await page.evaluate(() => !!window.VTApp), "control: let go before the app has started").toBe(false);
+    const released = await layout();
+    expect(same(released, before), `laid out as it was when the hold is let go: ${JSON.stringify([before, released])}`).toBe(true);
+    await page.waitForFunction(() => !!window.VTApp && document.readyState !== "loading", null, { timeout: 20000 });
+    await page.waitForTimeout(800);
+    const started = await layout();
+    expect(same(started, before), `and as the app lays it out: ${JSON.stringify([before, started])}`).toBe(true);
+    await ctx.close();
+  });
+
+  /*
+   * The hero's held layout lasts until the app has started: js/boot-ready.js
+   * says so when the app has started, and the load event does when that
+   * script is missing. Neither, and it lasted the page's life: the other ways
+   * in stayed hidden, and the two columns stayed, on the home the app draws
+   * once there is a first practice (here: body.loop-first taken off).
+   */
+  for (const [what, block] of [
+    ["js/boot-ready.js missing, once the page has loaded", "**/js/boot-ready.js*"],
+    ["an image that never loads, once the app has started", "**/never-loads.png"]
+  ]) {
+    test(`es 1280px, this browser's first load with ${what}: the hero's layout is the app's to decide`, async ({ browser }) => {
+      const { ctx, page } = await open(browser, { vp: LAPTOP, fresh: true });
+      const image = block.endsWith(".png");
+      await page.route(block, (route) => (image ? undefined : route.abort("failed")));
+      if (image) {
+        await page.addInitScript(() => {
+          document.addEventListener("DOMContentLoaded", () => {
+            const img = new Image();
+            img.src = "/never-loads.png";
+            img.alt = "";
+            document.body.appendChild(img);
+          });
+        });
+      }
+      await page.goto(BASE + "/", { waitUntil: image ? "domcontentloaded" : "load" });
+      await page.waitForFunction(() => !!window.VTApp && document.readyState !== "loading");
+      await page.waitForTimeout(300);
+      if (image) expect(await page.evaluate(() => document.readyState), "control: the page has not finished loading").toBe("interactive");
+      const otherWays = () => page.evaluate(() => getComputedStyle(document.getElementById("more-ways")).display);
+      expect(await page.evaluate(() => document.body.classList.contains("loop-first")), "control: the app drew the home for someone new").toBe(true);
+      expect(await otherWays(), "control: which folds the other ways in").toBe("none");
+      await page.evaluate(() => document.body.classList.remove("loop-first"));
+      expect(await otherWays(), "they show on the home it draws once there is a first practice").not.toBe("none");
       await ctx.close();
     });
   }
@@ -802,7 +1090,16 @@ test.describe("the first paint is the app's own home", () => {
     await ctx.close();
   });
 
-  test("es 390px, site data blocked: the first load shows the hero (nothing can be stored), a reload does not (the app goes back to the place it kept)", async ({ browser }) => {
+  /*
+   * With site data blocked nothing is stored, so every load is drawn for
+   * someone new, but the app keeps the place on the page in the history entry
+   * and goes back to it on a reload: below the top, the hero would only
+   * flash. A reload at the top is drawn exactly as a first load, so it shows
+   * the hero too; held whole, it showed nothing below the header until the app
+   * had started (review of PR #42, rt6).
+   */
+  test("es 390px, site data blocked: the first load shows the hero (nothing can be stored); a reload below the top is held, as the app goes back there, a reload at the top is not", async ({ browser }) => {
+    test.setTimeout(60000);
     const { ctx, page } = await open(browser, { vp: PHONE, blocked: true });
     const first = await heldBack(page, "/");
     expect(first.held.app, "control: the app has not started yet").toBe(false);
@@ -810,11 +1107,20 @@ test.describe("the first paint is the app's own home", () => {
     first.go();
     await settled(page);
     expect(await page.evaluate(() => { try { localStorage.setItem("vt_x", "1"); return "stored"; } catch { return "blocked"; } }), "control: the page's own storage is the in-memory one").toBe("stored");
-    await page.unroute("**/js/app.js*");
-    const again = await heldBack(page, null);
-    expect(again.held.app, "control: the app has not started yet").toBe(false);
-    expect(again.held.hero, "a reload is held whole").toBe("hidden");
-    again.go();
+    const reloadAt = async (y) => {
+      await page.evaluate((to) => window.scrollTo({ top: to, behavior: "instant" }), y);
+      await expect.poll(() => page.evaluate(() => history.state?.y ?? 0), { message: `control: the app kept the place (${y})` }).toBe(await page.evaluate(() => Math.round(scrollY)));
+      await page.unroute("**/js/app.js*");
+      const again = await heldBack(page, null);
+      expect(again.held.app, "control: the app has not started yet").toBe(false);
+      again.go();
+      await settled(page);
+      return again.held.hero;
+    };
+    expect(await reloadAt(600), "a reload below the top is held whole").toBe("hidden");
+    expect(await page.evaluate(() => scrollY), "control: and the app went back there").toBeGreaterThan(500);
+    expect(await reloadAt(0), "a reload at the top shows the hero, which the app draws there").toBe("visible");
+    expect(await page.evaluate(() => ({ y: scrollY, first: document.body.classList.contains("loop-first") })), "control: the app drew it, at the top").toEqual({ y: 0, first: true });
     await ctx.close();
   });
 
@@ -848,13 +1154,14 @@ test.describe("the first paint is the app's own home", () => {
   }
 
   /*
-   * A slow phone: the scripts arrive one by one (Chromium stops looking ahead
-   * after the page's CSP <meta>), 11-14 s on a 4G or Lighthouse mobile
+   * A slow line: the scripts arrive one by one, as they did on every phone
+   * before index.html asked for them all at once (Chromium stops looking
+   * ahead after the page's CSP <meta>): 11-14 s on a 4G or Lighthouse mobile
    * profile. Let go eight seconds after the start, the markup's home showed
    * under the hero with its buttons not wired, and jumped when the app
    * replaced it (layout shift 0.11 on a phone, 0.27-0.70 from 820 px; review
    * of PR #42). Correct: held while the scripts keep arriving, let go when
-   * nothing new has come for eight seconds (the next test).
+   * no new one has come for eight seconds (the next tests).
    */
   test("[L] es 390px, a first load whose scripts arrive one by one for twelve seconds: held until the app has started, and nothing moves", async ({ browser }) => {
     test.setTimeout(60000);
@@ -915,6 +1222,47 @@ test.describe("the first paint is the app's own home", () => {
     expect(early.ready, "control: the page is still being read").toBe("loading");
     expect(early.main, "held while the app could still start").toBe("hidden");
     await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector("main")).visibility), { timeout: 10000, intervals: [250] }).toBe("visible");
+    await ctx.close();
+  });
+
+  /*
+   * The last resort counts the parser's progress, a new <script>, on the
+   * page's own clock. Counting any edit of the page, one whose app never
+   * arrives was held the whole twenty seconds while anything else edited it
+   * every few seconds (an extension, a translator); timed by Date.now(), a
+   * system clock set back during the load held it for good (review of PR #42,
+   * rt6).
+   */
+  test("[L] released eight seconds after the last script was read, however often the page is otherwise edited and whatever the system clock does", async ({ browser }) => {
+    test.setTimeout(60000);
+    const { ctx, page } = await open(browser, { vp: LAPTOP, lang: "es" });
+    await page.addInitScript(() => {
+      window.__lastScript = 0;
+      window.__released = 0;
+      new MutationObserver((records) => {
+        for (const r of records) if ([...r.addedNodes].some((n) => n.nodeName === "SCRIPT")) window.__lastScript = performance.now();
+      }).observe(document, { childList: true, subtree: true });
+      new MutationObserver(() => {
+        const html = document.documentElement;
+        if (html && !window.__released && window.__lastScript && !html.classList.contains("vt-boot-pending")) window.__released = performance.now();
+      }).observe(document, { subtree: true, attributes: true, attributeFilter: ["class"] });
+      // Something else edits the page every second
+      setInterval(() => {
+        const s = document.createElement("span");
+        (document.body || document.documentElement).appendChild(s);
+        s.remove();
+      }, 1000);
+      // and the system clock is set back an hour, 1.5 s in
+      const real = Date.now;
+      setTimeout(() => (Date.now = () => real() - 3600000), 1500);
+    });
+    await page.route("**/js/app.js*", () => {});
+    await page.goto(BASE + "/", { waitUntil: "commit" });
+    await page.waitForFunction(() => window.__released > 0, null, { timeout: 30000, polling: 250 });
+    const t = await page.evaluate(() => ({ last: Math.round(window.__lastScript), released: Math.round(window.__released), app: !!window.VTApp, edited: document.readyState }));
+    expect(t.app, "control: the app never arrived").toBe(false);
+    expect(t.released - t.last, `let go eight seconds after the last script (${t.last} -> ${t.released} ms)`).toBeGreaterThanOrEqual(7500);
+    expect(t.released - t.last, `not later (${t.last} -> ${t.released} ms)`).toBeLessThan(9500);
     await ctx.close();
   });
 

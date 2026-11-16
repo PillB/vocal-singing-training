@@ -5104,13 +5104,14 @@ body.loop-first #start-steps li:first-child {
    still starts in the first screen. */
 @media (min-width: 861px) {
   /* and the first load's hero, shown before the app has started, is already
-     laid out this way (html.vt-boot-hero, js/boot-head.js) */
+     laid out this way (html.vt-boot-hero, js/boot-head.js), until the app has
+     started (html.vt-boot-ready, js/boot-ready.js) */
   body.loop-first #start-panel.start-panel,
-  html.vt-boot-pending.vt-boot-hero #start-panel.start-panel {
+  html.vt-boot-hero:not(.vt-boot-ready) #start-panel.start-panel {
     grid-template-columns: minmax(0, 2.3fr) minmax(0, 1fr);
   }
   body.loop-first #start-panel .start-title,
-  html.vt-boot-pending.vt-boot-hero #start-panel .start-title {
+  html.vt-boot-hero:not(.vt-boot-ready) #start-panel .start-title {
     font-size: clamp(1.3rem, 2.3vw, 1.6rem);
   }
 }
@@ -8321,31 +8322,71 @@ html.vt-i18n-pending body {
 }
 /* Everything below the header is held until the app has drawn it
    (js/boot-head.js adds the class, js/boot-ready.js removes it once the app
-   has started; on load, or after eight seconds, at the most). The markup's own
-   home, painted first, was replaced a moment later and the page under it
-   jumped. The header shows at once: the app does not redraw it. */
+   has started; on load, or once no new script has been read for eight
+   seconds, twenty at the most). The markup's own home, painted first, was
+   replaced a moment later and the page under it jumped. The header shows at
+   once: the app does not redraw it. */
 html.vt-boot-pending .main,
 html.vt-boot-pending .app-footer {
   visibility: hidden;
+}
+/* While the page is held it has its scrollbar where scrollbars take room
+   (Windows, Linux, a Mac with a mouse): the held page is one screen tall and
+   had none, the app's is taller and gets one, and everything centred under
+   it, the header and the hero being read, moved 7.5 px sideways as it came.
+   Only while held: kept for good, every view that fits the window would show
+   an empty track. Not scrollbar-gutter: stable, which keeps the same room
+   with no track, because Chromium keeps it too where its scrollbars are
+   hidden and take none (as in its headless test runs), and there the page
+   moved 7.5 px the other way. */
+html.vt-boot-pending {
+  overflow-y: scroll;
 }
 /* The first load's exception (html.vt-boot-hero, js/boot-head.js): nothing is
    cached, so the app starts seconds later. The hero's words show at once, in
    the place the app keeps them (its title is the one the app writes for
    someone new, first.titleMarkup); everything below it, which moves when the
-   app fills the hero, still waits. */
-html.vt-boot-pending.vt-boot-hero #start-panel {
+   app fills the hero, still waits.
+   For the page's life, not only while held: when the hold ends its ancestors
+   turn visible, and under reduced motion each steps through a 0.01 ms
+   transition that is hidden in its first frame, so the hero blinked out for
+   6-7 frames as the app started. Not while the page waits for its English
+   strings: shown through the hidden body, the hero was the Spanish one. */
+html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {
   visibility: visible;
 }
 /* The other ways in, buttons that do nothing before the app has started and
    that it folds away for someone new (js/daily-loop.js). The intro line does
-   show, and gives way to the first routine when the app has started. */
-html.vt-boot-pending.vt-boot-hero #more-ways {
+   show, and gives way to the first routine when the app has started. Until
+   then (html.vt-boot-ready, js/boot-ready.js), even when the hold was let go
+   before because a script stalled: the hero is laid out once, not again for
+   the markup and then for the app. */
+html.vt-boot-hero:not(.vt-boot-ready) #more-ways {
   display: none;
 }
 /* The first load's hero is painted as it stays. The view's entrance (fadeIn:
    0.22 s, rising 6 px) would make it rise under the reader's eye and delay its
-   paint. Off for that page's life, not only during the hold: changed when the
-   hold ends, the animation would start again over the words being read. */
-html.vt-boot-hero #view-home {
-  animation: none;
+   paint. A 0 s entrance while held, not animation: none: a new duration
+   updates the running animation, long over when the hold ends, where a new
+   name would start it again over the words being read; so the home view
+   still fades in when it is opened again. !important against the
+   reduced-motion block's 0.01 ms, which is drawn at the first keyframe. */
+html.vt-boot-pending.vt-boot-hero #view-home {
+  animation-duration: 0s !important;
+}
+/* When the app starts, what it adds to the hero fades in (0.2 s, opacity only,
+   so nothing moves) under the kicker and title, which stay as they are, where
+   it replaced the line under them in one frame (js/boot-ready.js marks the
+   moment). Not the catalog: from 861 px its line is the largest text, and a
+   fade held back its paint (LCP) by 0.28 s. None under reduced motion. */
+@keyframes vt-boot-reveal {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  html.vt-boot-reveal #start-panel .start-main > :not(#start-kicker, #start-title),
+  html.vt-boot-reveal #start-panel > :not(.start-main) {
+    animation: vt-boot-reveal 0.2s cubic-bezier(0, 0, 0.2, 1);
+  }
 }

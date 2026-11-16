@@ -20,8 +20,8 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
-    <script src="js/boot-head.js?v=20261116c"></script>
-    <link rel="stylesheet" href="css/styles.css?v=20261116c" />
+    <script src="js/boot-head.js?v=20261116e"></script>
+    <link rel="stylesheet" href="css/styles.css?v=20261116e" />
     <link rel="stylesheet" href="css/exercise-viz.css?v=20261002a" />
     <link rel="stylesheet" href="css/session-sets.css?v=20261112a" />
     <link rel="stylesheet" href="css/scenes/speech.css?v=20261002a" />
@@ -37,6 +37,70 @@
          before the first frame. A file, because the policy above allows no
          inline script but the one flag. -->
     <script src="js/site-version.js?v=20261113a"></script>
+    <!-- The scripts at the end of the body, asked for now and all at once.
+         Chromium looks no further ahead than the CSP meta tag above (its
+         preload scanner stops there), so it found each one only once the one
+         before it had run: one round trip each, 53 in a row, and the app
+         started after 11 s on a 4G phone (3.3 s on a desktop line). Asked for
+         here they arrive together, and the app starts after about 2.9 s (and
+         1.2 s). After site-version.js, so they never compete with the
+         stylesheets the first paint waits on. Same address as each script tag,
+         ?v= included, or the browser fetches it twice: npm run assets:bump
+         rewrites both, and tests/node/boot-preload.test.mjs checks the two
+         lists match. -->
+    <link rel="preload" href="js/focus-trap.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/i18n.js?v=20261113b" as="script" />
+    <link rel="preload" href="js/i18n-early.js?v=20261112a" as="script" />
+    <link rel="preload" href="js/exercises-data.js?v=20261112b" as="script" />
+    <link rel="preload" href="js/exercises-locale-es.js?v=20261112b" as="script" />
+    <link rel="preload" href="js/practice-profiles.js?v=20261112b" as="script" />
+    <link rel="preload" href="js/storage.js?v=20261113b" as="script" />
+    <link rel="preload" href="js/practice-days.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/billing-config.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/license.js?v=20261103d" as="script" />
+    <link rel="preload" href="js/billing.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/ads-config.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/ads.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/value-pulse.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/region-gate.js?v=20261112b" as="script" />
+    <link rel="preload" href="js/analytics.js?v=20261103a" as="script" />
+    <link rel="preload" href="js/experiments-config.js?v=20261112a" as="script" />
+    <link rel="preload" href="js/experiments.js?v=20261112a" as="script" />
+    <link rel="preload" href="js/privacy-switch.js?v=20261111a" as="script" />
+    <link rel="preload" href="js/reports.js?v=20261113d" as="script" />
+    <link rel="preload" href="js/reminders.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/auth-users.generated.js?v=20261006a" as="script" />
+    <link rel="preload" href="js/auth.js?v=20261006a" as="script" />
+    <link rel="preload" href="js/account.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/sync.js?v=20261113c" as="script" />
+    <link rel="preload" href="js/piano.js?v=20261112b" as="script" />
+    <link rel="preload" href="js/range-adapter.js?v=20261006a" as="script" />
+    <link rel="preload" href="js/pitch-visualizer.js?v=20261112c" as="script" />
+    <link rel="preload" href="js/pitch-game.js?v=20261002a" as="script" />
+    <link rel="preload" href="js/practice-engine.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/voice-features.js?v=20261112c" as="script" />
+    <link rel="preload" href="js/exercise-viz.js?v=20261112b" as="script" />
+    <link rel="preload" href="js/scenes/speech.js?v=20261005g" as="script" />
+    <link rel="preload" href="js/scenes/speech-shape.js?v=20261007a" as="script" />
+    <link rel="preload" href="js/scenes/volume.js?v=20261112b" as="script" />
+    <link rel="preload" href="js/scenes/guided.js?v=20261103c" as="script" />
+    <link rel="preload" href="js/scenes/voice-drill.js?v=20261111b" as="script" />
+    <link rel="preload" href="js/scenes/breath.js?v=20261002a" as="script" />
+    <link rel="preload" href="js/scenes/pitch.js?v=20261112b" as="script" />
+    <link rel="preload" href="js/scenes/dynamics.js?v=20261102a" as="script" />
+    <link rel="preload" href="js/scenes/resonance.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/practice-modes.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/recorder.js?v=20261102a" as="script" />
+    <link rel="preload" href="js/metrics.js?v=20260924c" as="script" />
+    <link rel="preload" href="js/session.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/session-sets.js?v=20261112a" as="script" />
+    <link rel="preload" href="js/daily-loop.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/site-layout.js?v=20261111a" as="script" />
+    <link rel="preload" href="js/tour.js?v=20261113a" as="script" />
+    <link rel="preload" href="js/app.js?v=20261113e" as="script" />
+    <link rel="preload" href="js/audio-recovery.js?v=20261103c" as="script" />
+    <link rel="preload" href="js/wake-lock.js?v=20261112b" as="script" />
+    <link rel="preload" href="js/boot-ready.js?v=20261116a" as="script" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>" />
   </head>
   <body>
@@ -1306,6 +1370,6 @@
     <script src="js/app.js?v=20261113e"></script>
     <script src="js/audio-recovery.js?v=20261103c"></script>
     <script src="js/wake-lock.js?v=20261112b"></script>
-    <script src="js/boot-ready.js?v=20261113a"></script>
+    <script src="js/boot-ready.js?v=20261116a"></script>
   </body>
 </html>

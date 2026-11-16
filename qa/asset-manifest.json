@@ -48,8 +48,8 @@
     "sha": "977e5ed0d3e4e59b"
   },
   "css/site-version.css": {
-    "v": "20261111c",
-    "sha": "5a4bc220a59822b6"
+    "v": "20261115b",
+    "sha": "2de54c5271a4af5f"
   },
   "css/styles.css": {
     "v": "20261113c",
@@ -80,8 +80,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261113e",
-    "sha": "d4a73435307aa4ed"
+    "v": "20261115a",
+    "sha": "4767bc6cb5fb9004"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -120,12 +120,12 @@
     "sha": "414c0bf8b52829e1"
   },
   "js/exercises-data.js": {
-    "v": "20261112b",
-    "sha": "271f7c866673c10e"
+    "v": "20261115a",
+    "sha": "e2efb0e80e32b3ce"
   },
   "js/exercises-locale-es.js": {
-    "v": "20261112b",
-    "sha": "d5f1af776604f993"
+    "v": "20261115a",
+    "sha": "426c85def2d1e50a"
   },
   "js/experiments-config.js": {
     "v": "20261112a",
@@ -244,8 +244,8 @@
     "sha": "ebfbe0581056b2fa"
   },
   "js/session-sets.js": {
-    "v": "20261112a",
-    "sha": "7ffb97202769e02b"
+    "v": "20261115a",
+    "sha": "7f1f8dc95bf9aa3f"
   },
   "js/session.js": {
     "v": "20261113a",

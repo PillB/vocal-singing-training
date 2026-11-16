@@ -73,7 +73,7 @@ export const EVENTS_IP_RATE_LIMIT = [3000, 3600];
 export const EXPOSURE_IP_CAP = [100, 86400];
 
 /**
- * Events stored per deployment per rolling day, so counting cannot starve the
+ * Events stored per deployment per UTC day, so counting cannot starve the
  * thing people actually came for.
  *
  * D1's free plan refuses *every* query for the rest of the UTC day once 100,000
@@ -91,8 +91,11 @@ export const EXPOSURE_IP_CAP = [100, 86400];
  * 10,000 events leaves about 40,000 rows a day for the account layer, which is
  * on the order of 500 sign-ins with their progress writes. A refused call writes
  * nothing (see `hitRateLimit`), so the cap cannot spend the budget it protects.
- * The window is rolling rather than aligned to 00:00 UTC, which is the safe
- * direction: it never allows more than the cap inside any 24 hours.
+ * The window is aligned to 00:00 UTC (`peekRateLimit` starts every window at a
+ * multiple of its length), which is the day D1's allowance resets on, so the
+ * cap holds per day of that allowance. Across midnight it can admit up to
+ * twice the cap inside 24 hours, one day's worth on each side; it is not a
+ * rolling window.
  *
  * `EVENTS_DAILY_CAP` in the environment overrides it, which is what a deploy on
  * the $5 plan wants: there the same ceiling is 500 times higher.
@@ -102,7 +105,7 @@ export const EVENTS_DAILY_CAP = [10000, 86400];
 /**
  * The cap this deployment runs under.
  * @param {Object} env Worker env bindings.
- * @returns {number} Events per rolling day.
+ * @returns {number} Events per UTC day.
  */
 export function eventsDailyCap(env) {
   const raw = Number(env && env.EVENTS_DAILY_CAP);

@@ -57,3 +57,27 @@ import "./split-stripe-mp.test.mjs";
 import "./split-creem.test.mjs";
 import "./split-routes.test.mjs";
 import "./split-reports.test.mjs";
+// The payment ledger in D1: one transaction per webhook, every race forced by
+// a barrier and checked against the KV store it replaced.
+import "./ledger.test.mjs";
+// The account layer's writes against a worker stopped half way and a second
+// request landing in between: trial, gift codes, revokes, links, sign-in, sweep.
+import "./d1-atomicity.test.mjs";
+// Every call out (email, Google's keys) carries a deadline, so a provider
+// that hangs cannot hold a sign-in open.
+import "./outbound-deadlines.test.mjs";
+// The ledger's edges: validation chunks and D1's parameter limit, TTLs,
+// expired rows and tombstones, and the backoff between attempts.
+import "./ledger-boundaries.test.mjs";
+// Every rail (Stripe, Creem, Mercado Pago) on the D1 ledger while KV refuses
+// writes, every route that reads what they wrote, and the health flag's copy in KV.
+import "./d1-rails.test.mjs";
+// Gift codes, grants and the trial at their edges: one code among several, a
+// race mid-write, a long note, a D1 error.
+import "./grants-edges.test.mjs";
+// Sign-in through the router: refused codes write nothing, the fifth try,
+// two tabs, failed reads, session length, and what the admin sweep answers.
+import "./sign-in-edges.test.mjs";
+// Housekeeping: what the sweep keeps, how much one run does, the schema memo,
+// and the deadline each call out really gets.
+import "./housekeeping-edges.test.mjs";

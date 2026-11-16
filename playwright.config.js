@@ -79,6 +79,11 @@ module.exports = {
       testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call)\.spec\.js/
     },
     {
+      name: "webkit-layout",
+      use: { browserName: "webkit" },
+      testMatch: /(site-version|site-version-devices|touch-hover)\.spec\.js/
+    },
+    {
       name: "mobile-chrome",
       use: {
         browserName: "chromium",
@@ -98,7 +103,11 @@ module.exports = {
   // The second reporter fails the run on a skipped test nobody reviewed (QA-57): a skip is reported as a success
   reporter: [["list"], ["./qa/no-skips-reporter.cjs"]],
   webServer: {
-    command: testPort === 8765 ? "npm run serve" : `python3 -m http.server ${testPort}`,
+    // GitHub macOS Python can spend ~35s in getfqdn between bind/listen.
+    // Avoid that lookup for this loopback fixture (runner-images#14409).
+    command: process.platform === "darwin"
+      ? `python3 -c "import socket, runpy; socket.getfqdn = lambda name='': name; runpy.run_module('http.server', run_name='__main__')" ${testPort} --bind 127.0.0.1`
+      : testPort === 8765 ? "npm run serve" : `python3 -m http.server ${testPort}`,
     url: `http://127.0.0.1:${testPort}`,
     reuseExistingServer: !process.env.CI,
     timeout: 30000

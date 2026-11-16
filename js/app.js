@@ -945,6 +945,10 @@
         stage.style.getPropertyValue("--rail-t") !== t || stage.style.getPropertyValue("--rail-h") !== b;
       stage.style.setProperty("--rail-t", t);
       stage.style.setProperty("--rail-h", b);
+      // Give optional guide rows their chance to fold before judging whether
+      // the picture needs more space. Measuring first grew a 433px stage to
+      // 448px on a 560px screen, although folding the guide freed that space.
+      fitStageGuide(); // release optional guide rows before measuring the picture
       const grew = growStageForContent(stage, Math.ceil(railBottom) + 4, clear);
       return moved || grew;
     } catch {

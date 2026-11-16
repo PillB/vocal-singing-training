@@ -28,6 +28,60 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  safari-layout:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install webkit
+      - name: macOS WebKit design selection and device layouts
+        run: npx playwright test --project=webkit-layout --workers=2 --reporter=line --global-timeout=600000
+      - name: Native select regression must be detected on macOS
+        env:
+          # Isolate this nested runner from the preceding suite's server.
+          VT_TEST_PORT: '8766'
+          DEBUG: 'pw:webserver'
+        run: bash qa/check-safari-selector.sh
+      - name: Preserve macOS WebKit diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safari-layout-failures
+          path: test-results/
+          if-no-files-found: ignore
+
+  sweep-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Below-fold pointer and short-screen regressions
+        run: xvfb-run -a npx playwright test tests/sweep-reachability.spec.js --project=chromium --workers=1 --reporter=line --global-timeout=300000
+      - name: Preserve focused sweep diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweep-regression-failures
+          path: test-results/
+          if-no-files-found: ignore
+
   contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -192,8 +246,28 @@ jobs:
         include:
           - group: geometry
             specs: "tests/exercise-ui-forensics.spec.js"
-          - group: voice-and-live
-            specs: "tests/exercise-live-forensics.spec.js tests/headed-exercise-forensics.spec.js"
+          - group: voice-live
+            specs: "tests/exercise-live-forensics.spec.js"
+          # All 52 exercises in every format, one format per job. The combined
+          # voice job ran past 80 minutes before reaching its last format.
+          - group: voice-desktop
+            specs: "tests/headed-exercise-forensics.spec.js"
+            formats: "desktop"
+          - group: voice-mobile
+            specs: "tests/headed-exercise-forensics.spec.js"
+            formats: "mobile"
+          - group: voice-landscape
+            specs: "tests/headed-exercise-forensics.spec.js"
+            formats: "mobile-land"
+          - group: voice-tablet
+            specs: "tests/headed-exercise-forensics.spec.js"
+            formats: "tablet"
+          - group: voice-short
+            specs: "tests/headed-exercise-forensics.spec.js"
+            formats: "short"
+          - group: voice-fullscreen
+            specs: "tests/headed-exercise-forensics.spec.js"
+            formats: "fullscreen"
           - group: click
             specs: "tests/click-ui-formats.spec.js tests/click-ui-live-log.spec.js tests/headed-formats-clicks.spec.js"
           - group: fullscreen
@@ -202,6 +276,7 @@ jobs:
       CI: '1'
       MIC_HELP: '0'
       SLOWMO: '5'
+      FORENSICS_FORMATS: ${{ matrix.formats }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -250,7 +325,7 @@ jobs:
       MIC_HELP: '0'
       SLOWMO: '5'
       CLICK_UI_IDS: 'v1-diction'
-      FULLSCREEN_IDS: 'v1-diction'
+      FULLSCREEN_IDS: 'v1-diction,s2-solfege-chords'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -49,7 +49,7 @@ jobs:
           # Isolate this nested runner from the preceding suite's server.
           VT_TEST_PORT: '8766'
           DEBUG: 'pw:webserver'
-        run: node qa/mutate.mjs safari-layout
+        run: bash qa/check-safari-selector.sh
       - name: Preserve macOS WebKit diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

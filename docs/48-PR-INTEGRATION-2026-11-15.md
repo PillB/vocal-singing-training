@@ -109,3 +109,18 @@ any selector mutation ran. Give that runner its own existing configurable port
 The baseline must still pass before the original CSS rule can be judged;
 no timeout, skip or layout threshold is relaxed. The earlier nightly run can
 continue because its application tree and sweep definitions are unchanged.
+
+Changing the port did not fix the Mac nested runner: diagnostics show its
+Python process starts but HTTP readiness changes from refused to timed out.
+The direct Playwright command again passed all 98 cases. Run SL1 directly from
+the CI shell too, instead of under the synchronous Node mutation subprocess.
+The [Node child-process contract](https://nodejs.org/api/child_process.html#synchronous-process-creation)
+explains that synchronous execution blocks the parent; the precise Mac
+network/process interaction remains unproven. The dedicated shell check uses
+the same canonical SL1 CSS mutation, restores the file on exit, first requires
+a clean baseline, and accepts a kill only when both designs report the measured
+selector-size assertion. Empty reports, unrelated errors, server timeouts and
+browser failures are explicitly rejected by its result classifier. This adds
+a small dedicated runner but prevents infrastructure errors masquerading as
+regression detection. Playwright's [server readiness contract](https://playwright.dev/docs/test-webserver)
+is retained, with the same timeout.

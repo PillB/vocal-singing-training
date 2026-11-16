@@ -81,18 +81,25 @@
     }
   });
 
+  /** Written by the guide, terms and privacy pages too: no sign that the app has run here */
+  var PAGE_KEYS = { vt_site_version_v1: 1, vt_analytics_v1: 1, vt_analytics_optout_v1: 1, vt_eu_consent_v1: 1 };
+
   /**
-   * This browser's first load of the home: nothing of the site's in storage
-   * (the first load writes several vt_ keys) and no address for another view,
-   * where the hero would only flash. The scripts are not cached yet, which is
-   * seconds on a phone, and the app draws the home for someone new. Blocked
-   * storage counts too: nothing is stored, so the app draws the same.
+   * This browser's first load of the app: none of the app's own vt_ keys in
+   * storage (its first load writes several), so its scripts are not cached,
+   * which is seconds on a phone, and it draws the home for someone new.
+   * Arriving from the guide counts: the guide caches none of the app's
+   * scripts. Blocked storage counts too: nothing is stored, so the app draws
+   * the same. Not with an address (another view, or a place on the home the
+   * app scrolls to) nor with an experiment arm forced by ?ab_..., where the
+   * app draws something else.
    */
   function firstLoad() {
-    if (/^#(plan|historial|ejercicio\/)/.test(location.hash)) return false;
+    if (location.hash || /[?&]ab_/.test(location.search)) return false;
     try {
       for (var i = 0; i < localStorage.length; i++) {
-        if (String(localStorage.key(i)).indexOf("vt_") === 0) return false;
+        var key = String(localStorage.key(i));
+        if (key.indexOf("vt_") === 0 && !PAGE_KEYS[key]) return false;
       }
       return true;
     } catch (e) {

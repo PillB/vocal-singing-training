@@ -124,3 +124,16 @@ browser failures are explicitly rejected by its result classifier. This adds
 a small dedicated runner but prevents infrastructure errors masquerading as
 regression detection. Playwright's [server readiness contract](https://playwright.dev/docs/test-webserver)
 is retained, with the same timeout.
+
+The direct-shell baseline also timed out, disproving synchronous nesting as
+the cause. [GitHub runner-images #14409](https://github.com/actions/runner-images/issues/14409)
+provides the matching confirmed diagnosis: Python's `HTTPServer.server_bind`
+calls `socket.getfqdn()` between bind and listen; macOS local-network privacy
+can stall that lookup about 35 seconds. Our readiness limit is 30 seconds.
+Use the runner team's lookup-free `http.server` invocation on Darwin and bind
+only to 127.0.0.1. Linux startup stays unchanged. Keep the stronger selector
+failure classifier and baseline restoration introduced during diagnosis;
+the timeout remains 30 seconds. The bypass affects only the local test server's
+hostname metadata; it does not alter browser DNS, application networking or
+production code. A returning hostname lookup was observed red in three Mac
+baselines, while the application layout suite repeatedly passed all 98 cases.

@@ -114,8 +114,8 @@ export const MUTANTS = {
   "safari-layout": [{
     name: "SL1 macOS native select sizing overrides the 44px touch target",
     file: "css/site-version.css",
-    from: "  -webkit-appearance: none;\n  appearance: none;\n",
-    to: "",
+    from: ".site-version-select {\n  /* macOS WebKit's native popup can override min-height with a 22px bezel.\n     Keep the native select behaviour, but draw its closed control ourselves. */\n  -webkit-appearance: none;\n  appearance: none;\n  min-height: var(--min-tap, 44px);\n  max-width: 100%;\n  font-weight: 650;\n  padding: 0.4rem 2rem 0.4rem 0.65rem;\n  border: 1px solid var(--border);\n  border-radius: 8px;\n  background-color: var(--bg, #0c1118);\n  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);\n  background-position: calc(100% - 1rem) 50%, calc(100% - 0.7rem) 50%;\n  background-size: 0.3rem 0.3rem;\n  background-repeat: no-repeat;\n}",
+    to: ".site-version-select {\n  min-height: var(--min-tap, 44px);\n  max-width: 100%;\n  font-weight: 650;\n}",
     cmd: [process.execPath, "node_modules/@playwright/test/cli.js", "test", "tests/site-version-devices.spec.js", "--project=webkit-layout", "--workers=1", "--reporter=line", "-g", "iPhone 12-16"]
   }],
   nightly: [

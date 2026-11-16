@@ -10,7 +10,7 @@ run [43721497915](https://github.com/PillB/vocal-singing-training/actions/runs/4
 | Voice/live job | Stopped after 4,800 seconds before all formats completed | Two large serial specs shared one budget. Run the live spec alone and each of the six headed formats in its own job, preserving all 52 exercises per format. |
 | Fullscreen solfège metrics | `btn-toggle-metrics` reported `hit_miss`, top element null | The sweep scrolled the target into view, then immediately called `fit()`, which scrolls back to the top. A shared pointer helper performs a trial action to scroll and check actionability, then verifies the real hit target and clicks with the mouse, without resetting scroll. |
 | Short-screen diction | Stage bottom 566.7 px against a 560 px viewport | CI reproduced this after #40: a fitted 433 px stage grew to 448 px while the optional guide still occupied 115 px. Fit the guide before testing whether picture content needs more stage height. Keep both screen bounds and picture clipping as hard assertions. |
-| macOS WebKit design selector | Claude measured 119×22 px instead of the 44 px touch target | The selector still used native appearance. Draw the closed select with CSS, including its arrow, while keeping native selection and keyboard behaviour. A dedicated macOS WebKit job runs both designs across all 30 device sizes and the design-selection suite. SL1 restores native appearance and must be caught on macOS. |
+| macOS WebKit design selector | Claude measured 119×22 px instead of the 44 px touch target | The selector still used native appearance. Draw the closed select with CSS, including its arrow, while keeping native selection and keyboard behaviour. A dedicated macOS WebKit job runs both designs across all 30 device sizes and the design-selection suite. SL1 restores the original native-select CSS rule and must be caught on macOS. |
 | Layout-suite authentication noise | Intermittent WebKit console errors from the live worker rejecting localhost | Stub the authentication-methods response at the network boundary for these layout tests. Live CORS is a separate contract; these layout cases no longer depend on a production service. |
 
 Playwright's [actionability contract](https://playwright.dev/docs/actionability)
@@ -86,3 +86,18 @@ real-device verification remain separate.
 The selector has a CSS arrow and border in ordinary colour mode; its open picker
 and keyboard selection remain native. The Mac job adds runner time and covers
 desktop macOS WebKit at device viewports, not physical iPhones or Safari's app UI.
+
+## Follow-up CI findings
+
+The first Mac run passed 96 of 98 layout cases, including all device sizes.
+Two existing swipe cases failed before reaching their assertions because
+macOS WebKit rejects construction of `Touch`. The helper now dispatches
+portable synthetic DOM events with the touch records consumed by the real
+listener. Its direction, distance, diagonal and design-A assertions remain.
+This follows the [Touch constructor compatibility limitation](https://developer.mozilla.org/en-US/docs/Web/API/Touch/Touch)
+and the [synthetic Event API](https://developer.mozilla.org/en-US/docs/Web/API/Event/Event).
+These are listener checks, not physical swipe verification. SL1 restores the
+entire original select rule: custom borders/backgrounds can also affect native
+styling, so removing only appearance declarations is not a complete regression.
+The guide page's updated stylesheet reference is included with this correction;
+the core asset gate correctly rejected the earlier omitted page.

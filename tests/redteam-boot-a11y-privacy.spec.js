@@ -49,7 +49,7 @@ const browserPath = (testInfo) => testInfo.project.use?.launchOptions?.executabl
 /* ------------------------------------------------------------------ setup */
 
 /** Language, tour seen, optional quiet mode and a few practised days, before the app loads. */
-function seedScript({ lang, e2e, days, progress, blocked, human, endpoint }) {
+function seedScript({ lang, e2e, days, progress, blocked, human, endpoint, fresh }) {
   try {
     if (human) Object.defineProperty(Navigator.prototype, "webdriver", { get: () => false, configurable: true });
     if (endpoint) window.VT_ANALYTICS_ENDPOINT = endpoint;
@@ -63,9 +63,11 @@ function seedScript({ lang, e2e, days, progress, blocked, human, endpoint }) {
       Object.defineProperty(window, "sessionStorage", boom);
       return;
     }
+    if (e2e) sessionStorage.setItem("vt_e2e", "1");
+    // This browser's first load: nothing of the site's stored yet
+    if (fresh) return;
     localStorage.setItem("vt_tour_v1", "1");
     if (lang) localStorage.setItem("vt_lang", lang);
-    if (e2e) sessionStorage.setItem("vt_e2e", "1");
     if ((days || progress) && !sessionStorage.getItem("vt_seeded_days")) {
       sessionStorage.setItem("vt_seeded_days", "1");
       localStorage.setItem("vt_settings_v1", JSON.stringify({ lastTab: "singing" }));
@@ -121,7 +123,8 @@ async function open(browser, o = {}) {
     progress: !!o.progress,
     blocked: !!o.blocked,
     human: !!o.human,
-    endpoint: o.endpoint || null
+    endpoint: o.endpoint || null,
+    fresh: !!o.fresh
   });
   if (o.zoom) {
     await page.addInitScript((pct) => {
@@ -498,11 +501,20 @@ test.describe("cross-12: the first seconds", () => {
  * merged #21, against 1 in 18 on main before (review AE3, AE4). A tap on the
  * stale hero also landed on whatever moved under the finger.
  *
- * Correct: until the app has drawn the page, nothing below the header is shown,
- * so the first view of the content is the app's own and nothing moves. The hold
- * must also end when the app cannot: at DOMContentLoaded (the app's own start),
- * on load when js/boot-ready.js is missing, and after eight seconds when a
- * script never arrives. A page without scripts is never held.
+ * Correct: until the app has drawn the page, nothing below the header that it
+ * will move is shown, so the first view of the content is the app's own and
+ * nothing moves. The hold must also end when the app cannot: at
+ * DOMContentLoaded (the app's own start), on load when js/boot-ready.js is
+ * missing, and after eight seconds when a script never arrives. A page without
+ * scripts is never held.
+ *
+ * Wrong behaviour rejected later (review of PR #40, red team 2): the whole page
+ * held on this browser's first load, when nothing is cached, made the app's
+ * start the first time anything showed: about 5 s on a 4G phone and 1.8 s on a
+ * fast line, against 0.8 and 0.3 s on main. On a first load the hero's words
+ * show at once, where the app keeps them and as it writes them for someone new;
+ * on every later load the scripts are cached and all of it waits (half a
+ * second on a 4G phone).
  */
 const shiftWatch = () => {
   window.__shifts = [];
@@ -513,13 +525,49 @@ const shiftWatch = () => {
       window.__shifts.push({ value: e.value, src: src.join(",") });
     }
   }).observe({ type: "layout-shift", buffered: true });
+  // Where the blocks stand the moment the hold ends. Shown then, they must not
+  // move after; the layout-shift entries alone under-report a block that was
+  // hidden until a moment before it moved.
+  let held = false;
+  new MutationObserver((_, watch) => {
+    const html = document.documentElement;
+    if (!html) return;
+    if (html.classList.contains("vt-boot-pending")) {
+      held = true;
+      return;
+    }
+    if (!held) return;
+    const top = (id) => Math.round(document.getElementById(id)?.getBoundingClientRect().top ?? -1);
+    window.__atRelease = { hero: top("start-panel"), catalog: top("catalog-panel") };
+    watch.disconnect();
+  }).observe(document, { subtree: true, attributes: true, attributeFilter: ["class"] });
 };
 const heldNow = () => ({
   app: !!window.VTApp,
   main: getComputedStyle(document.querySelector("main")).visibility,
   footer: getComputedStyle(document.querySelector(".app-footer")).visibility,
-  header: getComputedStyle(document.querySelector(".app-header")).visibility
+  header: getComputedStyle(document.querySelector(".app-header")).visibility,
+  hero: getComputedStyle(document.getElementById("start-panel")).visibility,
+  catalog: getComputedStyle(document.getElementById("catalog-panel")).visibility,
+  tops: { hero: Math.round(document.getElementById("start-panel").getBoundingClientRect().top), catalog: Math.round(document.getElementById("catalog-panel").getBoundingClientRect().top) }
 });
+/** The first load's hero: its title, and any control on the page that shows before it works. */
+const heroNow = () => {
+  const t = document.getElementById("start-title");
+  const shown = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility === "visible";
+  return {
+    title: { text: t.textContent.trim(), top: Math.round(t.getBoundingClientRect().top), shown: shown(t) },
+    controls: [...document.querySelectorAll(".main :is(button, a, select, input)")].filter(shown).map((el) => el.id || el.textContent.trim().slice(0, 24))
+  };
+};
+/** The app's start, then two seconds for anything that would still move. */
+async function settled(page) {
+  await page.waitForFunction(() => !!window.VTApp && document.readyState !== "loading");
+  await page.waitForTimeout(1200);
+}
+const clsOf = (shifts) => shifts.reduce((n, s) => n + s.value, 0);
+/** How far each block has moved since the hold ended (a font arriving may nudge a pixel). */
+const movedSince = (atRelease, tops) => Object.fromEntries(Object.keys(tops).map((k) => [k, Math.abs(tops[k] - atRelease[k]) > 2 ? `${atRelease[k]} -> ${tops[k]}` : "stayed"]));
 
 test.describe("the first paint is the app's own home", () => {
   for (const [lang, vp, days] of [
@@ -527,7 +575,7 @@ test.describe("the first paint is the app's own home", () => {
     ["en", LAPTOP, null],
     ["es", PHONE, null]
   ]) {
-    test(`${lang} ${vp.width}px${days ? ", returning" : ", first visit"}: the markup's hero is never shown, so the page does not jump when the app draws it`, async ({ browser }) => {
+    test(`${lang} ${vp.width}px, a later load${days ? " with practice days" : ""}: the markup's home is never shown, so the page does not jump when the app draws it`, async ({ browser }) => {
       const { ctx, page } = await open(browser, { vp, lang, days });
       await page.addInitScript(shiftWatch);
       // app.js held back, so the page is certainly painted before the app can draw the home:
@@ -542,18 +590,68 @@ test.describe("the first paint is the app's own home", () => {
       const during = await page.evaluate(heldNow);
       expect(during.app, "control: the app has not started yet").toBe(false);
       expect(during.main, "the markup's home is not on screen").toBe("hidden");
+      expect(during.hero, "nor its hero: the scripts are cached and the app starts at once").toBe("hidden");
       expect(during.footer).toBe("hidden");
       if (lang === "es") expect(during.header, "the header is, at once").toBe("visible");
-      await page.waitForFunction(() => !!window.VTApp && document.readyState !== "loading");
-      await page.waitForTimeout(1200);
-      const after = { ...(await page.evaluate(heldNow)), shifts: await page.evaluate(() => window.__shifts) };
+      await settled(page);
+      const after = { ...(await page.evaluate(heldNow)), shifts: await page.evaluate(() => window.__shifts), atRelease: await page.evaluate(() => window.__atRelease) };
       expect(after.main, "shown once the app has drawn it").toBe("visible");
       expect(after.footer).toBe("visible");
-      const cls = after.shifts.reduce((n, s) => n + s.value, 0);
-      expect(cls, `layout shifts: ${JSON.stringify(after.shifts)}`).toBeLessThan(0.1);
+      expect(after.atRelease, "control: the end of the hold was seen").toBeTruthy();
+      expect(movedSince(after.atRelease, after.tops), "what was first shown is where it stays").toEqual({ hero: "stayed", catalog: "stayed" });
+      expect(clsOf(after.shifts), `layout shifts: ${JSON.stringify(after.shifts)}`).toBeLessThan(0.1);
       await ctx.close();
     });
   }
+
+  for (const vp of [PHONE, LAPTOP]) {
+    test(`es ${vp.width}px, this browser's first load: the hero's words show at once, where and as the app keeps them, and nothing moves`, async ({ browser }) => {
+      const { ctx, page } = await open(browser, { vp, fresh: true });
+      await page.addInitScript(shiftWatch);
+      await page.route("**/js/app.js*", async (route) => {
+        await new Promise((r) => setTimeout(r, 900));
+        await route.continue();
+      });
+      await page.goto(BASE + "/", { waitUntil: "commit" });
+      await page.waitForSelector(".app-footer", { state: "attached" });
+      await page.waitForTimeout(350);
+      const held = await page.evaluate(heldNow);
+      const hero = await page.evaluate(heroNow);
+      expect(held.app, "control: the app has not started yet").toBe(false);
+      expect(held.hero, "the hero shows at once: nothing is cached and the app starts seconds later").toBe("visible");
+      expect(hero.title.shown).toBe(true);
+      expect(held.catalog, "what the app's hero pushes down waits").toBe("hidden");
+      expect(held.footer).toBe("hidden");
+      expect(hero.controls, "no button shows before it works").toEqual([]);
+      await settled(page);
+      const after = { ...(await page.evaluate(heldNow)), ...(await page.evaluate(heroNow)), shifts: await page.evaluate(() => window.__shifts), atRelease: await page.evaluate(() => window.__atRelease) };
+      expect(after.catalog, "shown once the app has drawn it").toBe("visible");
+      expect(after.controls.length, "control: the app's buttons are there now").toBeGreaterThan(3);
+      expect(after.title.text, "the words are the ones the app writes for someone new").toBe(hero.title.text);
+      expect(Math.abs(after.title.top - hero.title.top), `and they stay where they were (${hero.title.top} -> ${after.title.top})`).toBeLessThanOrEqual(1);
+      expect(after.atRelease, "control: the end of the hold was seen").toBeTruthy();
+      expect(movedSince(after.atRelease, after.tops), "what was shown when the rest came stays where it was").toEqual({ hero: "stayed", catalog: "stayed" });
+      expect(clsOf(after.shifts), `layout shifts: ${JSON.stringify(after.shifts)}`).toBeLessThan(0.1);
+      await ctx.close();
+    });
+  }
+
+  test("this browser's first load at another view's address: all of it waits, as the hero would only flash", async ({ browser }) => {
+    const { ctx, page } = await open(browser, { vp: PHONE, fresh: true });
+    await page.route("**/js/app.js*", async (route) => {
+      await new Promise((r) => setTimeout(r, 900));
+      await route.continue();
+    });
+    await page.goto(BASE + "/#plan", { waitUntil: "commit" });
+    await page.waitForSelector(".app-footer", { state: "attached" });
+    await page.waitForTimeout(350);
+    const held = await page.evaluate(heldNow);
+    expect(held.app, "control: the app has not started yet").toBe(false);
+    expect(held.hero).toBe("hidden");
+    await settled(page);
+    expect(await page.evaluate(() => window.VTApp.getState().view), "control: the address opened its view").toBe("plan");
+    await ctx.close();
+  });
 
   test("released when the app has started, not when the last image has loaded", async ({ browser }) => {
     const { ctx, page } = await open(browser, { vp: LAPTOP, lang: "es" });

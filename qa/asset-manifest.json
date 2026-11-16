@@ -52,8 +52,8 @@
     "sha": "5a4bc220a59822b6"
   },
   "css/styles.css": {
-    "v": "20261113c",
-    "sha": "f20c25e94c162dae"
+    "v": "20261116a",
+    "sha": "c05734c3d10b75d1"
   },
   "js/account.js": {
     "v": "20261113a",
@@ -104,8 +104,8 @@
     "sha": "c01b6050bcbccf84"
   },
   "js/boot-head.js": {
-    "v": "20261113a",
-    "sha": "e60450325bf5954a"
+    "v": "20261113b",
+    "sha": "cec6080b3aa6fb7e"
   },
   "js/boot-ready.js": {
     "v": "20261113a",
@@ -144,8 +144,8 @@
     "sha": "4c1c38110f0a3699"
   },
   "js/i18n.js": {
-    "v": "20261113a",
-    "sha": "8e25a838bb48ca89"
+    "v": "20261113b",
+    "sha": "4fe488a5b3607e3b"
   },
   "js/license.js": {
     "v": "20261103d",

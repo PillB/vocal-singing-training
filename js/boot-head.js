@@ -26,6 +26,12 @@
  *    finger. js/boot-ready.js lets go when the app has started; this lets go
  *    when the page has loaded (boot-ready.js missing) and after eight seconds
  *    (a script that never arrives), whichever comes first.
+ *    On this browser's first load (html.vt-boot-hero) the hero's words show at
+ *    once and only its buttons and what lies below it wait. Nothing is cached
+ *    then: the app starts after about 1.8 s on a fast line and 5 s on a 4G
+ *    phone, and holding the whole page made that the time anything showed
+ *    (0.3 and 0.8 s before). Every later load has the scripts cached and the
+ *    app starts in about half a second, so all of it waits.
  */
 (function () {
   "use strict";
@@ -75,6 +81,25 @@
     }
   });
 
+  /**
+   * This browser's first load of the home: nothing of the site's in storage
+   * (the first load writes several vt_ keys) and no address for another view,
+   * where the hero would only flash. The scripts are not cached yet, which is
+   * seconds on a phone, and the app draws the home for someone new. Blocked
+   * storage counts too: nothing is stored, so the app draws the same.
+   */
+  function firstLoad() {
+    if (/^#(plan|historial|ejercicio\/)/.test(location.hash)) return false;
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        if (String(localStorage.key(i)).indexOf("vt_") === 0) return false;
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   var html = document.documentElement;
   new MutationObserver(function (_, watch) {
     if (!document.body) return;
@@ -83,6 +108,7 @@
   }).observe(html, { childList: true });
 
   html.classList.add("vt-boot-pending");
+  if (firstLoad()) html.classList.add("vt-boot-hero");
   var show = function () {
     html.classList.remove("vt-boot-pending");
   };

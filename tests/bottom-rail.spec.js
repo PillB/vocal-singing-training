@@ -198,3 +198,63 @@ test("control: the check reports a box laid over the octave buttons", async ({ p
   const got = await page.evaluate(railClashes);
   expect(got.join("; ")).toContain("planted");
 });
+
+/**
+ * The mic slider against its own width: what the mic box is given now, and
+ * what it has laid out alone (flex: none). null when there is no mic box or
+ * the rail is not the speech drills' (sound options without a piano).
+ */
+function micSqueeze() {
+  const rail = document.getElementById("hud-bottom-rail");
+  const bc = rail.querySelector(":scope > .hud-bc");
+  const opts = rail.querySelector(":scope > #piano-mini-opts");
+  if (!bc || !bc.getClientRects().length || !opts || !opts.getClientRects().length) return null;
+  if (opts.classList.contains("piano-opts-compact") || opts.classList.contains("piano-opts-expanded")) return null;
+  const slider = bc.querySelector('input[type="range"]');
+  const now = slider.getBoundingClientRect().width;
+  const flex = bc.style.flex;
+  bc.style.flex = "none";
+  const own = slider.getBoundingClientRect().width;
+  bc.style.flex = flex;
+  return { now: Math.round(now), own: Math.round(own) };
+}
+
+/*
+ * Beside the speech drills' options the mic box is laid out at its own width
+ * before it shares a row, so where Start, the mic and the options do not fit
+ * side by side the options take a row of their own (#21's design for a phone
+ * on its side). Wrong behaviour rejected (design pass on PR #40): with #21's
+ * no-grow rule dropped, the box was measured at its 8rem basis when the row
+ * was laid out, all three went on one row, and at 740x360 the slider was
+ * squeezed to 71 px against 129 px on main.
+ */
+for (const vp of [
+  { width: 740, height: 360 },
+  { width: 844, height: 390 },
+  { width: 568, height: 320 },
+  { width: 1280, height: 800 }
+]) {
+  test(`es ${vp.width}x${vp.height}: beside the speech drills' options the mic slider is never squeezed below its own width`, async ({ page }) => {
+    test.setTimeout(120000);
+    await page.setViewportSize(vp);
+    await boot(page, { lang: "es" });
+    await page.waitForFunction(() => !!window.VTApp?.openExercise && !!window.VT_EXERCISES);
+    const ids = await page.evaluate(() =>
+      Object.values(window.VT_EXERCISES)
+        .flat()
+        .map((e) => e.id)
+    );
+    const squeezed = [];
+    const seen = [];
+    for (const id of ids) {
+      await page.evaluate((x) => window.VTApp.openExercise(x), id);
+      await page.evaluate(() => new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res))));
+      const m = await page.evaluate(micSqueeze);
+      if (!m) continue;
+      seen.push(id);
+      if (m.now < m.own - 2) squeezed.push(`${id}: slider ${m.now} px, ${m.own} px at its own width`);
+    }
+    expect(seen, "control: v12, the drill with sound options and no piano, is measured").toContain("v12-melodic-speech");
+    expect(squeezed, squeezed.join("\n")).toEqual([]);
+  });
+}

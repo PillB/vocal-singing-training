@@ -2230,6 +2230,14 @@ html[lang^="es"] .hud-bc.is-manual .mic-sens-title::after {
 .hud-bottom-rail > .hud-bc {
   overflow: hidden;
 }
+/* Beside sound options without a piano (speech drills) the mic box is laid out
+   at its own width: where Start, the mic and the options do not fit side by
+   side (a phone on its side) the options take a row of their own, as #21 meant,
+   instead of the slider being squeezed to 71 px; on a row with room it grows
+   into it (#21 held it to its own width: 500 px of a laptop's rail empty). */
+.hud-bottom-rail:has(> #piano-mini-opts.hud-br:not(.piano-opts-compact):not(.piano-opts-expanded)) > .hud-bc {
+  flex: 1 1 auto;
+}
 
 .hud-check {
   background: rgba(12, 18, 26, 0.7);
@@ -8323,4 +8331,18 @@ html.vt-i18n-pending body {
 html.vt-boot-pending .main,
 html.vt-boot-pending .app-footer {
   visibility: hidden;
+}
+/* The first load's exception (html.vt-boot-hero, js/boot-head.js): nothing is
+   cached, so the app starts seconds later. The hero's words show at once, in
+   the place the app keeps them (its title is the one the app writes for
+   someone new, first.titleMarkup); everything below it, which moves when the
+   app fills the hero, still waits. */
+html.vt-boot-pending.vt-boot-hero #start-panel {
+  visibility: visible;
+}
+/* The other ways in, buttons that do nothing before the app has started and
+   that it folds away for someone new (js/daily-loop.js). The intro line does
+   show, and gives way to the first routine when the app has started. */
+html.vt-boot-pending.vt-boot-hero #more-ways {
+  display: none;
 }

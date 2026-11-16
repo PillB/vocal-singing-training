@@ -101,3 +101,11 @@ entire original select rule: custom borders/backgrounds can also affect native
 styling, so removing only appearance declarations is not a complete regression.
 The guide page's updated stylesheet reference is included with this correction;
 the core asset gate correctly rejected the earlier omitted page.
+
+The corrected Mac suite passed all 98 cases. Its nested mutation runner then
+failed its unmodified baseline during web-server readiness (30 seconds), before
+any selector mutation ran. Give that runner its own existing configurable port
+(8766, with direct Python startup) and enable Playwright web-server diagnostics.
+The baseline must still pass before the original CSS rule can be judged;
+no timeout, skip or layout threshold is relaxed. The earlier nightly run can
+continue because its application tree and sweep definitions are unchanged.

@@ -45,6 +45,10 @@ jobs:
       - name: macOS WebKit design selection and device layouts
         run: npx playwright test --project=webkit-layout --workers=2 --reporter=line --global-timeout=600000
       - name: Native select regression must be detected on macOS
+        env:
+          # Isolate this nested runner from the preceding suite's server.
+          VT_TEST_PORT: '8766'
+          DEBUG: 'pw:webserver'
         run: node qa/mutate.mjs safari-layout
       - name: Preserve macOS WebKit diagnostics
         if: failure()

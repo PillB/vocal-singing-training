@@ -1508,7 +1508,8 @@ test.describe("the first paint is the app's own home", () => {
 
   // Each address the app draws something else at: another view, a place on the
   // home it scrolls to (a search result's text link among them, never in
-  // location.hash), an experiment's arm forced, however the address spells it
+  // location.hash; told only in Chromium, the one engine whose navigation entry
+  // keeps it), an experiment's arm forced, however the address spells it
   // and whatever else it holds, a malformed escape included (the classic arm
   // and the five-minute Mínimo write another title; any arm may)
   for (const [address, check] of [

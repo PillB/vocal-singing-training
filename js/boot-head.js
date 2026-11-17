@@ -99,7 +99,10 @@
    * scrolls back to; it writes none before it has started, so a reload of a
    * first load still shows the hero), and a text fragment (#:~:text=..., from
    * a search result), which is in the navigation's address but never in
-   * location.hash.
+   * location.hash. Only in Chromium: Safari (18) and Firefox (133) strip it
+   * from the navigation's address too, and no API there tells a page it was
+   * asked for one, so a first visit from a search result's text link shows
+   * the hero (review of PR #42, rt5).
    */
   function addressed() {
     var nav = (window.performance && performance.getEntriesByType && performance.getEntriesByType("navigation")[0]) || {};

@@ -8330,6 +8330,20 @@ html.vt-boot-pending .main,
 html.vt-boot-pending .app-footer {
   visibility: hidden;
 }
+/* Under reduced motion every transition lasts 0.01 ms, and a visibility it
+   inherits is drawn hidden in its first frame: let go, the page turned
+   visible a level per frame, in 3-6 steps. The frame the hold ends in has
+   none (js/boot-ready.js adds the class for two frames). */
+@media (prefers-reduced-motion: reduce) {
+  html.vt-boot-instant .main,
+  html.vt-boot-instant .main *,
+  html.vt-boot-instant .main *::before,
+  html.vt-boot-instant .main *::after,
+  html.vt-boot-instant .app-footer,
+  html.vt-boot-instant .app-footer * {
+    transition: none !important;
+  }
+}
 /* The page keeps a scrollbar's room where scrollbars take room (Windows,
    Linux, a Mac with a mouse), whether it overflows or not. The held page is
    one screen tall and had no scrollbar, the app's home is taller and has one,

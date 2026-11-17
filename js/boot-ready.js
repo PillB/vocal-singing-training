@@ -29,9 +29,12 @@
   "use strict";
   var html = document.documentElement;
   // The hero but its kicker and title, which the first paint showed as they
-  // stay. Not the catalog: from 861 px its line is the largest text, and a
-  // fade held back its paint (LCP) by 0.28 s.
-  var ADDED = "#start-panel .start-main > :not(#start-kicker, #start-title), #start-panel > :not(.start-main)";
+  // stay, and the design row above it, which turns visible with it: drawn at
+  // full strength at once, the line over the card took the eye before the
+  // card's own content had settled (review of PR #42, ae1). Not the catalog:
+  // from 861 px its line is the largest text, and a fade held back its paint
+  // (LCP) by 0.28 s.
+  var ADDED = "#start-panel .start-main > :not(#start-kicker, #start-title), #start-panel > :not(.start-main), #site-version-bar";
   var settle = function () {
     Array.prototype.forEach.call(document.querySelectorAll(".view"), function (view) {
       if (!view.getAnimations) return;
@@ -46,9 +49,27 @@
       if (el.animate) el.animate({ opacity: [0, 1] }, { duration: 200, easing: "cubic-bezier(0, 0, 0.2, 1)", id: "vt-boot-reveal" });
     });
   };
+  // Under reduced motion every transition lasts 0.01 ms (css/styles.css), and
+  // a change of the inherited visibility is drawn hidden in its first frame:
+  // let go, the page under the header turned visible a level per frame, in
+  // 3-6 steps over 70-340 ms, the catalog's words last (review of PR #42,
+  // ae1). The frame the hold ends in has no transitions there
+  // (html.vt-boot-instant, two frames), so it arrives whole.
+  var instant = function () {
+    var frame = window.requestAnimationFrame || function (f) {
+      return setTimeout(f, 16);
+    };
+    html.classList.add("vt-boot-instant");
+    frame(function () {
+      frame(function () {
+        html.classList.remove("vt-boot-instant");
+      });
+    });
+  };
   var ready = function () {
     var held = html.classList.contains("vt-boot-pending");
     var hero = held && html.classList.contains("vt-boot-hero");
+    if (held) instant();
     html.classList.add("vt-boot-ready");
     html.classList.remove("vt-boot-pending");
     if (document.body) document.body.removeAttribute("aria-busy");

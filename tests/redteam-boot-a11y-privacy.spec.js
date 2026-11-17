@@ -644,6 +644,34 @@ const revealWatch = () => {
   };
   requestAnimationFrame(sample);
 };
+/**
+ * For each part, the first frame after the hold ends in which it is visible
+ * (its computed visibility, which an ancestor's transition holds back too),
+ * over the first 30 frames.
+ */
+const stepWatch = (parts) => {
+  window.__steps = null;
+  let held = false;
+  let frame = 0;
+  const first = {};
+  const sample = () => {
+    const html = document.documentElement;
+    if (html && html.classList.contains("vt-boot-pending")) held = true;
+    else if (held) {
+      frame++;
+      for (const sel of parts) {
+        const el = document.querySelector(sel);
+        if (el && !(sel in first) && getComputedStyle(el).visibility === "visible") first[sel] = frame;
+      }
+      if (frame >= 30) {
+        window.__steps = first;
+        return;
+      }
+    }
+    requestAnimationFrame(sample);
+  };
+  requestAnimationFrame(sample);
+};
 /** Every frame, until the app has started, in which the Spanish title is on screen under lang="en". */
 const langWatch = () => {
   window.__spanishShown = [];
@@ -1124,6 +1152,30 @@ test.describe("the first paint is the app's own home", () => {
   });
 
   /*
+   * Under reduced motion a visibility an element inherits is drawn hidden in
+   * the first frame of its 0.01 ms transition, so the page under the header
+   * turned visible a level per frame when the hold ended: 3-6 steps over
+   * 70-340 ms, the hero's content first and the catalog's words last (review
+   * of PR #42, ae1). It now arrives in one frame.
+   */
+  for (const fresh of [true, false]) {
+    test(`es 390px, reduced motion, ${fresh ? "this browser's first load" : "a later load"}: the page under the header arrives in one frame when the hold ends`, async ({ browser }) => {
+      const parts = ["#start-title", "#site-version-bar .site-version-label", "#catalog-heading", ".app-footer"];
+      const { ctx, page } = await open(browser, { vp: PHONE, fresh, reducedMotion: "reduce" });
+      await page.addInitScript(stepWatch, parts);
+      const { held, go } = await heldBack(page, "/");
+      expect(held.app, "control: held until the app has started").toBe(false);
+      go();
+      await settled(page);
+      await page.waitForFunction(() => window.__steps !== null, null, { timeout: 10000 });
+      const steps = await page.evaluate(() => window.__steps);
+      expect(Object.keys(steps).sort(), "control: every part is seen, and turns visible").toEqual([...parts].sort());
+      expect(steps, "all of it in the same frame").toEqual(Object.fromEntries(parts.map((p) => [p, steps[parts[0]]])));
+      await ctx.close();
+    });
+  }
+
+  /*
    * When the app starts it replaces the hero's intro line with the first
    * routine's question, under the words read until then: in one frame, it was
    * a hard cut (review of PR #42, ae3). What it adds fades in (opacity only,
@@ -1139,6 +1191,7 @@ test.describe("the first paint is the app's own home", () => {
     const revealed = await page.evaluate(() => window.__revealed);
     expect(await page.evaluate(() => getComputedStyle(document.getElementById("track-pick")).display), "control: the app shows the first routine's question").not.toBe("none");
     expect(revealed, "the question fades in").toContain("track-pick");
+    expect(revealed, "and the design row above the hero with it, not drawn whole before it").toContain("site-version-bar");
     expect(revealed.filter((t) => /start-kicker|start-title/.test(t)), "the kicker and title do not").toEqual([]);
     expect(await page.evaluate(() => document.getAnimations().filter((a) => a.id === "vt-boot-reveal").length), "and the fade is over").toBe(0);
     await ctx.close();

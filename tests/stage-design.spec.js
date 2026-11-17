@@ -450,7 +450,7 @@ test.describe("Coach strip: the mode and its cue on the stage", () => {
  * A short laptop window (1280x560, the nightly sweep's "short" format). The
  * diction ladder's picture shrank to fit beside a guide that held a step, then
  * the stage grew 3-7 px past the window to show the picture whole. The guide
- * gives its room up first: steps, words, then itself.
+ * gives its room up first, its steps and then its words, and keeps its button.
  */
 function shortWindowStage() {
   const stage = document.getElementById("highway-stage").getBoundingClientRect();
@@ -490,10 +490,9 @@ test.describe("A short laptop window: the picture before the guide", () => {
       expect(s.stageBottom, `${at}: the stage ends on the window, not under its bottom edge`).toBeLessThanOrEqual(s.vh);
       expect(s.cut, `${at}: the picture is whole`).toBeLessThanOrEqual(2);
       expect(s.startHit, `${at}: a click on Empezar reaches it`).toBe(true);
-      if (s.guideShown) {
-        expect(s.guideClipped, `${at}: no step cut mid-line`).toBe(false);
-        expect(s.guideBottom, `${at}: the guide ends above Empezar's row`).toBeLessThanOrEqual(s.railTop);
-      }
+      expect(s.guideShown, `${at}: the guide keeps at least its button`).toBe(true);
+      expect(s.guideClipped, `${at}: no step cut mid-line`).toBe(false);
+      expect(s.guideBottom, `${at}: the guide ends above Empezar's row`).toBeLessThanOrEqual(s.railTop);
       // Control: where there is room the guide keeps its steps, so a fix that
       // always hid it would fail here.
       if (height === 800) expect(s.guideSteps, `${at}: the guide keeps its steps`).toBeGreaterThanOrEqual(1);
@@ -531,9 +530,27 @@ test.describe("A short laptop window: the picture before the guide", () => {
     expect(s.stageBottom, "the stage ends on the window").toBeLessThanOrEqual(s.vh);
     expect(s.cut, "the picture is whole").toBeLessThanOrEqual(2);
     expect(s.guideSteps, "the guide gave its steps up").toBe(0);
-    if (s.guideShown) {
-      expect(s.guideClipped, "its button is whole").toBe(false);
-      expect(s.guideBottom, "the guide ends above Empezar's row").toBeLessThanOrEqual(s.railTop);
+    expect(s.guideShown, "and kept its button").toBe(true);
+    expect(s.guideClipped, "its button is whole").toBe(false);
+    expect(s.guideBottom, "the guide ends above Empezar's row").toBeLessThanOrEqual(s.railTop);
+  });
+
+  // A small phone is where the stage may grow past the screen (#21): once the
+  // guide is down to its button, the picture's last rows come from the stage,
+  // not from under the button.
+  test("on a 320x640 phone the picture is whole beside the guide's button: the stage grows for the rest", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await boot(page, { clock: false });
+    for (const id of ["s4-lip-trills", "v1-diction"]) {
+      await open(page, id);
+      await page.evaluate(() => window.VTApp.fitHighwayToViewport());
+      await page.waitForTimeout(250);
+      const s = await page.evaluate(shortWindowStage);
+      expect(s.picture, `${id}: a picture`).toBe(true);
+      expect(s.cut, `${id}: the picture is whole`).toBeLessThanOrEqual(2);
+      expect(s.guideShown, `${id}: the guide keeps its button`).toBe(true);
+      expect(s.guideClipped, `${id}: its button is whole`).toBe(false);
+      expect(s.guideBottom, `${id}: the guide ends above Empezar's row`).toBeLessThanOrEqual(s.railTop);
     }
   });
 });

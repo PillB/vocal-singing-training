@@ -414,8 +414,9 @@ export const MUTANTS = {
     ["S10 the tap-floor allowance is 0,6 px: a 43,5 px control clears the 44 px floor (QA-66)", "tests/helpers/tap-floor.js", "const TAP_FLOOR_EPSILON = 0.05;", "const TAP_FLOOR_EPSILON = 0.6;", TAP_SPEC],
     ["S11 the tap-floor allowance is a whole pixel: a 43 px control clears the 44 px floor (QA-66)", "tests/helpers/tap-floor.js", "const TAP_FLOOR_EPSILON = 0.05;", "const TAP_FLOOR_EPSILON = 1;", TAP_SPEC],
     // A short laptop window (stage-design "short laptop window"): the guide gives its room up before the picture is cut or the stage grows.
-    ["S12 the guide is fitted beside the room the picture was left, not the room it needs: the diction ladder is cut at 1280x560", "js/app.js", "panel.offsetHeight + panelShortfall(panel) + px(cs.rowGap)", "panel.offsetHeight + px(cs.rowGap)", SHORT_SPEC],
-    ["S13 the stage grows past a short window before the guide gives its room back to the picture", "js/app.js", "const over = panelShortfall(wrap) - guideYield(focus, wrap);", "const over = panelShortfall(wrap);", SHORT_SPEC]
+    ["S12 the guide is fitted beside the room the picture was left, not the room it needs: the picture is cut under a guide that kept its steps", "js/app.js", "return { left, whole: left - (shown ? panelShortfall(panel) : 0) };", "return { left, whole: left };", SHORT_SPEC],
+    ["S13 the stage grows past the window before the guide gives its steps back to the picture", "js/app.js", "const over = panelShortfall(wrap) - guideYield(wrap);", "const over = panelShortfall(wrap);", SHORT_SPEC],
+    ["S14 the guide counts its button as room it can give back, so the stage does not grow and the picture stays cut", "js/app.js", "return Math.max(0, guide.offsetHeight - bare);", "return guide.offsetHeight;", SHORT_SPEC]
   ].map(([name, file, from, to, cmd]) => ({ name, file, from, to, cmd: cmd || PIANO_SPEC })),
   // Accessibility contracts that only a browser can see.
   a11y: [

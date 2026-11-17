@@ -885,16 +885,23 @@
   }
 
   /**
-   * Px the stage guide can hand back to the mode panel above it: its height and
-   * the gap before it. Only a panel that grows into freed room (a picture's,
-   * css: flex 1 1 0) takes them; a words-only panel keeps its own height.
-   * @param {HTMLElement} focus #mode-focus.
+   * Px the idle stage guide can hand back to the mode panel above it: its steps
+   * and words, down to its "Ver todos los pasos" button, which stays (the guide
+   * shows whole steps or just its button). Only a panel that grows into freed
+   * room (a picture's, css: flex 1 1 0) takes them; a words-only panel keeps its
+   * own height. While practising the guide holds the step the clock is on.
    * @param {HTMLElement|null} wrap #mode-focus-panel.
    */
-  function guideYield(focus, wrap) {
+  function guideYield(wrap) {
     const guide = $("#stage-guide");
-    if (!guide || guide.hidden || !wrap || !(parseFloat(getComputedStyle(wrap).flexGrow) > 0)) return 0;
-    return guide.offsetHeight + (parseFloat(getComputedStyle(focus).rowGap) || 0);
+    if (!guide || guide.hidden || guide.classList.contains("is-now") || !wrap) return 0;
+    if (!(parseFloat(getComputedStyle(wrap).flexGrow) > 0)) return 0;
+    const cs = getComputedStyle(guide);
+    const bare =
+      ($("#btn-stage-guide-more")?.offsetHeight || 0) +
+      (parseFloat(cs.borderTopWidth) || 0) +
+      (parseFloat(cs.borderBottomWidth) || 0);
+    return Math.max(0, guide.offsetHeight - bare);
   }
 
   /**
@@ -929,7 +936,7 @@
     const focus = $("#mode-focus");
     if (focus && !focus.hidden) {
       const wrap = $("#mode-focus-panel");
-      const over = panelShortfall(wrap) - guideYield(focus, wrap);
+      const over = panelShortfall(wrap) - guideYield(wrap);
       // A few px of padding or rounding is not a row of words cut off.
       if (over > 8) need = Math.max(need, h + over);
     }
@@ -1000,25 +1007,32 @@
     if (list) list.hidden = live;
     guide.classList.remove("is-bare");
     guide.hidden = false;
-    const room = guideRoom(focus, $("#mode-focus-panel"));
-    const fits = () => guide.scrollHeight <= room + 1;
-    if (!live) trimIdleGuide(guide, items, fits);
-    guide.hidden = !fits();
+    const room = guideRooms(focus, $("#mode-focus-panel"));
+    const fits = (px) => guide.scrollHeight <= px + 1;
+    if (!live) trimIdleGuide(guide, items, () => fits(room.whole));
+    // Its button stays wherever it fits beside the picture as it is; the stage
+    // grows for the rest of the picture where the screen allows
+    // (growStageForContent).
+    guide.hidden = !fits(room.left);
   }
 
   /**
-   * Px the stage guide may take under the mode panel. The panel's share is
-   * what it needs whole, not what the guide left it: a picture's panel shrinks
-   * beside a guide that holds steps, so the guide always "fitted" and the
-   * picture was the one cut.
+   * Px the stage guide may take under the mode panel: `left`, beside the panel
+   * as it is, and `whole`, beside the panel with what it needs to show whole.
+   * Steps are kept only within `whole`: a picture's panel shrinks beside a
+   * guide that holds steps, so measured against `left` the guide always
+   * "fitted" and the picture was the one cut.
    * @param {HTMLElement} focus #mode-focus.
    * @param {HTMLElement|null} panel #mode-focus-panel.
+   * @returns {{ left: number, whole: number }}
    */
-  function guideRoom(focus, panel) {
+  function guideRooms(focus, panel) {
     const cs = getComputedStyle(focus);
     const px = (v) => parseFloat(v) || 0;
-    const taken = panel && panel.offsetHeight ? panel.offsetHeight + panelShortfall(panel) + px(cs.rowGap) : 0;
-    return Math.floor(focus.clientHeight - px(cs.paddingTop) - px(cs.paddingBottom) - taken);
+    const shown = !!(panel && panel.offsetHeight);
+    const box = focus.clientHeight - px(cs.paddingTop) - px(cs.paddingBottom);
+    const left = Math.floor(box - (shown ? panel.offsetHeight + px(cs.rowGap) : 0));
+    return { left, whole: left - (shown ? panelShortfall(panel) : 0) };
   }
 
   /** Idle: drop steps from the end, then the words; "Ver todos los pasos" still opens the rest. */

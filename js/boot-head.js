@@ -146,6 +146,24 @@
   }
 
   var html = document.documentElement;
+
+  /*
+   * Where scrollbars take room (Windows, Linux, a Mac with a mouse), the page
+   * keeps a scrollbar's room for its whole life (html.vt-scrollbar-room,
+   * css/styles.css), so nothing centred moves sideways as the app starts or
+   * between views. Measured here, before the first paint, on a box that always
+   * scrolls: where scrollbars are drawn over the page (phones, a Mac's
+   * default) or hidden (headless test runs) it takes none, and none is kept.
+   * Kept by the stylesheet alone, Chromium kept it where its scrollbars are
+   * hidden too, and laid every page of a headless run out 15 px narrower than
+   * the phone it stands for (review of PR #42, CI on round 7).
+   */
+  var probe = document.createElement("div");
+  probe.style.cssText = "position:absolute;top:-200px;width:100px;height:100px;overflow:scroll;visibility:hidden";
+  html.appendChild(probe);
+  if (probe.offsetWidth > probe.clientWidth) html.classList.add("vt-scrollbar-room");
+  html.removeChild(probe);
+
   new MutationObserver(function (_, watch) {
     if (!document.body) return;
     document.body.setAttribute("aria-busy", "true");

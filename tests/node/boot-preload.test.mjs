@@ -1,8 +1,9 @@
-// index.html asks for every script at the end of its body from <head>, all at
-// once. Chromium's preload scanner stops at the page's CSP <meta>, so without
-// that it found each script only when the one before it had run: 53 round
-// trips in a row, and the app started after 11 s on a 4G phone (3.3 s on a
-// desktop line) against about 2.9 s (1.2 s) asked for together.
+// index.html asks for every script at the end of its body all at once, as soon
+// as the header and the hero have been read. Chromium's preload scanner stops
+// at the page's CSP <meta>, so without that it found each script only when the
+// one before it had run: 53 round trips in a row, and the app started after
+// 11 s on a 4G phone (3.3 s on a desktop line) against about 2.9 s (1.2 s)
+// asked for together. Asked for from <head>, the first paint came 0.1 s later.
 //
 // A preload is used only by a <script> at exactly its address (?v= included)
 // and with the same CORS mode; any other is a second download of the same file
@@ -61,7 +62,7 @@ export function preloadProblems(page) {
   return problems;
 }
 
-test("every script the body runs is asked for from <head>, at its own address, in order, and nothing else", () => {
+test("every script the body runs is asked for early, at its own address, in order, and nothing else", () => {
   const { preloads, scripts } = scriptLists(html);
   assert.ok(scripts.length >= 50, `control: the body runs its scripts (${scripts.length})`);
   assert.ok(scripts.some((s) => s.href.startsWith("js/app.js?v=")), "control: app.js is among them");
@@ -69,17 +70,50 @@ test("every script the body runs is asked for from <head>, at its own address, i
   assert.equal(preloads.length, scripts.length);
 });
 
-test("the preloads come after the stylesheets and site-version.js, so the first paint does not wait on them", () => {
+/**
+ * Where a page's preloads stand: after the hero's markup, so the parser has
+ * read what the first paint shows before it sets up 53 requests (from <head>
+ * that paint came 0.1 s later on a 4G phone, first load and later), and before
+ * the first script the body runs, so each is asked for early.
+ */
+export function preloadPlace(page) {
+  const read = live(page);
+  const preloads = [...read.matchAll(/<link\b[^>]*\brel="preload"[^>]*\bas="script"[^>]*>/g)].map((m) => m.index);
+  const hero = read.indexOf('id="start-panel"');
+  const heroEnd = hero < 0 ? -1 : read.indexOf("</section>", hero);
+  const firstScript = read.slice(read.indexOf("<body")).search(/<script\b[^>]*\bsrc="/) + read.indexOf("<body");
+  return { first: preloads.length ? Math.min(...preloads) : -1, last: preloads.length ? Math.max(...preloads) : -1, hero, heroEnd, firstScript };
+}
+
+test("the preloads come once the header and the hero have been read, and before the body's first script", () => {
+  const at = preloadPlace(html);
+  assert.ok(at.first > 0 && at.hero > 0 && at.heroEnd > at.hero, `control: the preloads and the hero are found (${JSON.stringify(at)})`);
+  assert.ok(at.first > at.heroEnd, "after the hero's markup, which the first paint shows");
+  assert.ok(at.last < at.firstScript, "before the first script the body runs");
+});
+
+test("site-version.js stays in <head> and runs before the first frame, not deferred", () => {
   const head = html.slice(0, html.indexOf("</head>"));
-  const first = head.search(/<link\b[^>]*\brel="preload"[^>]*\bas="script"/);
-  const lastSheet = [...head.matchAll(/<link\b[^>]*\brel="stylesheet"/g)].at(-1).index;
   const tag = head.match(/<script\b[^>]*\bsrc="js\/site-version\.js[^>]*>/);
-  const siteVersion = tag ? tag.index : -1;
-  assert.ok(first > 0, "control: there are preloads in <head>");
-  assert.ok(siteVersion > 0, "control: site-version.js is in <head>");
-  assert.doesNotMatch(tag[0], /\b(defer|async)\b/, "and runs before the first frame, not deferred");
-  assert.ok(first > lastSheet, "after the last stylesheet");
-  assert.ok(first > siteVersion, "after site-version.js, which paints the design before the first frame");
+  assert.ok(tag, "control: site-version.js is in <head>");
+  assert.doesNotMatch(tag[0], /\b(defer|async)\b/, "it paints the design before the first frame");
+});
+
+test("the place check finds preloads in <head>, inside the hero, and after the first script", () => {
+  const hero = `<section id="start-panel"><h2>Hi</h2></section>`;
+  const l = `<link rel="preload" href="js/a.js?v=1" as="script" />`;
+  const s = `<script src="js/a.js?v=1"></script>`;
+  const page = (head, body) => `<html><head>${head}</head><body>${body}</body></html>`;
+  const ok = preloadPlace(page("", hero + l + s));
+  assert.ok(ok.first > ok.heroEnd && ok.last < ok.firstScript, "control: a page that is right passes");
+  const inHead = preloadPlace(page(l, hero + s));
+  assert.ok(!(inHead.first > inHead.heroEnd), "in <head>: before the hero");
+  const inHero = preloadPlace(page("", `<section id="start-panel"><h2>Hi</h2>${l}</section>` + s));
+  assert.ok(!(inHero.first > inHero.heroEnd), "inside the hero: before its end");
+  const late = preloadPlace(page("", hero + s + l));
+  assert.ok(!(late.last < late.firstScript), "after the first script");
+  const commented = preloadPlace(page(`<!-- ${l} -->`, hero + l + s));
+  assert.ok(commented.first > commented.heroEnd, "a preload commented out in <head> is not read as one");
 });
 
 // The check itself, on pages that are wrong: it must say so for each.

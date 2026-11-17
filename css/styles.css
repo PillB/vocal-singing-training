@@ -8337,12 +8337,12 @@ html.vt-boot-pending .app-footer {
    7.5 px sideways as the app started. A scrollbar forced on only while held
    moved it the other way on every view that fits the window (Plan, an
    exercise, the home on a tall screen; review of PR #42, rt5), and every
-   change between Practicar and Plan moved it, before this PR too. Where
-   scrollbars are drawn over the page (phones, a Mac's default) nothing is
-   kept. Chromium keeps the room where its scrollbars are hidden too, as in
-   its headless test runs, which lay desktop pages out 15 px narrower: there
-   nothing moves either. */
-html {
+   change between Practicar and Plan moved it, before this PR too.
+   js/boot-head.js adds the class where a scrollbar takes room, before the
+   first paint. Where scrollbars are drawn over the page (phones, a Mac's
+   default) or hidden (headless test runs) none is kept: for all html,
+   Chromium kept the room where its scrollbars are hidden too. */
+html.vt-scrollbar-room {
   scrollbar-gutter: stable;
 }
 /* The first load's exception (html.vt-boot-hero, js/boot-head.js): nothing is

@@ -52,8 +52,8 @@
     "sha": "5a4bc220a59822b6"
   },
   "css/styles.css": {
-    "v": "20261117b",
-    "sha": "1743e87a71839d1c"
+    "v": "20261117c",
+    "sha": "b1d7f592904bcead"
   },
   "js/account.js": {
     "v": "20261113a",
@@ -104,8 +104,8 @@
     "sha": "c01b6050bcbccf84"
   },
   "js/boot-head.js": {
-    "v": "20261117a",
-    "sha": "0e6637f3164106a1"
+    "v": "20261117b",
+    "sha": "30e9949dc66b0d49"
   },
   "js/boot-ready.js": {
     "v": "20261117b",

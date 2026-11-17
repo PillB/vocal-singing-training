@@ -980,6 +980,36 @@ test.describe("the first paint is the app's own home", () => {
   }
 
   /*
+   * Where scrollbars take no room, none is kept. The suite's browser hides its
+   * scrollbars, as a phone draws them over the page; kept by the stylesheet
+   * alone, Chromium kept the room all the same, and every page of the suite
+   * was laid out 15 px narrower than the phone it stands for (CI on round 7:
+   * three mutation jobs' own controls turned red).
+   */
+  for (const fresh of [true, false]) {
+    test(`es 360px, ${fresh ? "this browser's first load" : "a later load"}, scrollbars that take none: the page keeps none of a scrollbar's room, held and after`, async ({ browser }) => {
+      const { ctx, page } = await open(browser, { vp: { width: 360, height: 780 }, fresh });
+      const width = () =>
+        page.evaluate(() => {
+          const box = document.createElement("div");
+          box.style.cssText = "position:absolute;top:0;width:100px;height:100px;overflow:scroll";
+          document.documentElement.appendChild(box);
+          const takes = box.offsetWidth - box.clientWidth;
+          box.remove();
+          return { takes, page: document.documentElement.clientWidth, header: Math.round(document.querySelector(".app-header").getBoundingClientRect().width) };
+        });
+      const { go } = await heldBack(page, "/");
+      const held = await width();
+      go();
+      await settled(page);
+      const after = await width();
+      expect(after.takes, "control: this browser's scrollbars take no room").toBe(0);
+      expect({ held, after }, "laid out at the window's whole width, held and after").toEqual({ held: { takes: 0, page: 360, header: 360 }, after: { takes: 0, page: 360, header: 360 } });
+      await ctx.close();
+    });
+  }
+
+  /*
    * A view that fits the window has no scrollbar to show. Held with one
    * forced on, a later load at Plan or an exercise moved the header 7.5 px
    * sideways as the app started (review of PR #42, rt5), and every change

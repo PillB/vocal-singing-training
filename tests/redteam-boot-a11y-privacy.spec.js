@@ -918,7 +918,11 @@ test.describe("the first paint is the app's own home", () => {
    * the first load's hero stood alone for that long (review of PR #42, rt6).
    * Correct: all of them are asked for together, from <head>. Each answer is
    * held 600 ms here, so a script asked for only once another had arrived
-   * starts at least that much later than the first.
+   * starts at least that much later than the first. Read once the page has
+   * loaded, when every request has ended: a Resource Timing entry appears only
+   * then, and a second download of a script the parser does not wait for (a
+   * module, whose preload is in another mode) was still in flight once the
+   * app had started (review of PR #42, rt4).
    */
   test("es 390px, this browser's first load asks for every script at once, not each once the one before it has run", async ({ browser }) => {
     test.setTimeout(90000);
@@ -928,7 +932,7 @@ test.describe("the first paint is the app's own home", () => {
       await route.continue();
     });
     await page.goto(BASE + "/", { waitUntil: "commit" });
-    await page.waitForFunction(() => !!window.VTApp && document.readyState !== "loading", null, { timeout: 60000, polling: 250 });
+    await page.waitForFunction(() => !!window.VTApp && document.readyState === "complete", null, { timeout: 60000, polling: 250 });
     const asked = await page.evaluate(() => {
       const run = new Set([...document.querySelectorAll("body script[src]")].map((el) => el.src));
       return performance
@@ -939,6 +943,7 @@ test.describe("the first paint is the app's own home", () => {
     expect(asked.length, "control: the body's scripts were fetched").toBeGreaterThanOrEqual(50);
     const first = Math.min(...asked.map((a) => a.start));
     expect(asked.filter((a) => a.start - first > 300), "none asked for after another had arrived").toEqual([]);
+    expect(asked.filter((a, i) => asked.findIndex((b) => b.file === a.file) !== i), "none fetched twice").toEqual([]);
     await ctx.close();
   });
 

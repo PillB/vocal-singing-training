@@ -862,6 +862,7 @@ export const MUTANTS = {
     // Review 6 of PR #42 (rt4): what the static check missed, read as the parser reads the page
     ["D79 a script that never runs (another type) is preloaded all the same: a wasted download", "index.html", "<script src=\"js/wake-lock.js?v=", "<script type=\"text/plain\" src=\"js/wake-lock.js?v=", "tests/node/boot-preload.test.mjs", ""],
     ["D80 a script fetched in another mode (a module) than its preload: fetched twice", "index.html", "<script src=\"js/wake-lock.js?v=", "<script type=\"module\" src=\"js/wake-lock.js?v=", "tests/node/boot-preload.test.mjs", ""],
+    ["D81 the same, judged in the browser: a second download the parser does not wait for, seen once the page has loaded", "index.html", "<script src=\"js/wake-lock.js?v=", "<script type=\"module\" src=\"js/wake-lock.js?v=", "tests/redteam-boot-a11y-privacy.spec.js", "asks for every script at once"],
   ].map(([name, file, from, to, spec, grep]) => ({
     name,
     file,

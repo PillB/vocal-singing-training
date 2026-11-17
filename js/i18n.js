@@ -433,6 +433,9 @@
       "first.speak": "Hablar",
       "first.speakSub": "presentaciones, dicción",
       "first.title": "Entrena tu voz {min}\u00a0minutos al día.",
+      // The markup's hero title: first.title for the first load's routine (Hablar's Mínimo, 3 min), so the words shown
+      // before the app has started are the ones it then writes (js/boot-head.js, html.vt-boot-hero)
+      "first.titleMarkup": "Entrena tu voz 3\u00a0minutos al día.",
       "first.label": "Tus básicos · {min}\u00a0min",
       "first.trills": "trinos de labios",
       "first.why": "Sin libro ni partitura: solo tu voz y el micrófono.",
@@ -1589,6 +1592,7 @@
       "first.speak": "Speaking",
       "first.speakSub": "presentations, diction",
       "first.title": "Train your voice {min}\u00a0minutes a day.",
+      "first.titleMarkup": "Train your voice 3\u00a0minutes a day.",
       "first.label": "Your basics · {min}\u00a0min",
       "first.trills": "lip trills",
       "first.why": "No book or sheet music: just your voice and the mic.",

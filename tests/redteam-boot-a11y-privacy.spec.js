@@ -982,15 +982,26 @@ test.describe("the first paint is the app's own home", () => {
    * on a first load, the header on every load (review of PR #42, ae2). The
    * suite's browser hides its scrollbars, so this one is started with them.
    */
-  for (const fresh of [true, false]) {
-    test(`es 1280px, ${fresh ? "this browser's first load" : "a later load"}, scrollbars that take room: nothing moves sideways as the app starts`, async ({}, testInfo) => {
+  /*
+   * At 1024 px the title's size follows the window (vw), and Chromium leaves a
+   * kept scrollbar's room out of vw: with a scrollbar forced on only while
+   * held, the title grew 1.5 % as the app started, every glyph redrawn up to
+   * 5.6 px to the right under the reader's eye (review of PR #42, ae2).
+   */
+  for (const [vp, fresh] of [
+    [LAPTOP, true],
+    [LAPTOP, false],
+    [{ width: 1024, height: 768 }, true]
+  ]) {
+    test(`es ${vp.width}px, ${fresh ? "this browser's first load" : "a later load"}, scrollbars that take room: nothing moves sideways as the app starts${vp.width < 1129 ? ", nor does the title change size" : ""}`, async ({}, testInfo) => {
       const b = await chromium.launch({ executablePath: browserPath(testInfo), ignoreDefaultArgs: ["--hide-scrollbars"] });
       try {
-        const { page } = await open(b, { vp: LAPTOP, fresh });
+        const { page } = await open(b, { vp, fresh });
         const lefts = () =>
           page.evaluate(() => {
             const left = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().left * 10) / 10;
-            return { brand: left(".app-header .brand"), hero: left("#start-kicker"), room: innerWidth - document.documentElement.clientWidth };
+            const title = document.getElementById("start-title");
+            return { brand: left(".app-header .brand"), hero: left("#start-kicker"), size: getComputedStyle(title).fontSize, room: innerWidth - document.documentElement.clientWidth };
           });
         const { held, go } = await heldBack(page, "/");
         expect(held.hero, `control: the hero is ${fresh ? "shown" : "held"}`).toBe(fresh ? "visible" : "hidden");
@@ -999,8 +1010,8 @@ test.describe("the first paint is the app's own home", () => {
         await settled(page);
         const after = await lefts();
         expect(after.room, "control: the app's page has a scrollbar, and it takes room").toBeGreaterThan(0);
-        const seen = (l) => (fresh ? { brand: l.brand, hero: l.hero } : { brand: l.brand });
-        expect(seen(after), "the header and the hero stay where they were").toEqual(seen(before));
+        const seen = (l) => (fresh ? { brand: l.brand, hero: l.hero, size: l.size } : { brand: l.brand });
+        expect(seen(after), "the header and the hero stay where they were, the title at its size").toEqual(seen(before));
       } finally {
         await b.close();
       }

@@ -869,6 +869,7 @@ export const MUTANTS = {
     ["D85 no scrollbar's room is kept where scrollbars take room: the header moves sideways as the app starts", "js/boot-head.js", "  if (probe.offsetWidth > probe.clientWidth) html.classList.add(\"vt-scrollbar-room\");", "  if (probe.offsetWidth < probe.clientWidth) html.classList.add(\"vt-scrollbar-room\");", "tests/redteam-boot-a11y-privacy.spec.js", "does not move sideways as the app starts"],
     ["D86 under reduced motion the hold ends with its transitions: the page under the header turns visible a level per frame", "js/boot-ready.js", "    if (held) instant();\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "arrives in one frame when the hold ends"],
     ["D87 the design row is drawn whole at once while the hero's content fades in under it", "js/boot-ready.js", ", #start-panel > :not(.start-main), #site-version-bar\";", ", #start-panel > :not(.start-main)\";", "tests/redteam-boot-a11y-privacy.spec.js", "fades in under its words"],
+    ["D88 a scrollbar forced on only while held, at 1024 px: the title, sized by the window, grows 1.5 % as the app starts", "css/styles.css", "html.vt-scrollbar-room {\n  scrollbar-gutter: stable;\n}\n", "html.vt-boot-pending {\n  overflow-y: scroll;\n}\n", "tests/redteam-boot-a11y-privacy.spec.js", "nor does the title change size"],
   ].map(([name, file, from, to, spec, grep]) => ({
     name,
     file,

@@ -644,6 +644,9 @@ const revealWatch = () => {
   };
   requestAnimationFrame(sample);
 };
+/** The name of a "scrollbars that take room" test: below 1129 px the title's size follows the window. */
+const sidewaysTitle = (vp, fresh) =>
+  `es ${vp.width}px, ${fresh ? "this browser's first load" : "a later load"}, scrollbars that take room: nothing moves sideways as the app starts${vp.width < 1129 ? ", nor does the title change size" : ""}`;
 /**
  * For each part, the first frame after the hold ends in which it is visible
  * (its computed visibility, which an ancestor's transition holds back too),
@@ -993,7 +996,7 @@ test.describe("the first paint is the app's own home", () => {
     [LAPTOP, false],
     [{ width: 1024, height: 768 }, true]
   ]) {
-    test(`es ${vp.width}px, ${fresh ? "this browser's first load" : "a later load"}, scrollbars that take room: nothing moves sideways as the app starts${vp.width < 1129 ? ", nor does the title change size" : ""}`, async ({}, testInfo) => {
+    test(sidewaysTitle(vp, fresh), async ({}, testInfo) => {
       const b = await chromium.launch({ executablePath: browserPath(testInfo), ignoreDefaultArgs: ["--hide-scrollbars"] });
       try {
         const { page } = await open(b, { vp, fresh });

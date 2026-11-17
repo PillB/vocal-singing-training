@@ -1166,6 +1166,27 @@ test.describe("the first paint is the app's own home", () => {
   });
 
   /*
+   * Let go by its last resort (a script that never arrives), the page never
+   * runs js/boot-ready.js, which makes the frame the hold ends in one without
+   * transitions: there the hero's own rule, kept for the page's life, is what
+   * keeps it on screen under reduced motion as everything around it turns
+   * visible a level per frame.
+   */
+  test("es 390px, reduced motion, this browser's first load let go by its last resort: the hero does not blink out", async ({ browser }) => {
+    test.setTimeout(60000);
+    const { ctx, page } = await open(browser, { vp: PHONE, fresh: true, reducedMotion: "reduce" });
+    await page.addInitScript(frameWatch);
+    await page.route("**/js/app.js*", () => {});
+    await page.goto(BASE + "/", { waitUntil: "commit" });
+    await page.waitForFunction(() => window.__heroFrames.filter((f) => !f.held).length >= 30, null, { timeout: 30000, polling: 250 });
+    const frames = await page.evaluate(() => window.__heroFrames);
+    expect(await page.evaluate(() => !!window.VTApp), "control: the app never started").toBe(false);
+    expect(frames.filter((f) => f.held).length, "control: the hero was shown while held").toBeGreaterThan(0);
+    expect(unsteady(frames), "drawn as it stays, in every frame").toEqual([]);
+    await ctx.close();
+  });
+
+  /*
    * Under reduced motion a visibility an element inherits is drawn hidden in
    * the first frame of its 0.01 ms transition, so the page under the header
    * turned visible a level per frame when the hold ended: 3-6 steps over

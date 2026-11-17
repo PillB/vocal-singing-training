@@ -874,6 +874,37 @@
   const STAGE_MIN_LANES = 60;
 
   /**
+   * Px a mode panel lacks to show what it holds whole. Only a box that clips (a
+   * picture's panel) can lack any: a long step list's wrapper scrolls, by design.
+   * @param {HTMLElement|null} wrap #mode-focus-panel.
+   */
+  function panelShortfall(wrap) {
+    const cutOff = (el) =>
+      el && /^(hidden|clip)$/.test(getComputedStyle(el).overflowY) ? el.scrollHeight - el.clientHeight : 0;
+    return Math.max(cutOff(wrap), cutOff(wrap?.querySelector(".mode-panel")));
+  }
+
+  /**
+   * Px the idle stage guide can hand back to the mode panel above it: its steps
+   * and words, down to its "Ver todos los pasos" button, which stays (the guide
+   * shows whole steps or just its button). Only a panel that grows into freed
+   * room (a picture's, css: flex 1 1 0) takes them; a words-only panel keeps its
+   * own height. While practising the guide holds the step the clock is on.
+   * @param {HTMLElement|null} wrap #mode-focus-panel.
+   */
+  function guideYield(wrap) {
+    const guide = $("#stage-guide");
+    if (!guide || guide.hidden || guide.classList.contains("is-now") || !wrap) return 0;
+    if (!(parseFloat(getComputedStyle(wrap).flexGrow) > 0)) return 0;
+    const cs = getComputedStyle(guide);
+    const bare =
+      ($("#btn-stage-guide-more")?.offsetHeight || 0) +
+      (parseFloat(cs.borderTopWidth) || 0) +
+      (parseFloat(cs.borderBottomWidth) || 0);
+    return Math.max(0, guide.offsetHeight - bare);
+  }
+
+  /**
    * The stage is sized to the screen, but never to less than it holds: its top
    * rail, its bottom rail and, between them, either lanes of STAGE_MIN_LANES or
    * a speaking exercise's mode panel with its words whole. On the smallest
@@ -897,14 +928,15 @@
     const h = stage.getBoundingClientRect().height;
     let need = railTop + railBottom + STAGE_MIN_LANES;
     // A mode panel that is cut off with no way to scroll to the rest (a picture's
-    // panel clips) gets the rows it lacks. A long step list is left alone: its
-    // wrapper scrolls, by design.
+    // panel clips) gets the rows it lacks, once the stage guide under it has
+    // given back all it can: the guide drops its steps, its words, then itself
+    // (fitStageGuide) before the stage grows past the screen. At 1280x560 the
+    // diction ladder's picture lacked 15 px while the guide held a step, and the
+    // stage ran 3-7 px under the window's bottom edge.
     const focus = $("#mode-focus");
     if (focus && !focus.hidden) {
       const wrap = $("#mode-focus-panel");
-      const cutOff = (el) =>
-        el && /^(hidden|clip)$/.test(getComputedStyle(el).overflowY) ? el.scrollHeight - el.clientHeight : 0;
-      const over = Math.max(cutOff(wrap), cutOff(wrap?.querySelector(".mode-panel")));
+      const over = panelShortfall(wrap) - guideYield(wrap);
       // A few px of padding or rounding is not a row of words cut off.
       if (over > 8) need = Math.max(need, h + over);
     }
@@ -965,7 +997,6 @@
     // bring the guide back after a short viewport hid it.
     if (!guide || guide.dataset.on !== "1") return;
     const focus = $("#mode-focus");
-    const panel = $("#mode-focus-panel");
     if (!focus || focus.hidden) return;
     const live = guide.classList.contains("is-now");
     const head = $("#stage-guide-k");
@@ -976,25 +1007,46 @@
     if (list) list.hidden = live;
     guide.classList.remove("is-bare");
     guide.hidden = false;
-    const cs = getComputedStyle(focus);
-    const room = Math.floor(
-      focus.clientHeight -
-        (parseFloat(cs.paddingTop) || 0) -
-        (parseFloat(cs.paddingBottom) || 0) -
-        (panel && panel.offsetHeight ? panel.offsetHeight + (parseFloat(cs.rowGap) || 0) : 0)
-    );
-    const fits = () => guide.scrollHeight <= room + 1;
-    if (!live) {
-      // Idle: drop steps from the end; "Ver todos los pasos" still opens the rest.
-      for (let i = items.length - 1; i > 0 && !fits(); i--) items[i].hidden = true;
-      if (!fits() && head && list) {
-        head.hidden = true;
-        list.hidden = true;
-        guide.classList.add("is-bare");
-      }
-    }
-    guide.hidden = !fits();
+    const room = guideRooms(focus, $("#mode-focus-panel"));
+    const fits = (px) => guide.scrollHeight <= px + 1;
+    if (!live) trimIdleGuide(guide, items, () => fits(room.whole));
+    // Its button stays wherever it fits beside the picture as it is; the stage
+    // grows for the rest of the picture where the screen allows
+    // (growStageForContent).
+    guide.hidden = !fits(room.left);
   }
+
+  /**
+   * Px the stage guide may take under the mode panel: `left`, beside the panel
+   * as it is, and `whole`, beside the panel with what it needs to show whole.
+   * Steps are kept only within `whole`: a picture's panel shrinks beside a
+   * guide that holds steps, so measured against `left` the guide always
+   * "fitted" and the picture was the one cut.
+   * @param {HTMLElement} focus #mode-focus.
+   * @param {HTMLElement|null} panel #mode-focus-panel.
+   * @returns {{ left: number, whole: number }}
+   */
+  function guideRooms(focus, panel) {
+    const cs = getComputedStyle(focus);
+    const px = (v) => parseFloat(v) || 0;
+    const shown = !!(panel && panel.offsetHeight);
+    const box = focus.clientHeight - px(cs.paddingTop) - px(cs.paddingBottom);
+    const left = Math.floor(box - (shown ? panel.offsetHeight + px(cs.rowGap) : 0));
+    return { left, whole: left - (shown ? panelShortfall(panel) : 0) };
+  }
+
+  /** Idle: drop steps from the end, then the words; "Ver todos los pasos" still opens the rest. */
+  function trimIdleGuide(guide, items, fits) {
+    for (let i = items.length - 1; i > 0 && !fits(); i--) items[i].hidden = true;
+    const head = $("#stage-guide-k");
+    const list = $("#stage-guide-steps");
+    if (!fits() && head && list) {
+      head.hidden = true;
+      list.hidden = true;
+      guide.classList.add("is-bare");
+    }
+  }
+
 
   /**
    * The stage guide while practising: the step the clock has reached, "Ahora ·

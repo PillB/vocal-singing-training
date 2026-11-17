@@ -75,12 +75,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "59f96e1f5a763986d19e0af1f7ad74d6e84f38b0134cca21a140df5a80d2047f",
-      "complexity": 18,
-      "name": "Function 'fitStageGuide'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "fd51c793293c338bb53e96ab8f2169b8e6816ecae60c3c6c7b93893afa17ebaa",
       "complexity": 28,
       "name": "Function 'paintScore'"

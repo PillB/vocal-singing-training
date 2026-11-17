@@ -78,7 +78,8 @@ jobs:
 
   # The browser mutation sets, one job each. They ran as one step of browser-contracts and, once a11y grew
   # to 26 mutants, outlived that job's 30 minute limit (cancelled, not red: QA-45). Each mutant is judged by
-  # the spec written to catch it; the nightly job below runs the a11y group wide as well.
+  # the spec written to catch it; the nightly job below runs the a11y group wide as well. The first paint's
+  # mutants (boot) left regress for the same reason: with them it took 28.3 of its 30 minutes (PR #42).
   mutation:
     needs: contracts
     runs-on: ubuntu-latest
@@ -86,7 +87,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        set: [stage, a11y, flows, regress, billing, scoring, controls, audit, toast, designs, splits]
+        set: [stage, a11y, flows, regress, boot, billing, scoring, controls, audit, toast, designs, splits]
     env:
       CI: '1'
       MIC_HELP: '0'

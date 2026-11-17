@@ -15,18 +15,19 @@
  *    at all: the markup is Spanish, and i18n.js comes at the end of the body.
  *    The page is held (html.vt-i18n-pending, css/styles.css) until
  *    js/i18n-early.js has translated it, and let go whatever else happens:
- *    when a script fails to load or throws, and after eight seconds (a first
- *    visit on a slow phone connection needs about four for the scripts
- *    alone). A page that was never translated says it is Spanish.
+ *    when a script fails to load (its own tag, not the request made ahead
+ *    for it) or throws, and after eight seconds (a first visit on a slow
+ *    phone connection needs about four for the scripts alone). A page that
+ *    was never translated says it is Spanish.
  * 4. Everything below the header is held (html.vt-boot-pending) until the app
  *    has drawn it. The markup's own home is what a page without scripts shows;
  *    painted first, the app replaced it a moment later and the page under it
  *    jumped (a layout shift of 0.5-0.7 on about half the desktop loads once
  *    #21 was merged), and a tap on it landed on whatever moved under the
  *    finger. js/boot-ready.js lets go when the app has started; this lets go
- *    when the page has loaded (boot-ready.js missing), and when no new script
- *    has been read for eight seconds (one that never arrives) or twenty have
- *    passed, whichever comes first.
+ *    when the page has loaded (boot-ready.js missing), and when it has waited
+ *    eight seconds for one of its scripts (one that never arrives) or twenty
+ *    have passed, whichever comes first.
  *    On this browser's first load (html.vt-boot-hero) the hero's words show at
  *    once and only what the app adds to it and what lies below wait: nothing
  *    is cached then. The scripts are asked for all at once (index.html
@@ -104,13 +105,22 @@
     var nav = (window.performance && performance.getEntriesByType && performance.getEntriesByType("navigation")[0]) || {};
     if (history.state && history.state.y > 0) return true;
     if (location.hash || String(nav.name || "").indexOf("#") !== -1) return true;
-    var query = location.search;
-    try {
-      query = decodeURIComponent(query);
-    } catch (e) {
-      /* read as it is */
-    }
-    return /[?&]ab_/.test(query);
+    return forced();
+  }
+
+  /**
+   * An experiment's arm forced in the address (?ab_<name>=<arm>), read as
+   * js/experiments.js reads it: each name decoded on its own, so %61b_ is
+   * ab_, a malformed escape elsewhere changes nothing, and a name inside
+   * another one's value (?x=1%26ab_...) forces nothing. Decoded whole, the
+   * address was read both ways wrong (review of PR #42, rt2).
+   */
+  function forced() {
+    var arm = false;
+    new URLSearchParams(location.search).forEach(function (_, name) {
+      if (name.indexOf("ab_") === 0) arm = true;
+    });
+    return arm;
   }
 
   /**
@@ -146,15 +156,21 @@
   if (firstLoad()) html.classList.add("vt-boot-hero");
 
   /*
-   * The last resort, for a script that never arrives: let go once no new
-   * script has been read for eight seconds, and after twenty in any case. Not
-   * eight seconds after the start: on a slow line the scripts can arrive one
-   * by one for longer than that, and let go then the markup's home showed
-   * under the hero, its buttons not wired, until the app replaced it and the
-   * page jumped (review of PR #42). Only the parser's progress counts, a new
-   * <script>: anything else that edits the page (an extension, a translator)
-   * kept a page whose app never arrives held for the twenty seconds. On the
-   * page's own clock, which a correction of the system's never moves.
+   * The last resort, for a script that never arrives: let go once the page
+   * has waited eight seconds for one of its own scripts, and after twenty in
+   * any case. Not eight seconds after the start: on a slow line the scripts
+   * can arrive one by one for longer than that, and let go then the markup's
+   * home showed under the hero, its buttons not wired, until the app replaced
+   * it and the page jumped (review of PR #42). Only the wait for a script the
+   * parser stops at counts, from when it is read until it has run or failed:
+   * - markup still arriving is the page being read, not stalled (let go
+   *   eight seconds after the last script, it showed the markup's home
+   *   mid-stream: layout shift 0.68 on a phone, review of PR #42, rt2);
+   * - what anything else does to the page, an extension's edits and the
+   *   scripts it adds, a translator's, neither holds it nor lets it go (any
+   *   edit counted as progress held a page whose app never arrives for the
+   *   whole twenty seconds).
+   * On the page's own clock, which a correction of the system's never moves.
    */
   var STALL_MS = 8000;
   var CAP_MS = 20000;
@@ -162,32 +178,54 @@
     return performance.now();
   };
   var began = clock();
-  var last = began;
-  var isScript = function (node) {
-    return node.nodeName === "SCRIPT";
+  // The script the parser waits for, and since when
+  var waiting = null;
+  var since = began;
+  // One the parser stops at: in the markup (a script that another adds is
+  // async), with a file to fetch, and neither deferred nor a module
+  var blocking = function (node) {
+    return !!node && node.nodeName === "SCRIPT" && !!node.src && !node.async && !node.defer && node.type !== "module";
   };
   var reading = new MutationObserver(function (records) {
     for (var i = 0; i < records.length; i++) {
-      if (Array.prototype.some.call(records[i].addedNodes, isScript)) last = clock();
+      var read = Array.prototype.filter.call(records[i].addedNodes, blocking);
+      if (!read.length) continue;
+      // Seen before it runs: the parser hands what it has read to observers
+      // before it runs a script (HTML: a microtask checkpoint)
+      waiting = read[read.length - 1];
+      since = clock();
     }
-    if (!html.classList.contains("vt-boot-pending")) reading.disconnect();
+    if (!html.classList.contains("vt-boot-pending")) stop();
   });
-  reading.observe(document, { childList: true, subtree: true });
+  // Run, or failed: the parser goes on
+  var done = function (e) {
+    if (e.target === waiting) waiting = null;
+  };
+  var stop = function () {
+    reading.disconnect();
+    document.removeEventListener("load", done, true);
+    document.removeEventListener("error", done, true);
+  };
   var show = function () {
     html.classList.remove("vt-boot-pending");
-    reading.disconnect();
+    stop();
   };
+  reading.observe(document, { childList: true, subtree: true });
+  document.addEventListener("load", done, true);
+  document.addEventListener("error", done, true);
   // Loaded, the page has been read and the app has started (or never will):
-  // what js/boot-ready.js says when it is there
+  // what js/boot-ready.js says when it is there, the end of the busy state too
   window.addEventListener("load", function () {
     html.classList.add("vt-boot-ready");
+    if (document.body) document.body.removeAttribute("aria-busy");
     show();
   });
   (function stalled() {
-    if (!html.classList.contains("vt-boot-pending")) return reading.disconnect();
+    if (!html.classList.contains("vt-boot-pending")) return stop();
     var now = clock();
-    if (now - last >= STALL_MS || now - began >= CAP_MS) return show();
-    setTimeout(stalled, Math.min(STALL_MS - (now - last), CAP_MS - (now - began)));
+    var waited = waiting ? now - since : 0;
+    if (waited >= STALL_MS || now - began >= CAP_MS) return show();
+    setTimeout(stalled, Math.min(STALL_MS - waited, CAP_MS - (now - began)));
   })();
 
   try {
@@ -202,6 +240,15 @@
     html.classList.remove("vt-i18n-pending");
     html.lang = "es";
   };
-  window.addEventListener("error", letGo, true);
+  // A script that fails to load (its own element's error: the request
+  // index.html makes ahead for each script fails first, while the strings may
+  // still come, and let go then the Spanish page showed under lang="en";
+  // review of PR #42, rt3) or that throws (the window's)
+  var failed = function (e) {
+    var target = e && e.target;
+    if (target && target !== window && target.nodeName !== "SCRIPT") return;
+    letGo();
+  };
+  window.addEventListener("error", failed, true);
   setTimeout(letGo, 8000);
 })();

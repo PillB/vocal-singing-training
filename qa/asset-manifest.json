@@ -52,8 +52,8 @@
     "sha": "5a4bc220a59822b6"
   },
   "css/styles.css": {
-    "v": "20261116e",
-    "sha": "2f1f6875e8f778f6"
+    "v": "20261117b",
+    "sha": "1743e87a71839d1c"
   },
   "js/account.js": {
     "v": "20261113a",
@@ -104,12 +104,12 @@
     "sha": "c01b6050bcbccf84"
   },
   "js/boot-head.js": {
-    "v": "20261116e",
-    "sha": "a10cd00590d350fd"
+    "v": "20261117a",
+    "sha": "0e6637f3164106a1"
   },
   "js/boot-ready.js": {
-    "v": "20261116a",
-    "sha": "0c2d27ecfefac6a0"
+    "v": "20261117b",
+    "sha": "0535ccfa987e2288"
   },
   "js/daily-loop.js": {
     "v": "20261113a",

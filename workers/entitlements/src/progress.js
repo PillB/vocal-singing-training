@@ -120,16 +120,69 @@ export async function putProgress(db, accountId, profileId, doc, baseRev, now) {
   return updateProgress(db, accountId, profileId, existing, encoded, base, at);
 }
 
+/** An object that is not null and not a list. */
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Left out, or a list. */
+function listOrAbsent(value) {
+  return value === undefined || Array.isArray(value);
+}
+
+/** Left out, or a finite number of at least zero. */
+function amountOrAbsent(value) {
+  return value === undefined || (typeof value === "number" && Number.isFinite(value) && value >= 0);
+}
+
+/** One exercise's row: nothing, or an object whose history is a list and whose session count is a number. */
+function rowIsSound(row) {
+  return row === null || (isRecord(row) && listOrAbsent(row.history) && amountOrAbsent(row.completedCount));
+}
+
+/** One hold: an object whose seconds, when it has them, are a number. */
+function holdIsSound(entry) {
+  return isRecord(entry) && amountOrAbsent(entry.seconds);
+}
+
+/** Left out, null, or an object. */
+function recordOrNothing(value) {
+  return value === undefined || value === null || isRecord(value);
+}
+
+/**
+ * Whether a document has the structure the browser writes, in the parts the
+ * browser reads as numbers and lists. The server still never interprets a
+ * score or an exercise id; this refuses only what no build of the client
+ * writes and what would reach the page as markup or break it: a session count
+ * or a hold that is not a number (both are drawn into the page), a history or
+ * a log that is not a list (the browser calls list methods on them). Red team
+ * CXSS-1: markup stored here came back to every device on the account. The
+ * browser escapes what it draws as well; this is the second line.
+ * @param {unknown} doc Candidate document.
+ * @returns {boolean} Whether it may be stored.
+ */
+function documentIsSound(doc) {
+  if (!isRecord(doc) || !recordOrNothing(doc.progress) || !recordOrNothing(doc.weekPlan)) {
+    return false;
+  }
+  if (!listOrAbsent(doc.reviews) || !listOrAbsent(doc.holdLogs)) {
+    return false;
+  }
+  return Object.values(doc.progress || {}).every(rowIsSound) && (doc.holdLogs || []).every(holdIsSound);
+}
+
 /**
  * A document fit to store: `{ text, sizeBytes }`, or `{ ok: false, reason }`
- * for a malformed profile id, a document that is not an object or cannot be
- * serialised, or one over the size cap.
+ * for a malformed profile id, a document that is not an object, is not shaped
+ * as the browser writes it (documentIsSound) or cannot be serialised, or one
+ * over the size cap.
  */
 function encodeProgress(profileId, doc) {
   if (!isProfileIdShape(profileId)) {
     return { ok: false, reason: "bad_profile" };
   }
-  if (doc === undefined || doc === null || typeof doc !== "object") {
+  if (!documentIsSound(doc)) {
     return { ok: false, reason: "bad_document" };
   }
   let text;

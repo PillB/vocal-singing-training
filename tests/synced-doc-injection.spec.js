@@ -86,7 +86,9 @@ test.describe("CXSS-1: the synced progress document renders as text", () => {
       vt_progress_v1: {
         "s4-lip-trills": { completedCount: M("progress.completedCount"), history: [], lastScore: null, lastAt: AT },
         // Positive control: a real count on the same tab still shows its badge
-        "s9-pitch-match": { completedCount: 3, history: [], lastScore: null, lastAt: AT }
+        "s9-pitch-match": { completedCount: 3, history: [], lastScore: null, lastAt: AT },
+        // A number only in name: Number("1e400") is Infinity, which is no count either
+        "s1-vocal-fry": { completedCount: "1e400", history: [], lastScore: null, lastAt: AT }
       }
     });
     await home(page);
@@ -97,6 +99,7 @@ test.describe("CXSS-1: the synced progress document renders as text", () => {
     // Not a number: no sessions to count, so no badge, and none of the markup as text either
     await expect(card("s4-lip-trills").locator(".badge.done")).toHaveCount(0);
     await expect(card("s4-lip-trills")).not.toContainText("vtmk");
+    await expect(card("s1-vocal-fry").locator(".badge.done")).toHaveCount(0);
   });
 
   test("IJ2 the exercise screen's hold pills show seconds, and drop a value that is not a number", async ({ page }) => {

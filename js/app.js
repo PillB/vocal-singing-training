@@ -568,9 +568,10 @@
     return VTStorage.getProgress()[id] || null;
   }
 
-  /** A row's saved sessions as a whole number >= 0; 0 for a count that is not a number. */
+  /** A row's saved sessions as a whole number >= 0; 0 for a count that is not a finite number ("<b>", "1e400"). */
   function sessionCount(row) {
-    return Math.max(0, Math.floor(Number(row?.completedCount) || 0));
+    const n = Number(row?.completedCount);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
   }
 
   /**

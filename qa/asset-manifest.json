@@ -4,8 +4,8 @@
     "sha": "18027e516f4057ab"
   },
   "css/admin.css": {
-    "v": "20261112a",
-    "sha": "d020a8e7c8bf12d2"
+    "v": "20261118a",
+    "sha": "0e117cfde7d7f1dd"
   },
   "css/exercise-viz.css": {
     "v": "20261002a",
@@ -80,8 +80,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261118b",
-    "sha": "22d357a6ffbb90e9"
+    "v": "20261118c",
+    "sha": "73037398d137ed01"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",

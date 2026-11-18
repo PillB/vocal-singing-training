@@ -1254,11 +1254,11 @@ export const MUTANTS = {
   // shipped CSP; the worker stored any object. Each mutant puts one defect back and names the test written for it: a
   // path under workers/ is a Node test file, anything else a browser spec under the real CSP, with a title filter.
   inject: [
-    ["IJ1 the catalogue card's session count is drawn as stored: markup in the synced count becomes elements", "js/app.js", "    return Math.max(0, Math.floor(Number(row?.completedCount) || 0));", "    return row?.completedCount || 0;", "tests/synced-doc-injection.spec.js", "IJ1 "],
+    ["IJ1 the catalogue card's session count is drawn as stored: markup in the synced count becomes elements", "js/app.js", "    const n = Number(row?.completedCount);\n    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return row?.completedCount || 0;", "tests/synced-doc-injection.spec.js", "IJ1 "],
     ["IJ2 the hold pills draw each stored entry's seconds as they are, markup and all", "js/app.js", "      .map(holdSeconds)\n      .filter((s) => s !== null)\n", "      .map((l) => l.seconds)\n", "tests/synced-doc-injection.spec.js", "IJ2 "],
     ["IJ3 the 12-week plan's HUD puts the stored focus into its HTML unescaped", "js/practice-modes.js", "<span data-week-head>${escText(model.head)}</span>", "<span data-week-head>${model.head}</span>", "tests/synced-doc-injection.spec.js", "IJ3 "],
     ["IJ4 the hold pills are raw again, judged by the sweep of every synced field with Pro's panels drawn", "js/app.js", "      .map(holdSeconds)\n      .filter((s) => s !== null)\n", "      .map((l) => l.seconds)\n", "tests/synced-doc-injection.spec.js", "IJ4 "],
-    ["IJ5 the catalogue count is raw again, judged end to end: the worker's copy arrives by sign-in sync and its meta refresh navigates", "js/app.js", "    return Math.max(0, Math.floor(Number(row?.completedCount) || 0));", "    return row?.completedCount || 0;", "tests/synced-doc-injection.spec.js", "IJ5 "],
+    ["IJ5 the catalogue count is raw again, judged end to end: the worker's copy arrives by sign-in sync and its meta refresh navigates", "js/app.js", "    const n = Number(row?.completedCount);\n    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return row?.completedCount || 0;", "tests/synced-doc-injection.spec.js", "IJ5 "],
     ["IJ6 the worker takes any number-shaped field: markup as a session count or a hold's seconds is stored", "workers/entitlements/src/progress.js", "  return value === undefined || (typeof value === \"number\" && Number.isFinite(value) && value >= 0);", "  return true;", "workers/entitlements/test/progress.test.mjs"],
     ["IJ7 the worker takes a history or a log that is not a list", "workers/entitlements/src/progress.js", "  return value === undefined || Array.isArray(value);", "  return true;", "workers/entitlements/test/progress.test.mjs"],
     ["IJ8 the worker no longer looks inside the exercise rows", "workers/entitlements/src/progress.js", "  return Object.values(doc.progress || {}).every(rowIsSound) && (doc.holdLogs || []).every(holdIsSound);", "  return (doc.holdLogs || []).every(holdIsSound);", "workers/entitlements/test/progress.test.mjs"],
@@ -1277,7 +1277,8 @@ export const MUTANTS = {
     ["IJ19 any text passes as the domain: the header fields after it are kept", "js/admin.js", "  const PLAIN_DOMAIN = /^(?=.{1,253}$)", "  const PLAIN_DOMAIN = /^(?=.*$)|^(?=.{1,253}$)", "tests/admin-reply-link.spec.js"],
     ["IJ20 the local part is not percent-encoded: a # in it starts a fragment and the mail goes to the part before it", "js/admin.js", "    return `mailto:${encodeURIComponent(local)}@${domain}`;", "    return `mailto:${local}@${domain}`;", "tests/admin-reply-link.spec.js"],
     // CXSS-4: the spec that stood for this wrote #ex-steps with its own escapeHtml and passed on this mutant.
-    ["IJ21 the exercise's steps are put into #ex-steps unescaped", "js/app.js", "      .map((s) => `<li>${escapeHtml(s)}</li>`)", "      .map((s) => `<li>${s}</li>`)", "tests/redteam-client.spec.js", "IJ21 "]
+    ["IJ21 the exercise's steps are put into #ex-steps unescaped", "js/app.js", "      .map((s) => `<li>${escapeHtml(s)}</li>`)", "      .map((s) => `<li>${s}</li>`)", "tests/redteam-client.spec.js", "IJ21 "],
+    ["IJ22 a stored count of \"1e400\" is drawn as Infinity sessions (coerced, but not checked finite)", "js/app.js", "    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return Math.max(0, Math.floor(n || 0));", "tests/synced-doc-injection.spec.js", "IJ1 "]
   ].map(([name, file, from, to, spec, grep]) => ({
     name,
     file,

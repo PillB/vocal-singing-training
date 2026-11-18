@@ -193,8 +193,18 @@ jobs:
         include:
           - group: geometry
             specs: "tests/exercise-ui-forensics.spec.js"
+          # The two used to share a job: 22 min of live forensics and about 87 of the six-format mouse sweep
+          # ran into the 80 min suite timeout every night from Nov 9, on its fifth format. The mouse sweep
+          # now runs in two jobs of three formats each (tests/node/nightly-sweep-contract.test.mjs checks
+          # that the halves cover every format of the spec once, and that the spec runs the ones it is given).
           - group: voice-and-live
-            specs: "tests/exercise-live-forensics.spec.js tests/headed-exercise-forensics.spec.js"
+            specs: "tests/exercise-live-forensics.spec.js"
+          - group: formats-1-of-2
+            specs: "tests/headed-exercise-forensics.spec.js"
+            formats: "desktop,mobile,mobile-land"
+          - group: formats-2-of-2
+            specs: "tests/headed-exercise-forensics.spec.js"
+            formats: "tablet,short,fullscreen"
           - group: click
             specs: "tests/click-ui-formats.spec.js tests/click-ui-live-log.spec.js tests/headed-formats-clicks.spec.js"
           - group: fullscreen
@@ -213,6 +223,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Headed watch sweeps (${{ matrix.group }})
         if: matrix.group != 'fullscreen'
+        env:
+          FORENSICS_FORMATS: ${{ matrix.formats }}
         run: xvfb-run -a npx playwright test ${{ matrix.specs }} --project=sweep --workers=1 --global-timeout=4800000
       - name: Fullscreen mouse controls isolated per exercise
         if: matrix.group == 'fullscreen'
@@ -227,7 +239,10 @@ jobs:
           exit $rc
       - name: Live GitHub Pages smoke
         if: always() && matrix.group == 'fullscreen'
-        run: LIVE_PAGES=1 xvfb-run -a npx playwright test tests/live-pages.spec.js --project=chromium --workers=1
+        # Its own --output: Playwright empties the output folder it starts with, and this step runs after a
+        # red fullscreen step too, so the default test-results/ took that step's traces with it every night
+        # ("No files were found" at the upload below).
+        run: LIVE_PAGES=1 xvfb-run -a npx playwright test tests/live-pages.spec.js --project=chromium --workers=1 --output="test-results/live-pages"
       - name: Preserve sweep reports
         if: always()
         uses: actions/upload-artifact@v4

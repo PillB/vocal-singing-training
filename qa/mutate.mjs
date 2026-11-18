@@ -61,6 +61,9 @@ const PIANO_SPEC = [
 const TAKE_SPEC = [...PIANO_SPEC.slice(0, -1), "short of 15 seconds"];
 // The stage in a 1280x560 window: the picture whole, the stage on the window (stage-design).
 const SHORT_SPEC = [...PIANO_SPEC.slice(0, 3), "tests/stage-design.spec.js", "--project=chromium", "--workers=1", "--reporter=dot", "-g", "short laptop window"];
+// The nightly fullscreen sweep's mouse (tests/helpers/fullscreen-clicks.js), held by a spec that runs on every PR.
+const HARNESS_SPEC = [...PIANO_SPEC.slice(0, 3), "tests/fullscreen-click-harness.spec.js", "--project=chromium", "--workers=2", "--reporter=dot"];
+const START_POINT_SPEC = [...PIANO_SPEC.slice(0, 3), "tests/sweep-start-point.spec.js", "--project=chromium", "--workers=2", "--reporter=dot"];
 // QA-66. The tap-floor allowance for float32 geometry (tests/helpers/tap-floor.js), judged by its own spec.
 const TAP_SPEC = [...PIANO_SPEC.slice(0, 3), "tests/tap-floor.spec.js", "--project=chromium", "--workers=2", "--reporter=dot"];
 const FLOW_SPEC = [
@@ -327,6 +330,20 @@ export const MUTANTS = {
     ["L43 the base branch's name is pasted into the complexity step's shell line again (QA round 11, CI-1)", ".github/workflows/quality.yml", "        env:\n          BASE_REF: ${{ github.base_ref }}\n        run: node qa/lint-complexity.mjs --baseline-ref \"origin/$BASE_REF\"", "        run: node qa/lint-complexity.mjs --baseline-ref \"origin/${{ github.base_ref }}\"", ["tests/node/workflow-injection.test.mjs"]],
     ["L26 an English drill loses its fifth step: two languages, two drills (QA-34)", "js/exercises-data.js", '        "Then tell a 60 s story using at least 3 levels, on purpose.",\n        "Keep the same clarity and diction at every level."\n      ],', '        "Then tell a 60 s story using at least 3 levels, on purpose."\n      ],', ["tests/node/exercise-parity.test.mjs"]],
     ["L48 the first paint's mutation set is left out of CI's matrix: its mutants never run", ".github/workflows/quality.yml", "regress, boot, billing", "regress, billing", ["tests/node/mutation-matrix.test.mjs"]],
+    // The six-format mouse sweep in two jobs (nightly voice-and-live ran out of its 80 min from Nov 9 to 17).
+    ["L49 the second half of the mouse sweep leaves the fullscreen format out: no nightly job runs it", ".github/workflows/quality.yml", 'formats: "tablet,short,fullscreen"', 'formats: "tablet,short"', ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L50 the mouse sweep's job does not hand its formats to the spec, so both halves run all six and time out", ".github/workflows/quality.yml", "        env:\n          FORENSICS_FORMATS: ${{ matrix.formats }}\n", "", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    // Exactly the old matrix: a valid partition, which only the alone-in-its-jobs check (mouseSweepAlone) catches.
+    ["L51 the mouse sweep goes back into one job beside the live forensics, about 109 min against 80", ".github/workflows/quality.yml", 'specs: "tests/exercise-live-forensics.spec.js"\n          - group: formats-1-of-2\n            specs: "tests/headed-exercise-forensics.spec.js"\n            formats: "desktop,mobile,mobile-land"\n          - group: formats-2-of-2\n            specs: "tests/headed-exercise-forensics.spec.js"\n            formats: "tablet,short,fullscreen"', 'specs: "tests/exercise-live-forensics.spec.js tests/headed-exercise-forensics.spec.js"', ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L52 the live Pages smoke writes to the default test-results/ again, emptying it of a red fullscreen step's traces before the upload", ".github/workflows/quality.yml", ' --output="test-results/live-pages"', "", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    // What the mouse sweep does with its job's formats: the spec runs only at night, so the helper it reads them with is judged here.
+    ["L53 the mouse sweep reads another name than the one its job sets, so both halves run all six formats and time out", "tests/helpers/forensics-formats.js", "String(env.FORENSICS_FORMATS || \"\")", "String(env.FORENSICS_FORMAT || \"\")", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L54 a misspelt format is dropped without a word, so no job runs it", "tests/helpers/forensics-formats.js", "  if (unknown.length) {", "  if (false) {", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L55 a part's Start budget rounds up, so three jobs of two formats tolerate six failed Starts where one run tolerated four", "tests/helpers/forensics-formats.js", "Math.floor((START_FAIL_BUDGET * n)", "Math.ceil((START_FAIL_BUDGET * n)", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L56 the mouse sweep runs all six formats whatever its job names", "tests/headed-exercise-forensics.spec.js", "const formats = selectFormats(process.env);", "const formats = selectFormats({});", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L57 each half of the mouse sweep tolerates four failed Starts again, eight in all", "tests/headed-exercise-forensics.spec.js", "const p0Budget = startFailBudget(formats.length);", "const p0Budget = 4;", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L58 the mouse sweep presses Start's centre wherever it is again, under the sticky Back button", "tests/headed-exercise-forensics.spec.js", "const startPt = await clickablePoint(page, \"#btn-practice-start\");", "const startPt = await centerIfVisible(page, \"#btn-practice-start\");", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L59 the mouse sweep presses a Start it was told is covered", "tests/headed-exercise-forensics.spec.js", "if (startPt && !startPt.covered) {", "if (startPt) {", ["tests/node/nightly-sweep-contract.test.mjs"]],
     ["L7 empty wait-may-fail reason accepted", "qa/lint-playwright-waits.mjs", "/wait-may-fail:\\s*\\S/", "/wait-may-fail:/"]
   // A mutant that edits a hashed asset (js/css) turns "every versioned asset matches its recorded content" red whatever
   // else is wrong, so it names the one test it is meant to be judged by (red-team: L25 and L26 were killed by the manifest).
@@ -418,7 +435,16 @@ export const MUTANTS = {
     // A short laptop window (stage-design "short laptop window"): the guide gives its room up before the picture is cut or the stage grows.
     ["S12 the guide is fitted beside the room the picture was left, not the room it needs: the picture is cut under a guide that kept its steps", "js/app.js", "return { left, whole: left - (shown ? panelShortfall(panel) : 0) };", "return { left, whole: left };", SHORT_SPEC],
     ["S13 the stage grows past the window before the guide gives its steps back to the picture", "js/app.js", "const over = panelShortfall(wrap) - guideYield(wrap);", "const over = panelShortfall(wrap);", SHORT_SPEC],
-    ["S14 the guide counts its button as room it can give back, so the stage does not grow and the picture stays cut", "js/app.js", "return Math.max(0, guide.offsetHeight - bare);", "return guide.offsetHeight;", SHORT_SPEC]
+    ["S14 the guide counts its button as room it can give back, so the stage does not grow and the picture stays cut", "js/app.js", "return Math.max(0, guide.offsetHeight - bare);", "return guide.offsetHeight;", SHORT_SPEC],
+    // The fullscreen sweep's mouse: red every night from Nov 12 on a toggle 5 px under a 1080 px screen.
+    ["S15 the click harness scrolls to a control under the window's edge, then fits the stage again, whose scrollTo(0, 0) puts it back under the edge", "tests/helpers/fullscreen-clicks.js", "    await page.locator(sel).scrollIntoViewIfNeeded().catch(() => {});\n    hit = await hitCenter(page, sel);", "    await page.locator(sel).scrollIntoViewIfNeeded().catch(() => {});\n    await fit(page);\n    hit = await hitCenter(page, sel);", HARNESS_SPEC],
+    ["S16 the click harness never scrolls to a control under the window's edge", "tests/helpers/fullscreen-clicks.js", "    await page.locator(sel).scrollIntoViewIfNeeded().catch(() => {});\n", "", HARNESS_SPEC],
+    ["S17 the click harness takes anything at a control's centre for the control, so a covered button passes", "tests/helpers/fullscreen-clicks.js", "const ok = !!(top && (top === el || el.contains(top)));", "const ok = !!top;", HARNESS_SPEC],
+    ["S18 the click harness scrolls to a control with no box, and waits there until the test's timeout", "tests/helpers/fullscreen-clicks.js", "  if (!hit.ok && hit.reason !== \"zero\" && hit.reason !== \"missing\") {", "  if (!hit.ok) {", HARNESS_SPEC],
+    ["S19 the sweep re-clicks the metrics toggle the open card hides, so the card stays open", "tests/helpers/fullscreen-clicks.js", "      if (wasOpen && id === \"btn-toggle-metrics\") card.classList.add(\"collapsed\");\n", "", HARNESS_SPEC],
+    // The mouse sweep's Start, pressed at its centre under the sticky Back button in a 560 px window.
+    ["S20 the mouse sweep takes whatever is at Start's centre for Start, and presses the Back button over it", "tests/helpers/ui-forensics.js", "mine: !!top && (top === el || el.contains(top))", "mine: !!top", START_POINT_SPEC],
+    ["S21 the mouse sweep sees Start is covered and does not scroll to it", "tests/helpers/ui-forensics.js", "      el.scrollIntoView({ block: \"center\", behavior: \"instant\" });\n      p = at();\n", "", START_POINT_SPEC]
   ].map(([name, file, from, to, cmd]) => ({ name, file, from, to, cmd: cmd || PIANO_SPEC })),
   // Accessibility contracts that only a browser can see.
   a11y: [

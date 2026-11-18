@@ -80,6 +80,40 @@ async function hitAt(page, x, y) {
 }
 
 /**
+ * Where a person could press a control: its centre, once nothing else is on
+ * top of it there. A control under something (the sticky header, a bar) or
+ * off the window is scrolled to the middle of the window first, once, as a
+ * person scrolls to what they mean to press. Returns { x, y }, or { covered }
+ * naming what is still on top, or null when it has no box. The mouse sweep
+ * clicked Start where it was: in a 560 px window with the rating open, the
+ * sticky Back button sat over v12-melodic-speech's Start, and the click went
+ * back to the plan (a "Start did not go live" that was the sweep's own miss).
+ */
+async function clickablePoint(page, sel) {
+  return page.evaluate((selector) => {
+    const el = document.querySelector(selector);
+    if (!el || el.hidden) return null;
+    const at = () => {
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return null;
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height / 2;
+      const top = document.elementFromPoint(x, y);
+      return { x, y, top, mine: !!top && (top === el || el.contains(top)) };
+    };
+    let p = at();
+    if (p && !p.mine) {
+      el.scrollIntoView({ block: "center", behavior: "instant" });
+      p = at();
+    }
+    if (!p) return null;
+    if (p.mine) return { x: p.x, y: p.y };
+    const t = p.top;
+    return { covered: t ? { id: t.id, tag: t.tagName, cls: String(t.className || "").slice(0, 60) } : { id: "", tag: "", cls: "outside the window" } };
+  }, sel);
+}
+
+/**
  * Real mouse path: scroll into view, then move with steps onto center.
  * @param {import('@playwright/test').Page} page
  * @param {string} sel
@@ -558,6 +592,7 @@ module.exports = {
   scrollIntoView,
   elementCenter,
   hitAt,
+  clickablePoint,
   realHover,
   realClick,
   realDragX,

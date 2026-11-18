@@ -9582,7 +9582,13 @@
     email_not_configured: "auth.err.emailUnavailable",
     // What every /v1/auth route answers on a deploy with no database, which the
     // operator runbook explicitly allows. Without this it read as a bug.
-    accounts_not_configured: "auth.err.accountsOff"
+    accounts_not_configured: "auth.err.accountsOff",
+    // Both sign-in routes refuse a switched-off account before any session
+    // exists, and Google sign-in refuses a second Google account that claims
+    // an address another Google account already holds here (red team AUTHN-1/2).
+    // The emailed code still proves the inbox, so that is the way in it names.
+    disabled: "auth.err.disabled",
+    identity_conflict: "auth.err.identityConflict"
   };
 
   function accountError(message) {

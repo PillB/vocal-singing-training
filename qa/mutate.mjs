@@ -1364,6 +1364,32 @@ export const MUTANTS = {
     cmd: spec.startsWith("workers/")
       ? node([spec])
       : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
+  })),
+  // Red team, Nov 2026 (sign-in). AUTHN-1: Google sign-in found the account by the token's email and ignored `sub`, so
+  // a second Google account with the same address entered the first one's account (admin included) and a Google
+  // account whose address changed got an empty one. AUTHN-2: a switched-off account still got a session and a licence
+  // from both sign-in routes. AUTHN-7: no response said nosniff. The last two mutants take the client's messages for
+  // the new refusals away, which made both read "Algo falló — inténtalo de nuevo".
+  authwall: [
+    ["AW1 Google sign-in looks the account up by email only: a renamed Google account gets an empty account", "workers/entitlements/src/api.js", "  let account = await getAccountByIdentity(env.DB, \"google\", identity.subject);", "  let account = null;", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW2 a second Google account with a taken address walks into the first one's account", "workers/entitlements/src/api.js", "    if (known.length && !known.includes(identity.subject)) {", "    if (false) {", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW3 over-strict: an account no Google account owns yet can never be joined by Google", "workers/entitlements/src/api.js", "    if (known.length && !known.includes(identity.subject)) {", "    if (!known.includes(identity.subject)) {", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW4 Google sign-in hands a switched-off account a session and a licence", "workers/entitlements/src/api.js", "  if (isDisabled(account)) {\n    return { ok: false, status: 403, reason: \"disabled\" };", "  if (false) {\n    return { ok: false, status: 403, reason: \"disabled\" };", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW5 an emailed code hands a switched-off account a session and a licence", "workers/entitlements/src/api.js", "  if (isDisabled(account)) {\n    // Before the code is spent", "  if (false) {\n    // Before the code is spent", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW6 a Google account's sub is never recorded, so its next sign-in after an address change starts over", "workers/entitlements/src/api.js", "  await recordIdentity(env.DB, account.id, \"google\", identity.subject, at);\n  return { ok: true, account };", "  return { ok: true, account };", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW7 over-strict: an account that was never switched off reads as switched off", "workers/entitlements/src/accounts.js", "  return Boolean(account) && account.disabled_at !== null && account.disabled_at !== undefined;", "  return Boolean(account) && account.disabled_at !== undefined;", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW8 JSON answers lose nosniff", "workers/entitlements/src/index.js", "      \"x-content-type-options\": \"nosniff\",\n      ...(headers || {})", "      ...(headers || {})", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW9 the preflight loses nosniff", "workers/entitlements/src/index.js", "headers: { ...cors, \"x-content-type-options\": \"nosniff\" } });", "headers: cors });", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW10 a switched-off account is told \"something went wrong\" and retries", "js/app.js", "    disabled: \"auth.err.disabled\",\n", "", "tests/redteam-accounts-profiles.spec.js", "switched-off account is told so"],
+    ["AW11 a Google account refused for a taken address is not told to use the emailed code", "js/app.js", "    identity_conflict: \"auth.err.identityConflict\"\n", "", "tests/redteam-accounts-profiles.spec.js", "address another Google account holds"]
+  ].map(([name, file, from, to, spec, grep]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: spec.startsWith("workers/")
+      ? node([spec])
+      : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
   }))
 };
 

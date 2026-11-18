@@ -81,3 +81,7 @@ import "./sign-in-edges.test.mjs";
 // Housekeeping: what the sweep keeps, how much one run does, the schema memo,
 // and the deadline each call out really gets.
 import "./housekeeping-edges.test.mjs";
+// Which account a sign-in reaches (Google's sub before the email), a switched-
+// off account refused before any session or licence, and nosniff on every
+// answer (red team 2026-11-18, AUTHN-1/2/7).
+import "./sign-in-identity.test.mjs";

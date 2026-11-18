@@ -156,33 +156,29 @@ test.describe("Red team client (Zuck)", () => {
     expect(executed).toBe(false);
   });
 
-  test("guide list escapes HTML if catalog string were hostile", async ({ page }) => {
+  // CXSS-4 (red team, Nov 2026): the test that stood here, "guide list escapes HTML if catalog string were
+  // hostile", wrote #ex-steps itself with its own copy of escapeHtml, so it passed on an app.js whose renderer
+  // escaped nothing. Data a stranger can write (the synced progress document, localStorage) is tested at its
+  // boundary in tests/synced-doc-injection.spec.js; this one now feeds a hostile string to the app's own
+  // renderer through the catalog it reads, and is red when the renderer stops escaping (mutant IJ21).
+  test("IJ21 the exercise's steps, tips and mistakes are drawn as text even if a catalog string held markup", async ({ page }) => {
     await boot(page);
+    await page.waitForFunction(() => !!window.VTApp?.openExercise && !!window.VT_EXERCISE_LOCALE_ES, null, { timeout: 15000 });
+    const hostile = (field) => `<b class="vtmk" data-f="${field}">${field}</b><img src=x onerror="window.__xssGuide=true">`;
+    await page.evaluate((fields) => {
+      const pack = (window.VT_EXERCISE_LOCALE_ES["v1-diction"] = window.VT_EXERCISE_LOCALE_ES["v1-diction"] || {});
+      // Each list holds a hostile string and, as a control, a plain one
+      for (const [field, text] of Object.entries(fields)) pack[field] = [text, `plain ${field}`];
+    }, { steps: hostile("steps"), tips: hostile("tips"), mistakes: hostile("mistakes") });
     await openExercise(page, "v1-diction");
-    const safe = await page.evaluate(() => {
-      window.__xssGuide = false;
-      const host = document.querySelector("#ex-steps");
-      if (!host || !window.VTApp) return { missing: "#ex-steps or VTApp" };
-      // Simulate hostile step rendering path by calling escape path via re-render
-      const ex = window.VTApp.getState?.()?.exercise;
-      if (!ex) return { missing: "VTApp.getState().exercise" };
-      const hostile = `<img src=x onerror="window.__xssGuide=true">`;
-      // Directly exercise escapeHtml-equivalent DOM path: set via same pattern as app
-      const escapeHtml = (s) =>
-        String(s ?? "")
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;");
-      host.innerHTML = [hostile].map((s) => `<li>${escapeHtml(s)}</li>`).join("");
-      return {
-        xss: window.__xssGuide === true,
-        text: host.textContent || ""
-      };
-    });
-    expect(safe.missing, "the page the test drives is open: a test that cannot reach it is a failure, not a skip (QA-57)").toBeUndefined();
-    expect(safe.xss).toBe(false);
-    expect(safe.text).toContain("<img");
+    for (const field of ["steps", "tips", "mistakes"]) {
+      const list = page.locator(`#ex-${field}`);
+      await expect(list.locator("li"), `control: the app drew both of ${field}'s strings`).toHaveCount(2);
+      await expect(list.locator("li").nth(1)).toHaveText(`plain ${field}`);
+      await expect(list.locator("li").first(), `${field}: the markup is shown as the characters it is`).toContainText(`<b class="vtmk" data-f="${field}">`);
+      await expect(list.locator(".vtmk, img"), `${field}: no element was made from the string`).toHaveCount(0);
+    }
+    expect(await page.evaluate(() => window.__xssGuide === true)).toBe(false);
   });
 
   test("mic deny still shows Start and recovers after toast path", async ({ page }) => {

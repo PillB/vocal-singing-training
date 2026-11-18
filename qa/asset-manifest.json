@@ -4,8 +4,8 @@
     "sha": "18027e516f4057ab"
   },
   "css/admin.css": {
-    "v": "20261112a",
-    "sha": "d020a8e7c8bf12d2"
+    "v": "20261118a",
+    "sha": "0e117cfde7d7f1dd"
   },
   "css/exercise-viz.css": {
     "v": "20261002a",
@@ -64,8 +64,8 @@
     "sha": "d1a309907c0e8b86"
   },
   "js/admin.js": {
-    "v": "20261113a",
-    "sha": "f327a63dcd332a39"
+    "v": "20261118a",
+    "sha": "63623aaff918b896"
   },
   "js/ads-config.js": {
     "v": "20261113a",
@@ -80,8 +80,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261118a",
-    "sha": "cd0d042c3efef611"
+    "v": "20261118d",
+    "sha": "2e6d6c866b1ec1e0"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -104,8 +104,8 @@
     "sha": "c01b6050bcbccf84"
   },
   "js/boot-head.js": {
-    "v": "20261117c",
-    "sha": "d232127e9ca2a6d8"
+    "v": "20261118a",
+    "sha": "cee3392cf03ba60c"
   },
   "js/boot-ready.js": {
     "v": "20261117c",
@@ -138,6 +138,10 @@
   "js/focus-trap.js": {
     "v": "20261113a",
     "sha": "82b1844ca021a77b"
+  },
+  "js/frame-guard.js": {
+    "v": "20261118a",
+    "sha": "24b048d7e4683c91"
   },
   "js/i18n-early.js": {
     "v": "20261112a",
@@ -176,8 +180,8 @@
     "sha": "1155596a5c7cd831"
   },
   "js/practice-modes.js": {
-    "v": "20261113a",
-    "sha": "fb906e7eb94e3b96"
+    "v": "20261118a",
+    "sha": "9c4a6a6c4eeb0442"
   },
   "js/practice-profiles.js": {
     "v": "20261112b",

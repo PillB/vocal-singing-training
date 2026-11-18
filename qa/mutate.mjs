@@ -1309,6 +1309,45 @@ export const MUTANTS = {
     from,
     to: to.replace("SEQ", SEQUENTIAL),
     cmd: node([`workers/entitlements/test/${test}.test.mjs`])
+  })),
+  // Red team, Nov 2026 (browser injection and framing). CXSS-1: three fields of the synced progress document reached
+  // innerHTML raw, and a stored <meta http-equiv="refresh"> moved every device on the account off the site under the
+  // shipped CSP; the worker stored any object. Each mutant puts one defect back and names the test written for it: a
+  // path under workers/ is a Node test file, anything else a browser spec under the real CSP, with a title filter.
+  inject: [
+    ["IJ1 the catalogue card's session count is drawn as stored: markup in the synced count becomes elements", "js/app.js", "    const n = Number(row?.completedCount);\n    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return row?.completedCount || 0;", "tests/synced-doc-injection.spec.js", "IJ1 "],
+    ["IJ2 the hold pills draw each stored entry's seconds as they are, markup and all", "js/app.js", "      .map(holdSeconds)\n      .filter((s) => s !== null)\n", "      .map((l) => l.seconds)\n", "tests/synced-doc-injection.spec.js", "IJ2 "],
+    ["IJ3 the 12-week plan's HUD puts the stored focus into its HTML unescaped", "js/practice-modes.js", "<span data-week-head>${escText(model.head)}</span>", "<span data-week-head>${model.head}</span>", "tests/synced-doc-injection.spec.js", "IJ3 "],
+    ["IJ4 the hold pills are raw again, judged by the sweep of every synced field with Pro's panels drawn", "js/app.js", "      .map(holdSeconds)\n      .filter((s) => s !== null)\n", "      .map((l) => l.seconds)\n", "tests/synced-doc-injection.spec.js", "IJ4 "],
+    ["IJ5 the catalogue count is raw again, judged end to end: the worker's copy arrives by sign-in sync and its meta refresh navigates", "js/app.js", "    const n = Number(row?.completedCount);\n    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return row?.completedCount || 0;", "tests/synced-doc-injection.spec.js", "IJ5 "],
+    ["IJ6 the worker takes any number-shaped field: markup as a session count or a hold's seconds is stored", "workers/entitlements/src/progress.js", "  return value === undefined || (typeof value === \"number\" && Number.isFinite(value) && value >= 0);", "  return true;", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ7 the worker takes a history or a log that is not a list", "workers/entitlements/src/progress.js", "  return value === undefined || Array.isArray(value);", "  return true;", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ8 the worker no longer looks inside the exercise rows", "workers/entitlements/src/progress.js", "  return Object.values(doc.progress || {}).every(rowIsSound) && (doc.holdLogs || []).every(holdIsSound);", "  return (doc.holdLogs || []).every(holdIsSound);", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ9 the worker no longer looks inside the hold log", "workers/entitlements/src/progress.js", "  return Object.values(doc.progress || {}).every(rowIsSound) && (doc.holdLogs || []).every(holdIsSound);", "  return Object.values(doc.progress || {}).every(rowIsSound);", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ10 over-strict: a document that leaves a list out is refused, though the client may send one so", "workers/entitlements/src/progress.js", "  return value === undefined || Array.isArray(value);", "  return Array.isArray(value);", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ11 over-strict: a week plan of null, what a browser with no plan sends, is refused", "workers/entitlements/src/progress.js", "  return value === undefined || value === null || isRecord(value);", "  return value === undefined || isRecord(value);", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ12 the worker takes a list as the whole document", "workers/entitlements/src/progress.js", "  return value !== null && typeof value === \"object\" && !Array.isArray(value);", "  return value !== null && typeof value === \"object\";", "workers/entitlements/test/progress.test.mjs"],
+    // CXSS-2: GitHub Pages cannot send frame-ancestors, so the first script of each page refuses a frame.
+    ["IJ13 index.html renders in another origin's frame: boot-head.js no longer hides it", "js/boot-head.js", "  if (framed()) {\n", "  if (false) {\n", "tests/frame-guard.spec.js", "IJ13 "],
+    ["IJ14 admin.html renders in another origin's frame: its guard no longer runs", "js/frame-guard.js", "  if (!framed()) return;\n", "  return;\n", "tests/frame-guard.spec.js", "IJ13 "],
+    ["IJ15 framed by its own origin, neither page asks to be the top window", ["js/boot-head.js", "js/frame-guard.js"], "window.top.location.replace(window.location.href);", "void 0;", "tests/frame-guard.spec.js", "IJ14 "],
+    ["IJ16 over-blocking: admin.html takes itself for framed when it is the top window, and never shows", "js/frame-guard.js", "      return window.top !== window.self;", "      return true;", "tests/frame-guard.spec.js", "IJ15 "],
+    // CXSS-3: a report's contact, typed by anyone, became the admin's reply link as it was (mailto header fields).
+    ["IJ17 the reply link is the contact as typed: ?bcc=, &body= and a second recipient reach the admin's mail client", "js/admin.js", "    const href = replyHref(contact);", "    const href = `mailto:${contact}`;", "tests/admin-reply-link.spec.js"],
+    ["IJ18 any character but @ passes as the local part: a comma writes to a second recipient", "js/admin.js", "  const PLAIN_LOCAL = /^[A-Za-z0-9.!#$'*+^_`{|}~-]{1,64}$/;", "  const PLAIN_LOCAL = /^[^@\\s]{1,64}$/;", "tests/admin-reply-link.spec.js"],
+    ["IJ19 any text passes as the domain: the header fields after it are kept", "js/admin.js", "  const PLAIN_DOMAIN = /^(?=.{1,253}$)", "  const PLAIN_DOMAIN = /^(?=.*$)|^(?=.{1,253}$)", "tests/admin-reply-link.spec.js"],
+    ["IJ20 the local part is not percent-encoded: a # in it starts a fragment and the mail goes to the part before it", "js/admin.js", "    return `mailto:${encodeURIComponent(local)}@${domain}`;", "    return `mailto:${local}@${domain}`;", "tests/admin-reply-link.spec.js"],
+    // CXSS-4: the spec that stood for this wrote #ex-steps with its own escapeHtml and passed on this mutant.
+    ["IJ21 the exercise's steps are put into #ex-steps unescaped", "js/app.js", "      .map((s) => `<li>${escapeHtml(s)}</li>`)", "      .map((s) => `<li>${s}</li>`)", "tests/redteam-client.spec.js", "IJ21 "],
+    ["IJ22 a stored count of \"1e400\" is drawn as Infinity sessions (coerced, but not checked finite)", "js/app.js", "    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return Math.max(0, Math.floor(n || 0));", "tests/synced-doc-injection.spec.js", "IJ1 "]
+  ].map(([name, file, from, to, spec, grep]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: spec.startsWith("workers/")
+      ? node([spec])
+      : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
   }))
 };
 

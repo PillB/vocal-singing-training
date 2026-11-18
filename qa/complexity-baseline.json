@@ -27,12 +27,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "0f5d1758f58f917a6edc23a78c1ca64d20ab9af35fa8a178de0d457a96aed292",
-      "complexity": 18,
-      "name": "Arrow function"
-    },
-    {
-      "file": "js/app.js",
       "sha": "428a7963c4c834a3ce8f326d65dfd9fe6648c7c45d9d2c3ac1bbade951a67ac5",
       "complexity": 16,
       "name": "Async arrow function"

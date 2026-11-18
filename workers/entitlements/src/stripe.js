@@ -359,7 +359,7 @@ function mapCheckoutSession(session, env, statusOverride) {
   const subscriptionId = idOf(session && session.subscription);
   const { plan, planSource } = checkoutPlan(byPrice, byMetadata, subscriptionId);
   const status = checkoutStatus(session, subscriptionId, statusOverride);
-  return {
+  return gateUnnamedCheckout({
     provider: "stripe",
     claimId: idOf(session && session.id),
     subscriptionId,
@@ -380,7 +380,41 @@ function mapCheckoutSession(session, env, statusOverride) {
     // A checkout session carries no period end; leave whatever the
     // subscription events recorded untouched.
     periodEnd: undefined
-  };
+  }, env, Boolean(byPrice || byMetadata));
+}
+
+/**
+ * What a checkout that names no plan may say, once the price table is filled
+ * in and so is an allow-list.
+ *
+ * A webhook's session carries no line items (Stripe expands nothing in a
+ * webhook), so its price is never seen here, and only the owner's
+ * `metadata.plan` names it as ours. Without that, it used to entitle anyway:
+ * a one-time checkout for anything else sold from the same account (a
+ * donation link) was stored as a month of Pro, and a subscription's checkout
+ * that landed seconds after the subscription — Stripe usually sends it last —
+ * was not stale, so its "active" lifted the suspension the subscription's own
+ * unlisted price had just imposed (red-team WH-3, 18 November 2026).
+ *
+ * So a one-time checkout that names nothing is suspended, as an unlisted
+ * subscription is: a Pro pass sold by link needs its `metadata.plan`, as the
+ * README already said. A subscription's checkout keeps only what can protect
+ * (unpaid, cancelled) and leaves entitling to the subscription and invoice
+ * events, which carry the price. With the table empty, which is how the
+ * repository ships, nothing changes.
+ * @param {Object} update The checkout's entitlement update.
+ * @param {Object} env Worker env bindings.
+ * @param {boolean} named Whether a price or the owner's metadata named the plan.
+ * @returns {Object} The update, or what is left of it.
+ */
+function gateUnnamedCheckout(update, env, named) {
+  if (named || !stripePriceTableConfigured(env)) {
+    return update;
+  }
+  if (!update.subscriptionId) {
+    return { ...update, plan: undefined, planSource: "unlisted_one_time", status: "suspended", paid: undefined };
+  }
+  return update.status === "active" ? { ...update, status: undefined, paid: undefined } : update;
 }
 
 /** The price id of a checkout session's first line item, when the session carries its line items. */

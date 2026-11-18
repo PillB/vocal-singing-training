@@ -54,7 +54,8 @@ import {
 } from "./grants.js";
 import { googleConfigured, verifyGoogleIdToken } from "./google.js";
 import { buildTokenPayload, isLicenseIdShape, signPayload } from "./license.js";
-import { CLAIMABLE_PROVIDERS } from "./limits.js";
+import { CLAIMABLE_PROVIDERS, MP_CLAIM_IP_LIMIT } from "./limits.js";
+import { ipBucketKey, ipKeyConfigured } from "./events.js";
 import { deleteProgress, getProgress, listProgress, putProgress } from "./progress.js";
 import { getEntitlement, getLicenseIdForClaim } from "./store.js";
 import { ledgerReader } from "./ledger.js";
@@ -501,6 +502,33 @@ export async function handleMe(request, env, deps) {
 }
 
 /**
+ * Spend one of the caller's tries at claiming or linking by a Mercado Pago
+ * payment number (MP_CLAIM_IP_LIMIT). Any other id passes untouched: Stripe's
+ * and Creem's are random, and a Mercado Pago subscription is claimed by its
+ * 32-hex preapproval id.
+ *
+ * The bucket is the address as `ipBucketKey` pseudonymises it, under its own
+ * scope, never the address itself (VG-87). Without D1 (the KV-only mode) or a
+ * key to pseudonymise under there is nothing to count with, and the try
+ * passes: the shipped worker has both, and a deployment without the signing
+ * key cannot hand out a token anyway.
+ * @param {Object} env Worker env bindings.
+ * @param {Request} request Incoming request.
+ * @param {unknown} provider Provider the caller named.
+ * @param {string} sessionId The id the caller is claiming by.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{ok: boolean, retryAfter?: number}>} Whether the try may go ahead.
+ */
+export async function spendMercadoPagoNumberTry(env, request, provider, sessionId, at) {
+  if (provider !== "mercadopago" || !/^\d+$/.test(sessionId) || !env.DB || !ipKeyConfigured(env)) {
+    return { ok: true };
+  }
+  await ensureSchema(env.DB);
+  const bucket = `mpclaim:${await ipBucketKey(env, request, at, "mpclaim")}`;
+  return hitRateLimit(env.DB, bucket, ...MP_CLAIM_IP_LIMIT, at);
+}
+
+/**
  * POST /v1/me/link — attach a completed checkout to the signed-in account.
  *
  * Accepts either the provider checkout id (same one `/v1/claim` takes) or a
@@ -533,6 +561,10 @@ export async function handleLink(request, env, deps) {
     const sessionId = parsed.body.sessionId.trim();
     if (!sessionId || sessionId.length > 200) {
       return json({ ok: false, reason: "bad_request" }, 400, cors);
+    }
+    const tried = await spendMercadoPagoNumberTry(env, request, provider, sessionId, at);
+    if (!tried.ok) {
+      return json({ ok: false, reason: "rate_limited", retryAfter: tried.retryAfter }, 429, cors);
     }
     licenseId = await getLicenseIdForClaim(ledgerReader(env), provider, sessionId);
     if (!licenseId) {

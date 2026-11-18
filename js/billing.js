@@ -854,7 +854,10 @@
    * The provider's id for the payment the customer is coming back from, or
    * null: Stripe's `session_id` (the success URL's {CHECKOUT_SESSION_ID}),
    * Creem's `checkout_id` (appended to its return URL; the worker files the
-   * claim under it), or Mercado Pago's `payment_id` / `preapproval_id`.
+   * claim under it), or Mercado Pago's `preapproval_id`, else its
+   * `payment_id`. The preapproval comes first: the worker files a
+   * subscription under it and never under a charge's number, which is printed
+   * on the receipt and so is nobody's secret.
    * @param {URLSearchParams} params The return URL's query.
    * @returns {string|null}
    */
@@ -862,8 +865,8 @@
     return (
       params.get("session_id") ||
       params.get("checkout_id") ||
-      params.get("payment_id") ||
       params.get("preapproval_id") ||
+      params.get("payment_id") ||
       null
     );
   }

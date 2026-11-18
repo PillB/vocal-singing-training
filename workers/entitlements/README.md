@@ -111,7 +111,7 @@ once the old token has expired or is a day old) gets a token again.
 |--------|------|---------|
 | POST | `/v1/webhooks/stripe` | Signed Stripe events. 400 on a bad signature. |
 | POST | `/v1/webhooks/mercadopago` | Signed Mercado Pago notifications; state is then re-read from the MP API. |
-| POST | `/v1/claim` | `{provider, sessionId}` → `200 {ok, licenseId, token, entitlement}`, `202 {ok:false,reason:"pending"}` while the webhook is still in flight *or* while an async payment settles, `402 {reason:"suspended"}` and `403 {reason:"inactive"}` as for `/v1/license`, `404` for garbage. |
+| POST | `/v1/claim` | `{provider, sessionId}` → `200 {ok, licenseId, token, entitlement}`, `202 {ok:false,reason:"pending"}` while the webhook is still in flight *or* while an async payment settles, `402 {reason:"suspended"}` and `403 {reason:"inactive"}` as for `/v1/license`, `404` for garbage, `429 {reason:"rate_limited"}` past `MP_CLAIM_IP_LIMIT` (below). |
 | POST | `/v1/license` | `{licenseId}` → a fresh token from live KV state. `404` unknown, `202 {reason:"pending"}` while an async payment settles, `402 {reason:"suspended"}` while a later payment can still bring it back, `403 {reason:"inactive"}` once nothing can (see "402 or 403" above). |
 | GET | `/v1/jwks` | The public key as a JWK set, with `kid`. |
 | GET | `/v1/health` | `{ok, stripeConfigured, mercadopagoConfigured, signingKeyConfigured, siteOrigin, accountsConfigured, authMethods}` — booleans and the public Google client id only. |
@@ -222,7 +222,7 @@ Public, committed in `wrangler.toml`:
 | `LICENSE_TTL_SECONDS` | Token lifetime (clamped to 60…2592000). |
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. Filling either one in also makes it an **allow-list** — see below. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
-| `CREEM_PRODUCT_PRO_MONTHLY` / `CREEM_PRODUCT_PRO_YEARLY` | Optional Creem product id → plan mapping. Filling either one in makes it an **allow-list** too, as the Stripe prices do, and one that `metadata.plan` cannot get past (a buyer can write Creem metadata). |
+| `CREEM_PRODUCT_PRO_MONTHLY` / `CREEM_PRODUCT_PRO_YEARLY` | Optional Creem product id → plan mapping. Filling either one in makes it an **allow-list** too, as the Stripe prices do. Creem metadata is never read for the plan (a buyer can write it). |
 | `CREEM_ALLOW_TEST_MODE` | `"true"` lets a Creem event whose `mode` is `test`, `sandbox` or `local` entitle. Defaults off: a test purchase moves no money, so honouring one hands out the paid tier for nothing. Switch it on to prove the rail end to end, and off again before the first real sale. An unrecognised mode entitles either way, so a live value Creem renames cannot silently stop every sale. |
 | `TRIAL_DAYS` | Length of the free trial, in days. One per account, ever. Default 7. |
 | `TRIAL_LEN_EXPERIMENT` | `"on"` runs the trial-length A/B test (`trial_len_2026_11`): each account's trial is 7 or 14 days, assigned from its account id. **It overrides `TRIAL_DAYS`** — with the test on, that setting is ignored. Off (the default) everybody gets `TRIAL_DAYS`. It also needs `LICENSE_ID_KEY` or `LICENSE_PRIVATE_KEY_PKCS8_B64` to key the assignment with; without one the test stays off, because an arm anyone can predict is an arm anyone can pick. The browser cannot switch this on: the `enabled` flag in `js/experiments-config.js` governs only what the statistics record. |
@@ -375,7 +375,8 @@ interval from when the money arrived (31 days for `pro_monthly`; for
 29 February), and each renewal charge extends it. A charge never *shortens* an
 existing period. Stripe webhook sessions carry no line items, so a one-time
 Stripe Payment Link meant as a yearly pass needs `metadata.plan = pro_yearly`;
-without it the pass counts as one month. A Stripe checkout that bought neither
+without it the pass counts as one month, and once the price table is filled in
+it does not count at all (see the allow-list below). A Stripe checkout that bought neither
 a subscription nor a one-time payment (a session in `setup` mode, which saves a
 card and charges nothing) entitles to nothing.
 
@@ -558,13 +559,21 @@ it must not get the grace that an existing subscriber gets;
 session names the plan only through a configured price id or its own
 `metadata.plan`; when it has neither it says nothing about the plan, and the
 subscription's events decide it, whichever order they arrive in. Only a
-one-time checkout with neither counts as `pro_monthly`.
+one-time checkout with neither counts as `pro_monthly`, and only while the price
+table is empty.
 
 **The price table is also an allow-list, wherever it is filled in.** With
 `STRIPE_PRICE_PRO_*` empty — how this repository ships — nothing is gated and
 the mapping above is all it does. Fill either id in and a Stripe subscription
 on a price that is *not* named there is stored `suspended`: it issues no token,
-and a paid invoice on that price does not lift it. That is what stops anything
+and a paid invoice on that price does not lift it. A checkout cannot vouch for a price
+either, because a webhook's session carries no line items: with the table
+filled in, a one-time checkout without `metadata.plan` is stored `suspended`
+too, and a subscription's checkout without it leaves entitling to the
+subscription and invoice events, which carry the price. Before that, a donation
+link on the same account bought a month of Pro, and a subscription's checkout
+landing seconds after its subscription (Stripe usually sends it last) lifted
+the suspension its unlisted price had just been given (red-team WH-3). That is what stops anything
 else ever sold from the same Stripe account — a donation, a one-off lesson, a
 subscription at any price — from becoming Pro.
 
@@ -622,9 +631,14 @@ link that offers both, and put their ids in `CREEM_PRODUCT_PRO_MONTHLY` and
 `CREEM_PRODUCT_PRO_YEARLY`. Filling either one in makes it an allow-list as
 well as a label, so a donation or a one-off lesson sold from the same Creem
 account cannot become Pro. Unlike Stripe, `metadata.plan` is no way past that
-list: a Creem payment link takes `?metadata[plan]=…` from whoever opens it and
-passes it to the webhook, so it is only read for a product the list does not
-refuse. A product of ours missing from the list is fixed by adding its id.
+list, or a way to name a plan at all: a Creem payment link takes
+`?metadata[plan]=…` from whoever opens it and passes it to the webhook, so the
+plan comes from the product's id in the list, else from the product's own
+`billing_period`, else it is a month. Metadata used to be read ahead of the
+billing period while the list was empty, which let `?metadata[plan]=pro_yearly`
+on the monthly link count one monthly charge as a year (red-team WH-2,
+18 November 2026). A product of ours missing from the list is fixed by adding
+its id.
 Paste each product's share link into `js/billing-config.js` under
 `providers.creem.links`.
 
@@ -687,7 +701,28 @@ Subscribe: `payment`, `subscription_preapproval`,
 
 The `x-signature` header is verified against the documented manifest
 `id:<data.id lowercased>;request-id:<x-request-id>;ts:<ts>;` (segments whose
-value is absent are omitted). After that the notification body is treated as a
+value is absent are omitted). The `data.id` signed is the query string's, as
+the documentation says (`data.id_url`: "los parámetros con el sufijo _url
+provienen de query params"); the body's stands in only when the query has
+none, and the id verified is the id fetched. An id that is not a string or a
+number is no id: an object such as `{"toString":1}` used to throw before the
+signature was checked.
+
+**Claim keys.** A subscription is claimed (and linked to an account) by its
+preapproval id, the 32-hex id the payer's browser comes back with. A payment's
+id is Mercado Pago's operation number, sequential and printed on the payer's
+receipt, so a subscription's charges are never filed under it: holding a
+receipt, or walking the numbers near one, used to hand out the subscription's
+token, and linking by it took the subscription from its payer for good
+(red-team WH-1). A one-off Checkout Pro payment comes back with nothing but
+that number, so it stays the payment's claim key, and claims and links by such
+a number are limited to `MP_CLAIM_IP_LIMIT` (20 an hour) per address, counted
+under the address's keyed daily pseudonym, never the address itself.
+
+**The alarm.** A webhook failure leaves the `webhook_failed` flag that turns
+`/v1/health?probe=1` red, but only for work after the signature has verified.
+Before 18 November 2026 an unsigned request that made the handler throw, or
+whose body stream broke half way, raised it for an hour (red-team INPUT-1). After that the notification body is treated as a
 *pointer only* — the worker re-reads state from the API with `MP_ACCESS_TOKEN`:
 
 | Kind | Endpoint |

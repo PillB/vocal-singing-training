@@ -1270,7 +1270,12 @@ export const MUTANTS = {
     ["IJ13 index.html renders in another origin's frame: boot-head.js no longer hides it", "js/boot-head.js", "  if (framed()) {\n", "  if (false) {\n", "tests/frame-guard.spec.js", "IJ13 "],
     ["IJ14 admin.html renders in another origin's frame: its guard no longer runs", "js/frame-guard.js", "  if (!framed()) return;\n", "  return;\n", "tests/frame-guard.spec.js", "IJ13 "],
     ["IJ15 framed by its own origin, neither page asks to be the top window", ["js/boot-head.js", "js/frame-guard.js"], "window.top.location.replace(window.location.href);", "void 0;", "tests/frame-guard.spec.js", "IJ14 "],
-    ["IJ16 over-blocking: admin.html takes itself for framed when it is the top window, and never shows", "js/frame-guard.js", "      return window.top !== window.self;", "      return true;", "tests/frame-guard.spec.js", "IJ15 "]
+    ["IJ16 over-blocking: admin.html takes itself for framed when it is the top window, and never shows", "js/frame-guard.js", "      return window.top !== window.self;", "      return true;", "tests/frame-guard.spec.js", "IJ15 "],
+    // CXSS-3: a report's contact, typed by anyone, became the admin's reply link as it was (mailto header fields).
+    ["IJ17 the reply link is the contact as typed: ?bcc=, &body= and a second recipient reach the admin's mail client", "js/admin.js", "    const href = replyHref(contact);", "    const href = `mailto:${contact}`;", "tests/admin-reply-link.spec.js"],
+    ["IJ18 any character but @ passes as the local part: a comma writes to a second recipient", "js/admin.js", "  const PLAIN_LOCAL = /^[A-Za-z0-9.!#$'*+^_`{|}~-]{1,64}$/;", "  const PLAIN_LOCAL = /^[^@\\s]{1,64}$/;", "tests/admin-reply-link.spec.js"],
+    ["IJ19 any text passes as the domain: the header fields after it are kept", "js/admin.js", "  const PLAIN_DOMAIN = /^(?=.{1,253}$)", "  const PLAIN_DOMAIN = /^(?=.*$)|^(?=.{1,253}$)", "tests/admin-reply-link.spec.js"],
+    ["IJ20 the local part is not percent-encoded: a # in it starts a fragment and the mail goes to the part before it", "js/admin.js", "    return `mailto:${encodeURIComponent(local)}@${domain}`;", "    return `mailto:${local}@${domain}`;", "tests/admin-reply-link.spec.js"]
   ].map(([name, file, from, to, spec, grep]) => ({
     name,
     file,

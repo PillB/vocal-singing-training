@@ -141,6 +141,7 @@
       rBrowser: "Navegador",
       rScreen: "Pantalla",
       rContact: "Responder a",
+      rContactNoLink: "no es una dirección simple, así que no hay enlace para responder: escríbele a mano si es de fiar",
       rFrom: "De {email}",
       rAnon: "Sin cuenta",
       rNote: "Nota nuestra (la persona no la ve)",
@@ -404,6 +405,7 @@
       rBrowser: "Browser",
       rScreen: "Screen",
       rContact: "Reply to",
+      rContactNoLink: "not a plain address, so there is no reply link: write to it by hand if you trust it",
       rFrom: "From {email}",
       rAnon: "No account",
       rNote: "Our note (they do not see it)",
@@ -2039,17 +2041,49 @@
     if (env.viewport) {
       where.push(el("span", { text: `${t("rScreen")}: ${env.viewport}${env.screen ? ` (${env.screen})` : ""}` }));
     }
-    if (report.contact) {
-      // A mailto, because answering somebody is the commonest next action and
-      // retyping an address off a screen is where typos come from.
-      where.push(
-        el("span", {}, [
-          `${t("rContact")}: `,
-          el("a", { href: `mailto:${report.contact}`, text: report.contact })
-        ])
-      );
-    }
+    if (report.contact) where.push(contactLine(report.contact));
     return where;
+  }
+
+  /**
+   * A plain address: RFC 5322 atext and dots before the one "@", without the
+   * characters a mailto: URI reads as its own ("%", "/", "?", "=", "&"; RFC
+   * 6068 section 2), and DNS labels after it. Nothing else gets a link.
+   */
+  const PLAIN_LOCAL = /^[A-Za-z0-9.!#$'*+^_`{|}~-]{1,64}$/;
+  const PLAIN_DOMAIN = /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+
+  /**
+   * A mailto: that writes to the one person in a report's contact and carries
+   * nothing else, or null when the contact is not a plain address. A reporter
+   * types the contact and anyone can send a report, so concatenated after
+   * "mailto:" it carried a hidden bcc, a cc and a body of their choosing
+   * ("?bcc=...&body=...") or a second recipient (","): red team CXSS-3. The
+   * local part is percent-encoded (RFC 6068 section 2), so even a character
+   * the check lets through cannot start a header field.
+   * @param {string} contact What the reporter typed.
+   * @returns {string|null} The href, or null for no link.
+   */
+  function replyHref(contact) {
+    const text = String(contact || "");
+    const at = text.lastIndexOf("@");
+    const local = text.slice(0, at);
+    const domain = text.slice(at + 1);
+    if (at < 1 || !PLAIN_LOCAL.test(local) || !PLAIN_DOMAIN.test(domain)) return null;
+    return `mailto:${encodeURIComponent(local)}@${domain}`;
+  }
+
+  /**
+   * "Reply to": a mailto, because answering somebody is the commonest next
+   * action and retyping an address off a screen is where typos come from. A
+   * contact that is not a plain address is shown as text, and says why.
+   * @param {string} contact What the reporter typed.
+   * @returns {HTMLElement} The line.
+   */
+  function contactLine(contact) {
+    const href = replyHref(contact);
+    if (href) return el("span", {}, [`${t("rContact")}: `, el("a", { href, text: contact })]);
+    return el("span", {}, [`${t("rContact")}: ${contact} `, el("small", { text: `(${t("rContactNoLink")})` })]);
   }
 
   /**

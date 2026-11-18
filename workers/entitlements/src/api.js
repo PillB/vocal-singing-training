@@ -54,7 +54,7 @@ import {
 } from "./grants.js";
 import { googleConfigured, verifyGoogleIdToken } from "./google.js";
 import { buildTokenPayload, isLicenseIdShape, signPayload } from "./license.js";
-import { CLAIMABLE_PROVIDERS, MP_CLAIM_DEPLOYMENT_LIMIT, MP_CLAIM_IP_LIMIT } from "./limits.js";
+import { CLAIMABLE_PROVIDERS, MP_CLAIM_DEPLOYMENT_LIMIT, MP_CLAIM_IP_LIMIT, MP_CLAIM_PATIENCE_MS } from "./limits.js";
 import { addressBlockKey, ipKeyConfigured } from "./events.js";
 import { deleteProgress, getProgress, listProgress, putProgress } from "./progress.js";
 import { getEntitlement, getLicenseIdForClaim } from "./store.js";
@@ -505,19 +505,28 @@ export async function handleMe(request, env, deps) {
  * Find the license a claim or link id names, holding a walk over Mercado Pago
  * payment numbers to MP_CLAIM_IP_LIMIT and MP_CLAIM_DEPLOYMENT_LIMIT.
  *
- * What is counted is distinct numbers that name no payment: each block of
- * addresses pays one try per number per hour (chargeForNumber), taken BEFORE
- * the lookup and given back when the number names a payment. So:
- * - a buyer polling their own number, before its webhook lands or while its
- *   voucher is unpaid, pays one try at most and never runs out (two reviews
- *   of the WH-1 throttle, 18 November 2026: counting requests, the site's own
- *   five retries per page load locked the payer out);
- * - a number the block has not paid for is refused once a budget is spent,
- *   whatever it names, or a 429 would only mean "miss";
- * - each request holds its try while it looks, so no more distinct numbers
- *   are looked up than the budgets allow, however many requests arrive at
- *   once (checking, looking up, and spending after a miss let a burst look
- *   up every number).
+ * What is counted is distinct numbers that name no payment, per block of
+ * addresses and per deployment, an hour. The rule, the consume-then-reset
+ * pattern of login throttles:
+ * - a number this block has not looked up this hour is looked up only while
+ *   the request holds a try from each budget, taken first (takeTries), so
+ *   no more new numbers are looked up than the budgets allow, however many
+ *   requests arrive at once, and a spent budget refuses whatever the number
+ *   names, or a 429 would only mean "miss";
+ * - after that lookup the number is recorded for the block (settleTries),
+ *   and the tries are kept for a miss and given back for a hit;
+ * - a number the block has recorded this hour is looked up again for free,
+ *   so a buyer polling their own number, before its webhook lands or while
+ *   a cash voucher is unpaid, spends one try at most.
+ * A record exists only after a lookup made while holding tries, so it never
+ * lets an unpaid number through. Four reviews of this throttle, 18 November
+ * 2026, each found a way past an earlier version: counting requests (the
+ * payer's own polls locked them out), checking then spending after a miss (a
+ * burst looked up every number), and recording the number before the tries
+ * were held (every number sent twice was looked up free, a request stopped
+ * between the two left its number free, and each refusal wrote two rows).
+ * Measuring the next design showed that handing a twin's tries back let a
+ * burst of copies write rows without bound, so a miss keeps them.
  *
  * Any other id is looked up untouched: Stripe's and Creem's are random, and a
  * Mercado Pago subscription is claimed by its 32-hex preapproval id. Buckets
@@ -534,55 +543,91 @@ export async function handleMe(request, env, deps) {
  *   The license, null for none yet, or the budget that refused.
  */
 export async function lookUpClaimId(env, request, provider, sessionId, at) {
-  const charge = await chargeForNumber(env, request, provider, sessionId, at);
-  if (charge.refused) {
-    return { licenseId: null, refused: charge.refused };
+  const number = await paymentNumber(env, request, provider, sessionId, at);
+  const tries = number ? await takeTries(env.DB, number, at) : { held: [] };
+  if (tries.refused) {
+    return { licenseId: null, refused: tries.refused };
   }
   const licenseId = await getLicenseIdForClaim(ledgerReader(env), provider, sessionId);
-  if (licenseId) {
-    await releaseRateLimits(env.DB, charge.refundable);
+  if (number) {
+    await settleTries(env.DB, number, tries.held, licenseId, at);
   }
   return { licenseId };
 }
 
 /**
- * Pay for looking a number up: nothing for an id that is not a payment number,
- * nothing for a number this block of addresses has already paid for this
- * hour, else one try from each budget, taken together with the block's marker
- * for the number (reserveRateLimits: all or none, a refusal writes nothing).
- * A request refused while another from the same block holds the marker for
- * the same number (the return page's link and claim, sent together) looks for
- * free, as it would a moment later.
- * @returns {Promise<{refundable?: Array<[string, number]>, refused?: Object}>}
- *   The tries to give back if the number names a payment, or the refusal.
+ * Hold a try from each budget for a lookup, or none for a number the block has
+ * already recorded this hour. A refused request waits a moment and asks again
+ * (MP_CLAIM_PATIENCE_MS), because the request holding the block's last try may
+ * be its own twin (the return page sends a link and a claim together), whose
+ * hit gives the try back and records the number. A refusal writes nothing,
+ * and neither does a request that loses a budget's last try to another.
+ * @param {Object} db D1 binding.
+ * @param {{record: Array, budgets: Array}} number The number's buckets.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{held: Array<[string, number]>, refused?: Object}>}
+ *   The tries held, none for a recorded number, or the refusal.
  */
-async function chargeForNumber(env, request, provider, sessionId, at) {
-  const buckets = await paymentNumberBuckets(env, request, provider, sessionId, at);
-  if (!buckets.length) {
-    return { refundable: [] };
+async function takeTries(db, number, at) {
+  for (let attempt = 0; ; attempt += 1) {
+    const recorded = await peekRateLimit(db, ...number.record, at);
+    if (!recorded.ok) {
+      return { held: [] };
+    }
+    const tries = await reserveRateLimits(db, number.budgets, at);
+    if (tries.ok) {
+      return { held: tries.held };
+    }
+    if (attempt >= MP_CLAIM_PATIENCE_MS.length) {
+      return { held: [], refused: tries };
+    }
+    await new Promise((resolve) => setTimeout(resolve, MP_CLAIM_PATIENCE_MS[attempt]));
   }
-  const marker = [`mpclaimn:${await addressBlockKey(env, request, at, `mpclaimn:${sessionId}`)}`, 1, MP_CLAIM_IP_LIMIT[1]];
-  const tries = await reserveRateLimits(env.DB, [marker, ...buckets], at);
-  if (tries.ok) {
-    return { refundable: tries.held.slice(1) };
-  }
-  const paid = await peekRateLimit(env.DB, ...marker, at);
-  return paid.ok ? { refused: tries } : { refundable: [] };
 }
 
 /**
- * The budgets a claim by this id is held to: none, or the caller's block of
- * addresses and then the deployment, as `[bucket, limit, windowSeconds]`.
+ * After a lookup made holding tries: record the number for the block, and
+ * keep the tries for a miss, give them back for a hit (the number is
+ * somebody's payment, found, not walked). Copies of one number sent together
+ * each keep their own: a walk that sends every number twice covers half as
+ * many, and nothing is handed back to be spent again, so the rows written stay
+ * bounded by the budgets whatever arrives at once.
+ * @param {Object} db D1 binding.
+ * @param {{record: Array}} number The number's buckets.
+ * @param {Array<[string, number]>} held The tries this request holds.
+ * @param {string|null} licenseId What the lookup found.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<void>} Resolves when written.
  */
-async function paymentNumberBuckets(env, request, provider, sessionId, at) {
+async function settleTries(db, number, held, licenseId, at) {
+  if (!held.length) {
+    return;
+  }
+  await hitRateLimit(db, ...number.record, at);
+  if (licenseId) {
+    await releaseRateLimits(db, held);
+  }
+}
+
+/**
+ * A Mercado Pago payment number's buckets for the caller's block of
+ * addresses, as `[bucket, limit, windowSeconds]`: its record (looked up this
+ * hour) and the two budgets; or null when the id is not a payment number, or
+ * there is nothing to count with.
+ */
+async function paymentNumber(env, request, provider, sessionId, at) {
   if (provider !== "mercadopago" || !/^\d+$/.test(sessionId) || !env.DB || !ipKeyConfigured(env)) {
-    return [];
+    return null;
   }
   await ensureSchema(env.DB);
-  return [
-    [`mpclaim:${await addressBlockKey(env, request, at, "mpclaim")}`, ...MP_CLAIM_IP_LIMIT],
-    ["mpclaim:all", ...MP_CLAIM_DEPLOYMENT_LIMIT]
-  ];
+  const numberKey = await addressBlockKey(env, request, at, `mpclaimn:${sessionId}`);
+  return {
+    record: [`mpclaimn:${numberKey}`, 1, MP_CLAIM_IP_LIMIT[1]],
+    budgets: [
+      [`mpclaim:${await addressBlockKey(env, request, at, "mpclaim")}`, ...MP_CLAIM_IP_LIMIT],
+      ["mpclaim:all", ...MP_CLAIM_DEPLOYMENT_LIMIT]
+    ]
+  };
 }
 
 /**

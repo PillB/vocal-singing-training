@@ -468,12 +468,15 @@ test("a payer whose webhook is late polls their own number as often as the site 
   for (let n = 0; n < MP_CLAIM_IP_LIMIT[0] + 5; n += 1) {
     assert.equal((await claimAt(env, "4402", "192.0.2.90", H + 10 + n)).status, 202, `poll ${n + 1} before the webhook`);
   }
+  // Control: the number costs one try, not none. Nineteen other numbers (a
+  // neighbour behind the same address) fill the block...
+  assert.deepEqual(await misses(env, MP_CLAIM_IP_LIMIT[0], () => "192.0.2.90", H + 300), [...new Array(MP_CLAIM_IP_LIMIT[0] - 1).fill(202), 429]);
+  // ...and the payer's own number, already looked up this hour, is still asked about for free.
+  assert.equal((await claimAt(env, "4402", "192.0.2.90", H + 400)).status, 202, "the payer polls on with the block full");
   const api = mpApi({ "/v1/payments/4402": { id: 4402, status: "approved", date_approved: iso(T), date_created: iso(T), payer: { id: 5 } } });
   assert.equal((await mercadoPago(env, { kind: "payment", notificationId: "n4402", signedId: "4402", bodyId: "4402", api: api.fetchImpl })).status, 200);
   const claimed = await claimAt(env, "4402", "192.0.2.90", H + 900);
   assert.equal(claimed.status, 200, `claimed once the webhook landed: ${JSON.stringify(claimed.body)}`);
-  // Control: the number costs one try, not none. Nineteen other numbers fill the block.
-  assert.deepEqual(await misses(env, MP_CLAIM_IP_LIMIT[0], () => "192.0.2.90", H + 901), [...new Array(MP_CLAIM_IP_LIMIT[0] - 1).fill(202), 429]);
 });
 
 test("numbers that name a payment give back their try in the deployment's ceiling too", async () => {
@@ -497,22 +500,32 @@ test("numbers that name a payment give back their try in the deployment's ceilin
  */
 function remoteDatabase(env) {
   const db = env.DB;
-  const seen = { lookups: 0 };
+  const seen = { lookups: 0, numbers: new Set(), throttleWrites: 0 };
   const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
-  const wrap = (statement) => ({
+  const wrap = (statement, sql) => ({
     inner: statement,
     bind: (...values) => {
-      if (values.some((v) => typeof v === "string" && v.startsWith("claim:mercadopago:"))) {
-        seen.lookups += 1;
+      for (const v of values) {
+        if (typeof v === "string" && v.startsWith("claim:mercadopago:")) {
+          seen.lookups += 1;
+          seen.numbers.add(v);
+        }
       }
-      return wrap(statement.bind(...values));
+      return wrap(statement.bind(...values), sql);
     },
     first: async (column) => { await tick(); return statement.first(column); },
     all: async () => { await tick(); return statement.all(); },
-    run: async () => { await tick(); return statement.run(); }
+    run: async () => {
+      await tick();
+      const result = await statement.run();
+      if (/^\s*(INSERT INTO|UPDATE) rate_limits/.test(sql) && result && result.meta && result.meta.changes > 0) {
+        seen.throttleWrites += 1;
+      }
+      return result;
+    }
   });
   env.DB = {
-    prepare: (sql) => wrap(db.prepare(sql)),
+    prepare: (sql) => wrap(db.prepare(sql), sql),
     batch: async (statements) => { await tick(); return db.batch(statements.map((st) => st.inner || st)); },
     exec: async (sql) => { await tick(); return db.exec(sql); }
   };
@@ -559,7 +572,46 @@ for (const [arrival, pace] of ARRIVALS) {
     assert.equal(burst.filter((answer) => answer.status === 200).length, 0, "nothing linked to the walker");
     assert.ok(seen.lookups <= MP_CLAIM_IP_LIMIT[0], `${seen.lookups} numbers looked up`);
   });
+
+  test(`a walk that sends every number twice, ${arrival}, by claim and by link, looks up no more numbers than its twenty`, async () => {
+    // Recording the number for the block BEFORE its tries were held let the
+    // twin of a request that then lost its try look the number up for free:
+    // every number sent twice was looked up, and every real payment taken.
+    const env = createAccountEnv();
+    const real = ["7150", "7180", "7290"];
+    const api = mpApi(Object.fromEntries(real.map((id) => [`/v1/payments/${id}`,
+      { id: Number(id), status: "approved", date_approved: iso(T), date_created: iso(T), payer: { id: 5 } }])));
+    for (const id of real) {
+      assert.equal((await mercadoPago(env, { kind: "payment", notificationId: `t${id}`, signedId: id, bodyId: id, api: api.fetchImpl })).status, 200);
+    }
+    const token = await signIn(env, "twinwalker@example.test");
+    const seen = remoteDatabase(env);
+    const ask = (n) => (n % 2
+      ? linkAt(env, token, String(7000 + (n >> 1)), "192.0.2.83", H + 10)
+      : claimAt(env, String(7000 + (n >> 1)), "192.0.2.83", H + 10));
+    const send = pace(ask);
+    const burst = await Promise.all(Array.from({ length: 600 }, (_, n) => send(n)));
+    assert.equal(burst.filter((answer) => answer.status === 200).length, 0, "no real payment found, by claim or by link");
+    assert.ok(seen.numbers.size <= MP_CLAIM_IP_LIMIT[0], `${seen.numbers.size} distinct numbers looked up, at most ${MP_CLAIM_IP_LIMIT[0]}`);
+    // And the rows written are bounded by the budget, not by what arrived: a
+    // refusal writes nothing, and each try the walk was allowed is two budget
+    // rows and its number's record.
+    assert.ok(seen.throttleWrites <= 3 * MP_CLAIM_IP_LIMIT[0], `${seen.throttleWrites} throttle rows written for a 600-request walk`);
+  });
 }
+
+test("a walk that sends every number twice from many addresses looks up no more numbers than the deployment's ceiling", async () => {
+  const env = createAccountEnv();
+  const seen = remoteDatabase(env);
+  const [ceiling] = MP_CLAIM_DEPLOYMENT_LIMIT;
+  // 25 addresses, 16 numbers each (inside each address's twenty), every number twice.
+  const burst = await Promise.all(Array.from({ length: 800 }, (_, n) => {
+    const k = n >> 1;
+    return claimAt(env, String(30000 + k), `10.11.${k >> 4}.1`, H + 10);
+  }));
+  assert.ok(seen.numbers.size <= ceiling, `${seen.numbers.size} distinct numbers looked up, at most ${ceiling}`);
+  assert.ok(burst.some((answer) => answer.status === 429), "the ceiling refused the rest");
+});
 
 test("the deployment ceiling bounds lookups, not only spends, under a burst from many addresses", async () => {
   const env = createAccountEnv();
@@ -585,6 +637,60 @@ test("a payer's link and claim sent together for their paid number both succeed 
     const [linked, claimed] = await Promise.all([linkAt(env, token, "4500", "192.0.2.95", H + 20), claimAt(env, "4500", "192.0.2.95", H + 20)]);
     assert.equal(linked.status, 200, `run ${run}: the link, ${JSON.stringify(linked.body)}`);
     assert.equal(claimed.status, 200, `run ${run}: the claim`);
+  }
+});
+
+/**
+ * Stop a request (a D1 error, or the Worker cancelled) right after its
+ * `stopAfter`-th write to the throttle: every statement after it throws.
+ */
+function cutAfterThrottleWrites(env, stopAfter) {
+  const db = env.DB;
+  let writes = 0;
+  const live = () => {
+    if (writes >= stopAfter) {
+      throw new Error("the request was stopped");
+    }
+  };
+  const wrap = (statement, sql) => ({
+    inner: statement,
+    bind: (...values) => wrap(statement.bind(...values), sql),
+    first: async (column) => { live(); return statement.first(column); },
+    all: async () => { live(); return statement.all(); },
+    run: async () => {
+      live();
+      const result = await statement.run();
+      if (/^\s*(INSERT INTO|UPDATE) rate_limits/.test(sql) && result && result.meta && result.meta.changes > 0) {
+        writes += 1;
+      }
+      return result;
+    }
+  });
+  env.DB = {
+    prepare: (sql) => wrap(db.prepare(sql), sql),
+    batch: async (statements) => { live(); return db.batch(statements.map((st) => st.inner || st)); },
+    exec: async (sql) => { live(); return db.exec(sql); }
+  };
+  return () => { env.DB = db; };
+}
+
+test("a claim stopped part way never leaves its number free without a try spent for it", async () => {
+  // The third cut recorded the number for the block before taking its tries,
+  // so a request stopped between the two left the number free to look up for
+  // the rest of the hour, and the block looked up one number past its twenty.
+  const ip = "192.0.2.90";
+  for (let stopAfter = 1; stopAfter <= 3; stopAfter += 1) {
+    const env = createAccountEnv();
+    await ensureSchema(env.DB);
+    const restore = cutAfterThrottleWrites(env, stopAfter);
+    await claimAt(env, "123456", ip, H + 10);
+    restore();
+    const others = await misses(env, MP_CLAIM_IP_LIMIT[0], () => ip, H + 20, 9100);
+    const again = await claimAt(env, "123456", ip, H + 30);
+    const looked = others.filter((status) => status === 202).length + (again.status === 202 ? 1 : 0);
+    assert.ok(looked <= MP_CLAIM_IP_LIMIT[0], `stopped after write ${stopAfter}: ${looked} numbers looked up, at most ${MP_CLAIM_IP_LIMIT[0]}`);
+    // Control: the block still gets its misses, so a stopped request costs at most its own try.
+    assert.ok(looked >= MP_CLAIM_IP_LIMIT[0] - 1, `stopped after write ${stopAfter}: only ${looked} numbers looked up`);
   }
 });
 

@@ -722,22 +722,31 @@ receipt, or walking the numbers near one, used to hand out the subscription's
 token, and linking by it took the subscription from its payer for good
 (red-team WH-1). A one-off Checkout Pro payment comes back with nothing but
 that number, so it stays the payment's claim key, and what is limited is the
-walk, counted in distinct numbers: the first claim or link by a number from the
-caller's IPv4 address or IPv6 /56 in an hour takes one of `MP_CLAIM_IP_LIMIT`
-(20 an hour) for that block and one of `MP_CLAIM_DEPLOYMENT_LIMIT` (200 an
-hour) for the whole deployment, and gives both back if the number names a
-payment of ours. Asking again for a number the block has already paid for that
-hour is free, so a buyer polling their own number before its webhook lands, or
-while a cash voucher is unpaid, spends one try at most. The try is taken before
-the lookup, so no more numbers are looked up than the budgets allow however
-many requests arrive at once (a check, then a lookup, then a spend let a burst
-look up every number). Once either budget is spent, every claim and link
-by a number the block has not already paid for is refused until the hour
-turns, the payer's own included, because
-if a hit still passed a `429` would only mean "miss". That last part is the
-price of the ceiling: whoever spends it holds one-off payments back for the
-rest of the hour (they wait; nothing is lost), while subscriptions, claimed by
-their preapproval id, are never held back. The per-block bucket is named after
+walk, counted in distinct numbers. A claim or link by a number takes a try
+from each of two budgets before it looks the number up: one of
+`MP_CLAIM_IP_LIMIT` (20 an hour) for the caller's IPv4 address or IPv6 /56,
+and one of `MP_CLAIM_DEPLOYMENT_LIMIT` (200 an hour) for the whole
+deployment, all or none, and a refusal writes nothing. After the lookup the
+number is recorded for that block for the hour; a miss keeps its tries, and a
+hit, a number that names a payment of ours, gives both back. Asking again for
+a recorded number is free, so a buyer polling their own number before its
+webhook lands, or while a cash voucher is unpaid, spends one try at most. The
+order is the point, the consume-then-reset pattern of a login throttle:
+checking, looking up and spending only after a miss let a burst look up every
+number, and recording the number before taking its tries let a refused copy
+make its twin free (and a request stopped between the two left its number
+free). Copies of one number that arrive together each spend their own try, so
+a walk that sends every number twice covers half as many, and nothing handed
+back can be spent again: the throttle writes at most three rows for each of
+the block's twenty, however many requests arrive at once. A refused request waits up to 200 ms
+(`MP_CLAIM_PATIENCE_MS`) and asks again, because the request holding the
+block's last try may be its own twin: the return page sends a link and a claim
+together. Once either budget is spent, every claim and link by a number the
+block has not recorded is refused until the hour turns, the payer's own
+included, because if a hit still passed a `429` would only mean "miss". That
+last part is the price of the ceiling: whoever spends it holds one-off
+payments back for the rest of the hour (they wait; nothing is lost), while
+subscriptions, claimed by their preapproval id, are never held back. The per-block bucket is named after
 the block's keyed daily pseudonym, never the address itself.
 
 **The alarm.** A webhook failure leaves the `webhook_failed` flag that turns

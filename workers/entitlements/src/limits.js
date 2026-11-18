@@ -37,7 +37,7 @@ export const CLAIMABLE_PROVIDERS = new Set(["stripe", "mercadopago", "creem"]);
  * there is nothing else the browser holds, so the walk is what is limited.
  *
  * Only distinct misses are counted: a number that names a payment gives its
- * try back, and a number the block has already paid for this hour is looked
+ * try back, and a number the block has already looked up this hour is looked
  * up again for free (lookUpClaimId). A walk over the sequence is distinct
  * numbers that are almost all misses, while a buyer polls one number, before
  * its webhook lands and while its voucher is unpaid: counting requests let
@@ -65,3 +65,12 @@ export const MP_CLAIM_IP_LIMIT = [20, 3600];
  * preapproval id and is never held back.
  */
 export const MP_CLAIM_DEPLOYMENT_LIMIT = [200, 3600];
+
+/**
+ * How long a claim or link refused by those budgets waits before asking again,
+ * in milliseconds, one entry per retry. The request holding the block's last
+ * try may be the payer's own twin (the return page sends a link and a claim
+ * together), and its hit gives the try back within a few round trips to D1.
+ * A walker refused for good only waits the sum, and reads; nothing is written.
+ */
+export const MP_CLAIM_PATIENCE_MS = [50, 150];

@@ -1120,7 +1120,9 @@ export const MUTANTS = {
     ["SY16 a history stored as an object makes the merge throw", "js/sync.js", "    for (const entry of [...list(b), ...list(a)]) {", "    for (const entry of [...(b || []), ...(a || [])]) {", "sync-account-doc"],
     ["SY17 a weekly goal written as text is kept as text", "js/sync.js", "    return { ...g, weeklySessionsTarget: target, ...present(g, \"updatedAt\", when) };", "    return { ...g, ...present(g, \"updatedAt\", when) };", "sync-account-doc"],
     ["SY18 a goal dated 2099 wins every later merge", "js/sync.js", "    return { ...g, weeklySessionsTarget: target, ...present(g, \"updatedAt\", when) };", "    return { ...g, weeklySessionsTarget: target };", "sync-account-doc"],
-    ["SY19 a review's element outside the catalogue's list is kept", "js/sync.js", "      ...present(e, \"element\", element),\n", "", "sync-account-doc"]
+    ["SY19 a review's element outside the catalogue's list is kept", "js/sync.js", "      ...present(e, \"element\", element),\n", "", "sync-account-doc"],
+    ["SY20 an owner storage refused is forgotten: the next account gets this practice unasked (RES-6)", "js/sync.js", "      ownerKept = id;\n    }", "    }", "sync-owner-quota"],
+    ["SY21 the owner kept in memory is never read", "js/sync.js", "    if (ownerKept) return ownerKept;\n    try {\n      return localStorage.getItem(LS_OWNER) || null;", "    try {\n      return localStorage.getItem(LS_OWNER) || null;", "sync-owner-quota"]
   ].map(([name, file, from, to, test]) => ({ name, file, from, to, cmd: node([`tests/node/${test}.test.mjs`]) })),
   ledger: [
     ["LG1 the first validation chunk always passes: a stale read commits", "src/ledger.js", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed})", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed}) OR 1", "ledger"],

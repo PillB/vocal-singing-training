@@ -74,6 +74,8 @@
   let refusedReason = null;
   let lastSyncedAt = null;
   let failures = 0;
+  // The owner this page recorded when storage would not keep it (see writeOwner).
+  let ownerKept = null;
 
   // Which profiles hold changes the account has not had yet. Every synced write
   // bumps `version`; a profile is pushed up to the version that was current
@@ -279,6 +281,7 @@
   }
 
   function readOwner() {
+    if (ownerKept) return ownerKept;
     try {
       return localStorage.getItem(LS_OWNER) || null;
     } catch {
@@ -290,8 +293,15 @@
     if (!id) return;
     try {
       localStorage.setItem(LS_OWNER, id);
+      ownerKept = null;
     } catch {
-      /* private mode: every sync then asks again, which is the safe side */
+      // Storage refused (the origin's quota is full, or site data is blocked).
+      // No owner on file reads as practice from before anyone signed in, which
+      // merges into whoever signs in next, so the next account would be handed
+      // this practice unasked. The page keeps the owner instead (RES-6). It
+      // does not outlive a reload: a sign-in after one, with storage still
+      // refusing, is not asked.
+      ownerKept = id;
     }
   }
 

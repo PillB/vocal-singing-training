@@ -73,7 +73,22 @@ export function createWorker() {
     const cur = await progress(token, profileId);
     return serve("PUT", "/v1/me/progress", { token, body: { profileId, baseRev: cur.rev || 0, doc } });
   }
-  return { env, mail, serve, signIn, progress, writeProgress };
+  /**
+   * Store an account's copy straight into D1, as a worker from before the
+   * shape check (progress.js documentIsSound) or an older client could have
+   * left it. The route refuses such a copy now, but rows written earlier stay
+   * stored and are still served, so a browser must still cope with them.
+   */
+  async function storeOldCopy(accountId, doc, profileId = "default") {
+    const text = JSON.stringify(doc);
+    await env.DB.prepare(
+      `INSERT INTO progress (account_id, profile_id, rev, doc, size_bytes, updated_at) VALUES (?1, ?2, 1, ?3, ?4, ?5)
+       ON CONFLICT(account_id, profile_id) DO UPDATE SET rev = progress.rev + 1, doc = ?3, size_bytes = ?4, updated_at = ?5`
+    )
+      .bind(accountId, profileId, text, text.length, Math.floor(Date.now() / 1000))
+      .run();
+  }
+  return { env, mail, serve, signIn, progress, writeProgress, storeOldCopy };
 }
 
 /** A localStorage over a Map; `quota` (characters) makes a write past it throw as a full origin does. */

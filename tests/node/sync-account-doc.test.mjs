@@ -32,7 +32,10 @@ const plain = (x) => JSON.parse(JSON.stringify(x));
 async function deviceWithAccountCopy(doc, opts = {}) {
   const worker = createWorker();
   const other = await worker.signIn("one@example.test");
-  if (doc) await worker.writeProgress(other.token, doc);
+  // Stored the way an older worker stored any object: the route itself now
+  // refuses these shapes (bad_document), but copies written before that are
+  // still served to every device.
+  if (doc) await worker.storeOldCopy(other.accountId, doc);
   const device = createBrowser(worker, { extra: { VT_WEEK_ELEMENTS: ELEMENTS, ...(opts.extra || {}) } });
   await device.signIn("one@example.test");
   return { worker, other, device };

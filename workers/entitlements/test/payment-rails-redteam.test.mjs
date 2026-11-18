@@ -33,6 +33,7 @@ import { hmacSha256Hex } from "../src/license.js";
 import { buildMercadoPagoManifest, resolveNotificationTarget } from "../src/mercadopago.js";
 import { mapCreemEvent, planForProduct } from "../src/creem.js";
 import { MP_CLAIM_DEPLOYMENT_LIMIT, MP_CLAIM_IP_LIMIT } from "../src/limits.js";
+import { EVENTS_DAILY_CAP } from "../src/events.js";
 import { createAccountEnv } from "./fixtures.mjs";
 
 const BASE = "https://entitlements.test";
@@ -786,6 +787,21 @@ test("the throttle writes at most eight billed rows for each of the deployment c
   assert.equal((await walked.DB.prepare("SELECT COUNT(*) AS n FROM rate_limits WHERE bucket LIKE 'mpclaim%'").first()).n, 0);
 });
 
+test("the shipped deployment ceiling keeps the throttle's day inside what limits.js budgets for it", () => {
+  // Not a behaviour test: a guard on the number, as the events cap has one.
+  // The test above holds the throttle to eight billed rows a try; this holds
+  // the tries a day to the budget: 9,600 rows and the ceiling row's three, a
+  // quarter of what EVENTS_DAILY_CAP leaves the account layer of D1's free
+  // 100,000. At 200 an hour (the fifth cut) it was 38,400.
+  const [ceiling, windowSeconds] = MP_CLAIM_DEPLOYMENT_LIMIT;
+  const perDay = 8 * ceiling * (DAY / windowSeconds) + 3;
+  assert.ok(perDay <= 9600 + 3, `${ceiling} tries per ${windowSeconds} s is up to ${perDay} billed rows a day: re-budget D1's writes before raising it`);
+  const [events] = EVENTS_DAILY_CAP;
+  assert.ok(perDay <= (100000 - 6 * events) / 4, `${perDay} rows a day is more than a quarter of what ${events} events a day leave the account layer`);
+  // And above one block's budget, or one block could hold every buyer back.
+  assert.ok(ceiling > MP_CLAIM_IP_LIMIT[0], `a ceiling of ${ceiling} is spent by one block's ${MP_CLAIM_IP_LIMIT[0]} misses`);
+});
+
 test("asking again about a number the block has recorded reads the throttle once", async () => {
   // Polling is the hot path (every page load for a week, link and claim
   // together), and from Lima each D1 statement is 100 ms or more: the record
@@ -812,9 +828,10 @@ test("asking again about a number the block has recorded reads the throttle once
 });
 
 test("when D1 refuses the throttle's writes, a claim or link by a number fails closed and looks nothing up", async () => {
-  // D1's free plan refuses writes for the rest of the day past 100,000 rows
-  // and still answers reads: the moment a walker would most like the
-  // throttle to step aside.
+  // A write error while reads still answer: the throttle must not step aside
+  // for a walker because it cannot count. (D1's free daily cap is not this
+  // case: past it every query is refused, reads included, and sign-in fails
+  // with the claim.)
   const env = createAccountEnv();
   await oneOff(env, "approved");
   const token = await signIn(env, "writesrefused@example.test");
@@ -835,45 +852,48 @@ test("when D1 refuses the throttle's writes, a claim or link by a number fails c
   assert.notEqual((await claimAt(env, "cs_test_unknown", "192.0.2.148", H + 10)).status, 500);
 });
 
-test("a link that holds its body back is counted in the hour it is read, not the hour it began", async () => {
-  // The link read its clock before its body, so links that sent their
-  // headers in one hour and their bodies in the next spent the earlier
-  // hour's budget, and each hour held back opened a budget of its own.
-  const env = createAccountEnv();
-  const token = await signIn(env, "heldbody@example.test");
-  const [limit] = MP_CLAIM_IP_LIMIT;
-  const ip = "192.0.2.149";
-  const realNow = Date.now;
-  let clock = (H + HOUR - 30) * 1000;
-  Date.now = () => clock;
-  try {
-    const held = Array.from({ length: limit }, (_, n) => {
-      let release;
-      const gate = new Promise((resolve) => { release = resolve; });
-      const body = new ReadableStream({
-        async pull(controller) {
-          await gate;
-          controller.enqueue(new TextEncoder().encode(JSON.stringify({ provider: "mercadopago", sessionId: String(62000 + n) })));
-          controller.close();
+for (const [route, who, ip] of [["/v1/me/link", "link", "192.0.2.149"], ["/v1/claim", "claim", "192.0.2.150"]]) {
+  test(`a ${who} that holds its body back is counted in the hour it is read, not the hour it began`, async () => {
+    // The link read its clock before its body, so links that sent their
+    // headers in one hour and their bodies in the next spent the earlier
+    // hour's budget, and each hour held back opened a budget of its own. The
+    // claim reads its clock late too, and nothing held it there.
+    const env = createAccountEnv();
+    const token = who === "link" ? await signIn(env, "heldbody@example.test") : undefined;
+    const [limit] = MP_CLAIM_IP_LIMIT;
+    const realNow = Date.now;
+    let clock = (H + HOUR - 30) * 1000;
+    Date.now = () => clock;
+    try {
+      const held = Array.from({ length: limit }, (_, n) => {
+        let release;
+        const gate = new Promise((resolve) => { release = resolve; });
+        const body = new ReadableStream({
+          async pull(controller) {
+            await gate;
+            controller.enqueue(new TextEncoder().encode(JSON.stringify({ provider: "mercadopago", sessionId: String(62000 + n) })));
+            controller.close();
+          }
+        });
+        const headers = { "content-type": "application/json", "cf-connecting-ip": ip };
+        if (token) {
+          headers.authorization = `Bearer ${token}`;
         }
+        const request = new Request(`${BASE}${route}`, { method: "POST", body, duplex: "half", headers });
+        return { release, answer: call(env, request) };
       });
-      const request = new Request(`${BASE}/v1/me/link`, {
-        method: "POST", body, duplex: "half",
-        headers: { "content-type": "application/json", "cf-connecting-ip": ip, authorization: `Bearer ${token}` }
-      });
-      return { release, answer: call(env, request) };
-    });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    clock = (H + HOUR + 30) * 1000;
-    held.forEach((h) => h.release());
-    const late = (await Promise.all(held.map((h) => h.answer))).map((answer) => answer.status);
-    assert.deepEqual(late, new Array(limit).fill(202), "the held links spend this hour's twenty");
-    const fresh = await call(env, jsonRequest("/v1/me/link", { provider: "mercadopago", sessionId: "62999" }, { token, ip }));
-    assert.equal(fresh.status, 429, "and nothing of this hour is left");
-  } finally {
-    Date.now = realNow;
-  }
-});
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      clock = (H + HOUR + 30) * 1000;
+      held.forEach((h) => h.release());
+      const late = (await Promise.all(held.map((h) => h.answer))).map((answer) => answer.status);
+      assert.deepEqual(late, new Array(limit).fill(202), `the held ${who}s spend this hour's twenty`);
+      const fresh = await call(env, jsonRequest(route, { provider: "mercadopago", sessionId: "62999" }, { token, ip }));
+      assert.equal(fresh.status, 429, "and nothing of this hour is left");
+    } finally {
+      Date.now = realNow;
+    }
+  });
+}
 
 test("a payment found is answered even when giving the block's try back fails", async () => {
   // The payment was found, so the claim and the link answer it; the failed

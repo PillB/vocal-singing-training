@@ -98,7 +98,8 @@ export const EXPOSURE_IP_CAP = [100, 86400];
  * rolling window.
  *
  * `EVENTS_DAILY_CAP` in the environment overrides it, which is what a deploy on
- * the $5 plan wants: there the same ceiling is 500 times higher.
+ * the $5 plan wants: there D1 has no daily limit (50 million rows written a
+ * month are included, then $1.00 a million).
  */
 export const EVENTS_DAILY_CAP = [10000, 86400];
 

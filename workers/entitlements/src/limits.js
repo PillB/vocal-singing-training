@@ -79,7 +79,8 @@ export const MP_CLAIM_IP_LIMIT = [20, 3600];
  * ceiling would hold real buyers back. A held-back claim waits and is
  * claimed later; a held-back account link is not retried by the site, which
  * is VG-83. A subscription is claimed by its preapproval id and is never held
- * back. On the Workers Paid plan, where D1 allows 500 times the writes,
- * raise it.
+ * back. On the Workers Paid plan D1 has no daily limit (50 million rows
+ * written a month are included, then $1.00 a million), so raise it there,
+ * with the guard in the red-team tests that holds it to this day's budget.
  */
 export const MP_CLAIM_DEPLOYMENT_LIMIT = [50, 3600];

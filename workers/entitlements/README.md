@@ -231,7 +231,7 @@ Public, committed in `wrangler.toml`:
 | `EMAIL_FROM` / `EMAIL_FROM_NAME` | Sender of the code emails. Must be a verified sender at the provider. |
 | `EVENTS_ENABLED` | `"false"` stops recording anonymous events at once (nothing is stored, not even counters). Deletions still work. |
 | `REPORTS_ENABLED` | Problem reports and ideas from the site. Unlike `EVENTS_ENABLED` this defaults **on** when absent. `"false"` closes the route; the form then shows the reporter their own text to copy, so nothing they typed is lost. |
-| `EVENTS_DAILY_CAP` | Optional. Events stored per deployment per rolling day; `10000` when absent. It exists so analytics cannot spend D1's free 100,000 rows a day and take sign-in, saved progress and the trial down with it: one stored event is three rows now and three more when the 180-day sweep deletes it, so the default leaves about 40,000 rows a day for the account layer. Past it the route answers `202 {accepted: 0, reason: "daily_capped"}` and writes nothing but the counter. On the $5 Workers Paid plan the same ceiling is 500 times higher, so raise it there. |
+| `EVENTS_DAILY_CAP` | Optional. Events stored per deployment per rolling day; `10000` when absent. It exists so analytics cannot spend D1's free 100,000 rows a day and take sign-in, saved progress and the trial down with it: one stored event is three rows now and three more when the 180-day sweep deletes it, so the default leaves about 40,000 rows a day for the account layer. Past it the route answers `202 {accepted: 0, reason: "daily_capped"}` and writes nothing but the counter. On the $5 Workers Paid plan D1 has no daily limit (50 million rows written a month are included, then $1.00 a million), so raise it there. |
 
 Secrets — **never** in this repo, only `wrangler secret put`:
 
@@ -745,8 +745,9 @@ belongs to one of the deployment's tries: as D1 bills them (a new row is two,
 the table and its primary-key index), at most eight a try with the sweep's
 deletes a day later, so at most 9,600 rows a day (and three for the
 ceiling's own row), a quarter of the roughly 40,000 the events cap leaves
-the account layer (`EVENTS_DAILY_CAP`). On the
-Workers Paid plan raise the ceiling with it. If D1 refuses the throttle's
+the account layer (`EVENTS_DAILY_CAP`); a test holds the shipped ceiling to
+that budget. On the Workers Paid plan, where D1 has no daily limit, raise
+the ceiling and that budget together. If D1 refuses the throttle's
 writes, a claim or link by a number fails closed (500) and nothing is looked
 up.
 

@@ -521,17 +521,20 @@ export async function handleMe(request, env, deps) {
  *   latency;
  * - a hit gives the block's try back (giveBlockTryBack) and keeps the
  *   deployment's, so payers behind one shared address are not held back by
- *   each other, and the rows the throttle writes have a hard ceiling: four
- *   for each of MP_CLAIM_DEPLOYMENT_LIMIT's tries an hour.
- * Five reviews of this throttle, 18 November 2026, each found a way past an
- * earlier version: counting requests (the payer's own polls locked them
- * out); checking, then spending after a miss (a burst looked up every
- * number); writing the record and the tries as separate statements (a copy
- * refused by the budgets left its twin a free lookup, and a request stopped
- * between them left its number free); waiting a fixed 200 ms for the payer's
- * twin (too short at the D1 latency a payer in Peru sees); and giving every
- * try back on a hit while taking budgets one statement at a time (copies of a
- * paid number, and losers at the ceiling, wrote rows no budget capped).
+ *   each other, and every row the throttle writes belongs to one of
+ *   MP_CLAIM_DEPLOYMENT_LIMIT's tries: at most eight as D1 bills them.
+ * Writes refused before the lookup fail the request (500): the throttle never
+ * steps aside. Six reviews of this throttle, 18 November 2026, each found a
+ * way past an earlier version: counting requests (the payer's own polls
+ * locked them out); checking, then spending after a miss (a burst looked up
+ * every number); writing the record and the tries as separate statements (a
+ * copy refused by the budgets left its twin a free lookup, and a request
+ * stopped between them left its number free); waiting a fixed 200 ms for the
+ * payer's twin (too short at the D1 latency a payer in Peru sees); giving
+ * every try back on a hit while taking budgets one statement at a time
+ * (copies of a paid number, and losers at the ceiling, wrote rows no budget
+ * capped); and reading the link's clock before its body (held bodies picked
+ * their hour).
  *
  * Any other id is looked up untouched: Stripe's and Creem's are random, and a
  * Mercado Pago subscription is claimed by its 32-hex preapproval id. Buckets
@@ -563,10 +566,11 @@ export async function lookUpClaimId(env, request, provider, sessionId, at) {
 /**
  * Record the number for the caller's block and take a try from each budget,
  * in one statement, all or none; or take nothing for a number the block has
- * already recorded this hour. The record is read again after a refusal: the
- * request that took the block's last try may be this one's twin (the return
- * page sends a link and a claim together), and its record is written in the
- * same statement as that try, so whoever sees the try gone sees the record.
+ * already recorded this hour (the record is read first, so such a poll costs
+ * one read). The record is read again after a budget refuses: the request
+ * that took the block's last try may be this one's twin (the return page
+ * sends a link and a claim together), and its record is written in the same
+ * statement as that try, so whoever sees the try gone sees the record.
  * @param {Object} db D1 binding.
  * @param {{record: Array, block: Array, ceiling: Array}} number The number's buckets.
  * @param {number} at Unix seconds.
@@ -577,6 +581,9 @@ async function takeTries(db, number, at) {
   const tries = await reserveRateLimits(db, [number.record, number.block, number.ceiling], at);
   if (tries.ok) {
     return { held: tries.held };
+  }
+  if (tries.refusedAt === 0) {
+    return { held: [] };
   }
   const recorded = await peekRateLimit(db, ...number.record, at);
   return recorded.ok ? { held: [], refused: tries } : { held: [] };
@@ -652,7 +659,9 @@ export async function handleLink(request, env, deps) {
     if (!sessionId || sessionId.length > 200) {
       return json({ ok: false, reason: "bad_request" }, 400, cors);
     }
-    const found = await lookUpClaimId(env, request, provider, sessionId, at);
+    // The throttle's clock is read after the body, as /v1/claim's is: one
+    // read before it let a request that held its body back pick an hour.
+    const found = await lookUpClaimId(env, request, provider, sessionId, nowSec(deps.now));
     if (found.refused) {
       return json({ ok: false, reason: "rate_limited", retryAfter: found.refused.retryAfter }, 429, cors);
     }

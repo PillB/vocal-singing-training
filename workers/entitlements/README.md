@@ -725,44 +725,59 @@ that number, so it stays the payment's claim key, and what is limited is the
 walk, counted in distinct numbers. Before a number is looked up, one SQL
 statement records it for the caller's IPv4 address or IPv6 /56 and takes a
 try from each of two budgets, all or none: one of `MP_CLAIM_IP_LIMIT` (20 an
-hour) for that block and one of `MP_CLAIM_DEPLOYMENT_LIMIT` (200 an hour) for
+hour) for that block and one of `MP_CLAIM_DEPLOYMENT_LIMIT` (50 an hour) for
 the whole deployment. A request refused, or one that loses the last try to
-another, writes nothing. A miss keeps both tries; a hit, a number that names
-a payment of ours, gives the block's try back and keeps the deployment's.
-Asking again for a number the block has recorded this hour is free, so a
-buyer polling their own number before its webhook lands, or while a cash
-voucher is unpaid, spends one try at most, and of the link and the claim the
-return page sends together, one pays and the other finds the record, whatever
-the latency to D1. A request refused at the budgets reads the record again
-before it answers, because its twin wrote the record in the same statement as
-the try it took. So no more numbers are looked up than the budgets allow
-however many requests arrive at once, and the throttle writes at most four
-rows for each of the deployment's two hundred tries an hour (the record, the
-two counts, and a hit's give-back), about 19,000 a day at worst against D1's
-free 100,000.
+another, writes nothing; one that loses only because another request opened
+the next hour between its read and its write reads again and takes its try
+in the new hour. A miss keeps both tries; a hit, a number that names a
+payment of ours, gives the block's try back and keeps the deployment's.
+Asking again for a number the block has recorded this hour is free, and
+costs one read: a buyer polling their own number before its webhook lands,
+or while a cash voucher is unpaid, spends one try at most, and of the link
+and the claim the return page sends together, one pays and the other finds
+the record, whatever the latency to D1. A request refused at the budgets
+reads the record again before it answers, because its twin wrote the record
+in the same statement as the try it took. Both routes read the throttle's
+clock after the request body, so a request cannot hold its body back to
+pick an hour. So no more numbers are looked up than the budgets allow
+however many requests arrive at once, and every row the throttle writes
+belongs to one of the deployment's tries: as D1 bills them (a new row is two,
+the table and its primary-key index), at most eight a try with the sweep's
+deletes a day later, so at most 9,600 rows a day (and three for the
+ceiling's own row), a quarter of the roughly 40,000 the events cap leaves
+the account layer (`EVENTS_DAILY_CAP`). On the
+Workers Paid plan raise the ceiling with it. If D1 refuses the throttle's
+writes, a claim or link by a number fails closed (500) and nothing is looked
+up.
 
-Five reviews shaped this order: counting requests locked the payer out with
+Six reviews shaped this order: counting requests locked the payer out with
 their own polls; checking, looking up and spending only after a miss let a
 burst look up every number; recording the number in a statement of its own
 let a copy refused by the budgets leave its twin a free lookup, and a request
 stopped between the two leave its number free; a fixed 200 ms wait for the
 payer's twin was shorter than the twin's own round trips from Lima, since D1
-has no South American location; and taking the budgets one statement each,
-and giving every try back on a hit, let the losers at the ceiling and copies
-of one paid number from many blocks write rows no budget capped. A
-give-back that fails after the payment was found costs the block a try, not
-the payer an answer.
+has no South American location; taking the budgets one statement each, and
+giving every try back on a hit, let the losers at the ceiling and copies of
+one paid number from many blocks write rows no budget capped; and a cap
+counted in changed rows, not billed ones, let 200 an hour spend 38,400 rows
+a day. A give-back that fails after the payment was found costs the block a
+try, not the payer an answer.
 
 Once either budget is spent, every claim and link by a number the block has
 not recorded is refused until the hour turns, the payer's own included,
 because if a hit still passed a `429` would only mean "miss". That is the
 price of the ceiling: whoever spends it holds one-off payments back for the
-rest of the hour (they wait; nothing is lost), and since buyers' own lookups
-count against it too, more than two hundred buyers an hour would hold each
-other back. Subscriptions, claimed by their preapproval id, are never held
-back. The block's bucket and the number's record are named after keyed daily
-pseudonyms, never the address or the number itself, and like every
-`rate_limits` row they are swept a day after their window.
+rest of the hour, and since buyers' own lookups count against it too, more
+than fifty buyers an hour would hold each other back. A held-back claim
+waits and is claimed on a later load; a held-back account link is lost,
+because the site sends `/v1/me/link` once and drops any answer but success,
+so a signed-in payer refused there ends without Pro on the account. That is
+VG-83, which a late webhook already triggers, and which has to be fixed
+before one-off payments are sold. Subscriptions, claimed by their
+preapproval id, are never held back. The block's bucket and the number's
+record are named after keyed daily pseudonyms, never the address or the
+number itself, and like every `rate_limits` row they are swept a day after
+their window.
 
 **The alarm.** A webhook failure leaves the `webhook_failed` flag that turns
 `/v1/health?probe=1` red, but only for work after the signature has verified.

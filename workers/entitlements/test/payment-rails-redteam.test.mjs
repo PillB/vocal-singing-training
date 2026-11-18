@@ -27,7 +27,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
 
-import { ensureSchema, releaseRateLimits, reserveRateLimits } from "../src/db.js";
+import { ensureSchema, releaseRateLimits, reserveRateLimits, sweepExpired } from "../src/db.js";
 import { handleRequest } from "../src/index.js";
 import { hmacSha256Hex } from "../src/license.js";
 import { buildMercadoPagoManifest, resolveNotificationTarget } from "../src/mercadopago.js";
@@ -457,7 +457,25 @@ test("a walk spread over many addresses meets the deployment's ceiling, which ho
   assert.equal((await claimAt(env, "7998", "203.0.113.200", H + 11)).status, 429, "a fresh address: the ceiling is spent");
   assert.equal((await claimAt(env, "4400", "203.0.113.201", H + 11)).status, 429, "a real number too, or a 429 would mean miss");
   assert.equal((await claimAt(env, PRE, "203.0.113.202", H + 11)).status, 202, "a preapproval id is never held back");
+  assert.equal((await claimAt(env, "7997", "203.0.113.203", H + HOUR - 1)).status, 429, "a fresh address in the hour's last second: still spent");
   assert.equal((await claimAt(env, "4400", "203.0.113.201", H + HOUR)).status, 200, "the next hour, the payer claims");
+});
+
+test("a number's record lasts the hour and belongs to the whole block", async () => {
+  // A record that outlived its hour would make every number a block looked up
+  // today free all day; one shorter than the hour, or kept per address, would
+  // charge a payer again for their own number once a neighbour spent the block.
+  const env = createAccountEnv();
+  const [limit] = MP_CLAIM_IP_LIMIT;
+  const payer = "2001:db8:ab:1100::1";
+  const sameBlock = "2001:db8:ab:11ff::9";
+  assert.equal((await claimAt(env, "4402", payer, H + 10)).status, 202, "before the webhook: recorded, one try");
+  assert.deepEqual(await misses(env, limit - 1, () => sameBlock, H + 20, 77000), new Array(limit - 1).fill(202), "a neighbour spends the rest");
+  assert.equal((await claimAt(env, "7994", sameBlock, H + 25)).status, 429, "control: the block is spent");
+  assert.equal((await claimAt(env, "4402", sameBlock, H + 30)).status, 202, "another address in the /56 finds the record");
+  assert.equal((await claimAt(env, "4402", payer, H + HOUR - 1)).status, 202, "still recorded in the hour's last second");
+  assert.deepEqual(await misses(env, limit, () => sameBlock, H + HOUR + 10, 78000), new Array(limit).fill(202), "the next hour's twenty, spent again");
+  assert.equal((await claimAt(env, "4402", payer, H + HOUR + 20)).status, 429, "the record went with its hour");
 });
 
 test("a payer whose webhook is late polls their own number as often as the site retries, and claims it once it lands", async () => {
@@ -519,9 +537,12 @@ test("a payer who polled their pending voucher polls it on after a neighbour spe
 });
 
 /**
- * Every rate_limits row the claim throttle writes, however it is written (one
- * statement for several rows, or one each): SQLite triggers count them where
- * D1 bills them. Call before remoteDatabase wraps the binding.
+ * The rows D1 bills for what the claim throttle writes to rate_limits,
+ * however it is written (one statement for several rows, or one each),
+ * counted by SQLite triggers with D1's rule: a new row is two (the table and
+ * its primary-key index), a changed row one, a deleted row one (the sweep).
+ * Counting changed rows only, as this did, said four a try where D1 bills up
+ * to eight (sixth review). Call before remoteDatabase wraps the binding.
  * @returns {Promise<() => Promise<number>>} Reads the count so far.
  */
 async function throttleRows(env, prefix = "mpclaim") {
@@ -529,8 +550,9 @@ async function throttleRows(env, prefix = "mpclaim") {
   const tag = prefix.replace(/\W/g, "_");
   await env.DB.exec(`CREATE TABLE IF NOT EXISTS rows_${tag} (n INTEGER NOT NULL);
     INSERT INTO rows_${tag} VALUES (0);
-    CREATE TRIGGER rows_${tag}_i AFTER INSERT ON rate_limits WHEN NEW.bucket LIKE '${prefix}%' BEGIN UPDATE rows_${tag} SET n = n + 1; END;
-    CREATE TRIGGER rows_${tag}_u AFTER UPDATE ON rate_limits WHEN NEW.bucket LIKE '${prefix}%' BEGIN UPDATE rows_${tag} SET n = n + 1; END;`);
+    CREATE TRIGGER rows_${tag}_i AFTER INSERT ON rate_limits WHEN NEW.bucket LIKE '${prefix}%' BEGIN UPDATE rows_${tag} SET n = n + 2; END;
+    CREATE TRIGGER rows_${tag}_u AFTER UPDATE ON rate_limits WHEN NEW.bucket LIKE '${prefix}%' BEGIN UPDATE rows_${tag} SET n = n + 1; END;
+    CREATE TRIGGER rows_${tag}_d AFTER DELETE ON rate_limits WHEN OLD.bucket LIKE '${prefix}%' BEGIN UPDATE rows_${tag} SET n = n + 1; END;`);
   const db = env.DB;
   return async () => Number((await db.prepare(`SELECT n FROM rows_${tag}`).first()).n);
 }
@@ -631,10 +653,10 @@ for (const [arrival, pace] of ARRIVALS) {
     assert.equal(burst.filter((answer) => answer.status === 200).length, 0, "no real payment found, by claim or by link");
     assert.ok(seen.numbers.size <= MP_CLAIM_IP_LIMIT[0], `${seen.numbers.size} distinct numbers looked up, at most ${MP_CLAIM_IP_LIMIT[0]}`);
     // And the rows written are bounded by the budget, not by what arrived: a
-    // refusal writes nothing, and each try the walk was allowed is two budget
-    // rows and its number's record.
+    // refusal writes nothing, and each try the walk was allowed is its
+    // number's new record and the two budgets' counts, six billed rows at most.
     const rows = await written();
-    assert.ok(rows <= 3 * MP_CLAIM_IP_LIMIT[0], `${rows} throttle rows written for a 600-request walk`);
+    assert.ok(rows <= 6 * MP_CLAIM_IP_LIMIT[0], `${rows} billed rows written for a 600-request walk`);
   });
 }
 
@@ -728,8 +750,16 @@ test("a payer's link and claim of their paid number sent together leave the bloc
   assert.deepEqual(await misses(env, MP_CLAIM_IP_LIMIT[0] + 1, () => ip, H + 20, 76000), [...new Array(MP_CLAIM_IP_LIMIT[0]).fill(202), 429]);
 });
 
-test("the throttle writes at most four rows for each of the deployment ceiling's tries, whatever arrives", async () => {
+test("the throttle writes at most eight billed rows for each of the deployment ceiling's tries, whatever arrives", async () => {
+  // Eight: the number's record and the block's count, new (two each), the
+  // ceiling's count, a hit's give-back, and the sweep's two deletes a day
+  // later; plus three a day for the ceiling's own row.
   const [ceiling] = MP_CLAIM_DEPLOYMENT_LIMIT;
+  const cap = 8 * ceiling + 3;
+  const swept = async (env, rows) => {
+    await sweepExpired(env.DB, H + 2 * DAY);
+    return rows();
+  };
   // Misses from 64 blocks, twenty each, all at once: the losers of the
   // ceiling's last tries used to take their block's try, lose the ceiling's,
   // and give the block's back, two rows each for a 429.
@@ -739,7 +769,8 @@ test("the throttle writes at most four rows for each of the deployment ceiling's
   const walk = await Promise.all(Array.from({ length: 64 * 20 }, (_, n) =>
     claimAt(walked, String(40000 + n), `2001:db8:77:${(n % 64).toString(16)}00::1`, H + 10)));
   assert.equal(walk.filter((answer) => answer.status === 202).length, ceiling);
-  assert.ok(await walkRows() <= 3 * ceiling, `${await walkRows()} rows written by a walk that the ceiling stopped at ${ceiling}`);
+  const walkTotal = await swept(walked, walkRows);
+  assert.ok(walkTotal <= cap, `${walkTotal} billed rows for a walk that the ceiling stopped at ${ceiling}`);
   // Copies of one paid number from 300 blocks, four each, all at once: each
   // copy used to take both tries and give both back, and nothing capped it.
   const copied = createAccountEnv();
@@ -749,7 +780,99 @@ test("the throttle writes at most four rows for each of the deployment ceiling's
   const copies = await Promise.all(Array.from({ length: 300 * 4 }, (_, n) =>
     claimAt(copied, "4400", `2001:db8:${(0x7800 + (n % 300)).toString(16)}:100::1`, H + 10)));
   assert.equal(copies.filter((answer) => answer.status === 200).length, ceiling * 4, "every copy from the blocks the ceiling let in claimed it");
-  assert.ok(await copyRows() <= 4 * ceiling, `${await copyRows()} rows written by copies of one paid number`);
+  const copyTotal = await swept(copied, copyRows);
+  assert.ok(copyTotal <= cap, `${copyTotal} billed rows for copies of one paid number`);
+  // Control: the sweep did run, or the cap would hold for nothing.
+  assert.equal((await walked.DB.prepare("SELECT COUNT(*) AS n FROM rate_limits WHERE bucket LIKE 'mpclaim%'").first()).n, 0);
+});
+
+test("asking again about a number the block has recorded reads the throttle once", async () => {
+  // Polling is the hot path (every page load for a week, link and claim
+  // together), and from Lima each D1 statement is 100 ms or more: the record
+  // read that refuses the reservation is the answer, not a reason to read it
+  // again.
+  const env = createAccountEnv();
+  assert.equal((await claimAt(env, "4402", "192.0.2.147", H + 10)).status, 202);
+  const db = env.DB;
+  let throttleStatements = 0;
+  const counted = (statement) => ({
+    inner: statement,
+    bind: (...v) => counted(statement.bind(...v)),
+    first: (c) => { throttleStatements += 1; return statement.first(c); },
+    all: () => { throttleStatements += 1; return statement.all(); },
+    run: () => { throttleStatements += 1; return statement.run(); }
+  });
+  env.DB = {
+    prepare: (sql) => (/rate_limits/.test(sql) ? counted(db.prepare(sql)) : db.prepare(sql)),
+    batch: (statements) => db.batch(statements.map((st) => st.inner || st)),
+    exec: (sql) => db.exec(sql)
+  };
+  assert.equal((await claimAt(env, "4402", "192.0.2.147", H + 20)).status, 202);
+  assert.equal(throttleStatements, 1, "one read of the record");
+});
+
+test("when D1 refuses the throttle's writes, a claim or link by a number fails closed and looks nothing up", async () => {
+  // D1's free plan refuses writes for the rest of the day past 100,000 rows
+  // and still answers reads: the moment a walker would most like the
+  // throttle to step aside.
+  const env = createAccountEnv();
+  await oneOff(env, "approved");
+  const token = await signIn(env, "writesrefused@example.test");
+  const seen = remoteDatabase(env);
+  const db = env.DB;
+  env.DB = {
+    ...db,
+    prepare: (sql) => (/^\s*(INSERT|UPDATE|DELETE)\b[\s\S]*rate_limits/i.test(sql)
+      ? { bind: () => ({ run: async () => { throw new Error("D1_ERROR: writes refused"); } }) }
+      : db.prepare(sql))
+  };
+  const claimed = await claimAt(env, "4400", "192.0.2.148", H + 10);
+  const linked = await linkAt(env, token, "4400", "192.0.2.148", H + 10);
+  assert.deepEqual([claimed.status, linked.status], [500, 500]);
+  assert.equal(claimed.body && claimed.body.token, undefined, "no token");
+  assert.equal(seen.lookups, 0, "nothing looked up without a try held");
+  // Control: Stripe's random ids are not throttled, so they still answer.
+  assert.notEqual((await claimAt(env, "cs_test_unknown", "192.0.2.148", H + 10)).status, 500);
+});
+
+test("a link that holds its body back is counted in the hour it is read, not the hour it began", async () => {
+  // The link read its clock before its body, so links that sent their
+  // headers in one hour and their bodies in the next spent the earlier
+  // hour's budget, and each hour held back opened a budget of its own.
+  const env = createAccountEnv();
+  const token = await signIn(env, "heldbody@example.test");
+  const [limit] = MP_CLAIM_IP_LIMIT;
+  const ip = "192.0.2.149";
+  const realNow = Date.now;
+  let clock = (H + HOUR - 30) * 1000;
+  Date.now = () => clock;
+  try {
+    const held = Array.from({ length: limit }, (_, n) => {
+      let release;
+      const gate = new Promise((resolve) => { release = resolve; });
+      const body = new ReadableStream({
+        async pull(controller) {
+          await gate;
+          controller.enqueue(new TextEncoder().encode(JSON.stringify({ provider: "mercadopago", sessionId: String(62000 + n) })));
+          controller.close();
+        }
+      });
+      const request = new Request(`${BASE}/v1/me/link`, {
+        method: "POST", body, duplex: "half",
+        headers: { "content-type": "application/json", "cf-connecting-ip": ip, authorization: `Bearer ${token}` }
+      });
+      return { release, answer: call(env, request) };
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    clock = (H + HOUR + 30) * 1000;
+    held.forEach((h) => h.release());
+    const late = (await Promise.all(held.map((h) => h.answer))).map((answer) => answer.status);
+    assert.deepEqual(late, new Array(limit).fill(202), "the held links spend this hour's twenty");
+    const fresh = await call(env, jsonRequest("/v1/me/link", { provider: "mercadopago", sessionId: "62999" }, { token, ip }));
+    assert.equal(fresh.status, 429, "and nothing of this hour is left");
+  } finally {
+    Date.now = realNow;
+  }
 });
 
 test("a payment found is answered even when giving the block's try back fails", async () => {
@@ -844,8 +967,9 @@ test("taking tries from several budgets is all or none, and a refusal writes not
   // Lost to a race: a budget fills after this caller read it and before it
   // took it. Taking the budgets one by one and giving back what was taken
   // wrote two rows for this 429; one statement writes none.
-  const racing = (bucket, fill) => {
-    let fired = false;
+  // `fills[k]` runs right after this caller's (k+1)th read of `bucket`, with ?1 and ?2 bound to `binds[k]`.
+  const racing = (bucket, fills, binds = fills.map(() => [H, H + HOUR])) => {
+    let reads = 0;
     return {
       ...env.DB,
       prepare: (sql) => {
@@ -855,9 +979,9 @@ test("taking tries from several budgets is all or none, and a refusal writes not
         }
         return { bind: (...v) => ({ first: async (c) => {
           const found = await statement.bind(...v).first(c);
-          if (!fired && v[0] === bucket) {
-            fired = true;
-            await env.DB.prepare(fill).bind(H, H + HOUR).run();
+          if (v[0] === bucket && reads < fills.length) {
+            reads += 1;
+            await env.DB.prepare(fills[reads - 1]).bind(...binds[reads - 1]).run();
           }
           return found;
         } }) };
@@ -866,21 +990,31 @@ test("taking tries from several budgets is all or none, and a refusal writes not
   };
   await env.DB.prepare("INSERT INTO rate_limits (bucket, count, window_start) VALUES ('t:all2', 1, ?1)").bind(H).run();
   before = await written();
-  const lost = await reserveRateLimits(racing("t:all2", "UPDATE rate_limits SET count = 2 WHERE bucket = 't:all2' AND window_start = ?1 AND ?2 > 0"),
+  const lost = await reserveRateLimits(racing("t:all2", ["UPDATE rate_limits SET count = 2 WHERE bucket = 't:all2' AND window_start = ?1 AND ?2 > 0"]),
     [["t:mine", 5, HOUR], ["t:all2", 2, HOUR]], at);
   assert.equal(lost.ok, false, "the second budget filled first");
   assert.equal(await written(), before + 1, "the only row written is the racing caller's");
   assert.equal(await row("t:mine"), undefined, "the caller's own budget was never touched");
   assert.equal(lost.retryAfter, H + HOUR - at, "come back when the hour turns");
   // Lost to the hour turning: another caller opened the next window after
-  // this one read the bucket. The bucket is not dragged back to the old hour.
-  const turned = await reserveRateLimits(racing("t:all3", "INSERT INTO rate_limits (bucket, count, window_start) VALUES ('t:all3', 1, ?2) ON CONFLICT(bucket) DO UPDATE SET count = 1, window_start = ?2 WHERE ?1 > 0"),
-    [["t:mine3", 5, HOUR], ["t:all3", 2, HOUR]], at);
-  assert.equal(turned.ok, false);
-  assert.equal(turned.retryAfter, 1, "the hour has just turned: ask again at once, not in an hour");
+  // this one read the bucket. The bucket is not dragged back to the old
+  // hour, and the caller, who has room in the new one, is not refused for it:
+  // it reads again and takes its try there.
+  const opens = "INSERT INTO rate_limits (bucket, count, window_start) VALUES ('t:all3', 1, ?2) ON CONFLICT(bucket) DO UPDATE SET count = 1, window_start = ?2 WHERE ?1 > 0";
+  before = await written();
+  const turned = await reserveRateLimits(racing("t:all3", [opens]), [["t:mine3", 5, HOUR], ["t:all3", 2, HOUR]], at);
+  assert.equal(turned.ok, true, "taken in the hour that has just begun");
+  assert.deepEqual(turned.held, [["t:mine3", H], ["t:all3", H + HOUR]]);
   const next = await row("t:all3");
-  assert.deepEqual([next.count, next.window_start], [1, H + HOUR], "the newer window stands");
-  assert.equal(await row("t:mine3"), undefined);
+  assert.deepEqual([next.count, next.window_start], [2, H + HOUR], "the newer window stands, with this caller's try in it");
+  // Lost twice (the hour turned again before the second write): refused,
+  // told to ask again at once rather than in an hour, and nothing written.
+  before = await written();
+  const twice = await reserveRateLimits(racing("t:all4", [opens.replaceAll("t:all3", "t:all4"), opens.replaceAll("t:all3", "t:all4")], [[H, H + HOUR], [H, H + 2 * HOUR]]),
+    [["t:mine4", 5, HOUR], ["t:all4", 2, HOUR]], at);
+  assert.deepEqual([twice.ok, twice.retryAfter], [false, 1]);
+  assert.equal(await written(), before + 3, "the only rows written are the racing callers' (a new row is two)");
+  assert.equal(await row("t:mine4"), undefined);
   // Control: with room in all, all are taken, by one statement that reads the
   // rows before it writes any: three budgets of one each are all taken.
   const taken = await reserveRateLimits(env.DB, [["t:mine", 5, HOUR], ["t:other", 2, HOUR]], at);

@@ -57,23 +57,29 @@ export const MP_CLAIM_IP_LIMIT = [20, 3600];
  *
  * Per-block limits stop one caller; a walk spread over many blocks (a
  * tunnel broker hands anybody a /48, which is 256 /56s) is stopped only by a
- * ceiling, as the report route's is (QA-40). A hit keeps its try here, unlike
- * the block's: every row the throttle writes then belongs to one of these
- * tries (the record, the two counts, and a hit's give-back), so there are at
- * most four times this an hour whatever arrives. Giving this try back too
- * let copies of one paid number, or of an unpaid voucher, from many blocks
- * write rows no budget capped (fifth review, 18 November 2026), and the
- * repository's own arithmetic is that D1's free plan stops every query for
- * the day at 100,000 rows written.
+ * ceiling, as the report route's is (QA-40). It also caps what the throttle
+ * itself writes, because every row it writes belongs to one of these tries:
+ * the number's record and the block's count (two rows each in D1's billing
+ * when new, the table and its primary-key index), the ceiling's count, a
+ * hit's give-back, and the sweep's deletes of the record and the block a day
+ * later: at most eight billed rows a try, so 50 an hour is at most 9,600
+ * rows a day, a quarter of the roughly 40,000 the events cap leaves the
+ * account layer on D1's free 100,000 (README, EVENTS_DAILY_CAP). A hit keeps
+ * its try here for that reason, unlike the block's; giving it back let
+ * copies of one paid number, or of an unpaid voucher, from many blocks write
+ * rows no budget capped, and 200 an hour would have let a walk spend 38,400
+ * rows a day (fifth and sixth reviews, 18 November 2026).
  *
- * Two hundred an hour is far above what legitimate traffic spends: a buyer
+ * Fifty an hour is still far above what legitimate traffic spends: a buyer
  * spends one, for the hour, from each block they poll from. It holds a walk
- * to a few thousand numbers a day, out of a sequence that every Mercado Pago
- * merchant's payments share. The price: somebody who spends the two hundred
- * holds every claim and link by a number not yet looked up back until the
- * hour turns, the payer's own included (their payment waits; nothing is
- * lost), and above two hundred buyers an hour the ceiling would hold real
- * buyers back. A subscription is claimed by its preapproval id and is never
- * held back.
+ * to 1,200 numbers a day, out of a sequence that every Mercado Pago
+ * merchant's payments share. The price: somebody who spends the fifty holds
+ * every claim and link by a number not yet looked up back until the hour
+ * turns, the payer's own included, and above fifty buyers an hour the
+ * ceiling would hold real buyers back. A held-back claim waits and is
+ * claimed later; a held-back account link is not retried by the site, which
+ * is VG-83. A subscription is claimed by its preapproval id and is never held
+ * back. On the Workers Paid plan, where D1 allows 500 times the writes,
+ * raise it.
  */
-export const MP_CLAIM_DEPLOYMENT_LIMIT = [200, 3600];
+export const MP_CLAIM_DEPLOYMENT_LIMIT = [50, 3600];

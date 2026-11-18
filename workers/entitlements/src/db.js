@@ -388,19 +388,60 @@ export async function hitRateLimit(db, bucket, limit, windowSeconds, now, cost) 
  * @param {Object} db D1 binding.
  * @param {Array<[string, number, number]>} limits Buckets and their limits.
  * @param {number} at Unix seconds.
- * @returns {Promise<{ok: boolean, held: Array<[string, number]>, retryAfter?: number}>}
+ * @returns {Promise<{ok: boolean, held: Array<[string, number]>, retryAfter?: number, refusedAt?: number}>}
  *   Whether every hit was taken, the hits held (bucket and window) to hand to
- *   releaseRateLimits, and when to retry if not.
+ *   releaseRateLimits, and when to retry if not; `refusedAt` is the index of
+ *   the limit that was found full, when one was.
  */
 export async function reserveRateLimits(db, limits, at) {
+  for (let attempt = 0; ; attempt += 1) {
+    const read = await readRooms(db, limits, at);
+    if (!read.ok) {
+      return read;
+    }
+    if (await takeEvery(db, limits, read.windows)) {
+      return { ok: true, held: limits.map(([bucket], i) => [bucket, read.windows[i]]) };
+    }
+    // Lost to a racing caller. Read again: a budget that is now full refuses
+    // with its own wait, and a window that turned under this caller (another
+    // request opened the next hour between the read and the write) is adopted
+    // and taken once more, so the turn of the hour refuses nobody with room.
+    if (attempt >= 1) {
+      return { ok: false, held: [], retryAfter: 1 };
+    }
+  }
+}
+
+/**
+ * Read every limit's room: the windows to take them in, or the first one that
+ * refuses, with its wait and its index in `limits`.
+ * @param {Object} db D1 binding.
+ * @param {Array<[string, number, number]>} limits Buckets and their limits.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{ok: true, windows: number[]}|{ok: false, held: [], retryAfter: number, refusedAt: number}>}
+ *   The windows, or the refusal.
+ */
+async function readRooms(db, limits, at) {
   const windows = [];
-  for (const [bucket, limit, windowSeconds] of limits) {
+  for (const [i, [bucket, limit, windowSeconds]] of limits.entries()) {
     const room = await peekRateLimit(db, bucket, limit, windowSeconds, at);
     if (!room.ok) {
-      return { ok: false, held: [], retryAfter: room.retryAfter };
+      return { ok: false, held: [], retryAfter: room.retryAfter, refusedAt: i };
     }
     windows.push(room.windowStart);
   }
+  return { ok: true, windows };
+}
+
+/**
+ * Take one hit from every limit in its window with one statement, all or
+ * none (see reserveRateLimits).
+ * @param {Object} db D1 binding.
+ * @param {Array<[string, number, number]>} limits Buckets and their limits.
+ * @param {number[]} windows Each bucket's window, as read.
+ * @returns {Promise<boolean>} Whether every hit was taken.
+ */
+async function takeEvery(db, limits, windows) {
   const rows = limits.map((_, i) => `(?${3 * i + 1}, ?${3 * i + 2}, ?${3 * i + 3})`).join(", ");
   const full = limits.map((_, i) =>
     `(bucket = ?${3 * i + 1} AND (window_start > ?${3 * i + 2} OR (window_start = ?${3 * i + 2} AND count >= ?${3 * i + 3})))`
@@ -416,28 +457,7 @@ export async function reserveRateLimits(db, limits, at) {
     )
     .bind(...limits.flatMap(([bucket, limit], i) => [bucket, windows[i], limit]))
     .run();
-  if (changedRows(taken) === limits.length) {
-    return { ok: true, held: limits.map(([bucket], i) => [bucket, windows[i]]) };
-  }
-  return { ok: false, held: [], retryAfter: await refusedRetryAfter(db, limits, at) };
-}
-
-/**
- * When to retry a reservation lost to a racing caller: the wait of the first
- * budget now full, or a second when none is (the window turned under it).
- * @param {Object} db D1 binding.
- * @param {Array<[string, number, number]>} limits Buckets and their limits.
- * @param {number} at Unix seconds.
- * @returns {Promise<number>} Seconds.
- */
-async function refusedRetryAfter(db, limits, at) {
-  for (const [bucket, limit, windowSeconds] of limits) {
-    const room = await peekRateLimit(db, bucket, limit, windowSeconds, at);
-    if (!room.ok) {
-      return room.retryAfter;
-    }
-  }
-  return 1;
+  return changedRows(taken) === limits.length;
 }
 
 /**

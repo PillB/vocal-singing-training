@@ -4,7 +4,7 @@
     "sha": "18027e516f4057ab"
   },
   "css/admin.css": {
-    "v": "20261118a",
+    "v": "20261118b",
     "sha": "0e117cfde7d7f1dd"
   },
   "css/exercise-viz.css": {
@@ -64,7 +64,7 @@
     "sha": "d1a309907c0e8b86"
   },
   "js/admin.js": {
-    "v": "20261118a",
+    "v": "20261118b",
     "sha": "63623aaff918b896"
   },
   "js/ads-config.js": {
@@ -80,8 +80,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261118d",
-    "sha": "2e6d6c866b1ec1e0"
+    "v": "20261118e",
+    "sha": "81dd7afb52051aca"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -148,8 +148,8 @@
     "sha": "4c1c38110f0a3699"
   },
   "js/i18n.js": {
-    "v": "20261118b",
-    "sha": "b40079c9da61f49d"
+    "v": "20261118c",
+    "sha": "c173ccec82f82749"
   },
   "js/license.js": {
     "v": "20261103d",

@@ -5293,6 +5293,17 @@
   // a short take; the stricter 15–45 s rule remains for automatic credit.
   const RATED_MIN_TAKE_SEC = 15;
 
+  /**
+   * What a take short of the 15 s needs (FLOW-10): "press Start" only to someone who has not, else how many
+   * more seconds, in the singular for one ("1 more seconds" read wrong, and so did "Primero pulsa Empezar"
+   * after Empezar was pressed).
+   */
+  function shortTakeHint() {
+    const s = Math.max(1, Math.ceil(RATED_MIN_TAKE_SEC - getPracticedSec()));
+    if (!state.sessionPractice.everStarted) return tt("rate.practiceFirst", { s });
+    return tt(s === 1 ? "rate.practiceMore_one" : "rate.practiceMore", { s });
+  }
+
   /** One invariant shared by one-tap, detailed Save, and automatic practice.
    * Rating an unopened or negligible run is not evidence of a completed take.
    */
@@ -5300,9 +5311,7 @@
     const practiced = getPracticedSec();
     const required = RATED_MIN_TAKE_SEC;
     if (state.sessionPractice.everStarted && practiced >= required) return true;
-    const message = tt("rate.practiceFirst", {
-      s: Math.max(1, Math.ceil(required - practiced))
-    });
+    const message = shortTakeHint();
     const note = $("#rate-note");
     if (note) note.textContent = message;
     toast(message);
@@ -5384,9 +5393,7 @@
       note.textContent = r.result
         ? tt("rate.saved", { score: VTMetrics.formatScore(r.result) })
         : !state.sessionPractice.everStarted || getPracticedSec() < RATED_MIN_TAKE_SEC
-          ? tt("rate.practiceFirst", {
-              s: Math.max(1, Math.ceil(RATED_MIN_TAKE_SEC - getPracticedSec()))
-            })
+          ? shortTakeHint()
           : tt("rate.hint");
     }
     const kicker = $("#rate-done");

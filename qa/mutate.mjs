@@ -1319,7 +1319,9 @@ export const MUTANTS = {
     ["IJ2 the hold pills draw each stored entry's seconds as they are, markup and all", "js/app.js", "      .map(holdSeconds)\n      .filter((s) => s !== null)\n", "      .map((l) => l.seconds)\n", "tests/synced-doc-injection.spec.js", "IJ2 "],
     ["IJ3 the 12-week plan's HUD puts the stored focus into its HTML unescaped", "js/practice-modes.js", "<span data-week-head>${escText(model.head)}</span>", "<span data-week-head>${model.head}</span>", "tests/synced-doc-injection.spec.js", "IJ3 "],
     ["IJ4 the hold pills are raw again, judged by the sweep of every synced field with Pro's panels drawn", "js/app.js", "      .map(holdSeconds)\n      .filter((s) => s !== null)\n", "      .map((l) => l.seconds)\n", "tests/synced-doc-injection.spec.js", "IJ4 "],
-    ["IJ5 the catalogue count is raw again, judged end to end: the worker's copy arrives by sign-in sync and its meta refresh navigates", "js/app.js", "    const n = Number(row?.completedCount);\n    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return row?.completedCount || 0;", "tests/synced-doc-injection.spec.js", "IJ5 "],
+    // IJ5 is the end-to-end case: since js/sync.js normalises the account's copy (the syncing set), markup in the
+    // count no longer reaches the sink by sign-in sync, so the test can only go red with both layers gone at once.
+    ["IJ5 the catalogue count is raw again and the merge keeps a stored count as it is, judged end to end: the worker's copy arrives by sign-in sync and its meta refresh navigates", "js/app.js", "    const n = Number(row?.completedCount);\n    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return row?.completedCount || 0;", "tests/synced-doc-injection.spec.js", "IJ5 ", [{ file: "js/sync.js", from: "      completedCount: Math.max(whole(r.completedCount), history.length),", to: "      completedCount: r.completedCount," }]],
     ["IJ6 the worker takes any number-shaped field: markup as a session count or a hold's seconds is stored", "workers/entitlements/src/progress.js", "  return value === undefined || (typeof value === \"number\" && Number.isFinite(value) && value >= 0);", "  return true;", "workers/entitlements/test/progress.test.mjs"],
     ["IJ7 the worker takes a history or a log that is not a list", "workers/entitlements/src/progress.js", "  return value === undefined || Array.isArray(value);", "  return true;", "workers/entitlements/test/progress.test.mjs"],
     ["IJ8 the worker no longer looks inside the exercise rows", "workers/entitlements/src/progress.js", "  return Object.values(doc.progress || {}).every(rowIsSound) && (doc.holdLogs || []).every(holdIsSound);", "  return (doc.holdLogs || []).every(holdIsSound);", "workers/entitlements/test/progress.test.mjs"],
@@ -1340,11 +1342,12 @@ export const MUTANTS = {
     // CXSS-4: the spec that stood for this wrote #ex-steps with its own escapeHtml and passed on this mutant.
     ["IJ21 the exercise's steps are put into #ex-steps unescaped", "js/app.js", "      .map((s) => `<li>${escapeHtml(s)}</li>`)", "      .map((s) => `<li>${s}</li>`)", "tests/redteam-client.spec.js", "IJ21 "],
     ["IJ22 a stored count of \"1e400\" is drawn as Infinity sessions (coerced, but not checked finite)", "js/app.js", "    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return Math.max(0, Math.floor(n || 0));", "tests/synced-doc-injection.spec.js", "IJ1 "]
-  ].map(([name, file, from, to, spec, grep]) => ({
+  ].map(([name, file, from, to, spec, grep, also]) => ({
     name,
     file,
     from,
     to,
+    ...(also ? { also } : {}),
     cmd: spec.startsWith("workers/")
       ? node([spec])
       : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
@@ -1368,20 +1371,35 @@ function runTests([cmd, ...args], root) {
   }
 }
 
+/** Every edit a mutant makes: its from/to in each of its files, then each of its `also` edits, in order. */
+function mutantEdits(m, root) {
+  const own = [].concat(m.file).map((f) => ({ file: path.join(root, f), from: m.from, to: m.to }));
+  return own.concat((m.also || []).map((e) => ({ file: path.join(root, e.file), from: e.from, to: e.to })));
+}
+
 /**
  * A mutant changes one file, or the same text in every file of a list (a defect
  * made on all four pages at once, which a "the pages agree" check cannot see).
+ * `also` adds further edits made together with it: a defect that only shows
+ * when two layers of one defence are both gone (an end-to-end test behind a
+ * sink escape and a normalisation upstream of it). Every anchor must occur
+ * exactly once in the text it is applied to, or the result is ANCHOR.
  * @returns {"KILLED"|"SURVIVED"|"ANCHOR"}
  */
 export function tryMutant(m, root = process.cwd()) {
-  const files = [].concat(m.file).map((f) => path.join(root, f));
-  const sources = files.map((f) => readFileSync(f, "utf8"));
-  if (sources.some((src) => src.split(m.from).length !== 2)) return "ANCHOR";
-  files.forEach((f, i) => writeFileSync(f, sources[i].replace(m.from, m.to)));
+  const edits = mutantEdits(m, root);
+  const originals = new Map(edits.map((e) => [e.file, readFileSync(e.file, "utf8")]));
+  const mutated = new Map(originals);
+  for (const e of edits) {
+    const src = mutated.get(e.file);
+    if (src.split(e.from).length !== 2) return "ANCHOR";
+    mutated.set(e.file, src.replace(e.from, e.to));
+  }
+  mutated.forEach((src, f) => writeFileSync(f, src));
   try {
     return runTests(m.cmd, root) ? "SURVIVED" : "KILLED";
   } finally {
-    files.forEach((f, i) => writeFileSync(f, sources[i]));
+    originals.forEach((src, f) => writeFileSync(f, src));
   }
 }
 

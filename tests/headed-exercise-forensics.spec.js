@@ -24,9 +24,11 @@ const {
   hoverFeedback,
   listExerciseControls,
   elementCenter,
-  hitAt
+  hitAt,
+  clickablePoint
 } = require("./helpers/ui-forensics");
 const { installClickLogInit } = require("./helpers/layout-probe");
+const { selectFormats, startFailBudget } = require("./helpers/forensics-formats");
 
 const ROOT = path.join(__dirname, "..");
 const SHOT_ROOT = path.join(ROOT, "qa", "screenshots", "exercise-ui-formats");
@@ -50,15 +52,6 @@ test.use({
   }
 });
 test.describe.configure({ mode: "serial" });
-
-const ALL_FORMATS = [
-  { name: "desktop", width: 1280, height: 800, fullscreen: false },
-  { name: "mobile", width: 390, height: 844, fullscreen: false },
-  { name: "mobile-land", width: 844, height: 390, fullscreen: false },
-  { name: "tablet", width: 768, height: 1024, fullscreen: false },
-  { name: "short", width: 1280, height: 560, fullscreen: false },
-  { name: "fullscreen", width: 1440, height: 900, fullscreen: true }
-];
 
 const SKIP_IDS = new Set([
   "btn-rec-start",
@@ -658,12 +651,13 @@ async function startByMouse(run) {
       verdict: "INFO"
     })
   );
-  const startPt = await centerIfVisible(page, "#btn-practice-start");
-  if (startPt) {
+  // Pressed where a person can press it: scrolled out from under the sticky header first (clickablePoint).
+  const startPt = await clickablePoint(page, "#btn-practice-start");
+  if (startPt && !startPt.covered) {
     await mouseClick(page, startPt.x, startPt.y, 14);
   }
   const liveProbe = await pollLive(page, entry);
-  entry.actions.start = { probe: liveProbe };
+  entry.actions.start = { probe: liveProbe, covered: startPt?.covered || null };
   entry.images.push(
     await capture(page, fmt.name, ex.id, "10_start_after.png", {
       action: "start_after",
@@ -688,7 +682,8 @@ async function startByMouse(run) {
     report.summary.metrics.start_ok++;
   } else {
     report.summary.metrics.start_fail++;
-    pushIssue(fmt.name, ex.id, "P0", "start_live", "Start mouse click did not go live", entry);
+    const why = startPt?.covered ? `Start is under ${startPt.covered.id || startPt.covered.tag || startPt.covered.cls}: not clicked` : "Start mouse click did not go live";
+    pushIssue(fmt.name, ex.id, "P0", "start_live", why, entry);
   }
   console.log(`    … live=${liveProbe.live} ${liveProbe.status}`);
   return liveProbe;
@@ -949,11 +944,8 @@ test("headed mouse-only forensics: exercises × formats", async ({ page }) => {
   const lim = Number(process.env.FORENSICS_LIMIT || 0);
   if (lim > 0) catalog = catalog.slice(0, lim);
 
-  const fmtNames = parseList(
-    "FORENSICS_FORMATS",
-    ALL_FORMATS.map((f) => f.name)
-  );
-  const formats = ALL_FORMATS.filter((f) => fmtNames.includes(f.name));
+  // The nightly runs the formats in two jobs; tests/helpers/forensics-formats.js says which and why.
+  const formats = selectFormats(process.env);
 
   expect(catalog.length).toBeGreaterThan(0);
   expect(formats.length).toBeGreaterThan(0);
@@ -1029,6 +1021,8 @@ test("headed mouse-only forensics: exercises × formats", async ({ page }) => {
   const p0Start = report.summary.issues.filter(
     (i) => i.sev === "P0" && i.code === "start_live"
   ).length;
-  expect.soft(p0Start, "P0 start failures").toBeLessThan(5);
+  // Four across all six formats; a run of fewer gets its share, rounded down (startFailBudget).
+  const p0Budget = startFailBudget(formats.length);
+  expect.soft(p0Start, `P0 start failures (budget ${p0Budget} for ${formats.length} formats)`).toBeLessThanOrEqual(p0Budget);
   expect(report.summary.totalActions).toBeGreaterThan(0);
 });

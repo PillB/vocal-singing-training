@@ -413,13 +413,237 @@
     return Number.isFinite(t) ? t : 0;
   }
 
+  /*
+   * The account's copy is data from outside this browser. The worker keeps
+   * any object under 512 KB, so an old or broken client, or anybody holding a
+   * session token, can put any shape there, and whatever a merge keeps is
+   * written here and sent back to every device. A merge therefore reads both
+   * sides through the shapes below first, as js/practice-days.js and
+   * js/daily-loop.js do for their own bags (CXSS-1, RES-4): numbers are
+   * numbers, closed lists hold their own values, lists are lists, and a
+   * moment far in the future (which would stay first for ever) is not kept.
+   * Fields this build does not know are left as they are, so a newer build's
+   * data survives an older build's merge.
+   */
+
+  /**
+   * How far ahead of this device's clock an entry may be dated and still be
+   * kept. Generous on purpose: a device a day or a month off is honest and its
+   * practice must not be dropped (and pushed back without it), while one too
+   * far off to be honest cannot sync at all, because TLS refuses certificates
+   * outside their validity window (90 days for the ones the worker is served
+   * with). A hold dated 2099 is far past it.
+   */
+  const FUTURE_SLACK_MS = 400 * 86400000;
+  /**
+   * Highest week a plan is taken to be at. The plan has twelve weeks, but a
+   * review after the twelfth keeps counting (js/app.js submitWeekReview), so
+   * twelve would throw away real plans; a year of weekly reviews is the bound.
+   */
+  const MAX_PLAN_WEEK = 52;
+  /** Most sessions a weekly goal can ask for (the picker offers 3, 5 and 7). */
+  const MAX_WEEKLY_TARGET = 21;
+  const PLAN_STATUSES = ["idle", "active", "review"];
+  const VERDICTS = ["improved", "continue"];
+
+  /** A plain object, or null for anything else (an array, a number, null). */
+  function obj(value) {
+    return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+  }
+
+  /** A list, whatever was stored in its place: an object's values, or nothing. */
+  function list(value) {
+    if (Array.isArray(value)) return value;
+    return obj(value) ? Object.values(value) : [];
+  }
+
+  /** A whole number of at least zero, or `fallback`. */
+  function whole(value, fallback = 0) {
+    const n = Math.floor(Number(value));
+    return value !== null && value !== "" && Number.isFinite(n) && n >= 0 ? n : fallback;
+  }
+
+  /** A finite number, or null. */
+  function num(value) {
+    const n = Number(value);
+    return value !== null && value !== undefined && value !== "" && Number.isFinite(n) ? n : null;
+  }
+
+  /** The same moment as text when it is one a device could have written, else null. */
+  function when(value) {
+    const t = ms(value);
+    return t > 0 && t <= Date.now() + FUTURE_SLACK_MS ? String(value) : null;
+  }
+
+  /** A week element from the catalogue's closed list, or null. Without the list, any text. */
+  function element(value) {
+    if (typeof value !== "string") return null;
+    const known = global.VT_WEEK_ELEMENTS;
+    return !Array.isArray(known) || known.includes(value) ? value : null;
+  }
+
+  /** A field coerced only when the copy carries it. */
+  function present(entry, key, fix) {
+    return key in entry ? { [key]: fix(entry[key]) } : {};
+  }
+
+  /** One take, or null when it has no id or no believable time. */
+  function normalizeTake(entry) {
+    const e = obj(entry);
+    if (!e || (typeof e.id !== "string" && typeof e.id !== "number") || !when(e.at)) return null;
+    return {
+      ...e,
+      id: String(e.id),
+      at: when(e.at),
+      ...present(e, "updatedAt", when),
+      ...present(e, "score", num),
+      ...present(e, "durationSec", (x) => Math.max(0, num(x) || 0))
+    };
+  }
+
+  /**
+   * One exercise's row. The count is a whole number and never below the takes
+   * the row lists.
+   */
+  function normalizeRow(row) {
+    const r = obj(row);
+    if (!r) return null;
+    const history = list(r.history).map(normalizeTake).filter(Boolean);
+    return {
+      ...r,
+      completedCount: Math.max(whole(r.completedCount), history.length),
+      history,
+      lastScore: num(r.lastScore),
+      lastAt: when(r.lastAt)
+    };
+  }
+
+  function normalizeProgress(progress) {
+    const out = {};
+    for (const [id, row] of Object.entries(obj(progress) || {})) {
+      const r = id === "__proto__" ? null : normalizeRow(row);
+      if (r) out[id] = r;
+    }
+    return out;
+  }
+
+  /** One held note: a believable time and a number of seconds, or null. */
+  function normalizeHold(entry) {
+    const e = obj(entry);
+    const seconds = e ? num(e.seconds) : null;
+    if (!e || !when(e.at) || seconds === null || seconds < 0) return null;
+    return { ...e, at: when(e.at), seconds };
+  }
+
+  /** One week's review: its numbers and closed lists checked, its notes left as text. */
+  function normalizeReview(entry) {
+    const e = obj(entry);
+    if (!e || !when(e.at)) return null;
+    return {
+      ...e,
+      at: when(e.at),
+      ...present(e, "week", (x) => whole(x, null)),
+      ...present(e, "weekNumber", (x) => whole(x, null)),
+      ...present(e, "checkInCount", (x) => whole(x, 0)),
+      ...present(e, "element", element),
+      ...present(e, "verdict", (x) => (VERDICTS.includes(x) ? x : null))
+    };
+  }
+
+  /** The 12-week plan, or null when its week is not one a plan reaches. */
+  function normalizeWeekPlan(plan) {
+    const p = obj(plan);
+    const week = p ? whole(p.weekNumber, 0) : 0;
+    if (!p || week < 1 || week > MAX_PLAN_WEEK) return null;
+    return {
+      ...p,
+      weekNumber: week,
+      element: element(p.element),
+      status: PLAN_STATUSES.includes(p.status) ? p.status : "idle",
+      completedElements: [...new Set(list(p.completedElements).map(element).filter(Boolean))],
+      checkIns: list(p.checkIns),
+      reviews: list(p.reviews).map(normalizeReview).filter(Boolean),
+      startedAt: when(p.startedAt),
+      ...present(p, "updatedAt", when)
+    };
+  }
+
+  /** The weekly goal, or null when its target is not a number of sessions. */
+  function normalizeGoals(goals) {
+    const g = obj(goals);
+    const target = g ? whole(g.weeklySessionsTarget, 0) : 0;
+    if (!g || target < 1 || target > MAX_WEEKLY_TARGET) return null;
+    return { ...g, weeklySessionsTarget: target, ...present(g, "updatedAt", when) };
+  }
+
+  /** Achievement flags: earned or not. */
+  function normalizeFlags(flags) {
+    const out = {};
+    for (const [id, on] of Object.entries(obj(flags) || {})) if (on && id !== "__proto__") out[id] = true;
+    return out;
+  }
+
+  /**
+   * A whole bag read through the shapes above. The day ledger and the loop's
+   * memory are left to their own merges, which normalize them.
+   * @param {object} bag A sync bag, this browser's or the account's.
+   * @returns {object} The same bag, with every field it may keep in its own shape.
+   */
+  function normalizeBag(bag) {
+    const b = obj(bag) || {};
+    return {
+      progress: normalizeProgress(b.progress),
+      weekPlan: normalizeWeekPlan(b.weekPlan),
+      reviews: list(b.reviews).map(normalizeReview).filter(Boolean),
+      holdLogs: list(b.holdLogs).map(normalizeHold).filter(Boolean),
+      goals: normalizeGoals(b.goals),
+      achievements: normalizeFlags(b.achievements),
+      days: obj(b.days),
+      loop: obj(b.loop)
+    };
+  }
+
+  /**
+   * Union two histories by take id, newest first. The same id can differ
+   * between devices when an automatically recorded take was rated later on
+   * one of them; the newer copy is the rated one.
+   * @param {Array} a This browser's history.
+   * @param {Array} b The account's history.
+   * @returns {Array} Every distinct take, uncapped.
+   */
+  function unionTakes(a, b) {
+    const byId = new Map();
+    for (const entry of [...list(b), ...list(a)]) {
+      if (!entry || !entry.id) continue;
+      const prev = byId.get(entry.id);
+      if (!prev || ms(entry.updatedAt || entry.at) > ms(prev.updatedAt || prev.at)) byId.set(entry.id, entry);
+    }
+    return Array.from(byId.values()).sort((x, y) => ms(y.at) - ms(x.at));
+  }
+
+  /** One exercise's row on both sides, merged. */
+  function mergeRow(a, b) {
+    const takes = unionTakes(a.history, b.history);
+    const newest = ms(a.lastAt) >= ms(b.lastAt) ? a : b;
+    return {
+      // Never fewer sessions than distinct takes: two devices that each did
+      // three since they last met hold six, and the larger count alone said
+      // three (RES-5). Counted before the cap, so it stays a lower bound.
+      completedCount: Math.max(Number(a.completedCount) || 0, Number(b.completedCount) || 0, takes.length),
+      history: takes.slice(0, HISTORY_CAP),
+      lastScore: newest.lastScore ?? null,
+      lastAt: newest.lastAt || null
+    };
+  }
+
   /**
    * Merge two exercise-progress maps.
    *
    * Histories are unioned by entry id, because the same take can legitimately
    * arrive from two devices and must not be counted twice, and a take only one
-   * device has must survive. `completedCount` takes the larger of the two: the
-   * history is capped, so it cannot be recomputed from the entries.
+   * device has must survive. `completedCount` takes the larger of the two
+   * counts and of the takes listed: the history is capped, so it cannot be
+   * recomputed from the entries alone.
    *
    * @param {object} local This browser's map.
    * @param {object} remote The account's map.
@@ -427,38 +651,12 @@
    */
   function mergeProgress(local, remote) {
     const out = {};
-    const ids = new Set([...Object.keys(local || {}), ...Object.keys(remote || {})]);
+    const ids = new Set([...Object.keys(obj(local) || {}), ...Object.keys(obj(remote) || {})]);
+    ids.delete("__proto__");
     for (const id of ids) {
-      const a = (local && local[id]) || null;
-      const b = (remote && remote[id]) || null;
-      if (!a) {
-        out[id] = b;
-        continue;
-      }
-      if (!b) {
-        out[id] = a;
-        continue;
-      }
-      const byId = new Map();
-      // The same id can differ between devices when an automatically recorded
-      // take was rated later on one of them; the newer copy is the rated one.
-      for (const entry of [...(b.history || []), ...(a.history || [])]) {
-        if (!entry || !entry.id) continue;
-        const prev = byId.get(entry.id);
-        if (!prev || ms(entry.updatedAt || entry.at) > ms(prev.updatedAt || prev.at)) {
-          byId.set(entry.id, entry);
-        }
-      }
-      const history = Array.from(byId.values())
-        .sort((x, y) => ms(y.at) - ms(x.at))
-        .slice(0, HISTORY_CAP);
-      const newest = ms(a.lastAt) >= ms(b.lastAt) ? a : b;
-      out[id] = {
-        completedCount: Math.max(Number(a.completedCount) || 0, Number(b.completedCount) || 0),
-        history,
-        lastScore: newest.lastScore ?? null,
-        lastAt: newest.lastAt || null
-      };
+      const a = obj(local && local[id]);
+      const b = obj(remote && remote[id]);
+      out[id] = a && b ? mergeRow(a, b) : a || b;
     }
     return out;
   }
@@ -490,9 +688,9 @@
     // plans saved before 23 Sep 2026 carry check-ins at all.
     const rank = (plan) => [
       Number(plan.weekNumber) || 0,
-      (plan.completedElements || []).length,
+      list(plan.completedElements).length,
       ms(plan.startedAt),
-      (plan.checkIns || []).length
+      list(plan.checkIns).length
     ];
     const [aw, ae, as, ac] = rank(local);
     const [bw, be, bs, bc] = rank(remote);
@@ -514,7 +712,7 @@
   function mergeLog(local, remote, cap) {
     const seen = new Set();
     const out = [];
-    for (const entry of [...(local || []), ...(remote || [])]) {
+    for (const entry of [...list(local), ...list(remote)]) {
       if (!entry) continue;
       // `at` plus the payload is a good enough identity for a log line: two
       // real entries that share both are indistinguishable anyway.
@@ -565,23 +763,25 @@
    */
   function mergeBag(local, remote) {
     if (!remote || typeof remote !== "object") return local;
+    // Both sides through the same shapes: the account's is from outside, and
+    // this browser's was written back from it (or by another project on the
+    // same origin), so a bad copy here is repaired by the next write too.
+    const a = normalizeBag(local);
+    const b = normalizeBag(remote);
     return {
       v: 1,
       profileId: local.profileId,
       savedAt: new Date().toISOString(),
-      progress: mergeProgress(local.progress, remote.progress),
-      weekPlan: mergeWeekPlan(local.weekPlan, remote.weekPlan),
-      reviews: mergeLog(local.reviews, remote.reviews, 40),
-      holdLogs: mergeLog(local.holdLogs, remote.holdLogs, 100),
+      progress: mergeProgress(a.progress, b.progress),
+      weekPlan: mergeWeekPlan(a.weekPlan, b.weekPlan),
+      reviews: mergeLog(a.reviews, b.reviews, 40),
+      holdLogs: mergeLog(a.holdLogs, b.holdLogs, 100),
       // Not the bag's own savedAt: that is "now" on whichever device is
       // syncing, so this device's goal always won and never came down.
-      goals: newerSetting(local.goals, remote.goals, isDefaultGoals),
-      achievements: {
-        ...(remote.achievements || {}),
-        ...(local.achievements || {})
-      },
-      days: global.VTDays?.merge ? global.VTDays.merge(local.days, remote.days) : local.days || remote.days || null,
-      loop: global.VTLoop?.merge ? global.VTLoop.merge(local.loop, remote.loop) : local.loop || remote.loop || null
+      goals: newerSetting(a.goals, b.goals, isDefaultGoals),
+      achievements: { ...b.achievements, ...a.achievements },
+      days: global.VTDays?.merge ? global.VTDays.merge(a.days, b.days) : a.days || b.days,
+      loop: global.VTLoop?.merge ? global.VTLoop.merge(a.loop, b.loop) : a.loop || b.loop
     };
   }
 

@@ -132,6 +132,55 @@ test("Bruno leaves without answering: his takes do not reach Ana's account, and 
   assert.deepEqual(takes((await worker.progress(bruno.token)).doc), ["B-own-1"], "and reached his account");
 });
 
+test("what Bruno left here in a second profile survives his answer when he also practised before answering", async () => {
+  const worker = createWorker();
+  const laptop = createBrowser(worker);
+  const S = laptop.win.VTStorage;
+  // The laptop has a second profile, which Bruno's account already holds a copy of from his phone.
+  const p2 = S.createProfile("Bruno", { maxSlots: 3 }).id;
+  S.setActiveProfile("default");
+  const phone = await worker.signIn("bruno@example.test");
+  const at = "2026-11-10T10:00:00.000Z";
+  const p2Doc = {
+    v: 1,
+    profileId: p2,
+    progress: { "ex-9": { completedCount: 1, history: [{ id: "ph1", at, notes: "B-phone-p2", score: 5 }], lastScore: 5, lastAt: at } }
+  };
+  assert.equal((await worker.writeProgress(phone.token, p2Doc, p2)).status, 200);
+
+  await laptop.signIn("ana@example.test");
+  laptop.take("A-1");
+  assert.equal((await laptop.win.VTSync.syncNow()).ok, true);
+  await laptop.win.VTAccount.signOut();
+
+  // Bruno practises in his profile and leaves without answering: that take goes aside for him.
+  await nextMs();
+  await laptop.signIn("bruno@example.test");
+  await laptop.fire([0]);
+  await nextMs();
+  S.setActiveProfile(p2);
+  laptop.take("B-p2-1", "ex-9");
+  S.setActiveProfile("default");
+  const ana = await signsBackIn(laptop, "ana@example.test");
+  assert.equal(ana.asked, false, "precondition: the laptop is still Ana's");
+
+  // He comes back, practises in the main profile, and answers.
+  await laptop.win.VTAccount.signOut();
+  await nextMs();
+  await laptop.signIn("bruno@example.test");
+  await laptop.fire([0]);
+  assert.equal(laptop.win.VTSync.getStatus().otherOwner, true, "precondition: Bruno is asked");
+  await nextMs();
+  laptop.take("B-def-1");
+  assert.equal((await laptop.win.VTSync.useAccountOnly()).ok, true);
+  assert.deepEqual(takes(S.readSyncBag(p2)), ["B-p2-1", "B-phone-p2"], "his take in the second profile is back, with his phone's");
+  assert.deepEqual(takes(S.readSyncBag("default")), ["B-def-1"], "control: his main profile has his new take and none of Ana's");
+  await laptop.fire([8000]);
+  const bruno = laptop.win.VTAccount.getSessionToken();
+  assert.deepEqual(takes((await worker.progress(bruno, p2)).doc), ["B-p2-1", "B-phone-p2"], "and it reached his account");
+  assert.deepEqual(takes((await worker.progress(bruno)).doc), ["B-def-1"]);
+});
+
 test("control: Ana signing out of her own laptop leaves her practice there", async () => {
   const worker = createWorker();
   const laptop = createBrowser(worker);

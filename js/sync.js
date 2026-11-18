@@ -1651,21 +1651,43 @@
     if (!kept) return { ok: false, reason: "storage" };
     writeOwner(me);
     if (lastError === "other_owner") lastError = null;
-    let result = { ok: true };
-    for (const id of ids) {
-      // A profile with practice of this account's own merges into the
-      // account's copy; one without takes the account's copy as it is.
-      const res = kept[id] ? await syncNow(id) : await pullOverwrite(id, token);
-      if (sessionMoved(token)) return sessionGone();
-      if (!res.ok && res.reason !== "empty" && result.ok) result = res;
-    }
-    // After the pull, never before: a pull overwrites, and what this account
-    // left here may hold takes that never reached it. Restoring merges them
-    // into the account's copy, and they are sent without waiting for a save.
-    if (restoreAside(me)) schedule();
+    const result = await bringAccountDown(me, ids, kept, token);
+    if (sessionMoved(token)) return sessionGone();
     await recordingsBack;
     dataChanged(global.VTStorage.getActiveProfileId());
     emit();
+    return result;
+  }
+
+  /**
+   * The account's own copies come down in place of what was set aside, in an
+   * order that loses nothing. First every profile with nothing of this
+   * account's here takes the account's copy as it is. Then what this account
+   * left here earlier comes back, merged into those copies: after the pull,
+   * never before, because a pull overwrites and what was left may hold takes
+   * that never reached the account. Last, every profile this account
+   * practised in since signing in merges with the account's copy and is sent;
+   * its cycle would restore what was left, so it may not run before a pull.
+   * @param {string} me The account signed in.
+   * @param {string[]} ids Every profile on this browser.
+   * @param {Object<string, object>} kept What putAside() kept, by profile.
+   * @param {string} token The session the answer was given in.
+   * @returns {Promise<{ok: boolean, reason?: string}>} The first failure, or ok.
+   */
+  async function bringAccountDown(me, ids, kept, token) {
+    let result = { ok: true };
+    const note = (res) => {
+      if (!res.ok && res.reason !== "empty" && result.ok) result = res;
+    };
+    for (const id of ids.filter((x) => !kept[x])) {
+      note(await pullOverwrite(id, token));
+      if (sessionMoved(token)) return sessionGone();
+    }
+    if (restoreAside(me)) schedule();
+    for (const id of ids.filter((x) => kept[x])) {
+      note(await syncNow(id));
+      if (sessionMoved(token)) return sessionGone();
+    }
     return result;
   }
 

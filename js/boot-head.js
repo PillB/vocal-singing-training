@@ -36,9 +36,37 @@
  *    phone and 3.3 s on a desktop line); the app now starts after about 2.9 s
  *    and 1.2 s. Every later load has the scripts cached, or revalidates them
  *    all at once, so all of it waits.
+ * 0. Before all of that, a page loaded in another page's frame hides itself
+ *    and asks to be the top window (red team CXSS-2, clickjacking). GitHub
+ *    Pages sends no headers, so neither frame-ancestors nor X-Frame-Options
+ *    can refuse the frame, and a <meta> policy cannot carry frame-ancestors
+ *    (CSP3 ignores it there). Hiding is what holds: browsers block a
+ *    cross-origin frame from moving the top window without a tap (Chrome's
+ *    framebusting intervention), and an attacker's onbeforeunload or a
+ *    sandbox can stop the move too, but not undo the hiding. A frame that
+ *    runs no script runs no app either, so there is nothing in it to click.
+ *    admin.html runs the same lines as js/frame-guard.js.
  */
 (function () {
   "use strict";
+
+  /** Whether this page is inside a frame: of any origin, a page of this one included (the origin is shared). */
+  function framed() {
+    try {
+      return window.top !== window.self;
+    } catch (e) {
+      return true;
+    }
+  }
+  if (framed()) {
+    // CSSOM, not a style attribute: the CSP's style rules do not apply to it, and nothing on the page sets display on <html>
+    document.documentElement.style.setProperty("display", "none", "important");
+    try {
+      window.top.location.replace(window.location.href);
+    } catch (e) {
+      /* refused (another origin, no tap): the page stays hidden */
+    }
+  }
 
   function memoryStore() {
     var mem = {};

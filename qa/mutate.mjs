@@ -1265,7 +1265,12 @@ export const MUTANTS = {
     ["IJ9 the worker no longer looks inside the hold log", "workers/entitlements/src/progress.js", "  return Object.values(doc.progress || {}).every(rowIsSound) && (doc.holdLogs || []).every(holdIsSound);", "  return Object.values(doc.progress || {}).every(rowIsSound);", "workers/entitlements/test/progress.test.mjs"],
     ["IJ10 over-strict: a document that leaves a list out is refused, though the client may send one so", "workers/entitlements/src/progress.js", "  return value === undefined || Array.isArray(value);", "  return Array.isArray(value);", "workers/entitlements/test/progress.test.mjs"],
     ["IJ11 over-strict: a week plan of null, what a browser with no plan sends, is refused", "workers/entitlements/src/progress.js", "  return value === undefined || value === null || isRecord(value);", "  return value === undefined || isRecord(value);", "workers/entitlements/test/progress.test.mjs"],
-    ["IJ12 the worker takes a list as the whole document", "workers/entitlements/src/progress.js", "  return value !== null && typeof value === \"object\" && !Array.isArray(value);", "  return value !== null && typeof value === \"object\";", "workers/entitlements/test/progress.test.mjs"]
+    ["IJ12 the worker takes a list as the whole document", "workers/entitlements/src/progress.js", "  return value !== null && typeof value === \"object\" && !Array.isArray(value);", "  return value !== null && typeof value === \"object\";", "workers/entitlements/test/progress.test.mjs"],
+    // CXSS-2: GitHub Pages cannot send frame-ancestors, so the first script of each page refuses a frame.
+    ["IJ13 index.html renders in another origin's frame: boot-head.js no longer hides it", "js/boot-head.js", "  if (framed()) {\n", "  if (false) {\n", "tests/frame-guard.spec.js", "IJ13 "],
+    ["IJ14 admin.html renders in another origin's frame: its guard no longer runs", "js/frame-guard.js", "  if (!framed()) return;\n", "  return;\n", "tests/frame-guard.spec.js", "IJ13 "],
+    ["IJ15 framed by its own origin, neither page asks to be the top window", ["js/boot-head.js", "js/frame-guard.js"], "window.top.location.replace(window.location.href);", "void 0;", "tests/frame-guard.spec.js", "IJ14 "],
+    ["IJ16 over-blocking: admin.html takes itself for framed when it is the top window, and never shows", "js/frame-guard.js", "      return window.top !== window.self;", "      return true;", "tests/frame-guard.spec.js", "IJ15 "]
   ].map(([name, file, from, to, spec, grep]) => ({
     name,
     file,

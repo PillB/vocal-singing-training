@@ -104,8 +104,8 @@
     "sha": "c01b6050bcbccf84"
   },
   "js/boot-head.js": {
-    "v": "20261117c",
-    "sha": "d232127e9ca2a6d8"
+    "v": "20261118a",
+    "sha": "cee3392cf03ba60c"
   },
   "js/boot-ready.js": {
     "v": "20261117c",
@@ -138,6 +138,10 @@
   "js/focus-trap.js": {
     "v": "20261113a",
     "sha": "82b1844ca021a77b"
+  },
+  "js/frame-guard.js": {
+    "v": "20261118a",
+    "sha": "24b048d7e4683c91"
   },
   "js/i18n-early.js": {
     "v": "20261112a",

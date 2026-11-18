@@ -83,6 +83,77 @@ async function tabAround(page, selector, steps) {
   return seen;
 }
 
+/**
+ * Whether the focused control can be seen: inside the window and inside the
+ * nearest box that scrolls it (for a radio, its label is what shows).
+ */
+function focusedInSight(page) {
+  return page.evaluate(() => {
+    const el = document.activeElement;
+    const box = (el.closest("label") || el).getBoundingClientRect();
+    let scroller = el.parentElement;
+    while (scroller && !(scroller.scrollHeight > scroller.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(scroller).overflowY))) {
+      scroller = scroller.parentElement;
+    }
+    const view = scroller ? scroller.getBoundingClientRect() : { top: 0, bottom: innerHeight };
+    const top = Math.max(0, view.top);
+    const bottom = Math.min(innerHeight, view.bottom);
+    return box.bottom > top + 1 && box.top < bottom - 1;
+  });
+}
+
+// Red team FLOW-3: in a dialog taller than a phone's window, Tab past the last
+// control wrapped focus to the first one, which was scrolled out of sight
+// above, and the dialog stayed where it was: the person typed into a field
+// they could not see. Shift+Tab from the first one did the same at the bottom.
+// Wrong behaviour rejected: a wrap that focuses without bringing into view.
+// Control: the dialog really is taller than its window here, so a wrap without
+// a scroll would leave the control out of sight.
+test.describe("A trap's wrap brings the control into view", () => {
+  test.use({ viewport: { width: 360, height: 740 } });
+
+  test("the report dialog at 360x740: Tab past the end and Shift+Tab past the start land in sight", async ({ page }) => {
+    // boot() waits for the header's Pro button, which a phone keeps in its menu.
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem("vt_tour_v1", "1");
+        localStorage.setItem("vt_lang", "es");
+        sessionStorage.setItem("vt_e2e", "1");
+      } catch {
+        /* ignore */
+      }
+    });
+    await page.goto(BASE, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => !!window.VTReports?.open && !!window.VTFocusTrap);
+    await page.evaluate(() => window.VTReports.open());
+    const dialog = page.locator(".vt-report");
+    await expect(dialog).toBeVisible();
+    const items = await page.evaluate(() => window.VTFocusTrap.focusables(document.querySelector(".vt-report")).length);
+    expect(items).toBeGreaterThan(3);
+    // Walk to the last control, then one more Tab wraps to the first.
+    for (let i = 0; i < items + 2; i += 1) {
+      const last = await page.evaluate(() => {
+        const list = window.VTFocusTrap.focusables(document.querySelector(".vt-report"));
+        return document.activeElement === list[list.length - 1];
+      });
+      if (last) break;
+      await page.keyboard.press("Tab");
+    }
+    const scrolled = await page.evaluate(() => {
+      const el = document.activeElement;
+      let s = el.parentElement;
+      while (s && !(s.scrollHeight > s.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(s).overflowY))) s = s.parentElement;
+      return s ? s.scrollTop : scrollY;
+    });
+    expect(scrolled, "control: at the last control the dialog has scrolled, so its first control is out of sight").toBeGreaterThan(40);
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => document.activeElement === window.VTFocusTrap.focusables(document.querySelector(".vt-report"))[0])).toBe(true);
+    await expect.poll(() => focusedInSight(page), { message: "the first control, reached by wrapping, is in sight" }).toBe(true);
+    await page.keyboard.press("Shift+Tab");
+    await expect.poll(() => focusedInSight(page), { message: "the last control, reached by wrapping back, is in sight" }).toBe(true);
+  });
+});
+
 test.describe("Modal focus trap", () => {
   test("focus-trap module is loaded", async ({ page }) => {
     await boot(page);

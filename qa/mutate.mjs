@@ -1099,13 +1099,17 @@ export const MUTANTS = {
   // Each mutant puts one defect back and is judged by the test in tests/learner-flows.spec.js written for it.
   learner: [
     ["LF1 a started short take is told to press Start first", "js/app.js", 'return tt(s === 1 ? "rate.practiceMore_one" : "rate.practiceMore", { s });', 'return tt("rate.practiceFirst", { s });', "FLOW-10"],
-    ["LF2 one more second reads in the plural", "js/app.js", 'tt(s === 1 ? "rate.practiceMore_one" : "rate.practiceMore", { s })', 'tt("rate.practiceMore", { s })', "FLOW-10"]
-  ].map(([name, file, from, to, grep]) => ({
+    ["LF2 one more second reads in the plural", "js/app.js", 'tt(s === 1 ? "rate.practiceMore_one" : "rate.practiceMore", { s })', 'tt("rate.practiceMore", { s })', "FLOW-10"],
+    // FLOW-3: a dialog taller than a phone's window wrapped focus to a control scrolled out of sight.
+    ["LF3 a trap's wrap focuses without bringing the control into view", "js/focus-trap.js", '    if (moved && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" });\n', "", "wrap brings the control into view", "tests/focus-trap.spec.js"],
+    ["LF4 Tab past the last control wraps to a first one out of sight", "js/focus-trap.js", "      moveTo(first);\n", "      focus(first);\n", "wrap brings the control into view", "tests/focus-trap.spec.js"],
+    ["LF5 Shift+Tab past the first control wraps to a last one out of sight", "js/focus-trap.js", "      moveTo(last);\n", "      focus(last);\n", "wrap brings the control into view", "tests/focus-trap.spec.js"]
+  ].map(([name, file, from, to, grep, spec]) => ({
     name,
     file,
     from,
     to,
-    cmd: [...PIANO_SPEC.slice(0, 3), "tests/learner-flows.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", grep]
+    cmd: [...PIANO_SPEC.slice(0, 3), spec || "tests/learner-flows.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", grep]
   })),
   // The payment ledger in D1 (one optimistic transaction per webhook) and the account layer's
   // multi-step writes made single batches (audit WH-*, KV-*, D1-*, SW-1, SC-1). Node only, so it

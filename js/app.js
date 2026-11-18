@@ -9604,7 +9604,19 @@
   }
 
   function accountErrorFor(reason) {
-    accountError(tt(ACCOUNT_ERROR_KEYS[reason] || "auth.err.generic"));
+    accountError(tt(accountErrorKey(reason)));
+  }
+
+  /**
+   * The message for a refusal. An identity conflict names the way in that
+   * this deploy offers: the emailed code where there is one, and otherwise a
+   * report, since the operator then unlinks the old Google account by hand
+   * (docs/ADMIN-GUIDE.md 8.6). Pointing at a code nobody can ask for is a
+   * dead end.
+   */
+  function accountErrorKey(reason) {
+    if (reason === "identity_conflict" && !accountSignIn().canEmail) return "auth.err.identityConflictNoEmail";
+    return ACCOUNT_ERROR_KEYS[reason] || "auth.err.generic";
   }
 
   /** Format a unix-seconds period end the way the rest of the UI writes dates. */

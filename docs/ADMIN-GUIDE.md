@@ -776,6 +776,36 @@ opens or reloads the site, and shows Pro again only after they sign in. After
 the worker has been redeployed ([8.7](#87-redeploy-the-worker)), the admin
 page's look-up shows **Sesiones abiertas: 0** (Open sessions: 0).
 
+**Switch an account off.** For abuse, or a person who asks to be stopped
+until they decide. **Changes data.** Run the command above first, then:
+
+```bash
+npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "UPDATE accounts SET disabled_at = unixepoch() WHERE email_normalized = lower(trim('$SQLEMAIL'))"
+```
+
+From the next sign-in on, both Google and the emailed code answer "Esta
+cuenta está desactivada" and hand out no session and no Pro. Before the red
+team round of 18 November 2026 a switched-off account could still sign in
+and got a 72-hour licence. Their data stays. To switch it back on, run the
+same command with `disabled_at = NULL`.
+
+**"Este correo ya está unido a otra cuenta de Google aquí."** Google sign-in
+finds an account by the Google account that first opened it, not by the
+address. A different Google account with the same address is refused, so it
+cannot walk into someone else's account. This is what a person sees when
+their workplace deleted and recreated their Google account, or when they
+added the address to a second Google account. First make sure the person
+asking owns the address: ask them to reply from it. Then remove the old
+Google link. **Changes data**, but only the link: the account, Pro and
+progress stay.
+
+```bash
+npx --yes wrangler@4 d1 execute vocal-studio-accounts --remote --command "DELETE FROM identities WHERE provider = 'google' AND account_id = (SELECT id FROM accounts WHERE email_normalized = lower(trim('$SQLEMAIL')))"
+```
+
+Their next Google sign-in joins the account by its address and becomes its
+Google account from then on.
+
 ### 8.7 Redeploy the worker
 
 Needed only when a change to `workers/entitlements` is merged. The site itself

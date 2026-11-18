@@ -1385,7 +1385,9 @@ export const MUTANTS = {
     ["AW8 JSON answers lose nosniff", "workers/entitlements/src/index.js", "      \"x-content-type-options\": \"nosniff\",\n      ...(headers || {})", "      ...(headers || {})", "workers/entitlements/test/sign-in-identity.test.mjs"],
     ["AW9 the preflight loses nosniff", "workers/entitlements/src/index.js", "headers: { ...cors, \"x-content-type-options\": \"nosniff\" } });", "headers: cors });", "workers/entitlements/test/sign-in-identity.test.mjs"],
     ["AW10 a switched-off account is told \"something went wrong\" and retries", "js/app.js", "    disabled: \"auth.err.disabled\",\n", "", "tests/redteam-accounts-profiles.spec.js", "switched-off account is told so"],
-    ["AW11 a Google account refused for a taken address is not told to use the emailed code", "js/app.js", "    identity_conflict: \"auth.err.identityConflict\"\n", "", "tests/redteam-accounts-profiles.spec.js", "address another Google account holds"]
+    ["AW11 a Google account refused for a taken address is not told to use the emailed code", "js/app.js", "    identity_conflict: \"auth.err.identityConflict\"\n", "", "tests/redteam-accounts-profiles.spec.js", "address another Google account holds"],
+    ["AW12 with no emailed code on offer, an identity conflict still sends the person to one", "js/app.js", "    if (reason === \"identity_conflict\" && !accountSignIn().canEmail) return", "    if (false) return", "tests/redteam-accounts-profiles.spec.js", "address another Google account holds"],
+    ["AW13 an identity conflict always names a report, though an emailed code is on offer", "js/app.js", "    if (reason === \"identity_conflict\" && !accountSignIn().canEmail) return", "    if (reason === \"identity_conflict\") return", "tests/redteam-accounts-profiles.spec.js", "address another Google account holds"]
   ].map(([name, file, from, to, spec, grep]) => ({
     name,
     file,

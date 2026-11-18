@@ -1129,13 +1129,16 @@ test.describe("Copy that says only what is true", () => {
     expect(await page.evaluate(() => localStorage.getItem("vt_account_session_v1"))).toBeNull();
   });
 
-  for (const [lang, text] of [
-    ["es", "Este correo ya está unido a otra cuenta de Google aquí. Entra con el código por correo."],
-    ["en", "This email already belongs to a different Google account here. Sign in with the emailed code instead."]
+  // Where the deploy offers no emailed code (production signs in with Google
+  // only), the message must not send the person to one: it names the report.
+  for (const [lang, email, text] of [
+    ["es", true, "Este correo ya está unido a otra cuenta de Google aquí. Entra con el código por correo."],
+    ["en", true, "This email already belongs to a different Google account here. Sign in with the emailed code instead."],
+    ["es", false, "Este correo ya está unido a otra cuenta de Google aquí. Cuéntanoslo con «Reportar un problema» y lo resolvemos."]
   ]) {
-    test(`${lang}: a Google account whose address another Google account holds is sent to the emailed code`, async ({ page }) => {
+    test(`${lang}: a Google account whose address another Google account holds is sent to ${email ? "the emailed code" : "a report, with no emailed code on offer"}`, async ({ page }) => {
       const license = await mintLicense({ origin: BASE });
-      const stub = createStub({ methods: { email: true, google: true, googleClientId: "stub-client.apps.googleusercontent.com" } });
+      const stub = createStub({ methods: { email, google: true, googleClientId: "stub-client.apps.googleusercontent.com" } });
       stub.gis = true;
       stub.googleAnswer = [409, { ok: false, reason: "identity_conflict" }];
       await installStub(page, stub, license);

@@ -29,7 +29,7 @@ import {
   startSessionWithCode,
   toPublicAccount
 } from "./accounts.js";
-import { callerIp, ensureSchema, hitRateLimit, normalizeEmail, nowSec, releaseRateLimits, reserveRateLimits, sweepExpired } from "./db.js";
+import { callerIp, ensureSchema, hitRateLimit, normalizeEmail, nowSec, peekRateLimit, releaseRateLimits, reserveRateLimits, sweepExpired } from "./db.js";
 import { emailConfigured, sendLoginCode } from "./email.js";
 import {
   MAX_GRANT_DAYS,
@@ -505,21 +505,26 @@ export async function handleMe(request, env, deps) {
  * Find the license a claim or link id names, holding a walk over Mercado Pago
  * payment numbers to MP_CLAIM_IP_LIMIT and MP_CLAIM_DEPLOYMENT_LIMIT.
  *
- * A try is taken from both budgets BEFORE the lookup and given back when the
- * number names a payment, so only a miss is spent: a buyer polling their own
- * payment never runs out (review of the WH-1 throttle, 18 November 2026). A
- * spent budget refuses the request whatever it names, or a 429 would only
- * mean "miss". And because each request holds its try while it looks, no
- * more lookups run than the budgets allow, however many requests arrive at
- * once: peeking first and spending only after a miss let a burst of a few
- * hundred concurrent claims look up every number (second review, same day).
+ * What is counted is distinct numbers that name no payment: each block of
+ * addresses pays one try per number per hour (chargeForNumber), taken BEFORE
+ * the lookup and given back when the number names a payment. So:
+ * - a buyer polling their own number, before its webhook lands or while its
+ *   voucher is unpaid, pays one try at most and never runs out (two reviews
+ *   of the WH-1 throttle, 18 November 2026: counting requests, the site's own
+ *   five retries per page load locked the payer out);
+ * - a number the block has not paid for is refused once a budget is spent,
+ *   whatever it names, or a 429 would only mean "miss";
+ * - each request holds its try while it looks, so no more distinct numbers
+ *   are looked up than the budgets allow, however many requests arrive at
+ *   once (checking, looking up, and spending after a miss let a burst look
+ *   up every number).
  *
  * Any other id is looked up untouched: Stripe's and Creem's are random, and a
- * Mercado Pago subscription is claimed by its 32-hex preapproval id. The
- * per-block bucket is the address's keyed daily pseudonym, never the address
- * (VG-87). Without D1 (the KV-only mode) or a key to pseudonymise under there
- * is nothing to count with, and nothing is held back: the shipped worker has
- * both, and a deployment without the signing key cannot hand out a token.
+ * Mercado Pago subscription is claimed by its 32-hex preapproval id. Buckets
+ * are keyed daily pseudonyms, never an address or a number (VG-87). Without
+ * D1 (the KV-only mode) or a key to pseudonymise under there is nothing to
+ * count with, and nothing is held back: the shipped worker has both, and a
+ * deployment without the signing key cannot hand out a token.
  * @param {Object} env Worker env bindings.
  * @param {Request} request Incoming request.
  * @param {string} provider Provider the caller named.
@@ -529,16 +534,40 @@ export async function handleMe(request, env, deps) {
  *   The license, null for none yet, or the budget that refused.
  */
 export async function lookUpClaimId(env, request, provider, sessionId, at) {
-  const buckets = await paymentNumberBuckets(env, request, provider, sessionId, at);
-  const tries = buckets.length ? await reserveRateLimits(env.DB, buckets, at) : { ok: true, held: [] };
-  if (!tries.ok) {
-    return { licenseId: null, refused: tries };
+  const charge = await chargeForNumber(env, request, provider, sessionId, at);
+  if (charge.refused) {
+    return { licenseId: null, refused: charge.refused };
   }
   const licenseId = await getLicenseIdForClaim(ledgerReader(env), provider, sessionId);
   if (licenseId) {
-    await releaseRateLimits(env.DB, tries.held);
+    await releaseRateLimits(env.DB, charge.refundable);
   }
   return { licenseId };
+}
+
+/**
+ * Pay for looking a number up: nothing for an id that is not a payment number,
+ * nothing for a number this block of addresses has already paid for this
+ * hour, else one try from each budget, taken together with the block's marker
+ * for the number (reserveRateLimits: all or none, a refusal writes nothing).
+ * A request refused while another from the same block holds the marker for
+ * the same number (the return page's link and claim, sent together) looks for
+ * free, as it would a moment later.
+ * @returns {Promise<{refundable?: Array<[string, number]>, refused?: Object}>}
+ *   The tries to give back if the number names a payment, or the refusal.
+ */
+async function chargeForNumber(env, request, provider, sessionId, at) {
+  const buckets = await paymentNumberBuckets(env, request, provider, sessionId, at);
+  if (!buckets.length) {
+    return { refundable: [] };
+  }
+  const marker = [`mpclaimn:${await addressBlockKey(env, request, at, `mpclaimn:${sessionId}`)}`, 1, MP_CLAIM_IP_LIMIT[1]];
+  const tries = await reserveRateLimits(env.DB, [marker, ...buckets], at);
+  if (tries.ok) {
+    return { refundable: tries.held.slice(1) };
+  }
+  const paid = await peekRateLimit(env.DB, ...marker, at);
+  return paid.ok ? { refused: tries } : { refundable: [] };
 }
 
 /**

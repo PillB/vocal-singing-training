@@ -722,15 +722,18 @@ receipt, or walking the numbers near one, used to hand out the subscription's
 token, and linking by it took the subscription from its payer for good
 (red-team WH-1). A one-off Checkout Pro payment comes back with nothing but
 that number, so it stays the payment's claim key, and what is limited is the
-walk: a claim or link by such a number that names no payment of ours spends one
-of `MP_CLAIM_IP_LIMIT` (20 an hour) for the caller's IPv4 address or IPv6 /56,
-and one of `MP_CLAIM_DEPLOYMENT_LIMIT` (200 an hour) for the whole deployment.
-The try is taken before the lookup and given back when the number names a
-payment, so a buyer polling an unpaid cash voucher never runs out, and no more
-numbers are looked up than the budgets allow however many requests arrive at
-once (a check, then a lookup, then a spend let a burst look up every number).
-Once either budget is spent, every claim and link
-by a number is refused until the hour turns, the payer's own included, because
+walk, counted in distinct numbers: the first claim or link by a number from the
+caller's IPv4 address or IPv6 /56 in an hour takes one of `MP_CLAIM_IP_LIMIT`
+(20 an hour) for that block and one of `MP_CLAIM_DEPLOYMENT_LIMIT` (200 an
+hour) for the whole deployment, and gives both back if the number names a
+payment of ours. Asking again for a number the block has already paid for that
+hour is free, so a buyer polling their own number before its webhook lands, or
+while a cash voucher is unpaid, spends one try at most. The try is taken before
+the lookup, so no more numbers are looked up than the budgets allow however
+many requests arrive at once (a check, then a lookup, then a spend let a burst
+look up every number). Once either budget is spent, every claim and link
+by a number the block has not already paid for is refused until the hour
+turns, the payer's own included, because
 if a hit still passed a `429` would only mean "miss". That last part is the
 price of the ceiling: whoever spends it holds one-off payments back for the
 rest of the hour (they wait; nothing is lost), while subscriptions, claimed by

@@ -359,10 +359,12 @@ test("linking by a one-off Mercado Pago payment's number is throttled with the c
   assert.equal((await link(env, token, "mercadopago", "6999", "192.0.2.78")).status, 202, "control: another address");
 });
 
-// The throttle's own shape, on a clock that starts a window, so the hour
-// boundary falls where the tests put it (windows are aligned to the epoch).
+// The throttle's own shape, on a clock that starts a UTC day: windows are
+// aligned to the epoch, so H + 3600 starts a new window for an hour-long
+// window and stays inside the same one for any longer window that divides a
+// day. On the next hour after Date.now, a two-hour window passed half the runs.
 const HOUR = 3600;
-const H = T - (T % HOUR) + HOUR;
+const H = T - (T % DAY) + DAY;
 const claimAt = (env, id, ip, now) => call(env, jsonRequest("/v1/claim", { provider: "mercadopago", sessionId: id }, { ip }), { now });
 const linkAt = (env, token, id, ip, now) => call(env, jsonRequest("/v1/me/link", { provider: "mercadopago", sessionId: id }, { token, ip }), { now });
 
@@ -447,7 +449,8 @@ test("moving to the next IPv6 address, or to an IPv4-mapped spelling, does not r
 test("a walk spread over many addresses meets the deployment's ceiling, which holds every number back until the hour turns", async () => {
   const env = createAccountEnv();
   await oneOff(env, "approved");
-  const [ceiling] = MP_CLAIM_DEPLOYMENT_LIMIT;
+  const [ceiling, window] = MP_CLAIM_DEPLOYMENT_LIMIT;
+  assert.equal(window, HOUR, "an hour, as documented");
   const spread = (n) => `10.${(n >> 8) & 255}.${n & 255}.1`;
   const walked = await misses(env, ceiling, spread, H + 10);
   assert.ok(walked.every((s) => s === 202), "each address is well inside its own twenty");
@@ -455,6 +458,35 @@ test("a walk spread over many addresses meets the deployment's ceiling, which ho
   assert.equal((await claimAt(env, "4400", "203.0.113.201", H + 11)).status, 429, "a real number too, or a 429 would mean miss");
   assert.equal((await claimAt(env, PRE, "203.0.113.202", H + 11)).status, 202, "a preapproval id is never held back");
   assert.equal((await claimAt(env, "4400", "203.0.113.201", H + HOUR)).status, 200, "the next hour, the payer claims");
+});
+
+test("a payer whose webhook is late polls their own number as often as the site retries, and claims it once it lands", async () => {
+  // Four page views of five POSTs each, all misses until the webhook lands:
+  // counted per request, that was the whole hour's budget, and the payer got
+  // 429 until the hour turned although nobody else had touched their number.
+  const env = createAccountEnv();
+  for (let n = 0; n < MP_CLAIM_IP_LIMIT[0] + 5; n += 1) {
+    assert.equal((await claimAt(env, "4402", "192.0.2.90", H + 10 + n)).status, 202, `poll ${n + 1} before the webhook`);
+  }
+  const api = mpApi({ "/v1/payments/4402": { id: 4402, status: "approved", date_approved: iso(T), date_created: iso(T), payer: { id: 5 } } });
+  assert.equal((await mercadoPago(env, { kind: "payment", notificationId: "n4402", signedId: "4402", bodyId: "4402", api: api.fetchImpl })).status, 200);
+  const claimed = await claimAt(env, "4402", "192.0.2.90", H + 900);
+  assert.equal(claimed.status, 200, `claimed once the webhook landed: ${JSON.stringify(claimed.body)}`);
+  // Control: the number costs one try, not none. Nineteen other numbers fill the block.
+  assert.deepEqual(await misses(env, MP_CLAIM_IP_LIMIT[0], () => "192.0.2.90", H + 901), [...new Array(MP_CLAIM_IP_LIMIT[0] - 1).fill(202), 429]);
+});
+
+test("numbers that name a payment give back their try in the deployment's ceiling too", async () => {
+  const env = createAccountEnv();
+  await oneOff(env, "pending");
+  const [ceiling] = MP_CLAIM_DEPLOYMENT_LIMIT;
+  for (let n = 0; n <= ceiling; n += 1) {
+    assert.equal((await claimAt(env, "4400", `10.7.${n >> 8}.${n & 255}`, H + 10)).status, 202, `buyer poll ${n + 1}, each from its own address`);
+  }
+  await ensureSchema(env.DB);
+  const all = await env.DB.prepare("SELECT count FROM rate_limits WHERE bucket = 'mpclaim:all'").first();
+  assert.equal(all ? all.count : 0, 0, "the ceiling holds no try for a number that names a payment");
+  assert.equal((await claimAt(env, "7997", "203.0.113.250", H + 11)).status, 202, "the next miss is answered as usual");
 });
 
 /**
@@ -487,38 +519,47 @@ function remoteDatabase(env) {
   return seen;
 }
 
-test("a burst of concurrent claims from one address looks up no more numbers than its twenty", async () => {
-  // Peeking at the budget, looking up, and spending only on a miss let every
-  // request that peeked before the first spend landed do its lookup: 2000 at
-  // once looked up all 2000 numbers and took the real payments' tokens.
-  const env = createAccountEnv();
-  const real = ["7150", "7180", "7290"];
-  const api = mpApi(Object.fromEntries(real.map((id) => [`/v1/payments/${id}`,
-    { id: Number(id), status: "approved", date_approved: iso(T), date_created: iso(T), payer: { id: 5 } }])));
-  for (const id of real) {
-    assert.equal((await mercadoPago(env, { kind: "payment", notificationId: `n${id}`, signedId: id, bodyId: id, api: api.fetchImpl })).status, 200);
-  }
-  const seen = remoteDatabase(env);
-  const [limit] = MP_CLAIM_IP_LIMIT;
-  const burst = await Promise.all(Array.from({ length: 300 }, (_, n) => claimAt(env, String(7000 + n), "192.0.2.80", H + 10)));
-  const statuses = burst.map((answer) => answer.status);
-  assert.equal(statuses.filter((s) => s === 200).length, 0, "no real payment found by the walk");
-  assert.ok(seen.lookups <= limit, `${seen.lookups} numbers looked up, at most ${limit}`);
-  assert.equal(statuses.filter((s) => s === 202).length, limit, "the twenty misses are answered as usual");
-  // Control: the payer, from their own address, still claims.
-  assert.equal((await claimAt(env, "7180", "192.0.2.81", H + 11)).status, 200);
-});
+/** Requests sent all at once, or one every millisecond (as they arrive on the edge). */
+const ARRIVALS = [
+  ["together", (send) => (n) => send(n)],
+  ["one per millisecond", (send) => (n) => new Promise((resolve) => setTimeout(resolve, n)).then(() => send(n))]
+];
 
-test("a burst of concurrent links from one account takes nobody's payment", async () => {
-  const env = createAccountEnv();
-  const api = mpApi({ "/v1/payments/8150": { id: 8150, status: "approved", date_approved: iso(T), date_created: iso(T), payer: { id: 5 } } });
-  assert.equal((await mercadoPago(env, { kind: "payment", notificationId: "n8150", signedId: "8150", bodyId: "8150", api: api.fetchImpl })).status, 200);
-  const token = await signIn(env, "burstlinker@example.test");
-  const seen = remoteDatabase(env);
-  const burst = await Promise.all(Array.from({ length: 200 }, (_, n) => linkAt(env, token, String(8000 + n), "192.0.2.82", H + 10)));
-  assert.equal(burst.filter((answer) => answer.status === 200).length, 0, "nothing linked to the walker");
-  assert.ok(seen.lookups <= MP_CLAIM_IP_LIMIT[0], `${seen.lookups} numbers looked up`);
-});
+for (const [arrival, pace] of ARRIVALS) {
+  test(`a burst of claims from one address, ${arrival}, looks up no more numbers than its twenty`, async () => {
+    // Checking the budget, looking up, and spending only on a miss let every
+    // request that checked before the first spend landed do its lookup: 2000
+    // at once looked up all 2000 numbers and took the real payments' tokens.
+    const env = createAccountEnv();
+    const real = ["7150", "7180", "7290"];
+    const api = mpApi(Object.fromEntries(real.map((id) => [`/v1/payments/${id}`,
+      { id: Number(id), status: "approved", date_approved: iso(T), date_created: iso(T), payer: { id: 5 } }])));
+    for (const id of real) {
+      assert.equal((await mercadoPago(env, { kind: "payment", notificationId: `n${id}`, signedId: id, bodyId: id, api: api.fetchImpl })).status, 200);
+    }
+    const seen = remoteDatabase(env);
+    const [limit] = MP_CLAIM_IP_LIMIT;
+    const send = pace((n) => claimAt(env, String(7000 + n), "192.0.2.80", H + 10));
+    const statuses = (await Promise.all(Array.from({ length: 300 }, (_, n) => send(n)))).map((answer) => answer.status);
+    assert.equal(statuses.filter((s) => s === 200).length, 0, "no real payment found by the walk");
+    assert.ok(seen.lookups <= limit, `${seen.lookups} numbers looked up, at most ${limit}`);
+    assert.equal(statuses.filter((s) => s === 202).length, limit, "the twenty misses are answered as usual");
+    // Control: the payer, from their own address, still claims.
+    assert.equal((await claimAt(env, "7180", "192.0.2.81", H + 11)).status, 200);
+  });
+
+  test(`a burst of links from one account, ${arrival}, takes nobody's payment`, async () => {
+    const env = createAccountEnv();
+    const api = mpApi({ "/v1/payments/8150": { id: 8150, status: "approved", date_approved: iso(T), date_created: iso(T), payer: { id: 5 } } });
+    assert.equal((await mercadoPago(env, { kind: "payment", notificationId: "n8150", signedId: "8150", bodyId: "8150", api: api.fetchImpl })).status, 200);
+    const token = await signIn(env, "burstlinker@example.test");
+    const seen = remoteDatabase(env);
+    const send = pace((n) => linkAt(env, token, String(8000 + n), "192.0.2.82", H + 10));
+    const burst = await Promise.all(Array.from({ length: 200 }, (_, n) => send(n)));
+    assert.equal(burst.filter((answer) => answer.status === 200).length, 0, "nothing linked to the walker");
+    assert.ok(seen.lookups <= MP_CLAIM_IP_LIMIT[0], `${seen.lookups} numbers looked up`);
+  });
+}
 
 test("the deployment ceiling bounds lookups, not only spends, under a burst from many addresses", async () => {
   const env = createAccountEnv();
@@ -528,6 +569,23 @@ test("the deployment ceiling bounds lookups, not only spends, under a burst from
     claimAt(env, String(20000 + n), `10.9.${(n >> 4) & 255}.${n & 15}`, H + 10)));
   assert.ok(seen.lookups <= ceiling, `${seen.lookups} numbers looked up, at most ${ceiling}`);
   assert.equal(burst.filter((answer) => answer.status === 202).length, ceiling);
+});
+
+test("a payer's link and claim sent together for their paid number both succeed with one try left", async () => {
+  // The first request holds the block's last try while it looks; the second
+  // used to find the budget full and refuse the payer's own number, and the
+  // site sends the link only once.
+  for (let run = 0; run < 10; run += 1) {
+    const env = createAccountEnv();
+    const token = await signIn(env, `pair${run}@example.test`);
+    const api = mpApi({ "/v1/payments/4500": { id: 4500, status: "approved", date_approved: iso(T), date_created: iso(T), payer: { id: 5 } } });
+    assert.equal((await mercadoPago(env, { kind: "payment", notificationId: `n4500-${run}`, signedId: "4500", bodyId: "4500", api: api.fetchImpl })).status, 200);
+    await misses(env, MP_CLAIM_IP_LIMIT[0] - 1, () => "192.0.2.95", H + 10, 9000);
+    remoteDatabase(env);
+    const [linked, claimed] = await Promise.all([linkAt(env, token, "4500", "192.0.2.95", H + 20), claimAt(env, "4500", "192.0.2.95", H + 20)]);
+    assert.equal(linked.status, 200, `run ${run}: the link, ${JSON.stringify(linked.body)}`);
+    assert.equal(claimed.status, 200, `run ${run}: the claim`);
+  }
 });
 
 test("taking tries from several budgets is all or none, and a refusal writes nothing", async () => {

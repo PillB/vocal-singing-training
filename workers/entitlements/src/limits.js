@@ -36,13 +36,14 @@ export const CLAIMABLE_PROVIDERS = new Set(["stripe", "mercadopago", "creem"]);
  * printed on the payer's receipt. It stays that payment's claim key, because
  * there is nothing else the browser holds, so the walk is what is limited.
  *
- * Only a miss is counted. A walk over the sequence is almost all misses, while
- * a buyer polling their own payment hits it from its first webhook on, pending
- * or paid: counting hits too let the site's own retries (five POSTs per
- * claim while a cash voucher is unpaid) lock its payer out for the hour as
- * soon as the voucher was paid (review of the WH-1 throttle, 18 November
- * 2026). Twenty misses an hour is far more than a buyer whose webhook is late
- * ever spends. The block is the IPv4 address or the IPv6 /56 (`addressBlock`).
+ * Only distinct misses are counted: a number that names a payment gives its
+ * try back, and a number the block has already paid for this hour is looked
+ * up again for free (lookUpClaimId). A walk over the sequence is distinct
+ * numbers that are almost all misses, while a buyer polls one number, before
+ * its webhook lands and while its voucher is unpaid: counting requests let
+ * the site's own retries (five POSTs per claim) lock the payer out for the
+ * hour (two reviews of the WH-1 throttle, 18 November 2026). The block is the
+ * IPv4 address or the IPv6 /56 (`addressBlock`).
  *
  * A subscription is never claimed by such a number (its charges are filed
  * under the 32-hex preapproval id), and the other rails' ids are random, so

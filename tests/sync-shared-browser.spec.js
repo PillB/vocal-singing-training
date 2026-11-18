@@ -128,25 +128,32 @@ async function installWorker(page, worker) {
   });
 }
 
-/** Open the app with Ana signed in (her session in storage, as a sign-in leaves it). */
-async function bootAsAna(page, worker) {
+/**
+ * Open the app with Ana signed in (her session in storage, as a sign-in leaves
+ * it), or signed out with `{signedIn: false}`. `clock` installs the page's
+ * fake clock first, so the 8 s quiet period before a push only passes when
+ * the test says so.
+ */
+async function bootAsAna(page, worker, opts = {}) {
+  const signedIn = opts.signedIn !== false;
   await installWorker(page, worker);
-  await page.addInitScript(() => {
+  if (opts.clock) await page.clock.install({ time: new Date("2026-11-18T10:00:00-05:00") });
+  await page.addInitScript((withSession) => {
     try {
       localStorage.setItem("vt_tour_v1", "1");
       localStorage.setItem("vt_lang", "es");
       if (!sessionStorage.getItem("vt_seeded")) {
         sessionStorage.setItem("vt_seeded", "1");
         sessionStorage.setItem("vt_e2e", "1");
-        localStorage.setItem("vt_account_session_v1", JSON.stringify({ token: "tok-ana", expiresAt: 4102444800 }));
+        if (withSession) localStorage.setItem("vt_account_session_v1", JSON.stringify({ token: "tok-ana", expiresAt: 4102444800 }));
       }
     } catch {
       /* ignore */
     }
-  });
+  }, signedIn);
   await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.VTApp && !!window.VTSync && !!window.VTAccount);
-  await page.waitForFunction(() => window.VTAccount.getState().account?.id === "acct_ana");
+  if (signedIn) await page.waitForFunction(() => window.VTAccount.getState().account?.id === "acct_ana");
 }
 
 /** Open the account panel, from the phone menu when that is where the door is. */
@@ -250,5 +257,55 @@ test.describe("A shared browser: a sync still out when the account changes", () 
     release();
     expect((await page.evaluate(() => window.__anaCycle)).ok).toBe(true);
     expect(accountTakes(worker, ana)).toEqual(["ana-take-1", "ana-take-2"]);
+  });
+});
+
+test.describe("The account panel says where the practice is", () => {
+  test.use({ viewport: { width: 1280, height: 800 }, timezoneId: "America/Lima", locale: "es-PE" });
+
+  // FLOW-6. Right after a take the panel said "Progreso guardado en tu cuenta."
+  // while the account did not hold it yet.
+  test("a take not yet sent reads as not in the account, then as saved once it is", async ({ page }) => {
+    const worker = createWorker();
+    const ana = PEOPLE["ana@example.test"];
+    await bootAsAna(page, worker, { clock: true });
+    // The sign-in's own sync lands first.
+    await page.clock.runFor(9000);
+    await expect.poll(() => worker.puts.length).toBeGreaterThan(0);
+    await expect.poll(() => page.evaluate(() => window.VTSync.getStatus().syncing)).toBe(false);
+    await openPanel(page);
+    await expect(page.locator("#account-sync")).toHaveText("Progreso guardado en tu cuenta.");
+
+    await saveTake(page, "ana-fresh");
+    expect(accountTakes(worker, ana)).toEqual([]);
+    await expect(page.locator("#account-sync")).toHaveText("Tu práctica más reciente aún no está en tu cuenta.");
+
+    await page.clock.runFor(9000);
+    await expect.poll(() => accountTakes(worker, ana)).toEqual(["ana-fresh"]);
+    await expect(page.locator("#account-sync")).toHaveText("Progreso guardado en tu cuenta.");
+  });
+
+  // FLOW-7. Signing in on a second device waited the 8 s quiet period before
+  // reading the account, and meanwhile said "Aún no guardado en tu cuenta.".
+  test("signing in on another device reads the account at once and says it is fetching until then", async ({ page }) => {
+    const worker = createWorker();
+    const ana = PEOPLE["ana@example.test"];
+    worker.docs[`${ana.id}:default`] = { v: 1, profileId: "default", progress: { "v1-diction": takeRow("p1", "from-phone", "2026-11-17T10:00:00.000Z") } };
+    worker.revs[`${ana.id}:default`] = 1;
+    await bootAsAna(page, worker, { signedIn: false });
+    // The account answers slowly, so what the panel says while it waits can be read.
+    let release;
+    worker.hold = { token: ana.token, promise: new Promise((r) => (release = r)) };
+    await signInByCode(page, ana.email);
+    // Far sooner than the 8 s quiet period meant for writes: the read goes out now.
+    await expect.poll(() => worker.gets.filter((g) => g.token === ana.token).length, { timeout: 3000 }).toBeGreaterThan(0);
+    await expect(page.locator("#account-sync")).toHaveText("Trayendo tu progreso de la cuenta…");
+    worker.hold = null;
+    release();
+    await expect
+      .poll(() => page.evaluate(() => Object.values(window.VTStorage.getProgress()).flatMap((r) => r.history.map((h) => h.notes))))
+      .toEqual(["from-phone"]);
+    await expect(page.locator("#account-sync")).not.toHaveText("Trayendo tu progreso de la cuenta…");
+    await expect(page.locator("#account-sync")).not.toHaveText("Aún no guardado en tu cuenta.");
   });
 });

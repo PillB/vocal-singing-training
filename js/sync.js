@@ -76,6 +76,12 @@
   let failures = 0;
   // The owner this page recorded when storage would not keep it (see writeOwner).
   let ownerKept = null;
+  // The session signed in on this page a moment ago whose account has not been
+  // read yet: the panel says "fetching" rather than "never saved" (FLOW-7).
+  let fetchingFor = null;
+  // The session the account listener last saw, so a sign-in can be told apart
+  // from any other change of the account's state (a /v1/me answer, a plan).
+  let seenToken = null;
 
   // Which profiles hold changes the account has not had yet. Every synced write
   // bumps `version`; a profile is pushed up to the version that was current
@@ -1116,6 +1122,20 @@
    * @returns {Promise<void>}
    */
   async function syncScheduled() {
+    const asked = sessionToken();
+    try {
+      await syncRound();
+    } finally {
+      // The first read after a sign-in has had its answer, whatever it was.
+      if (fetchingFor && fetchingFor === asked) {
+        fetchingFor = null;
+        emit();
+      }
+    }
+  }
+
+  /** One round of syncScheduled(): the active profile, then the others with changes. */
+  async function syncRound() {
     const active = global.VTStorage.getActiveProfileId();
     let failed = null;
     for (const id of [active, ...otherUnpushed(active)]) {
@@ -1199,8 +1219,11 @@
    * Current sync status, synchronously.
    * @returns {{available: boolean, syncing: boolean, lastSyncedAt: string|null,
    *            lastError: string|null, refusedReason: string|null, rev: number,
-   *            otherOwner: boolean}} Status. `otherOwner`: this browser holds
-   *            another account's practice and the one signed in has to choose.
+   *            otherOwner: boolean, pending: boolean, fetching: boolean}} Status.
+   *            `otherOwner`: this browser holds another account's practice and
+   *            the one signed in has to choose. `pending`: something written on
+   *            this page has not reached the account yet (FLOW-6). `fetching`:
+   *            just signed in, and the account has not been read yet (FLOW-7).
    */
   function getStatus() {
     let rev = 0;
@@ -1218,8 +1241,36 @@
       lastError,
       refusedReason,
       rev,
-      otherOwner: otherOwner()
+      otherOwner: otherOwner(),
+      pending: hasUnpushed(),
+      fetching: !!fetchingFor && fetchingFor === sessionToken()
     };
+  }
+
+  /** Whether any profile on this browser holds a change the account has not had. */
+  function hasUnpushed() {
+    try {
+      const active = global.VTStorage.getActiveProfileId();
+      return unpushed(active) || otherUnpushed(active).length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Forget what this page knew about the account that was signed in: its
+   * revisions and copies, why it failed, what it turned down.
+   */
+  function forgetAccount() {
+    confirmed.clear();
+    // "Guardado en tu cuenta" was about the account that just left.
+    lastError = null;
+    refusedReason = null;
+    // What that account turned down says nothing about the next one's.
+    refusals.clear();
+    lastSyncedAt = null;
+    failures = 0;
+    fetchingFor = null;
   }
 
   /**
@@ -1362,21 +1413,27 @@
     version += 1;
     changedAt.set(profileId, version);
     schedule();
+    // An open panel stops saying "saved" the moment there is something new.
+    emit();
   });
 
   if (typeof document !== "undefined" && global.VTAccount?.onChange) {
-    // Signing in on a fresh device is the moment a sync is most wanted.
+    seenToken = sessionToken();
     global.VTAccount.onChange((state) => {
-      if (state.signedIn) schedule();
-      else {
-        confirmed.clear();
-        // "Guardado en tu cuenta" was about the account that just left.
-        lastError = null;
-        refusedReason = null;
-        // What that account turned down says nothing about the next one's.
-        refusals.clear();
-        lastSyncedAt = null;
-        failures = 0;
+      const token = state.signedIn ? sessionToken() : null;
+      // Signed out, or somebody else signed in.
+      if (token !== seenToken) forgetAccount();
+      const arrived = !!token && token !== seenToken;
+      seenToken = token;
+      if (arrived) {
+        // Signing in is the moment a sync is most wanted: read the account
+        // now. The quiet period is for batching writes, and making a sign-in
+        // wait it out showed a returning learner an empty record (FLOW-7).
+        fetchingFor = token;
+        schedule(0);
+        emit();
+      } else if (token && !timer) {
+        schedule();
       }
     });
     // The account may have answered while this file was still downloading

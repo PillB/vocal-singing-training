@@ -153,7 +153,7 @@ export const MUTANTS = {
     ["SYR1 a save's timer still pending sends the refused write again (PR #21 merge)", "js/sync.js", "      const res = standingRefusal(id) ? { ok: false, reason: \"refused\" } : await syncNow(id);", "      const res = await syncNow(id);"],
     ["SYR2 a change made while the refused write was out is taken as refused, and never sent", "js/sync.js", "      noteRefusal(profileId, result, before);", "      noteRefusal(profileId, result, version);"],
     ["SYR3 a refusal outlives every later change", "js/sync.js", "    return refusal && (changedAt.get(profileId) || 0) <= refusal.before ? refusal : null;", "    return refusal || null;"],
-    ["SYR4 a sign-out keeps the last account's refusal", "js/sync.js", "        refusals.clear();\n", ""],
+    ["SYR4 a sign-out keeps the last account's refusal", "js/sync.js", "    refusals.clear();\n", ""],
     ["SYR5 a profile that went up after a refused one hides why that one did not", "js/sync.js", "      refusedReason = failed.reason === \"refused\" ? refusals.get(failed.id)?.reason || null : null;\n", ""],
     ["SYR6 a profile the account took is still treated as refused", "js/sync.js", "    if (result && result.ok) refusals.delete(profileId);\n    else if", "    if (result && result.ok) return;\n    if"],
     ["M22 the first match in a periodic tail, not the nearest", "js/voice-features.js", "if (j === K && (best == null || Math.abs(k - est) < Math.abs(best - est))) best = k;", "if (j === K && best == null) best = k;"],
@@ -1099,8 +1099,9 @@ export const MUTANTS = {
   // runs in the contracts job with the default sets. "Sequential" mutants replace a D1 batch (one
   // transaction) with the same statements run one by one, which is what the code did before.
   // The client sync on a shared browser and against a malformed account copy (red-team round of 2026-11-18,
-  // findings RES-1/2/4/5/6/7, FLOW-6/7, CXSS-1 part 2). Each mutant runs only the node test written for it,
-  // against the real js/storage.js, js/account.js and js/sync.js and the real worker router (tests/node/sync-env.mjs).
+  // findings RES-1/2/4/5/6/7, FLOW-6/7, CXSS-1 part 2). Each mutant runs only the test written for it: a node test
+  // against the real js/storage.js, js/account.js and js/sync.js and the real worker router (tests/node/sync-env.mjs),
+  // or, for what the page shows, tests/sync-shared-browser.spec.js. The browser half puts the set in the CI matrix.
   syncing: [
     ["SY1 a write answered after the account changed is recorded as the next account's", "js/sync.js", "      // The write went to the account that made it; whoever is here now is not told it was theirs.\n      if (sessionMoved(token)) return sessionGone();\n", "", "sync-account-switch"],
     ["SY2 each request of a cycle goes out as whichever session is current, and nothing checks between them (RES-1)", "js/sync.js", "      const pulled = await readAccount(profileId, token);\n      if (sessionMoved(token)) return sessionGone();\n      const halt = pullStop(pulled, profileId);\n      if (halt) return halt;\n\n      const step = mergePulled(profileId, pulled);\n      const pushed = await global.VTAccount.request(\n        \"PUT\",\n        \"/v1/me/progress\",\n        { profileId, doc: step.merged, baseRev: step.serverRev },\n        { timeoutMs: REQUEST_TIMEOUT_MS, token }\n      );\n      // The write went to the account that made it; whoever is here now is not told it was theirs.\n      if (sessionMoved(token)) return sessionGone();\n", "      const pulled = await readAccount(profileId, null);\n      const halt = pullStop(pulled, profileId);\n      if (halt) return halt;\n\n      const step = mergePulled(profileId, pulled);\n      const pushed = await global.VTAccount.request(\n        \"PUT\",\n        \"/v1/me/progress\",\n        { profileId, doc: step.merged, baseRev: step.serverRev },\n        { timeoutMs: REQUEST_TIMEOUT_MS }\n      );\n", "sync-account-switch"],
@@ -1122,8 +1123,24 @@ export const MUTANTS = {
     ["SY18 a goal dated 2099 wins every later merge", "js/sync.js", "    return { ...g, weeklySessionsTarget: target, ...present(g, \"updatedAt\", when) };", "    return { ...g, weeklySessionsTarget: target };", "sync-account-doc"],
     ["SY19 a review's element outside the catalogue's list is kept", "js/sync.js", "      ...present(e, \"element\", element),\n", "", "sync-account-doc"],
     ["SY20 an owner storage refused is forgotten: the next account gets this practice unasked (RES-6)", "js/sync.js", "      ownerKept = id;\n    }", "    }", "sync-owner-quota"],
-    ["SY21 the owner kept in memory is never read", "js/sync.js", "    if (ownerKept) return ownerKept;\n    try {\n      return localStorage.getItem(LS_OWNER) || null;", "    try {\n      return localStorage.getItem(LS_OWNER) || null;", "sync-owner-quota"]
-  ].map(([name, file, from, to, test]) => ({ name, file, from, to, cmd: node([`tests/node/${test}.test.mjs`]) })),
+    ["SY21 the owner kept in memory is never read", "js/sync.js", "    if (ownerKept) return ownerKept;\n    try {\n      return localStorage.getItem(LS_OWNER) || null;", "    try {\n      return localStorage.getItem(LS_OWNER) || null;", "sync-owner-quota"],
+    ["SY22 the status never says a change is waiting: the panel says saved over an unsent take (FLOW-6)", "js/sync.js", "      pending: hasUnpushed(),\n", "      pending: false,\n", "sync-status"],
+    ["SY23 a sign-in waits out the 8 s quiet period before its first read (FLOW-7)", "js/sync.js", "        fetchingFor = token;\n        schedule(0);", "        fetchingFor = token;\n        schedule();", "sync-status"],
+    ["SY24 'fetching' outlives the first read", "js/sync.js", "      if (fetchingFor && fetchingFor === asked) {", "      if (false) {", "sync-status"],
+    ["SY25 a /v1/me answer after the sign-in pushes the first read back by the quiet period", "js/sync.js", "      } else if (token && !timer) {", "      } else if (token) {", "sync-status"],
+    ["SY26 a take does not tell an open panel that something is waiting", "js/sync.js", "    // An open panel stops saying \"saved\" the moment there is something new.\n    emit();\n", "", "sync-status"],
+    ["SY27 the panel says saved while a take waits to be sent (FLOW-6)", "js/app.js", "    if (status.pending) return tt(\"auth.syncPending\");\n", "", "sync-shared-browser.spec.js", "a take not yet sent"],
+    ["SY28 the panel says 'Aún no guardado' while the account's copy is on its way (FLOW-7)", "js/app.js", "    if (status.fetching) return tt(\"auth.syncFetching\");\n", "", "sync-shared-browser.spec.js", "says it is fetching"]
+  ].map(([name, file, from, to, test, grep]) => ({
+    name,
+    file,
+    from,
+    to,
+    // A panel line is judged in the browser by the spec written for it; everything else by its node test.
+    cmd: test.endsWith(".spec.js")
+      ? [...PIANO_SPEC.slice(0, 3), `tests/${test}`, "--project=chromium", "--workers=2", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
+      : node([`tests/node/${test}.test.mjs`])
+  })),
   ledger: [
     ["LG1 the first validation chunk always passes: a stale read commits", "src/ledger.js", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed})", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed}) OR 1", "ledger"],
     ["LG2 later validation chunks are ignored", "src/ledger.js", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed})", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed}) AND 0", "ledger"],
@@ -1277,7 +1294,7 @@ export const MUTANTS = {
   }))
 };
 
-export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger", "syncing"];
+export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger"];
 
 /** What the last failing command printed, so a red baseline in CI says which test failed. */
 let lastFailure = "";

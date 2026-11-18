@@ -1275,7 +1275,9 @@ export const MUTANTS = {
     ["IJ17 the reply link is the contact as typed: ?bcc=, &body= and a second recipient reach the admin's mail client", "js/admin.js", "    const href = replyHref(contact);", "    const href = `mailto:${contact}`;", "tests/admin-reply-link.spec.js"],
     ["IJ18 any character but @ passes as the local part: a comma writes to a second recipient", "js/admin.js", "  const PLAIN_LOCAL = /^[A-Za-z0-9.!#$'*+^_`{|}~-]{1,64}$/;", "  const PLAIN_LOCAL = /^[^@\\s]{1,64}$/;", "tests/admin-reply-link.spec.js"],
     ["IJ19 any text passes as the domain: the header fields after it are kept", "js/admin.js", "  const PLAIN_DOMAIN = /^(?=.{1,253}$)", "  const PLAIN_DOMAIN = /^(?=.*$)|^(?=.{1,253}$)", "tests/admin-reply-link.spec.js"],
-    ["IJ20 the local part is not percent-encoded: a # in it starts a fragment and the mail goes to the part before it", "js/admin.js", "    return `mailto:${encodeURIComponent(local)}@${domain}`;", "    return `mailto:${local}@${domain}`;", "tests/admin-reply-link.spec.js"]
+    ["IJ20 the local part is not percent-encoded: a # in it starts a fragment and the mail goes to the part before it", "js/admin.js", "    return `mailto:${encodeURIComponent(local)}@${domain}`;", "    return `mailto:${local}@${domain}`;", "tests/admin-reply-link.spec.js"],
+    // CXSS-4: the spec that stood for this wrote #ex-steps with its own escapeHtml and passed on this mutant.
+    ["IJ21 the exercise's steps are put into #ex-steps unescaped", "js/app.js", "      .map((s) => `<li>${escapeHtml(s)}</li>`)", "      .map((s) => `<li>${s}</li>`)", "tests/redteam-client.spec.js", "IJ21 "]
   ].map(([name, file, from, to, spec, grep]) => ({
     name,
     file,

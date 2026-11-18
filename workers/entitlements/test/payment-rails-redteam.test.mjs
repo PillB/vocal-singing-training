@@ -27,7 +27,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
 
-import { ensureSchema } from "../src/db.js";
+import { ensureSchema, releaseRateLimits, reserveRateLimits } from "../src/db.js";
 import { handleRequest } from "../src/index.js";
 import { hmacSha256Hex } from "../src/license.js";
 import { buildMercadoPagoManifest, resolveNotificationTarget } from "../src/mercadopago.js";
@@ -457,6 +457,121 @@ test("a walk spread over many addresses meets the deployment's ceiling, which ho
   assert.equal((await claimAt(env, "4400", "203.0.113.201", H + HOUR)).status, 200, "the next hour, the payer claims");
 });
 
+/**
+ * D1 as it is in production, a round trip away: every statement waits one
+ * timer tick, so requests sent together interleave as they do on the edge
+ * (the in-memory database otherwise answers each request in one go). Counts
+ * the claim-index lookups of Mercado Pago numbers.
+ */
+function remoteDatabase(env) {
+  const db = env.DB;
+  const seen = { lookups: 0 };
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
+  const wrap = (statement) => ({
+    inner: statement,
+    bind: (...values) => {
+      if (values.some((v) => typeof v === "string" && v.startsWith("claim:mercadopago:"))) {
+        seen.lookups += 1;
+      }
+      return wrap(statement.bind(...values));
+    },
+    first: async (column) => { await tick(); return statement.first(column); },
+    all: async () => { await tick(); return statement.all(); },
+    run: async () => { await tick(); return statement.run(); }
+  });
+  env.DB = {
+    prepare: (sql) => wrap(db.prepare(sql)),
+    batch: async (statements) => { await tick(); return db.batch(statements.map((st) => st.inner || st)); },
+    exec: async (sql) => { await tick(); return db.exec(sql); }
+  };
+  return seen;
+}
+
+test("a burst of concurrent claims from one address looks up no more numbers than its twenty", async () => {
+  // Peeking at the budget, looking up, and spending only on a miss let every
+  // request that peeked before the first spend landed do its lookup: 2000 at
+  // once looked up all 2000 numbers and took the real payments' tokens.
+  const env = createAccountEnv();
+  const real = ["7150", "7180", "7290"];
+  const api = mpApi(Object.fromEntries(real.map((id) => [`/v1/payments/${id}`,
+    { id: Number(id), status: "approved", date_approved: iso(T), date_created: iso(T), payer: { id: 5 } }])));
+  for (const id of real) {
+    assert.equal((await mercadoPago(env, { kind: "payment", notificationId: `n${id}`, signedId: id, bodyId: id, api: api.fetchImpl })).status, 200);
+  }
+  const seen = remoteDatabase(env);
+  const [limit] = MP_CLAIM_IP_LIMIT;
+  const burst = await Promise.all(Array.from({ length: 300 }, (_, n) => claimAt(env, String(7000 + n), "192.0.2.80", H + 10)));
+  const statuses = burst.map((answer) => answer.status);
+  assert.equal(statuses.filter((s) => s === 200).length, 0, "no real payment found by the walk");
+  assert.ok(seen.lookups <= limit, `${seen.lookups} numbers looked up, at most ${limit}`);
+  assert.equal(statuses.filter((s) => s === 202).length, limit, "the twenty misses are answered as usual");
+  // Control: the payer, from their own address, still claims.
+  assert.equal((await claimAt(env, "7180", "192.0.2.81", H + 11)).status, 200);
+});
+
+test("a burst of concurrent links from one account takes nobody's payment", async () => {
+  const env = createAccountEnv();
+  const api = mpApi({ "/v1/payments/8150": { id: 8150, status: "approved", date_approved: iso(T), date_created: iso(T), payer: { id: 5 } } });
+  assert.equal((await mercadoPago(env, { kind: "payment", notificationId: "n8150", signedId: "8150", bodyId: "8150", api: api.fetchImpl })).status, 200);
+  const token = await signIn(env, "burstlinker@example.test");
+  const seen = remoteDatabase(env);
+  const burst = await Promise.all(Array.from({ length: 200 }, (_, n) => linkAt(env, token, String(8000 + n), "192.0.2.82", H + 10)));
+  assert.equal(burst.filter((answer) => answer.status === 200).length, 0, "nothing linked to the walker");
+  assert.ok(seen.lookups <= MP_CLAIM_IP_LIMIT[0], `${seen.lookups} numbers looked up`);
+});
+
+test("the deployment ceiling bounds lookups, not only spends, under a burst from many addresses", async () => {
+  const env = createAccountEnv();
+  const seen = remoteDatabase(env);
+  const [ceiling] = MP_CLAIM_DEPLOYMENT_LIMIT;
+  const burst = await Promise.all(Array.from({ length: ceiling + 100 }, (_, n) =>
+    claimAt(env, String(20000 + n), `10.9.${(n >> 4) & 255}.${n & 15}`, H + 10)));
+  assert.ok(seen.lookups <= ceiling, `${seen.lookups} numbers looked up, at most ${ceiling}`);
+  assert.equal(burst.filter((answer) => answer.status === 202).length, ceiling);
+});
+
+test("taking tries from several budgets is all or none, and a refusal writes nothing", async () => {
+  const env = createAccountEnv();
+  await ensureSchema(env.DB);
+  const at = H + 10;
+  // The deployment budget is already spent; the caller's own is empty.
+  await env.DB.prepare("INSERT INTO rate_limits (bucket, count, window_start) VALUES ('t:all', 2, ?1)").bind(H).run();
+  const rows = async () => (await env.DB.prepare("SELECT bucket, count FROM rate_limits WHERE bucket LIKE 't:%' ORDER BY bucket").all()).results;
+  const before = await rows();
+  const refused = await reserveRateLimits(env.DB, [["t:mine", 5, HOUR], ["t:all", 2, HOUR]], at);
+  assert.equal(refused.ok, false);
+  assert.deepEqual(await rows(), before, "nothing written for a refused request");
+  // Lost to a race: the second budget fills between the read and the write. The first try is given back.
+  const racing = { ...env.DB, prepare: env.DB.prepare.bind(env.DB) };
+  let reads = 0;
+  racing.prepare = (sql) => {
+    const statement = env.DB.prepare(sql);
+    if (/^SELECT count, window_start FROM rate_limits/.test(sql) && ++reads === 3) {
+      return { bind: (...v) => ({ first: async () => { await env.DB.prepare("UPDATE rate_limits SET count = 2 WHERE bucket = 't:all2'").run(); return statement.bind(...v).first(); } }) };
+    }
+    return statement;
+  };
+  await env.DB.prepare("INSERT INTO rate_limits (bucket, count, window_start) VALUES ('t:all2', 1, ?1)").bind(H).run();
+  const lost = await reserveRateLimits(racing, [["t:mine", 5, HOUR], ["t:all2", 2, HOUR]], at);
+  assert.equal(lost.ok, false, "the second budget filled first");
+  const mine = (await rows()).find((row) => row.bucket === "t:mine");
+  assert.equal(mine ? mine.count : 0, 0, "the try taken from the first budget was given back");
+  // Control: with room in both, both are taken.
+  const taken = await reserveRateLimits(env.DB, [["t:mine", 5, HOUR], ["t:other", 2, HOUR]], at);
+  assert.equal(taken.ok, true);
+  assert.deepEqual(taken.held.map(([bucket]) => bucket), ["t:mine", "t:other"]);
+  const count = async (bucket) => (await env.DB.prepare("SELECT count FROM rate_limits WHERE bucket = ?1").bind(bucket).first()).count;
+  // A try goes back once, and never below zero: given back twice, it is not an extra try.
+  await releaseRateLimits(env.DB, taken.held);
+  await releaseRateLimits(env.DB, taken.held);
+  assert.equal(await count("t:mine"), 0);
+  // A try goes back to the window it was taken in, not to the next one.
+  const late = await reserveRateLimits(env.DB, [["t:late", 5, HOUR]], at);
+  await reserveRateLimits(env.DB, [["t:late", 5, HOUR]], H + HOUR + 5);
+  await releaseRateLimits(env.DB, late.held);
+  assert.equal(await count("t:late"), 1, "the next hour's try stands");
+});
+
 // ------------------------------------- WH-2: Creem never reads metadata.plan
 
 test("Creem with no product table takes the plan from the product's billing period, whatever the buyer wrote in metadata", () => {
@@ -604,6 +719,37 @@ test("with the Stripe price table filled in, a checkout Stripe created last but 
   await stripe(env, "o_cs", "checkout.session.completed", session("cs_other", "sub_other", "checkout.session.completed"), T + 60);
   await stripe(env, "o_sc", "customer.subscription.created", other, T);
   assert.notEqual((await claim(env, "stripe", "cs_other")).status, 200, "an unlisted price stays suspended");
+});
+
+test("with the Stripe price table filled in, an unlisted subscription whose deletion is processed first gets no Pro for its period", async () => {
+  // Deleted, a subscription is "canceled", never "suspended", and processed
+  // before any other event of its license it kept its whole period.
+  const at = T - 10 * DAY;
+  const run = async (priceId) => {
+    const env = createAccountEnv(LISTED);
+    const id = `sub_del_${priceId}`;
+    const sub = (status, extra) => ({
+      id, object: "subscription", status, customer: `cus_${id}`, current_period_end: at + 30 * DAY, metadata: {},
+      items: { data: [{ price: { id: priceId, recurring: { interval: "month", interval_count: 1 } } }] }, ...extra
+    });
+    await stripe(env, `d_${id}`, "customer.subscription.deleted", sub("canceled", { ended_at: at + DAY, canceled_at: at + DAY }), at + DAY);
+    await stripe(env, `c_${id}`, "customer.subscription.created", sub("active"), at);
+    await stripe(env, `i_${id}`, "invoice.paid", {
+      id: `in_${id}`, customer: `cus_${id}`, subscription: id, status: "paid",
+      lines: { data: [{ price: { id: priceId }, period: { start: at, end: at + 30 * DAY } }] }
+    }, at + 1);
+    await stripe(env, `s_${id}`, "checkout.session.completed", {
+      id: `cs_${id}`, object: "checkout.session", mode: "subscription", status: "complete", payment_status: "paid",
+      customer: `cus_${id}`, subscription: id, metadata: {}
+    }, at + 2);
+    return call(env, jsonRequest("/v1/claim", { provider: "stripe", sessionId: `cs_${id}` }));
+  };
+  const unlisted = await run("price_donation");
+  assert.notEqual(unlisted.status, 200, `a price that is not ours: ${JSON.stringify(unlisted.body)}`);
+  assert.equal(unlisted.body.token, undefined);
+  // Control: a listed price cancelled the same way keeps the month that was paid for.
+  const listed = await run("price_pro_monthly");
+  assert.equal(listed.status, 200, `a listed price keeps its paid period: ${JSON.stringify(listed.body)}`);
 });
 
 test("with the Stripe price table filled in, a listed subscription whose checkout lands first still becomes Pro", async () => {

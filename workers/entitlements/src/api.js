@@ -29,7 +29,7 @@ import {
   startSessionWithCode,
   toPublicAccount
 } from "./accounts.js";
-import { callerIp, ensureSchema, hitRateLimit, normalizeEmail, nowSec, peekRateLimit, sweepExpired } from "./db.js";
+import { callerIp, ensureSchema, hitRateLimit, normalizeEmail, nowSec, releaseRateLimits, reserveRateLimits, sweepExpired } from "./db.js";
 import { emailConfigured, sendLoginCode } from "./email.js";
 import {
   MAX_GRANT_DAYS,
@@ -505,11 +505,14 @@ export async function handleMe(request, env, deps) {
  * Find the license a claim or link id names, holding a walk over Mercado Pago
  * payment numbers to MP_CLAIM_IP_LIMIT and MP_CLAIM_DEPLOYMENT_LIMIT.
  *
- * Both budgets are read before the lookup, without writing, and a spent one
- * refuses the request whatever it names: if a hit could still pass, a 429
- * would just mean "miss" and the walk would go on unlimited. Only a miss
- * spends a try, so a buyer polling their own payment never runs out (review
- * of the WH-1 throttle, 18 November 2026).
+ * A try is taken from both budgets BEFORE the lookup and given back when the
+ * number names a payment, so only a miss is spent: a buyer polling their own
+ * payment never runs out (review of the WH-1 throttle, 18 November 2026). A
+ * spent budget refuses the request whatever it names, or a 429 would only
+ * mean "miss". And because each request holds its try while it looks, no
+ * more lookups run than the budgets allow, however many requests arrive at
+ * once: peeking first and spending only after a miss let a burst of a few
+ * hundred concurrent claims look up every number (second review, same day).
  *
  * Any other id is looked up untouched: Stripe's and Creem's are random, and a
  * Mercado Pago subscription is claimed by its 32-hex preapproval id. The
@@ -527,19 +530,13 @@ export async function handleMe(request, env, deps) {
  */
 export async function lookUpClaimId(env, request, provider, sessionId, at) {
   const buckets = await paymentNumberBuckets(env, request, provider, sessionId, at);
-  for (const [bucket, limit, window] of buckets) {
-    const room = await peekRateLimit(env.DB, bucket, limit, window, at);
-    if (!room.ok) {
-      return { licenseId: null, refused: room };
-    }
+  const tries = buckets.length ? await reserveRateLimits(env.DB, buckets, at) : { ok: true, held: [] };
+  if (!tries.ok) {
+    return { licenseId: null, refused: tries };
   }
   const licenseId = await getLicenseIdForClaim(ledgerReader(env), provider, sessionId);
-  const spends = licenseId ? [] : buckets;
-  for (const [bucket, limit, window] of spends) {
-    const spent = await hitRateLimit(env.DB, bucket, limit, window, at);
-    if (!spent.ok) {
-      return { licenseId: null, refused: spent };
-    }
+  if (licenseId) {
+    await releaseRateLimits(env.DB, tries.held);
   }
   return { licenseId };
 }

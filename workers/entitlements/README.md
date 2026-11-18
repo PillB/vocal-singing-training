@@ -577,7 +577,9 @@ the suspension its unlisted price had just been given (red-team WH-3). A
 subscription's checkout stripped that way also leaves the license's clock
 alone, because Stripe creates it after the subscription's own events: when it
 was delivered first, it made them stale, and a paid subscription stayed
-`pending` until its renewal (the review of that fix). That is what stops anything
+`pending` until its renewal (the review of that fix). And a deleted
+subscription on an unlisted price, which is "canceled" rather than
+"suspended", ends at its deletion instead of keeping its period. That is what stops anything
 else ever sold from the same Stripe account — a donation, a one-off lesson, a
 subscription at any price — from becoming Pro.
 
@@ -723,8 +725,11 @@ that number, so it stays the payment's claim key, and what is limited is the
 walk: a claim or link by such a number that names no payment of ours spends one
 of `MP_CLAIM_IP_LIMIT` (20 an hour) for the caller's IPv4 address or IPv6 /56,
 and one of `MP_CLAIM_DEPLOYMENT_LIMIT` (200 an hour) for the whole deployment.
-A number that names a payment spends nothing, so a buyer polling an unpaid cash
-voucher never runs out; but once either budget is spent, every claim and link
+The try is taken before the lookup and given back when the number names a
+payment, so a buyer polling an unpaid cash voucher never runs out, and no more
+numbers are looked up than the budgets allow however many requests arrive at
+once (a check, then a lookup, then a spend let a burst look up every number).
+Once either budget is spent, every claim and link
 by a number is refused until the hour turns, the payer's own included, because
 if a hit still passed a `429` would only mean "miss". That last part is the
 price of the ceiling: whoever spends it holds one-off payments back for the

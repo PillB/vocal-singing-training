@@ -602,7 +602,11 @@ function mapSubscription(subscription, env, deleted) {
       : (unlisted ? "suspended" : mapStripeStatus(subscription && subscription.status)),
     periodEnd: subscriptionPeriodEnd(subscription),
     endedAt,
-    endsAt: unpaid && endedAt !== null ? endedAt : undefined,
+    // A subscription on a price that is not ours ends there too: deleted, it
+    // is "canceled" rather than "suspended", and processed before any other
+    // event of its license it used to keep its whole period, and a token for
+    // it (second review of the WH-3 fix).
+    endsAt: (unpaid || unlisted) && endedAt !== null ? endedAt : undefined,
     // Stripe never reactivates a deleted subscription: nothing after this may
     // change the license's state.
     terminal: deleted

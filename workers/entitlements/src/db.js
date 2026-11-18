@@ -343,7 +343,7 @@ export async function hitRateLimit(db, bucket, limit, windowSeconds, now, cost) 
     .bind(bucket, room.windowStart, step)
     .run();
   if (changedRows(started) > 0) {
-    return { ok: true, count: step, retryAfter: 0 };
+    return { ok: true, count: step, retryAfter: 0, windowStart: room.windowStart };
   }
   // Already in this window: the increment carries the limit, so the row moves
   // only while there is room for this call's cost.
@@ -358,7 +358,63 @@ export async function hitRateLimit(db, bucket, limit, windowSeconds, now, cost) 
     // Somebody else took the room between the read above and this write.
     return { ok: false, count: limit, retryAfter: room.retryAfter };
   }
-  return { ok: true, count: room.count + step, retryAfter: 0 };
+  return { ok: true, count: room.count + step, retryAfter: 0, windowStart: room.windowStart };
+}
+
+/**
+ * Take one hit from each of several limits, all or none: `[bucket, limit,
+ * windowSeconds]` in order. Every limit is read first, so a caller held back
+ * by any of them writes nothing (a refusal has to be free, QA-40); then each
+ * is taken with hitRateLimit's guarded write, and if one is lost to a racing
+ * caller the ones already taken are given back.
+ *
+ * For a check that must be counted BEFORE the work it guards and may be given
+ * back after it: the work cannot run more often than the limits allow, however
+ * many requests arrive together, because each one holds its hit while it works.
+ * A peek, the work, and then a hit only for some outcomes let every request
+ * that peeked before the first hit landed do the work (review of the Mercado
+ * Pago claim throttle, 18 November 2026).
+ * @param {Object} db D1 binding.
+ * @param {Array<[string, number, number]>} limits Buckets and their limits.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{ok: boolean, held: Array<[string, number]>, retryAfter?: number}>}
+ *   Whether every hit was taken, the hits held (bucket and window) to hand to
+ *   releaseRateLimits, and when to retry if not.
+ */
+export async function reserveRateLimits(db, limits, at) {
+  for (const [bucket, limit, windowSeconds] of limits) {
+    const room = await peekRateLimit(db, bucket, limit, windowSeconds, at);
+    if (!room.ok) {
+      return { ok: false, held: [], retryAfter: room.retryAfter };
+    }
+  }
+  const held = [];
+  for (const [bucket, limit, windowSeconds] of limits) {
+    const taken = await hitRateLimit(db, bucket, limit, windowSeconds, at);
+    if (!taken.ok) {
+      await releaseRateLimits(db, held);
+      return { ok: false, held: [], retryAfter: taken.retryAfter };
+    }
+    held.push([bucket, taken.windowStart]);
+  }
+  return { ok: true, held };
+}
+
+/**
+ * Give back hits reserveRateLimits took. Each goes back to the window it was
+ * taken in and never below zero, so a window that has since turned over is
+ * left alone rather than handed an extra try.
+ * @param {Object} db D1 binding.
+ * @param {Array<[string, number]>} held Buckets and the windows their hits were taken in.
+ * @returns {Promise<void>} Resolves when written.
+ */
+export async function releaseRateLimits(db, held) {
+  for (const [bucket, windowStart] of held) {
+    await db
+      .prepare("UPDATE rate_limits SET count = count - 1 WHERE bucket = ?1 AND window_start = ?2 AND count > 0")
+      .bind(bucket, windowStart)
+      .run();
+  }
 }
 
 /**

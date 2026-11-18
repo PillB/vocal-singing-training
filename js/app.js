@@ -9641,6 +9641,9 @@
   function accountSyncLine() {
     const status = window.VTSync?.getStatus?.();
     if (!status || !status.available) return "";
+    // Just signed in and the account's copy is on its way: "Aún no guardado"
+    // over an empty record told a returning learner their account was empty.
+    if (status.fetching) return tt("auth.syncFetching");
     if (status.syncing) return tt("auth.syncing");
     if (status.lastError === "refused") {
       // Turned down for what it is, and the same write would be turned down
@@ -9648,6 +9651,9 @@
       return tt(status.refusedReason === "profile_limit" ? "auth.syncRefused" : "auth.syncRefusedOther");
     }
     if (status.lastError) return tt("auth.syncError");
+    // Something written here is still waiting out the quiet period (or was
+    // never taken): "saved" would be about the copy before it.
+    if (status.pending) return tt("auth.syncPending");
     // "Aún no guardado" is only true of a device that has never synced. After a
     // reload `lastSyncedAt` starts empty, but a revision on file means this
     // device's progress has been in the account before.

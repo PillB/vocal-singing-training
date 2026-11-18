@@ -1304,12 +1304,6 @@
       "name": "Method 'writeSyncBag'"
     },
     {
-      "file": "js/sync.js",
-      "sha": "655dd47f73170540c6d2b441517551e7fa44ab9b3a9aff769ea5e4fa626c70d5",
-      "complexity": 24,
-      "name": "Function 'mergeProgress'"
-    },
-    {
       "file": "js/tour.js",
       "sha": "f1815244d419a679423089b7427ec505e0ffb1b7cf47e2ca54045a1a6a38e9ab",
       "complexity": 16,

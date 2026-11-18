@@ -29,7 +29,7 @@ import {
   startSessionWithCode,
   toPublicAccount
 } from "./accounts.js";
-import { callerIp, ensureSchema, hitRateLimit, normalizeEmail, nowSec, sweepExpired } from "./db.js";
+import { callerIp, ensureSchema, hitRateLimit, normalizeEmail, nowSec, peekRateLimit, sweepExpired } from "./db.js";
 import { emailConfigured, sendLoginCode } from "./email.js";
 import {
   MAX_GRANT_DAYS,
@@ -54,8 +54,8 @@ import {
 } from "./grants.js";
 import { googleConfigured, verifyGoogleIdToken } from "./google.js";
 import { buildTokenPayload, isLicenseIdShape, signPayload } from "./license.js";
-import { CLAIMABLE_PROVIDERS, MP_CLAIM_IP_LIMIT } from "./limits.js";
-import { ipBucketKey, ipKeyConfigured } from "./events.js";
+import { CLAIMABLE_PROVIDERS, MP_CLAIM_DEPLOYMENT_LIMIT, MP_CLAIM_IP_LIMIT } from "./limits.js";
+import { addressBlockKey, ipKeyConfigured } from "./events.js";
 import { deleteProgress, getProgress, listProgress, putProgress } from "./progress.js";
 import { getEntitlement, getLicenseIdForClaim } from "./store.js";
 import { ledgerReader } from "./ledger.js";
@@ -502,30 +502,61 @@ export async function handleMe(request, env, deps) {
 }
 
 /**
- * Spend one of the caller's tries at claiming or linking by a Mercado Pago
- * payment number (MP_CLAIM_IP_LIMIT). Any other id passes untouched: Stripe's
- * and Creem's are random, and a Mercado Pago subscription is claimed by its
- * 32-hex preapproval id.
+ * Find the license a claim or link id names, holding a walk over Mercado Pago
+ * payment numbers to MP_CLAIM_IP_LIMIT and MP_CLAIM_DEPLOYMENT_LIMIT.
  *
- * The bucket is the address as `ipBucketKey` pseudonymises it, under its own
- * scope, never the address itself (VG-87). Without D1 (the KV-only mode) or a
- * key to pseudonymise under there is nothing to count with, and the try
- * passes: the shipped worker has both, and a deployment without the signing
- * key cannot hand out a token anyway.
+ * Both budgets are read before the lookup, without writing, and a spent one
+ * refuses the request whatever it names: if a hit could still pass, a 429
+ * would just mean "miss" and the walk would go on unlimited. Only a miss
+ * spends a try, so a buyer polling their own payment never runs out (review
+ * of the WH-1 throttle, 18 November 2026).
+ *
+ * Any other id is looked up untouched: Stripe's and Creem's are random, and a
+ * Mercado Pago subscription is claimed by its 32-hex preapproval id. The
+ * per-block bucket is the address's keyed daily pseudonym, never the address
+ * (VG-87). Without D1 (the KV-only mode) or a key to pseudonymise under there
+ * is nothing to count with, and nothing is held back: the shipped worker has
+ * both, and a deployment without the signing key cannot hand out a token.
  * @param {Object} env Worker env bindings.
  * @param {Request} request Incoming request.
- * @param {unknown} provider Provider the caller named.
+ * @param {string} provider Provider the caller named.
  * @param {string} sessionId The id the caller is claiming by.
  * @param {number} at Unix seconds.
- * @returns {Promise<{ok: boolean, retryAfter?: number}>} Whether the try may go ahead.
+ * @returns {Promise<{licenseId: string|null, refused?: {retryAfter: number}}>}
+ *   The license, null for none yet, or the budget that refused.
  */
-export async function spendMercadoPagoNumberTry(env, request, provider, sessionId, at) {
+export async function lookUpClaimId(env, request, provider, sessionId, at) {
+  const buckets = await paymentNumberBuckets(env, request, provider, sessionId, at);
+  for (const [bucket, limit, window] of buckets) {
+    const room = await peekRateLimit(env.DB, bucket, limit, window, at);
+    if (!room.ok) {
+      return { licenseId: null, refused: room };
+    }
+  }
+  const licenseId = await getLicenseIdForClaim(ledgerReader(env), provider, sessionId);
+  const spends = licenseId ? [] : buckets;
+  for (const [bucket, limit, window] of spends) {
+    const spent = await hitRateLimit(env.DB, bucket, limit, window, at);
+    if (!spent.ok) {
+      return { licenseId: null, refused: spent };
+    }
+  }
+  return { licenseId };
+}
+
+/**
+ * The budgets a claim by this id is held to: none, or the caller's block of
+ * addresses and then the deployment, as `[bucket, limit, windowSeconds]`.
+ */
+async function paymentNumberBuckets(env, request, provider, sessionId, at) {
   if (provider !== "mercadopago" || !/^\d+$/.test(sessionId) || !env.DB || !ipKeyConfigured(env)) {
-    return { ok: true };
+    return [];
   }
   await ensureSchema(env.DB);
-  const bucket = `mpclaim:${await ipBucketKey(env, request, at, "mpclaim")}`;
-  return hitRateLimit(env.DB, bucket, ...MP_CLAIM_IP_LIMIT, at);
+  return [
+    [`mpclaim:${await addressBlockKey(env, request, at, "mpclaim")}`, ...MP_CLAIM_IP_LIMIT],
+    ["mpclaim:all", ...MP_CLAIM_DEPLOYMENT_LIMIT]
+  ];
 }
 
 /**
@@ -562,11 +593,11 @@ export async function handleLink(request, env, deps) {
     if (!sessionId || sessionId.length > 200) {
       return json({ ok: false, reason: "bad_request" }, 400, cors);
     }
-    const tried = await spendMercadoPagoNumberTry(env, request, provider, sessionId, at);
-    if (!tried.ok) {
-      return json({ ok: false, reason: "rate_limited", retryAfter: tried.retryAfter }, 429, cors);
+    const found = await lookUpClaimId(env, request, provider, sessionId, at);
+    if (found.refused) {
+      return json({ ok: false, reason: "rate_limited", retryAfter: found.refused.retryAfter }, 429, cors);
     }
-    licenseId = await getLicenseIdForClaim(ledgerReader(env), provider, sessionId);
+    licenseId = found.licenseId;
     if (!licenseId) {
       // The webhook has not landed yet; the browser retries, same as /v1/claim.
       return json({ ok: false, reason: "pending" }, 202, cors);

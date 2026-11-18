@@ -376,6 +376,79 @@ export function callerIp(request) {
   }
 }
 
+/**
+ * The block of addresses one caller can be expected to hold, for a limit that
+ * a caller must not reset by moving to the next address: an IPv4 address is
+ * itself, an IPv6 address is its /56.
+ *
+ * One IPv6 subscriber holds a whole prefix, a /64 at the least, and RFC 6177
+ * has ISPs hand a home a /56 or a /48, so a per-address bucket gives one
+ * attacker 2^64 fresh allowances (review of the WH-1 throttle, 18 November
+ * 2026). /56 is express-rate-limit's default (`ipv6Subnet`). An IPv4-mapped
+ * address (`::ffff:192.0.2.1`) is the IPv4 address it maps and never a /56,
+ * because every such address shares one /56 and masking them put every IPv4
+ * client in a single bucket (express-rate-limit, CVE-2026-30827).
+ * Anything that does not parse as IPv6 is kept whole.
+ * @param {string} ip An address as `callerIp` returns it.
+ * @returns {string} The address, or its block.
+ */
+export function addressBlock(ip) {
+  const groups = ipv6Groups(ip);
+  if (!groups) {
+    return ip;
+  }
+  if (groups.slice(0, 5).every((g) => g === 0) && groups[5] === 0xffff) {
+    return [groups[6] >> 8, groups[6] & 255, groups[7] >> 8, groups[7] & 255].join(".");
+  }
+  const hex = (g) => g.toString(16);
+  return `${hex(groups[0])}:${hex(groups[1])}:${hex(groups[2])}:${hex(groups[3] & 0xff00)}::/56`;
+}
+
+/**
+ * An IPv6 address as its eight 16-bit groups, or null when it is not one.
+ * Takes the compressed (`::`) form, either case, a zone (`%eth0`, dropped)
+ * and a dotted IPv4 tail.
+ * @param {unknown} ip Candidate address.
+ * @returns {number[]|null} Eight groups, or null.
+ */
+function ipv6Groups(ip) {
+  if (typeof ip !== "string" || !ip.includes(":")) {
+    return null;
+  }
+  const text = dottedTailToHex(ip.trim().toLowerCase().split("%")[0]);
+  const halves = text === null ? [] : text.split("::");
+  if (halves.length < 1 || halves.length > 2) {
+    return null;
+  }
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const missing = 8 - head.length - tail.length;
+  if (halves.length === 2 ? missing < 1 : missing !== 0) {
+    return null;
+  }
+  const groups = [...head, ...new Array(halves.length === 2 ? missing : 0).fill("0"), ...tail];
+  return groups.every((g) => /^[0-9a-f]{1,4}$/.test(g)) ? groups.map((g) => parseInt(g, 16)) : null;
+}
+
+/**
+ * An IPv6 address's dotted IPv4 tail (`::ffff:192.0.2.1`) as its two hex
+ * groups, so the rest of the parse sees groups only.
+ * @param {string} text Lowercased address.
+ * @returns {string|null} The address with a hex tail, or null for a bad octet.
+ */
+function dottedTailToHex(text) {
+  const dotted = /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(text);
+  if (!dotted) {
+    return text;
+  }
+  const octets = dotted.slice(1).map(Number);
+  if (octets.some((o) => o > 255)) {
+    return null;
+  }
+  const pair = (a, b) => ((a << 8) | b).toString(16);
+  return `${text.slice(0, dotted.index)}${pair(octets[0], octets[1])}:${pair(octets[2], octets[3])}`;
+}
+
 /** Rows one sweep statement deletes at most. */
 export const SWEEP_CHUNK_ROWS = 5000;
 

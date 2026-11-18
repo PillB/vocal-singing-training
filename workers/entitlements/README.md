@@ -111,7 +111,7 @@ once the old token has expired or is a day old) gets a token again.
 |--------|------|---------|
 | POST | `/v1/webhooks/stripe` | Signed Stripe events. 400 on a bad signature. |
 | POST | `/v1/webhooks/mercadopago` | Signed Mercado Pago notifications; state is then re-read from the MP API. |
-| POST | `/v1/claim` | `{provider, sessionId}` → `200 {ok, licenseId, token, entitlement}`, `202 {ok:false,reason:"pending"}` while the webhook is still in flight *or* while an async payment settles, `402 {reason:"suspended"}` and `403 {reason:"inactive"}` as for `/v1/license`, `404` for garbage, `429 {reason:"rate_limited"}` past `MP_CLAIM_IP_LIMIT` (below). |
+| POST | `/v1/claim` | `{provider, sessionId}` → `200 {ok, licenseId, token, entitlement}`, `202 {ok:false,reason:"pending"}` while the webhook is still in flight *or* while an async payment settles, `402 {reason:"suspended"}` and `403 {reason:"inactive"}` as for `/v1/license`, `404` for garbage, `429 {reason:"rate_limited"}` once a Mercado Pago payment number's budget is spent (`MP_CLAIM_IP_LIMIT`, `MP_CLAIM_DEPLOYMENT_LIMIT`, below). |
 | POST | `/v1/license` | `{licenseId}` → a fresh token from live KV state. `404` unknown, `202 {reason:"pending"}` while an async payment settles, `402 {reason:"suspended"}` while a later payment can still bring it back, `403 {reason:"inactive"}` once nothing can (see "402 or 403" above). |
 | GET | `/v1/jwks` | The public key as a JWK set, with `kid`. |
 | GET | `/v1/health` | `{ok, stripeConfigured, mercadopagoConfigured, signingKeyConfigured, siteOrigin, accountsConfigured, authMethods}` — booleans and the public Google client id only. |
@@ -573,7 +573,11 @@ too, and a subscription's checkout without it leaves entitling to the
 subscription and invoice events, which carry the price. Before that, a donation
 link on the same account bought a month of Pro, and a subscription's checkout
 landing seconds after its subscription (Stripe usually sends it last) lifted
-the suspension its unlisted price had just been given (red-team WH-3). That is what stops anything
+the suspension its unlisted price had just been given (red-team WH-3). A
+subscription's checkout stripped that way also leaves the license's clock
+alone, because Stripe creates it after the subscription's own events: when it
+was delivered first, it made them stale, and a paid subscription stayed
+`pending` until its renewal (the review of that fix). That is what stops anything
 else ever sold from the same Stripe account — a donation, a one-off lesson, a
 subscription at any price — from becoming Pro.
 
@@ -715,9 +719,18 @@ receipt, so a subscription's charges are never filed under it: holding a
 receipt, or walking the numbers near one, used to hand out the subscription's
 token, and linking by it took the subscription from its payer for good
 (red-team WH-1). A one-off Checkout Pro payment comes back with nothing but
-that number, so it stays the payment's claim key, and claims and links by such
-a number are limited to `MP_CLAIM_IP_LIMIT` (20 an hour) per address, counted
-under the address's keyed daily pseudonym, never the address itself.
+that number, so it stays the payment's claim key, and what is limited is the
+walk: a claim or link by such a number that names no payment of ours spends one
+of `MP_CLAIM_IP_LIMIT` (20 an hour) for the caller's IPv4 address or IPv6 /56,
+and one of `MP_CLAIM_DEPLOYMENT_LIMIT` (200 an hour) for the whole deployment.
+A number that names a payment spends nothing, so a buyer polling an unpaid cash
+voucher never runs out; but once either budget is spent, every claim and link
+by a number is refused until the hour turns, the payer's own included, because
+if a hit still passed a `429` would only mean "miss". That last part is the
+price of the ceiling: whoever spends it holds one-off payments back for the
+rest of the hour (they wait; nothing is lost), while subscriptions, claimed by
+their preapproval id, are never held back. The per-block bucket is named after
+the block's keyed daily pseudonym, never the address itself.
 
 **The alarm.** A webhook failure leaves the `webhook_failed` flag that turns
 `/v1/health?probe=1` red, but only for work after the signature has verified.

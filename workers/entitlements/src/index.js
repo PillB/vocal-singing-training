@@ -45,7 +45,7 @@
 
 "use strict";
 
-import { readJsonBody, requireSession, routeAccountApi, authMethods, requireAdmin, spendMercadoPagoNumberTry } from "./api.js";
+import { readJsonBody, requireSession, routeAccountApi, authMethods, requireAdmin, lookUpClaimId } from "./api.js";
 import { asksFirst, callerCountry, routeEventsApi } from "./events.js";
 import {
   ensureSchema,
@@ -73,7 +73,6 @@ import { confirmAndMapNotification, resolveNotificationTarget, verifyMercadoPago
 import {
   clearEventSeen,
   getEntitlement,
-  getLicenseIdForClaim,
   markEventSeen,
   noteRefusal,
   toPublicEntitlement,
@@ -524,17 +523,15 @@ async function handleClaim(request, env, cors, options) {
   if (typeof sessionId !== "string" || !sessionId || sessionId.length > MAX_SESSION_ID_LENGTH) {
     return json({ ok: false, reason: "bad_request" }, 400, cors);
   }
-  const tried = await spendMercadoPagoNumberTry(env, request, provider, sessionId, clockSeconds(options));
-  if (!tried.ok) {
-    return json({ ok: false, reason: "rate_limited", retryAfter: tried.retryAfter }, 429, cors);
+  const found = await lookUpClaimId(env, request, provider, sessionId, clockSeconds(options));
+  if (found.refused) {
+    return json({ ok: false, reason: "rate_limited", retryAfter: found.refused.retryAfter }, 429, cors);
   }
-  const ledger = ledgerReader(env);
-  const licenseId = await getLicenseIdForClaim(ledger, provider, sessionId);
-  if (!licenseId) {
+  if (!found.licenseId) {
     // The webhook may simply not have landed yet; the client retries on 202.
     return json({ ok: false, reason: "pending" }, 202, cors);
   }
-  const record = await getEntitlement(ledger, licenseId);
+  const record = await getEntitlement(ledgerReader(env), found.licenseId);
   if (!record) {
     return json({ ok: false, reason: "not_found" }, 404, cors);
   }

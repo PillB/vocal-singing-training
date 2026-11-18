@@ -28,17 +28,39 @@ export const MAX_SESSION_ID_LENGTH = 200;
 export const CLAIMABLE_PROVIDERS = new Set(["stripe", "mercadopago", "creem"]);
 
 /**
- * Claims and links by a Mercado Pago payment number, per address: `[limit,
- * windowSeconds]`.
+ * Claims and links by a Mercado Pago payment number that name no payment of
+ * ours, per block of addresses: `[limit, windowSeconds]`.
  *
  * A one-off Checkout Pro payment comes back to the site with nothing but its
  * `payment_id`, which is Mercado Pago's sequential operation number, the one
  * printed on the payer's receipt. It stays that payment's claim key, because
- * there is nothing else the browser holds, so the walk is what is limited:
- * twenty tries an hour is more than one buyer reloading the return page ever
- * spends, and a few hundred a day from one address is nowhere near a walk.
+ * there is nothing else the browser holds, so the walk is what is limited.
+ *
+ * Only a miss is counted. A walk over the sequence is almost all misses, while
+ * a buyer polling their own payment hits it from its first webhook on, pending
+ * or paid: counting hits too let the site's own retries (five POSTs per
+ * claim while a cash voucher is unpaid) lock its payer out for the hour as
+ * soon as the voucher was paid (review of the WH-1 throttle, 18 November
+ * 2026). Twenty misses an hour is far more than a buyer whose webhook is late
+ * ever spends. The block is the IPv4 address or the IPv6 /56 (`addressBlock`).
+ *
  * A subscription is never claimed by such a number (its charges are filed
  * under the 32-hex preapproval id), and the other rails' ids are random, so
  * neither is counted here.
  */
 export const MP_CLAIM_IP_LIMIT = [20, 3600];
+
+/**
+ * The same misses across the whole deployment: `[limit, windowSeconds]`.
+ *
+ * Per-block limits stop one caller; a walk spread over many blocks (a
+ * tunnel broker hands anybody a /48, which is 256 /56s) is stopped only by a
+ * ceiling, as the report route's is (QA-40). Two hundred misses an hour is
+ * far above what legitimate traffic spends, since a buyer only misses before
+ * their webhook lands, and holds a walk to a few thousand numbers a day, out of
+ * a sequence that every Mercado Pago merchant's payments share. The price: somebody who spends the two hundred holds every claim and link by
+ * payment number back until the hour turns, the payer's own included (their
+ * payment waits; nothing is lost). A subscription is claimed by its
+ * preapproval id and is never held back.
+ */
+export const MP_CLAIM_DEPLOYMENT_LIMIT = [200, 3600];

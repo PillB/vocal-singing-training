@@ -86,3 +86,6 @@ import "./housekeeping-edges.test.mjs";
 // claim keys, Creem metadata and Stripe checkouts that named a plan they had
 // no right to, and the Mercado Pago manifest's own data.id.
 import "./payment-rails-redteam.test.mjs";
+// The block of addresses a throttle counts one caller by: IPv4 itself, IPv6
+// by /56, and an IPv4-mapped address as the IPv4 address it maps.
+import "./address-block.test.mjs";

@@ -148,6 +148,18 @@ function idValue(value) {
 }
 
 /**
+ * The `data.id` of a notification body, read only from an object: a falsy
+ * `data` (`{"data":0}`) is no container, and must not stand in as the id
+ * itself, as `body.data && body.data.id` let it.
+ * @param {Object} body Parsed notification body.
+ * @returns {string|null} The id, or null.
+ */
+function bodyDataId(body) {
+  const data = body && body.data;
+  return data && typeof data === "object" ? idValue(data.id) : null;
+}
+
+/**
  * The resource id a notification names, which is also the id its signature
  * covers. Mercado Pago signs `id:[data.id_url]`, and "los parámetros con el
  * sufijo _url provienen de query params" (Webhooks, "Validar origen de la
@@ -160,7 +172,7 @@ function idValue(value) {
  */
 function notificationResourceId(body, query) {
   return idValue(query && query.get("data.id"))
-    || idValue(body && body.data && body.data.id)
+    || bodyDataId(body)
     || idValue(query && query.get("id"))
     || idValue(body && body.id);
 }
@@ -192,7 +204,7 @@ export function resolveNotificationTarget(body, url) {
   // The notification's own id when it has one, else the resource's: both
   // checked like the id itself, since a template literal throws on the same
   // values `String()` does.
-  const eventIdSource = idValue(body && body.id) || idValue(body && body.data && body.data.id) || id;
+  const eventIdSource = idValue(body && body.id) || bodyDataId(body) || id;
   const action = body && typeof body.action === "string" ? body.action : kind;
   const eventId = eventIdSource ? `${action || "event"}:${eventIdSource}` : null;
   return { kind, id, eventId };

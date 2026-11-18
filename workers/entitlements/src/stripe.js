@@ -402,6 +402,15 @@ function mapCheckoutSession(session, env, statusOverride) {
  * (unpaid, cancelled) and leaves entitling to the subscription and invoice
  * events, which carry the price. With the table empty, which is how the
  * repository ships, nothing changes.
+ *
+ * A subscription's checkout stripped of its "active" says nothing about the
+ * license's state any more, so it must not move the license's clock either:
+ * it is `timeless`, and stampEventTimes gives it no `occurredAt`. Stamped, it
+ * was newer than the subscription's own events (Stripe creates the session
+ * last), so a delivery that put it first made those events stale and the
+ * paid subscription stayed "pending", with no token, until its next renewal
+ * (review of the WH-3 fix, 18 November 2026). Mercado Pago's silent charge is
+ * kept off the clock the same way.
  * @param {Object} update The checkout's entitlement update.
  * @param {Object} env Worker env bindings.
  * @param {boolean} named Whether a price or the owner's metadata named the plan.
@@ -414,7 +423,7 @@ function gateUnnamedCheckout(update, env, named) {
   if (!update.subscriptionId) {
     return { ...update, plan: undefined, planSource: "unlisted_one_time", status: "suspended", paid: undefined };
   }
-  return update.status === "active" ? { ...update, status: undefined, paid: undefined } : update;
+  return update.status === "active" ? { ...update, status: undefined, paid: undefined, timeless: true } : update;
 }
 
 /** The price id of a checkout session's first line item, when the session carries its line items. */
@@ -846,7 +855,9 @@ function updateForEvent(event, object, env) {
 function stampEventTimes(update, event, object) {
   // When the event was emitted, so a delayed or retried delivery cannot undo a
   // newer one. Stripe guarantees neither ordering nor exactly-once delivery.
-  update.occurredAt = unixOrNull(event.created);
+  // An update that says nothing about the license's state (gateUnnamedCheckout)
+  // has no place in that order, and would only make older events stale.
+  update.occurredAt = update.timeless ? null : unixOrNull(event.created);
   // Money went back when its event says it did. A charge that does not say
   // when it was taken (and a dispute never does) reverses whichever charge the
   // license last counted instead, so the store can still tell whether what

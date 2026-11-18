@@ -32,7 +32,7 @@ import { handleRequest } from "../src/index.js";
 import { hmacSha256Hex } from "../src/license.js";
 import { buildMercadoPagoManifest, resolveNotificationTarget } from "../src/mercadopago.js";
 import { mapCreemEvent, planForProduct } from "../src/creem.js";
-import { MP_CLAIM_IP_LIMIT } from "../src/limits.js";
+import { MP_CLAIM_DEPLOYMENT_LIMIT, MP_CLAIM_IP_LIMIT } from "../src/limits.js";
 import { createAccountEnv } from "./fixtures.mjs";
 
 const BASE = "https://entitlements.test";
@@ -238,6 +238,10 @@ test("the Mercado Pago pointer takes only a string or a number as an id", () => 
   assert.deepEqual(resolveNotificationTarget({ type: "payment", data: { id: 77 } }, url),
     { kind: "payment", id: "77", eventId: "payment:77" });
   assert.equal(resolveNotificationTarget({}, new URL(`${BASE}/x?topic=payment&id=55`)).id, "55", "the legacy query shape");
+  // A falsy `data` is no container: it must not stand in as the id itself.
+  assert.equal(resolveNotificationTarget({ type: "payment", id: "123456", data: 0 }, url).id, "123456", "data: 0 names nothing");
+  assert.equal(resolveNotificationTarget({ data: 0 }, new URL(`${BASE}/x?data.id=123456`)).eventId, "event:123456",
+    "nor does it name the event");
 });
 
 // ------------------------------------------ WH-4: the manifest's own data.id
@@ -355,6 +359,104 @@ test("linking by a one-off Mercado Pago payment's number is throttled with the c
   assert.equal((await link(env, token, "mercadopago", "6999", "192.0.2.78")).status, 202, "control: another address");
 });
 
+// The throttle's own shape, on a clock that starts a window, so the hour
+// boundary falls where the tests put it (windows are aligned to the epoch).
+const HOUR = 3600;
+const H = T - (T % HOUR) + HOUR;
+const claimAt = (env, id, ip, now) => call(env, jsonRequest("/v1/claim", { provider: "mercadopago", sessionId: id }, { ip }), { now });
+const linkAt = (env, token, id, ip, now) => call(env, jsonRequest("/v1/me/link", { provider: "mercadopago", sessionId: id }, { token, ip }), { now });
+
+/** `count` claims by numbers that name nothing, from `ipFor(n)`, at `now`; their statuses. */
+async function misses(env, count, ipFor, now, from = 7000) {
+  const statuses = [];
+  for (let n = 0; n < count; n += 1) {
+    statuses.push((await claimAt(env, String(from + n), ipFor(n), now)).status);
+  }
+  return statuses;
+}
+
+/** A one-off Mercado Pago payment 4400, delivered `status`, through an API whose answer the test can change. */
+async function oneOff(env, status, api) {
+  const resources = api ? api.resources : {};
+  resources["/v1/payments/4400"] = {
+    id: 4400, status, date_approved: status === "approved" ? iso(T) : null, date_created: iso(T), payer: { id: 5 },
+    payment_type_id: "ticket"
+  };
+  const live = api || { resources, ...mpApi(resources) };
+  const answer = await mercadoPago(env, { kind: "payment", notificationId: `4400-${status}`, signedId: "4400", bodyId: "4400", api: live.fetchImpl });
+  assert.equal(answer.status, 200, `${status} delivered: ${JSON.stringify(answer.body)}`);
+  return live;
+}
+
+test("a buyer polling their own unpaid Mercado Pago voucher is never held back, and claims it the moment it is paid", async () => {
+  // The site POSTs a claim up to five times per page load while it gets 202,
+  // so a voucher waiting to be paid used to spend the hour's tries in four
+  // loads, and its payer got 429 once they had paid.
+  const env = createAccountEnv();
+  const api = await oneOff(env, "pending");
+  for (let n = 0; n < MP_CLAIM_IP_LIMIT[0] * 2; n += 1) {
+    const polled = await claimAt(env, "4400", "192.0.2.40", H + n);
+    assert.equal(polled.status, 202, `poll ${n + 1}: still waiting for the voucher, not held back`);
+  }
+  await oneOff(env, "approved", api);
+  const paid = await claimAt(env, "4400", "192.0.2.40", H + 100);
+  assert.equal(paid.status, 200, `paid, and claimed: ${JSON.stringify(paid.body)}`);
+  assert.equal(paid.body.entitlement.status, "active");
+});
+
+test("one address gets exactly its twenty misses an hour, and the next hour twenty more", async () => {
+  const env = createAccountEnv();
+  const [limit, window] = MP_CLAIM_IP_LIMIT;
+  assert.equal(window, HOUR, "an hour, as documented");
+  const ip = () => "192.0.2.50";
+  const first = await misses(env, limit + 1, ip, H + 10);
+  assert.deepEqual(first, [...new Array(limit).fill(202), 429], "the twentieth try passes and the twenty-first does not");
+  for (const later of [H + 11, H + 600, H + window - 1]) {
+    assert.equal((await claimAt(env, "7999", ip(), later)).status, 429, `still held back ${later - H} s into the hour`);
+  }
+  assert.equal((await claimAt(env, "7999", ip(), H + window)).status, 202, "the next hour starts again");
+});
+
+test("a signed-in walker linking by payment numbers alone is held to the same twenty misses", async () => {
+  const env = createAccountEnv();
+  const token = await signIn(env, "linkwalker@example.test");
+  const [limit] = MP_CLAIM_IP_LIMIT;
+  const answers = [];
+  for (let n = 0; n < limit + 3; n += 1) {
+    answers.push((await linkAt(env, token, String(8000 + n), "192.0.2.60", H + 10)).status);
+  }
+  assert.deepEqual(answers, [...new Array(limit).fill(202), 429, 429, 429], "links spend tries of their own");
+  assert.equal((await linkAt(env, token, "8999", "192.0.2.61", H + 10)).status, 202, "control: another address");
+});
+
+test("moving to the next IPv6 address, or to an IPv4-mapped spelling, does not reset an address's tries", async () => {
+  const env = createAccountEnv();
+  const [limit] = MP_CLAIM_IP_LIMIT;
+  // Twenty misses from twenty addresses inside one /56 (the fourth group's low byte and the interface id vary).
+  const inBlock = (n) => `2001:db8:aa:11${(n % 256).toString(16).padStart(2, "0")}::${(n + 1).toString(16)}`;
+  assert.deepEqual(await misses(env, limit, inBlock, H + 10), new Array(limit).fill(202));
+  assert.equal((await claimAt(env, "7990", "2001:DB8:AA:11FF:abcd::9", H + 10)).status, 429, "the same /56, written another way");
+  assert.equal((await claimAt(env, "7990", "2001:db8:aa:1200::1", H + 10)).status, 202, "control: the next /56 is somebody else");
+  // An IPv4 address and its IPv4-mapped spelling are one caller...
+  assert.deepEqual(await misses(env, limit, () => "192.0.2.70", H + 10, 7100), new Array(limit).fill(202));
+  assert.equal((await claimAt(env, "7991", "::ffff:192.0.2.70", H + 10)).status, 429, "::ffff:192.0.2.70 is 192.0.2.70");
+  // ...but two IPv4 clients never share a bucket because both look like IPv6 (CVE-2026-30827).
+  assert.equal((await claimAt(env, "7991", "::ffff:192.0.2.71", H + 10)).status, 202, "::ffff:192.0.2.71 is somebody else");
+});
+
+test("a walk spread over many addresses meets the deployment's ceiling, which holds every number back until the hour turns", async () => {
+  const env = createAccountEnv();
+  await oneOff(env, "approved");
+  const [ceiling] = MP_CLAIM_DEPLOYMENT_LIMIT;
+  const spread = (n) => `10.${(n >> 8) & 255}.${n & 255}.1`;
+  const walked = await misses(env, ceiling, spread, H + 10);
+  assert.ok(walked.every((s) => s === 202), "each address is well inside its own twenty");
+  assert.equal((await claimAt(env, "7998", "203.0.113.200", H + 11)).status, 429, "a fresh address: the ceiling is spent");
+  assert.equal((await claimAt(env, "4400", "203.0.113.201", H + 11)).status, 429, "a real number too, or a 429 would mean miss");
+  assert.equal((await claimAt(env, PRE, "203.0.113.202", H + 11)).status, 202, "a preapproval id is never held back");
+  assert.equal((await claimAt(env, "4400", "203.0.113.201", H + HOUR)).status, 200, "the next hour, the payer claims");
+});
+
 // ------------------------------------- WH-2: Creem never reads metadata.plan
 
 test("Creem with no product table takes the plan from the product's billing period, whatever the buyer wrote in metadata", () => {
@@ -457,6 +559,51 @@ test("with the Stripe price table filled in, a checkout that lands after the sub
     const ours = await stripeSubscription(env, "price_pro_monthly", gap);
     assert.equal(ours.status, 200, `checkout ${gap} s later on a listed price: ${JSON.stringify(ours.body)}`);
   }
+});
+
+test("with the Stripe price table filled in, a checkout Stripe created last but delivered first does not leave a paid subscription pending", async () => {
+  // A gated checkout says nothing about the license's state, so it must not
+  // move the license's clock: stamped, it made the subscription's own older
+  // events stale, and the subscriber had paid but got 202 until their renewal.
+  const sub = (id, status) => ({
+    id, object: "subscription", status, customer: `cus_${id}`, current_period_end: T + 30 * DAY, metadata: {},
+    items: { data: [{ price: { id: "price_pro_monthly", recurring: { interval: "month", interval_count: 1 } } }] }
+  });
+  const session = (id, subId, type) => ({
+    id, object: "checkout.session", mode: "subscription", status: "complete",
+    payment_status: type === "checkout.session.completed" ? "paid" : "unpaid", customer: `cus_${subId}`, subscription: subId, metadata: {}
+  });
+  const invoice = (subId) => ({
+    id: `in_${subId}`, customer: `cus_${subId}`, subscription: subId, status: "paid",
+    lines: { data: [{ price: { id: "price_pro_monthly" }, period: { start: T, end: T + 30 * DAY } }] }
+  });
+  for (const checkoutType of ["checkout.session.completed", "checkout.session.async_payment_succeeded"]) {
+    for (const gap of [1, 3, 60]) {
+      for (const order of [["cs", "sc", "ip"], ["cs", "ip", "sc"], ["sc", "cs", "ip"]]) {
+        const env = createAccountEnv(LISTED);
+        const subId = `sub_${gap}_${order.join("")}`;
+        const csId = `cs_${subId}`;
+        const events = {
+          sc: () => stripe(env, `sc_${subId}`, "customer.subscription.created", sub(subId, "active"), T),
+          ip: () => stripe(env, `ip_${subId}`, "invoice.paid", invoice(subId), T + 1),
+          cs: () => stripe(env, `cs_${subId}`, checkoutType, session(csId, subId, checkoutType), T + 1 + gap)
+        };
+        for (const name of order) {
+          assert.equal((await events[name]()).status, 200, `${name} delivered`);
+        }
+        const claimed = await claim(env, "stripe", csId);
+        const label = `${checkoutType}, created ${gap} s after the invoice, delivered ${order.join(" > ")}`;
+        assert.equal(claimed.status, 200, `${label}: ${JSON.stringify(claimed.body)}`);
+        assert.equal(claimed.body.entitlement.status, "active", label);
+      }
+    }
+  }
+  // Control: the gate still keeps an unlisted price suspended in the same order.
+  const env = createAccountEnv(LISTED);
+  const other = { ...sub("sub_other", "active"), items: { data: [{ price: { id: "price_other", recurring: { interval: "month", interval_count: 1 } } }] } };
+  await stripe(env, "o_cs", "checkout.session.completed", session("cs_other", "sub_other", "checkout.session.completed"), T + 60);
+  await stripe(env, "o_sc", "customer.subscription.created", other, T);
+  assert.notEqual((await claim(env, "stripe", "cs_other")).status, 200, "an unlisted price stays suspended");
 });
 
 test("with the Stripe price table filled in, a listed subscription whose checkout lands first still becomes Pro", async () => {

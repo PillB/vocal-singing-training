@@ -568,6 +568,32 @@
     return VTStorage.getProgress()[id] || null;
   }
 
+  /** A row's saved sessions as a whole number >= 0; 0 for a count that is not a number. */
+  function sessionCount(row) {
+    return Math.max(0, Math.floor(Number(row?.completedCount) || 0));
+  }
+
+  /**
+   * A catalogue card's sessions badge, or nothing before the first session.
+   * The count is made a number whatever the stored row holds: the row can come
+   * from the account's document, which anyone holding the session can write,
+   * and the badge is HTML (red team CXSS-1).
+   */
+  function sessionsBadge(row) {
+    const n = sessionCount(row);
+    if (!n) return "";
+    return `<span class="badge done">${tt(n === 1 ? "card.sessions" : "card.sessions_plural", { n })}</span>`;
+  }
+
+  /** What a catalogue card says the exercise uses: the piano, the pitch line, a recording or plain practice. */
+  function cardTools(ex) {
+    return (
+      (ex.audio.piano ? tt("card.piano") : "") +
+      (ex.audio.pitchViz || ex.practice?.showPitch ? tt("card.pitch") : "") +
+      (ex.audio.record ? tt("card.record") : tt("card.practice"))
+    );
+  }
+
   function formatTime(sec) {
     sec = Math.max(0, Math.floor(sec));
     const m = Math.floor(sec / 60);
@@ -2361,15 +2387,7 @@
         head.innerHTML = `<span>${name}</span><span class="grid-group-n">${tt("group.count", { n })}</span>`;
         list.appendChild(head);
       }
-      const tools =
-        (ex.audio.piano ? tt("card.piano") : "") +
-        (ex.audio.pitchViz || ex.practice?.showPitch ? tt("card.pitch") : "") +
-        (ex.audio.record ? tt("card.record") : tt("card.practice"));
-      const sessions = prog?.completedCount || 0;
-      const sessLabel =
-        sessions === 1
-          ? tt("card.sessions", { n: sessions })
-          : tt("card.sessions_plural", { n: sessions });
+      const tools = cardTools(ex);
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = `card card-ex track-${track}`;
@@ -2383,7 +2401,7 @@
       // badge only once filtered (grouped, the head names the group).
       btn.innerHTML = `
         <span class="card-ex-body">
-          ${sessions ? `<span class="badge done">${sessLabel}</span>` : ""}
+          ${sessionsBadge(prog)}
           <h3>${exName(ex)}</h3>
           <p class="card-ex-desc">${escapeHtml(exerciseSummary(ex))}</p>
           <p class="meta">${tt("card.meta", { min: ex.durationMin, tools })}</p>
@@ -6450,16 +6468,26 @@
     }
   }
 
+  /**
+   * A hold's length in seconds, or null when the entry holds no usable number.
+   * The stored log is synced from the account, so an entry can carry anything
+   * (red team CXSS-1: markup in `seconds` reached the pills' innerHTML).
+   */
+  function holdSeconds(entry) {
+    const s = Number(entry?.seconds);
+    return Number.isFinite(s) && s > 0 ? Math.round(s * 10) / 10 : null;
+  }
+
   function renderHoldHistory() {
     const el = $("#hold-history");
     if (!el) return;
     const fromEngine = state.practice?.getHolds?.() || [];
-    const stored = VTStorage.getHoldLogs().slice(0, 8);
-    const logs = fromEngine.length
-      ? fromEngine.slice(0, 8).map((h) => ({ seconds: h.seconds }))
-      : stored;
+    const logs = (fromEngine.length ? fromEngine : VTStorage.getHoldLogs())
+      .map(holdSeconds)
+      .filter((s) => s !== null)
+      .slice(0, 8);
     el.innerHTML = logs.length
-      ? logs.map((l) => `<span class="pill">${l.seconds}s</span>`).join("")
+      ? logs.map((s) => `<span class="pill">${s}s</span>`).join("")
       : `<span class="muted">${escapeHtml(tt("ex.holdsEmpty"))}</span>`;
   }
 

@@ -31,15 +31,16 @@ const WORKER = "https://vocal-studio-entitlements.vocalstudio-pe.workers.dev";
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp", ".jpg": "image/jpeg", ".woff2": "font/woff2", ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".webmanifest": "application/manifest+json" };
 const PAGES = ["/", "/admin.html"];
 
-/** An attacker's page: the site's pages in frames, made invisible as a clickjacker would. */
-const lure = (origin) => `<!doctype html><title>prize</title>
-  ${PAGES.map((p, i) => `<iframe id="f${i}" src="${origin}${p}" style="opacity:0.01;width:900px;height:600px"></iframe>`).join("")}`;
+/** An attacker's page: the given pages of the site in frames, made invisible as a clickjacker would. */
+const lure = (origin, pages) => `<!doctype html><title>prize</title>
+  ${pages.map((p, i) => `<iframe id="f${i}" src="${origin}${p}" style="opacity:0.01;width:900px;height:600px"></iframe>`).join("")}`;
 
 /** The repository as https://victim.test, the attacker's page on each origin, and a worker that knows nobody. */
 async function serve(page) {
   await page.route(`${VICTIM}/**`, (route) => {
     const url = new URL(route.request().url());
-    if (url.pathname === "/lure.html") return route.fulfill({ status: 200, contentType: "text/html", body: lure(VICTIM) });
+    // A lure on the same origin frames one page (?p=): two frames that each move the top race, and one aborts the other
+    if (url.pathname === "/lure.html") return route.fulfill({ status: 200, contentType: "text/html", body: lure(VICTIM, [url.searchParams.get("p")]) });
     const rel = url.pathname === "/" ? "index.html" : decodeURIComponent(url.pathname.slice(1));
     const file = path.normalize(path.join(ROOT, rel));
     if (!file.startsWith(ROOT + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
@@ -47,7 +48,7 @@ async function serve(page) {
     }
     return route.fulfill({ status: 200, contentType: TYPES[path.extname(file)] || "application/octet-stream", body: fs.readFileSync(file) });
   });
-  await page.route(`${ATTACKER}/**`, (route) => route.fulfill({ status: 200, contentType: "text/html", body: lure(VICTIM) }));
+  await page.route(`${ATTACKER}/**`, (route) => route.fulfill({ status: 200, contentType: "text/html", body: lure(VICTIM, PAGES) }));
   await page.route(`${WORKER}/**`, (route) => route.fulfill({ status: 404, contentType: "application/json", body: '{"ok":false}' }));
   await page.addInitScript(() => {
     try {
@@ -91,12 +92,14 @@ test.describe("CXSS-2: the site's pages do not render inside another site's fram
 
   test("IJ14 framed by a page of the same origin, the top window is sent to the page itself", async ({ page }) => {
     await serve(page);
-    // Another project on the same origin (pillb.github.io is shared) framing the app
-    await page.goto(`${VICTIM}/lure.html`, { waitUntil: "domcontentloaded" });
-    await page.waitForURL((url) => PAGES.some((p) => url.href === VICTIM + p), { timeout: 15000 });
-    await page.waitForLoadState("load");
-    const s = await shown(page.mainFrame());
-    expect(s.display, "loaded on its own, the page is laid out").not.toBe("none");
+    // Another project on the same origin (pillb.github.io is shared) framing the app, one page at a time
+    for (const p of PAGES) {
+      await page.goto(`${VICTIM}/lure.html?p=${encodeURIComponent(p)}`, { waitUntil: "domcontentloaded" });
+      await page.waitForURL(VICTIM + p, { timeout: 15000 });
+      const s = await shown(page.mainFrame());
+      expect(s.display, `${p}, loaded on its own, is laid out`).not.toBe("none");
+      expect(s.started).toBe(true);
+    }
   });
 
   test("IJ15 control: on their own, at the same origin, both pages render and start", async ({ page }) => {

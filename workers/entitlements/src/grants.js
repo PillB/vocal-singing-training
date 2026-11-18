@@ -315,47 +315,57 @@ export function toPublicGrant(row, at) {
  * @returns {Promise<Object>} The stored grant row.
  */
 export async function createGrant(db, input, now) {
-  const at = nowSec(now);
+  const row = grantRow(input, nowSec(now));
+  await insertGrant(db, row).run();
+  return row;
+}
+
+/**
+ * The row a grant would be stored as, with a fresh id, before anything is written.
+ * @param {Object} input As for `createGrant`.
+ * @param {number} at Unix seconds.
+ * @returns {Object} The grant row.
+ */
+function grantRow(input, at) {
   const kind = GRANT_KINDS.includes(input.kind) ? input.kind : "comp";
-  const plan = safePlan(input.plan);
-  const days = Math.min(MAX_GRANT_DAYS, Math.max(1, Math.floor(Number(input.days) || 0)));
   const startsAt = Number.isFinite(input.startsAt) ? Math.floor(input.startsAt) : at;
-  const endsAt = startsAt + days * 86400;
-  const id = mintId("grant");
-  await db
-    .prepare(
-      `INSERT INTO grants (id, account_id, kind, plan, starts_at, ends_at, source, note,
-                           issued_by, revoked_at, revoked_by, created_at, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, NULL, ?10, ?10)`
-    )
-    .bind(
-      id,
-      input.accountId,
-      kind,
-      plan,
-      startsAt,
-      endsAt,
-      input.source || kind,
-      input.note ? String(input.note).slice(0, 200) : null,
-      input.issuedBy || null,
-      at
-    )
-    .run();
+  const days = Math.min(MAX_GRANT_DAYS, Math.max(1, Math.floor(Number(input.days) || 0)));
   return {
-    id,
+    id: mintId("grant"),
     account_id: input.accountId,
     kind,
-    plan,
+    plan: safePlan(input.plan),
     starts_at: startsAt,
-    ends_at: endsAt,
+    ends_at: startsAt + days * 86400,
     source: input.source || kind,
-    note: input.note || null,
+    note: input.note ? String(input.note).slice(0, 200) : null,
     issued_by: input.issuedBy || null,
     revoked_at: null,
     revoked_by: null,
     created_at: at,
     updated_at: at
   };
+}
+
+/**
+ * The statement that stores a grant row, optionally only when `when` holds at
+ * the moment it runs, so it can sit in a batch beside the write it depends on.
+ * `when` may name the row's own values as ?1 (id) and ?2 (account id), and
+ * `extra` values as ?11 onwards.
+ * @param {Object} db D1 binding.
+ * @param {Object} row From `grantRow`.
+ * @param {string} [when] SQL condition.
+ * @param {unknown[]} [extra] Values for the condition.
+ * @returns {Object} Prepared statement.
+ */
+function insertGrant(db, row, when, extra) {
+  return db
+    .prepare(
+      `INSERT INTO grants (id, account_id, kind, plan, starts_at, ends_at, source, note,
+                           issued_by, revoked_at, revoked_by, created_at, updated_at)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, NULL, ?10, ?10 WHERE ${when || "1"}`
+    )
+    .bind(row.id, row.account_id, row.kind, row.plan, row.starts_at, row.ends_at, row.source, row.note, row.issued_by, row.created_at, ...(extra || []));
 }
 
 /**
@@ -376,10 +386,16 @@ export async function revokeGrant(db, grantId, revokedBy, now) {
   if (row.revoked_at !== null && row.revoked_at !== undefined) {
     return { ok: true, reason: "already_revoked", grant: row };
   }
-  await db
-    .prepare("UPDATE grants SET revoked_at = ?2, revoked_by = ?3, updated_at = ?2 WHERE id = ?1")
+  // Guarded, so of two operators revoking at once only the first is recorded
+  // as the one who did it; the second is told it was already done.
+  const revoked = await db
+    .prepare("UPDATE grants SET revoked_at = ?2, revoked_by = ?3, updated_at = ?2 WHERE id = ?1 AND revoked_at IS NULL")
     .bind(grantId, at, revokedBy || null)
     .run();
+  if (changedRows(revoked) === 0) {
+    const current = await db.prepare("SELECT * FROM grants WHERE id = ?1").bind(grantId).first();
+    return current ? { ok: true, reason: "already_revoked", grant: current } : { ok: false, reason: "not_found" };
+  }
   return { ok: true, grant: { ...row, revoked_at: at, revoked_by: revokedBy || null, updated_at: at } };
 }
 
@@ -530,57 +546,42 @@ export async function startTrial(db, account, env, now) {
   if (account.trial_used_at !== null && account.trial_used_at !== undefined) {
     return { ok: false, reason: "trial_used" };
   }
-  // Claim the one trial this account will ever get BEFORE writing the grant it
-  // buys. `account.trial_used_at` was read before any of this, and the marker
-  // used to be written after the grant, so two requests arriving together both
-  // read null, both wrote a grant, and the account held two trials; five at
-  // once held five (QA round 7). The part that costs money is what happens
-  // next: revoking "the trial" leaves the duplicate entitling, so the account
-  // still answers pro.
+  // The grant and the claim on the account's one trial are written in one
+  // batch, which D1 runs as one transaction with nothing in between, and both
+  // on the same condition (the trial is unclaimed), so the account ends with
+  // both or neither.
   //
-  // A guarded UPDATE and its changed-row count is the only condition test D1
-  // has that two requests cannot both pass.
-  const claimed = await db
-    .prepare(
-      `UPDATE accounts SET trial_used_at = ?2, updated_at = ?2
-       WHERE id = ?1 AND trial_used_at IS NULL`
-    )
-    .bind(account.id, at)
-    .run();
-  if (changedRows(claimed) === 0) {
+  // Two requests arriving together (QA round 7, TRIAL-01) used to write two
+  // grants; then a claim taken first and a grant written second, with a
+  // compensating un-claim, left a burned trial with no grant whenever the
+  // worker died or D1 failed between them (audit D1-5). Batches run one
+  // after the other on D1's single writer, so the second request's grant finds
+  // the trial claimed and writes nothing.
+  const plan = await trialPlanFor(env, account.id);
+  const row = grantRow(
+    {
+      accountId: account.id,
+      kind: "trial",
+      plan: "pro_monthly",
+      days: plan.days,
+      source: trialSourceFor(plan.arm),
+      note: null
+    },
+    at
+  );
+  const [granted] = await db.batch([
+    insertGrant(db, row, "EXISTS (SELECT 1 FROM accounts WHERE id = ?2 AND trial_used_at IS NULL)"),
+    db
+      .prepare(
+        `UPDATE accounts SET trial_used_at = ?2, updated_at = ?2
+         WHERE id = ?1 AND trial_used_at IS NULL`
+      )
+      .bind(account.id, at)
+  ]);
+  if (changedRows(granted) === 0) {
     return { ok: false, reason: "trial_used" };
   }
-  const plan = await trialPlanFor(env, account.id);
-  try {
-    const grant = await createGrant(
-      db,
-      {
-        accountId: account.id,
-        kind: "trial",
-        plan: "pro_monthly",
-        days: plan.days,
-        source: trialSourceFor(plan.arm),
-        note: null
-      },
-      at
-    );
-    return { ok: true, grant, days: plan.days, arm: plan.arm };
-  } catch (error) {
-    // A claim is only worth holding if it bought something, so put it back.
-    // Guarded on the instant this request wrote, so a trial somebody else has
-    // since started is not taken off them.
-    //
-    // What this does not cover is the worker being killed between the two
-    // writes, which burns the trial without a grant. That is the cost of this
-    // order, and it is the right way round: the old order failed by giving a
-    // trial away twice, and the remedy for this one is a gift from the admin
-    // page.
-    await db
-      .prepare("UPDATE accounts SET trial_used_at = NULL WHERE id = ?1 AND trial_used_at = ?2")
-      .bind(account.id, at)
-      .run();
-    throw error;
-  }
+  return { ok: true, grant: row, days: plan.days, arm: plan.arm };
 }
 
 /**
@@ -598,6 +599,11 @@ export async function createGiftCode(db, input, now) {
   const plan = safePlan(input.plan);
   const days = Math.min(MAX_GRANT_DAYS, Math.max(1, Math.floor(Number(input.days) || 30)));
   const maxRedemptions = Math.min(1000, Math.max(1, Math.floor(Number(input.maxRedemptions) || 1)));
+  // Answered as stored: the create answer used to echo the note as sent (not
+  // cut to 200 characters, not made a string) while the list showed the
+  // stored one, so the same code read differently on the two screens.
+  const note = input.note ? String(input.note).slice(0, 200) : null;
+  const expiresAt = Number.isFinite(input.expiresAt) ? Math.floor(input.expiresAt) : null;
   await db
     .prepare(
       `INSERT INTO gift_codes (code_normalized, code_display, plan, days, max_redemptions,
@@ -610,22 +616,13 @@ export async function createGiftCode(db, input, now) {
       plan,
       days,
       maxRedemptions,
-      input.note ? String(input.note).slice(0, 200) : null,
+      note,
       input.createdBy || null,
-      Number.isFinite(input.expiresAt) ? Math.floor(input.expiresAt) : null,
+      expiresAt,
       at
     )
     .run();
-  return {
-    code: display,
-    plan,
-    days,
-    maxRedemptions,
-    redeemedCount: 0,
-    note: input.note || null,
-    expiresAt: Number.isFinite(input.expiresAt) ? Math.floor(input.expiresAt) : null,
-    createdAt: at
-  };
+  return { code: display, plan, days, maxRedemptions, redeemedCount: 0, note, expiresAt, createdAt: at };
 }
 
 /**
@@ -656,8 +653,11 @@ export async function revokeGiftCode(db, code, now) {
   if (row.revoked_at !== null && row.revoked_at !== undefined) {
     return { ok: true, reason: "already_revoked" };
   }
-  await db.prepare("UPDATE gift_codes SET revoked_at = ?2 WHERE code_normalized = ?1").bind(normalized, at).run();
-  return { ok: true };
+  const revoked = await db
+    .prepare("UPDATE gift_codes SET revoked_at = ?2 WHERE code_normalized = ?1 AND revoked_at IS NULL")
+    .bind(normalized, at)
+    .run();
+  return changedRows(revoked) > 0 ? { ok: true } : { ok: true, reason: "already_revoked" };
 }
 
 /**
@@ -694,8 +694,18 @@ export async function redeemGiftCode(db, accountId, code, now) {
     return { ok: false, reason: "exhausted" };
   }
 
-  const grant = await createGrant(
-    db,
+  // The redemption, the use it spends and the grant it buys are one batch,
+  // which D1 runs as one transaction. The redemption row is written only while
+  // the code is unrevoked and has a use left, checked when the batch runs
+  // rather than as read above; the count and the grant only once that row exists.
+  // `UNIQUE (code_normalized, account_id)` turns the same account twice into
+  // an error that rolls the whole batch back.
+  //
+  // This used to be three separate writes with deletes to undo them, so one
+  // failure in the middle left a grant with no redemption (redeemable again)
+  // or a redemption the count never saw, and a code revoked between the read
+  // above and the writes still paid out (audit D1-1).
+  const grant = grantRow(
     {
       accountId,
       kind: "gift",
@@ -707,52 +717,50 @@ export async function redeemGiftCode(db, accountId, code, now) {
     },
     at
   );
-
+  const redemptionId = mintId("redeem");
+  let claimed;
   try {
-    await db
-      .prepare(
-        `INSERT INTO gift_redemptions (id, code_normalized, account_id, grant_id, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)`
-      )
-      .bind(mintId("redeem"), normalized, accountId, grant.id, at)
-      .run();
-  } catch {
-    // The unique index rejected it: this account already redeemed this code.
-    // Roll the speculative grant back so the duplicate attempt grants nothing.
-    await db.prepare("DELETE FROM grants WHERE id = ?1").bind(grant.id).run();
-    return { ok: false, reason: "already_redeemed" };
+    [claimed] = await db.batch([
+      db
+        .prepare(
+          `INSERT INTO gift_redemptions (id, code_normalized, account_id, grant_id, created_at)
+           SELECT ?1, code_normalized, ?2, ?3, ?4 FROM gift_codes
+           WHERE code_normalized = ?5 AND revoked_at IS NULL AND redeemed_count < max_redemptions`
+        )
+        .bind(redemptionId, accountId, grant.id, at, normalized),
+      db
+        .prepare(
+          `UPDATE gift_codes SET redeemed_count = redeemed_count + 1
+           WHERE code_normalized = ?1 AND EXISTS (SELECT 1 FROM gift_redemptions WHERE id = ?2)`
+        )
+        .bind(normalized, redemptionId),
+      insertGrant(db, grant, "EXISTS (SELECT 1 FROM gift_redemptions WHERE id = ?11)", [redemptionId])
+    ]);
+  } catch (error) {
+    if (/UNIQUE/i.test(String(error && error.message))) {
+      return { ok: false, reason: "already_redeemed" };
+    }
+    // Anything else is D1's trouble, not the person's: nothing was written,
+    // and a retry may work. It used to be reported as "already redeemed".
+    throw error;
   }
-
-  // Counted only after the redemption row exists, so a rejected duplicate never
-  // burns one of the code's uses.
-  //
-  // This UPDATE is the only atomic test of "is there a use left": the SELECT
-  // above is a fast path that two accounts redeeming the last use of a code at
-  // the same moment both pass, because each reads the count before either
-  // writes it. Its changed-row count is therefore the real answer, and ignoring
-  // it is what granted a one-use code twice. The unique index on
-  // (code, account) catches the same account twice; nothing but this catches
-  // two different ones.
-  const counted = await db
-    .prepare(
-      `UPDATE gift_codes SET redeemed_count = redeemed_count + 1
-       WHERE code_normalized = ?1 AND redeemed_count < max_redemptions`
-    )
-    .bind(normalized)
-    .run();
-  if (changedRows(counted) < 1) {
-    // Somebody else took the last use between our read and this write. Undo
-    // both speculative writes, in the order that cannot leave a redemption row
-    // pointing at a grant that is gone.
-    await db
-      .prepare("DELETE FROM gift_redemptions WHERE code_normalized = ?1 AND account_id = ?2")
-      .bind(normalized, accountId)
-      .run();
-    await db.prepare("DELETE FROM grants WHERE id = ?1").bind(grant.id).run();
-    return { ok: false, reason: "exhausted" };
+  if (changedRows(claimed) === 0) {
+    // Revoked or used up between the read above and the batch. (Expiry needs
+    // no second look: a code's end date never changes, and both use `at`.)
+    return { ok: false, reason: await giftCodeRefusal(db, normalized) };
   }
-
   return { ok: true, grant, days: Number(row.days) };
+}
+
+/**
+ * Why a code that was live when read could not be redeemed when written.
+ * @param {Object} db D1 binding.
+ * @param {string} normalized Normalized code.
+ * @returns {Promise<string>} "revoked" | "exhausted".
+ */
+async function giftCodeRefusal(db, normalized) {
+  const current = await db.prepare("SELECT revoked_at FROM gift_codes WHERE code_normalized = ?1").bind(normalized).first();
+  return current && current.revoked_at !== null && current.revoked_at !== undefined ? "revoked" : "exhausted";
 }
 
 /**
@@ -767,6 +775,19 @@ export async function redeemGiftCode(db, accountId, code, now) {
  */
 export async function linkLicense(db, accountId, licenseId, provider, now) {
   const at = nowSec(now);
+  // Insert first and ask afterwards: two tabs returning from one checkout used
+  // to both read "not linked" and both insert, and the second hit the primary
+  // key and answered 500 (audit D1-3).
+  const inserted = await db
+    .prepare(
+      `INSERT INTO license_links (license_id, account_id, provider, created_at) VALUES (?1, ?2, ?3, ?4)
+       ON CONFLICT(license_id) DO NOTHING`
+    )
+    .bind(licenseId, accountId, provider || null, at)
+    .run();
+  if (changedRows(inserted) > 0) {
+    return { ok: true };
+  }
   const existing = await db
     .prepare("SELECT account_id FROM license_links WHERE license_id = ?1")
     .bind(licenseId)
@@ -776,16 +797,7 @@ export async function linkLicense(db, accountId, licenseId, provider, now) {
     // answer: re-pointing it would silently move a paid plan between accounts.
     return { ok: false, reason: "already_linked" };
   }
-  if (existing) {
-    return { ok: true, reason: "already_linked_here" };
-  }
-  await db
-    .prepare(
-      `INSERT INTO license_links (license_id, account_id, provider, created_at) VALUES (?1, ?2, ?3, ?4)`
-    )
-    .bind(licenseId, accountId, provider || null, at)
-    .run();
-  return { ok: true };
+  return { ok: true, reason: "already_linked_here" };
 }
 
 /**

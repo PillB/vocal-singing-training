@@ -963,3 +963,28 @@ webhook → claim → token flow through the router with a fake `fetch`.
 In short: it makes entitlements **authentic and revocable**, which is what
 billing needs. It does not make a static site's client-side features
 un-hackable, and no serverless endpoint can.
+# PR #38 integration review — 2026-11-15
+
+Reconciled with main after #40 (`ad5d35c`). The conflict was the default
+mutation-set list: both main's `pitch` set and this branch's `ledger` set now
+run. Account, webhook and schema changes merged without textual conflicts.
+
+Five review passes covered transaction read-set validation and retries,
+idempotency and provider failure responses, atomic account writes, schema and
+retention changes, and preservation of main's pitch/default mutation gates.
+The D1 batch rollback premise is documented at
+https://developers.cloudflare.com/d1/observability/find-expensive-queries/.
+
+Local lint passed. The combined Node/worker run produced 1,096 passes, two
+existing TODOs, and one environment failure: a child process with an intentionally
+minimal environment cannot resolve its home directory in this sandbox. The full
+core command also requires a localhost socket denied here. GitHub CI must pass
+on the integrated head before merge. No local browser/visual or physical-device
+verification is claimed; the four visual review formats are unverified locally.
+
+Deployment remains a separate step. Payments with a DB binding depend on D1;
+without it, the existing KV fallback retains its previous limitations. During
+a future worker rollout, old isolates may still write KV, so the PR's quiet-hour
+rollout and webhook-log review remain necessary. No bindings, secrets or signing
+keys were changed by this integration, and the worker was not deployed.
+

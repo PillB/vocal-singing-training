@@ -363,10 +363,21 @@ export async function hitRateLimit(db, bucket, limit, windowSeconds, now, cost) 
 
 /**
  * Take one hit from each of several limits, all or none: `[bucket, limit,
- * windowSeconds]` in order. Every limit is read first, so a caller held back
- * by any of them writes nothing (a refusal has to be free, QA-40); then each
- * is taken with hitRateLimit's guarded write, and if one is lost to a racing
- * caller the ones already taken are given back.
+ * windowSeconds]` in order, every bucket a different one. Every limit is read
+ * first, so a caller already held back by one writes nothing (QA-40), and
+ * then all are taken by ONE guarded statement: it writes every row or none,
+ * so a caller that loses a race for a budget's last try writes nothing either.
+ * Taking them one by one and giving back the ones taken when a later one was
+ * lost wrote two rows for every loser, and a burst from many address blocks
+ * at the deployment's ceiling wrote thousands an hour (fifth review of the
+ * Mercado Pago claim throttle, 18 November 2026).
+ *
+ * The guard is a NOT EXISTS over the rows as they stand before the statement
+ * writes any (SQLite reads the SELECT that feeds an INSERT to the end before
+ * inserting, because it reads the table written; an uncorrelated EXISTS is
+ * evaluated once besides). It refuses a bucket that is full in its window,
+ * or whose stored window is newer than the one read: a straggler is refused
+ * rather than allowed to drag a bucket back to an older window.
  *
  * For a check that must be counted BEFORE the work it guards and may be given
  * back after it: the work cannot run more often than the limits allow, however
@@ -382,22 +393,51 @@ export async function hitRateLimit(db, bucket, limit, windowSeconds, now, cost) 
  *   releaseRateLimits, and when to retry if not.
  */
 export async function reserveRateLimits(db, limits, at) {
+  const windows = [];
   for (const [bucket, limit, windowSeconds] of limits) {
     const room = await peekRateLimit(db, bucket, limit, windowSeconds, at);
     if (!room.ok) {
       return { ok: false, held: [], retryAfter: room.retryAfter };
     }
+    windows.push(room.windowStart);
   }
-  const held = [];
+  const rows = limits.map((_, i) => `(?${3 * i + 1}, ?${3 * i + 2}, ?${3 * i + 3})`).join(", ");
+  const full = limits.map((_, i) =>
+    `(bucket = ?${3 * i + 1} AND (window_start > ?${3 * i + 2} OR (window_start = ?${3 * i + 2} AND count >= ?${3 * i + 3})))`
+  ).join(" OR ");
+  const taken = await db
+    .prepare(
+      `INSERT INTO rate_limits (bucket, count, window_start)
+       SELECT column1, 1, column2 FROM (VALUES ${rows})
+       WHERE NOT EXISTS (SELECT 1 FROM rate_limits WHERE ${full})
+       ON CONFLICT(bucket) DO UPDATE SET
+         count = CASE WHEN rate_limits.window_start = excluded.window_start THEN rate_limits.count + 1 ELSE 1 END,
+         window_start = excluded.window_start`
+    )
+    .bind(...limits.flatMap(([bucket, limit], i) => [bucket, windows[i], limit]))
+    .run();
+  if (changedRows(taken) === limits.length) {
+    return { ok: true, held: limits.map(([bucket], i) => [bucket, windows[i]]) };
+  }
+  return { ok: false, held: [], retryAfter: await refusedRetryAfter(db, limits, at) };
+}
+
+/**
+ * When to retry a reservation lost to a racing caller: the wait of the first
+ * budget now full, or a second when none is (the window turned under it).
+ * @param {Object} db D1 binding.
+ * @param {Array<[string, number, number]>} limits Buckets and their limits.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<number>} Seconds.
+ */
+async function refusedRetryAfter(db, limits, at) {
   for (const [bucket, limit, windowSeconds] of limits) {
-    const taken = await hitRateLimit(db, bucket, limit, windowSeconds, at);
-    if (!taken.ok) {
-      await releaseRateLimits(db, held);
-      return { ok: false, held: [], retryAfter: taken.retryAfter };
+    const room = await peekRateLimit(db, bucket, limit, windowSeconds, at);
+    if (!room.ok) {
+      return room.retryAfter;
     }
-    held.push([bucket, taken.windowStart]);
   }
-  return { ok: true, held };
+  return 1;
 }
 
 /**

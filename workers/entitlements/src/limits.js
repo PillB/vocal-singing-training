@@ -36,14 +36,14 @@ export const CLAIMABLE_PROVIDERS = new Set(["stripe", "mercadopago", "creem"]);
  * printed on the payer's receipt. It stays that payment's claim key, because
  * there is nothing else the browser holds, so the walk is what is limited.
  *
- * Only distinct misses are counted: a number that names a payment gives its
- * try back, and a number the block has already looked up this hour is looked
- * up again for free (lookUpClaimId). A walk over the sequence is distinct
- * numbers that are almost all misses, while a buyer polls one number, before
- * its webhook lands and while its voucher is unpaid: counting requests let
- * the site's own retries (five POSTs per claim) lock the payer out for the
- * hour (two reviews of the WH-1 throttle, 18 November 2026). The block is the
- * IPv4 address or the IPv6 /56 (`addressBlock`).
+ * Only distinct misses are counted: a number that names a payment gives the
+ * block's try back, and a number the block has already looked up this hour is
+ * looked up again for free (lookUpClaimId). A walk over the sequence is
+ * distinct numbers that are almost all misses, while a buyer polls one
+ * number, before its webhook lands and while its voucher is unpaid: counting
+ * requests let the site's own retries (five POSTs per claim) lock the payer
+ * out for the hour (two reviews of the WH-1 throttle, 18 November 2026). The
+ * block is the IPv4 address or the IPv6 /56 (`addressBlock`).
  *
  * A subscription is never claimed by such a number (its charges are filed
  * under the 32-hex preapproval id), and the other rails' ids are random, so
@@ -52,25 +52,28 @@ export const CLAIMABLE_PROVIDERS = new Set(["stripe", "mercadopago", "creem"]);
 export const MP_CLAIM_IP_LIMIT = [20, 3600];
 
 /**
- * The same misses across the whole deployment: `[limit, windowSeconds]`.
+ * Distinct payment numbers looked up across the whole deployment, hits
+ * included: `[limit, windowSeconds]`.
  *
  * Per-block limits stop one caller; a walk spread over many blocks (a
  * tunnel broker hands anybody a /48, which is 256 /56s) is stopped only by a
- * ceiling, as the report route's is (QA-40). Two hundred misses an hour is
- * far above what legitimate traffic spends, since a buyer only misses before
- * their webhook lands, and holds a walk to a few thousand numbers a day, out of
- * a sequence that every Mercado Pago merchant's payments share. The price: somebody who spends the two hundred holds every claim and link by
- * payment number back until the hour turns, the payer's own included (their
- * payment waits; nothing is lost). A subscription is claimed by its
- * preapproval id and is never held back.
+ * ceiling, as the report route's is (QA-40). A hit keeps its try here, unlike
+ * the block's: every row the throttle writes then belongs to one of these
+ * tries (the record, the two counts, and a hit's give-back), so there are at
+ * most four times this an hour whatever arrives. Giving this try back too
+ * let copies of one paid number, or of an unpaid voucher, from many blocks
+ * write rows no budget capped (fifth review, 18 November 2026), and the
+ * repository's own arithmetic is that D1's free plan stops every query for
+ * the day at 100,000 rows written.
+ *
+ * Two hundred an hour is far above what legitimate traffic spends: a buyer
+ * spends one, for the hour, from each block they poll from. It holds a walk
+ * to a few thousand numbers a day, out of a sequence that every Mercado Pago
+ * merchant's payments share. The price: somebody who spends the two hundred
+ * holds every claim and link by a number not yet looked up back until the
+ * hour turns, the payer's own included (their payment waits; nothing is
+ * lost), and above two hundred buyers an hour the ceiling would hold real
+ * buyers back. A subscription is claimed by its preapproval id and is never
+ * held back.
  */
 export const MP_CLAIM_DEPLOYMENT_LIMIT = [200, 3600];
-
-/**
- * How long a claim or link refused by those budgets waits before asking again,
- * in milliseconds, one entry per retry. The request holding the block's last
- * try may be the payer's own twin (the return page sends a link and a claim
- * together), and its hit gives the try back within a few round trips to D1.
- * A walker refused for good only waits the sum, and reads; nothing is written.
- */
-export const MP_CLAIM_PATIENCE_MS = [50, 150];

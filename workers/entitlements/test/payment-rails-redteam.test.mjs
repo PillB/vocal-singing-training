@@ -479,29 +479,72 @@ test("a payer whose webhook is late polls their own number as often as the site 
   assert.equal(claimed.status, 200, `claimed once the webhook landed: ${JSON.stringify(claimed.body)}`);
 });
 
-test("numbers that name a payment give back their try in the deployment's ceiling too", async () => {
+test("a hit gives back exactly the block's one try, and the deployment's ceiling keeps it", async () => {
+  // Every earlier assertion on the give-back started from a count of one, so
+  // "minus one", "reset to zero" and "the wrong budget" all passed. The block:
+  // nineteen misses, the block's own paid number, then exactly one more miss.
   const env = createAccountEnv();
-  await oneOff(env, "pending");
+  await oneOff(env, "approved");
+  const [limit] = MP_CLAIM_IP_LIMIT;
+  const ip = "192.0.2.140";
+  assert.deepEqual(await misses(env, limit - 1, () => ip, H + 10, 70000), new Array(limit - 1).fill(202));
+  assert.equal((await claimAt(env, "4400", ip, H + 11)).status, 200, "the block's own paid number");
+  assert.deepEqual(await misses(env, 2, () => ip, H + 12, 71000), [202, 429], "one try left after the hit, not none and not twenty");
+  // The ceiling counts every number looked up, hits included, so the rows the
+  // throttle writes are capped by it: one short, a buyer's hit, then nothing.
   const [ceiling] = MP_CLAIM_DEPLOYMENT_LIMIT;
-  for (let n = 0; n <= ceiling; n += 1) {
-    assert.equal((await claimAt(env, "4400", `10.7.${n >> 8}.${n & 255}`, H + 10)).status, 202, `buyer poll ${n + 1}, each from its own address`);
-  }
-  await ensureSchema(env.DB);
-  const all = await env.DB.prepare("SELECT count FROM rate_limits WHERE bucket = 'mpclaim:all'").first();
-  assert.equal(all ? all.count : 0, 0, "the ceiling holds no try for a number that names a payment");
-  assert.equal((await claimAt(env, "7997", "203.0.113.250", H + 11)).status, 202, "the next miss is answered as usual");
+  const busy = createAccountEnv();
+  await oneOff(busy, "approved");
+  await misses(busy, ceiling - 1, (n) => `10.40.${n >> 8}.${n & 255}`, H + 10, 72000);
+  assert.equal((await claimAt(busy, "4400", "10.41.0.1", H + 11)).status, 200, "the buyer's own number, with the last try");
+  assert.equal((await claimAt(busy, "7996", "10.42.0.1", H + 12)).status, 429, "the hit kept the ceiling's try");
+  assert.equal((await claimAt(busy, "4400", "10.41.0.1", H + 13)).status, 200, "and the buyer's block polls its number on for free");
+});
+
+test("a payer who polled their pending voucher polls it on after a neighbour spends the block, and claims it once paid", async () => {
+  // A pending voucher already names its license, so its lookup is a hit and
+  // gives the block's try back. What keeps the payer's next poll free once a
+  // neighbour behind the same address spends the block is the record of the
+  // number, and a test without the neighbour passes without the record.
+  const env = createAccountEnv();
+  const api = await oneOff(env, "pending");
+  const ip = "192.0.2.141";
+  assert.equal((await claimAt(env, "4400", ip, H + 10)).status, 202, "pending voucher");
+  assert.deepEqual(await misses(env, MP_CLAIM_IP_LIMIT[0], () => ip, H + 20, 74000), new Array(MP_CLAIM_IP_LIMIT[0]).fill(202),
+    "the neighbour spends the block's twenty");
+  assert.equal((await claimAt(env, "7995", ip, H + 25)).status, 429, "control: the block is spent");
+  assert.equal((await claimAt(env, "4400", ip, H + 30)).status, 202, "the payer polls on");
+  await oneOff(env, "approved", api);
+  assert.equal((await claimAt(env, "4400", ip, H + 40)).status, 200, "and claims once paid");
 });
 
 /**
- * D1 as it is in production, a round trip away: every statement waits one
- * timer tick, so requests sent together interleave as they do on the edge
- * (the in-memory database otherwise answers each request in one go). Counts
- * the claim-index lookups of Mercado Pago numbers.
+ * Every rate_limits row the claim throttle writes, however it is written (one
+ * statement for several rows, or one each): SQLite triggers count them where
+ * D1 bills them. Call before remoteDatabase wraps the binding.
+ * @returns {Promise<() => Promise<number>>} Reads the count so far.
  */
-function remoteDatabase(env) {
+async function throttleRows(env, prefix = "mpclaim") {
+  await ensureSchema(env.DB);
+  const tag = prefix.replace(/\W/g, "_");
+  await env.DB.exec(`CREATE TABLE IF NOT EXISTS rows_${tag} (n INTEGER NOT NULL);
+    INSERT INTO rows_${tag} VALUES (0);
+    CREATE TRIGGER rows_${tag}_i AFTER INSERT ON rate_limits WHEN NEW.bucket LIKE '${prefix}%' BEGIN UPDATE rows_${tag} SET n = n + 1; END;
+    CREATE TRIGGER rows_${tag}_u AFTER UPDATE ON rate_limits WHEN NEW.bucket LIKE '${prefix}%' BEGIN UPDATE rows_${tag} SET n = n + 1; END;`);
   const db = env.DB;
-  const seen = { lookups: 0, numbers: new Set(), throttleWrites: 0 };
-  const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
+  return async () => Number((await db.prepare(`SELECT n FROM rows_${tag}`).first()).n);
+}
+
+/**
+ * D1 as it is in production, a round trip away: every statement waits `ms`
+ * (one timer tick by default), so requests sent together interleave as they
+ * do on the edge (the in-memory database otherwise answers each request in
+ * one go). Counts the claim-index lookups of Mercado Pago numbers.
+ */
+function remoteDatabase(env, ms = 1) {
+  const db = env.DB;
+  const seen = { lookups: 0, numbers: new Set() };
+  const tick = () => new Promise((resolve) => setTimeout(resolve, ms));
   const wrap = (statement, sql) => ({
     inner: statement,
     bind: (...values) => {
@@ -515,14 +558,7 @@ function remoteDatabase(env) {
     },
     first: async (column) => { await tick(); return statement.first(column); },
     all: async () => { await tick(); return statement.all(); },
-    run: async () => {
-      await tick();
-      const result = await statement.run();
-      if (/^\s*(INSERT INTO|UPDATE) rate_limits/.test(sql) && result && result.meta && result.meta.changes > 0) {
-        seen.throttleWrites += 1;
-      }
-      return result;
-    }
+    run: async () => { await tick(); return statement.run(); }
   });
   env.DB = {
     prepare: (sql) => wrap(db.prepare(sql), sql),
@@ -585,6 +621,7 @@ for (const [arrival, pace] of ARRIVALS) {
       assert.equal((await mercadoPago(env, { kind: "payment", notificationId: `t${id}`, signedId: id, bodyId: id, api: api.fetchImpl })).status, 200);
     }
     const token = await signIn(env, "twinwalker@example.test");
+    const written = await throttleRows(env);
     const seen = remoteDatabase(env);
     const ask = (n) => (n % 2
       ? linkAt(env, token, String(7000 + (n >> 1)), "192.0.2.83", H + 10)
@@ -596,7 +633,8 @@ for (const [arrival, pace] of ARRIVALS) {
     // And the rows written are bounded by the budget, not by what arrived: a
     // refusal writes nothing, and each try the walk was allowed is two budget
     // rows and its number's record.
-    assert.ok(seen.throttleWrites <= 3 * MP_CLAIM_IP_LIMIT[0], `${seen.throttleWrites} throttle rows written for a 600-request walk`);
+    const rows = await written();
+    assert.ok(rows <= 3 * MP_CLAIM_IP_LIMIT[0], `${rows} throttle rows written for a 600-request walk`);
   });
 }
 
@@ -638,6 +676,103 @@ test("a payer's link and claim sent together for their paid number both succeed 
     assert.equal(linked.status, 200, `run ${run}: the link, ${JSON.stringify(linked.body)}`);
     assert.equal(claimed.status, 200, `run ${run}: the claim`);
   }
+});
+
+/** A payer's link and claim of `number` sent together with the block one try short, D1 `ms` away; the claim sent `claimAfter` ms later. */
+async function returnPair(tag, { number, paid, ms, claimAfter = 0 }) {
+  const env = createAccountEnv();
+  const token = await signIn(env, `${tag}@example.test`);
+  if (paid) {
+    const api = mpApi({ [`/v1/payments/${number}`]: { id: Number(number), status: "approved", date_approved: iso(T), date_created: iso(T), payer: { id: 5 } } });
+    assert.equal((await mercadoPago(env, { kind: "payment", notificationId: `n-${tag}`, signedId: number, bodyId: number, api: api.fetchImpl })).status, 200);
+  }
+  await misses(env, MP_CLAIM_IP_LIMIT[0] - 1, () => "192.0.2.96", H + 10, 9100);
+  remoteDatabase(env, ms);
+  const later = new Promise((resolve) => setTimeout(resolve, claimAfter)).then(() => claimAt(env, number, "192.0.2.96", H + 20));
+  const [linked, claimed] = await Promise.all([linkAt(env, token, number, "192.0.2.96", H + 20), later]);
+  return [linked.status, claimed.status];
+}
+
+test("a payer whose webhook is late gets 202 for both the link and the claim sent together with one try left", async () => {
+  // The request refused at the block's last try reads the number's record
+  // again: its twin wrote it in the same statement as that try.
+  for (let run = 0; run < 5; run += 1) {
+    assert.deepEqual(await returnPair(`late${run}`, { number: "4402", paid: false, ms: 1 }), [202, 202], `run ${run}`);
+  }
+});
+
+test("the payer's link and claim sent together both succeed at the D1 latency a payer in Peru sees", async () => {
+  // D1 has no South American location, and nothing places this worker near
+  // its database, so a statement is 100 ms or more from Lima. A wait of a
+  // fixed 200 ms for the twin was shorter than the twin's own round trips,
+  // and the link, which the site sends once, was refused.
+  const cases = [
+    ["paid, together", { number: "4501", paid: true, ms: 120 }, [200, 200]],
+    ["paid, link first", { number: "4502", paid: true, ms: 120, claimAfter: 600 }, [200, 200]],
+    ["late webhook, together", { number: "4503", paid: false, ms: 120 }, [202, 202]],
+    ["late webhook, link first", { number: "4504", paid: false, ms: 120, claimAfter: 600 }, [202, 202]]
+  ];
+  const answers = await Promise.all(cases.map(([label, pair], i) => returnPair(`peru${i}`, pair)));
+  cases.forEach(([label, , want], i) => assert.deepEqual(answers[i], want, label));
+});
+
+test("a payer's link and claim of their paid number sent together leave the block its whole twenty", async () => {
+  // Only one of the two pays; the other finds the record, and the hit gives the block's try back.
+  const env = createAccountEnv();
+  await oneOff(env, "approved");
+  const token = await signIn(env, "wholeblock@example.test");
+  const ip = "192.0.2.143";
+  remoteDatabase(env);
+  const [linked, claimed] = await Promise.all([linkAt(env, token, "4400", ip, H + 10), claimAt(env, "4400", ip, H + 10)]);
+  assert.deepEqual([linked.status, claimed.status], [200, 200]);
+  assert.deepEqual(await misses(env, MP_CLAIM_IP_LIMIT[0] + 1, () => ip, H + 20, 76000), [...new Array(MP_CLAIM_IP_LIMIT[0]).fill(202), 429]);
+});
+
+test("the throttle writes at most four rows for each of the deployment ceiling's tries, whatever arrives", async () => {
+  const [ceiling] = MP_CLAIM_DEPLOYMENT_LIMIT;
+  // Misses from 64 blocks, twenty each, all at once: the losers of the
+  // ceiling's last tries used to take their block's try, lose the ceiling's,
+  // and give the block's back, two rows each for a 429.
+  const walked = createAccountEnv();
+  const walkRows = await throttleRows(walked);
+  remoteDatabase(walked);
+  const walk = await Promise.all(Array.from({ length: 64 * 20 }, (_, n) =>
+    claimAt(walked, String(40000 + n), `2001:db8:77:${(n % 64).toString(16)}00::1`, H + 10)));
+  assert.equal(walk.filter((answer) => answer.status === 202).length, ceiling);
+  assert.ok(await walkRows() <= 3 * ceiling, `${await walkRows()} rows written by a walk that the ceiling stopped at ${ceiling}`);
+  // Copies of one paid number from 300 blocks, four each, all at once: each
+  // copy used to take both tries and give both back, and nothing capped it.
+  const copied = createAccountEnv();
+  await oneOff(copied, "approved");
+  const copyRows = await throttleRows(copied);
+  remoteDatabase(copied);
+  const copies = await Promise.all(Array.from({ length: 300 * 4 }, (_, n) =>
+    claimAt(copied, "4400", `2001:db8:${(0x7800 + (n % 300)).toString(16)}:100::1`, H + 10)));
+  assert.equal(copies.filter((answer) => answer.status === 200).length, ceiling * 4, "every copy from the blocks the ceiling let in claimed it");
+  assert.ok(await copyRows() <= 4 * ceiling, `${await copyRows()} rows written by copies of one paid number`);
+});
+
+test("a payment found is answered even when giving the block's try back fails", async () => {
+  // The payment was found, so the claim and the link answer it; the failed
+  // write costs the block one try and nobody a payment.
+  const env = createAccountEnv();
+  await oneOff(env, "approved");
+  const token = await signIn(env, "giveback@example.test");
+  const db = env.DB;
+  env.DB = {
+    prepare: (sql) => {
+      if (/^UPDATE rate_limits SET count = count - 1/.test(sql)) {
+        return { bind: () => ({ run: async () => { throw new Error("D1 is overloaded"); } }) };
+      }
+      return db.prepare(sql);
+    },
+    batch: (statements) => db.batch(statements),
+    exec: (sql) => db.exec(sql)
+  };
+  const claimed = await claimAt(env, "4400", "192.0.2.144", H + 10);
+  assert.equal(claimed.status, 200, JSON.stringify(claimed.body));
+  const linked = await linkAt(env, token, "4400", "192.0.2.145", H + 10);
+  assert.equal(linked.status, 200, JSON.stringify(linked.body));
 });
 
 /**
@@ -696,39 +831,76 @@ test("a claim stopped part way never leaves its number free without a try spent 
 
 test("taking tries from several budgets is all or none, and a refusal writes nothing", async () => {
   const env = createAccountEnv();
-  await ensureSchema(env.DB);
+  const written = await throttleRows(env, "t:");
   const at = H + 10;
+  const rows = async () => (await env.DB.prepare("SELECT bucket, count, window_start FROM rate_limits WHERE bucket LIKE 't:%' ORDER BY bucket").all()).results;
+  const row = async (bucket) => (await rows()).find((r) => r.bucket === bucket);
   // The deployment budget is already spent; the caller's own is empty.
   await env.DB.prepare("INSERT INTO rate_limits (bucket, count, window_start) VALUES ('t:all', 2, ?1)").bind(H).run();
-  const rows = async () => (await env.DB.prepare("SELECT bucket, count FROM rate_limits WHERE bucket LIKE 't:%' ORDER BY bucket").all()).results;
-  const before = await rows();
+  let before = await written();
   const refused = await reserveRateLimits(env.DB, [["t:mine", 5, HOUR], ["t:all", 2, HOUR]], at);
   assert.equal(refused.ok, false);
-  assert.deepEqual(await rows(), before, "nothing written for a refused request");
-  // Lost to a race: the second budget fills between the read and the write. The first try is given back.
-  const racing = { ...env.DB, prepare: env.DB.prepare.bind(env.DB) };
-  let reads = 0;
-  racing.prepare = (sql) => {
-    const statement = env.DB.prepare(sql);
-    if (/^SELECT count, window_start FROM rate_limits/.test(sql) && ++reads === 3) {
-      return { bind: (...v) => ({ first: async () => { await env.DB.prepare("UPDATE rate_limits SET count = 2 WHERE bucket = 't:all2'").run(); return statement.bind(...v).first(); } }) };
-    }
-    return statement;
+  assert.equal(await written(), before, "nothing written for a refused request");
+  // Lost to a race: a budget fills after this caller read it and before it
+  // took it. Taking the budgets one by one and giving back what was taken
+  // wrote two rows for this 429; one statement writes none.
+  const racing = (bucket, fill) => {
+    let fired = false;
+    return {
+      ...env.DB,
+      prepare: (sql) => {
+        const statement = env.DB.prepare(sql);
+        if (!/^SELECT count, window_start FROM rate_limits/.test(sql)) {
+          return statement;
+        }
+        return { bind: (...v) => ({ first: async (c) => {
+          const found = await statement.bind(...v).first(c);
+          if (!fired && v[0] === bucket) {
+            fired = true;
+            await env.DB.prepare(fill).bind(H, H + HOUR).run();
+          }
+          return found;
+        } }) };
+      }
+    };
   };
   await env.DB.prepare("INSERT INTO rate_limits (bucket, count, window_start) VALUES ('t:all2', 1, ?1)").bind(H).run();
-  const lost = await reserveRateLimits(racing, [["t:mine", 5, HOUR], ["t:all2", 2, HOUR]], at);
+  before = await written();
+  const lost = await reserveRateLimits(racing("t:all2", "UPDATE rate_limits SET count = 2 WHERE bucket = 't:all2' AND window_start = ?1 AND ?2 > 0"),
+    [["t:mine", 5, HOUR], ["t:all2", 2, HOUR]], at);
   assert.equal(lost.ok, false, "the second budget filled first");
-  const mine = (await rows()).find((row) => row.bucket === "t:mine");
-  assert.equal(mine ? mine.count : 0, 0, "the try taken from the first budget was given back");
-  // Control: with room in both, both are taken.
+  assert.equal(await written(), before + 1, "the only row written is the racing caller's");
+  assert.equal(await row("t:mine"), undefined, "the caller's own budget was never touched");
+  assert.equal(lost.retryAfter, H + HOUR - at, "come back when the hour turns");
+  // Lost to the hour turning: another caller opened the next window after
+  // this one read the bucket. The bucket is not dragged back to the old hour.
+  const turned = await reserveRateLimits(racing("t:all3", "INSERT INTO rate_limits (bucket, count, window_start) VALUES ('t:all3', 1, ?2) ON CONFLICT(bucket) DO UPDATE SET count = 1, window_start = ?2 WHERE ?1 > 0"),
+    [["t:mine3", 5, HOUR], ["t:all3", 2, HOUR]], at);
+  assert.equal(turned.ok, false);
+  assert.equal(turned.retryAfter, 1, "the hour has just turned: ask again at once, not in an hour");
+  const next = await row("t:all3");
+  assert.deepEqual([next.count, next.window_start], [1, H + HOUR], "the newer window stands");
+  assert.equal(await row("t:mine3"), undefined);
+  // Control: with room in all, all are taken, by one statement that reads the
+  // rows before it writes any: three budgets of one each are all taken.
   const taken = await reserveRateLimits(env.DB, [["t:mine", 5, HOUR], ["t:other", 2, HOUR]], at);
   assert.equal(taken.ok, true);
-  assert.deepEqual(taken.held.map(([bucket]) => bucket), ["t:mine", "t:other"]);
-  const count = async (bucket) => (await env.DB.prepare("SELECT count FROM rate_limits WHERE bucket = ?1").bind(bucket).first()).count;
+  assert.deepEqual(taken.held, [["t:mine", H], ["t:other", H]]);
+  const ones = await reserveRateLimits(env.DB, [["t:a", 1, HOUR], ["t:b", 1, HOUR], ["t:c", 1, HOUR]], at);
+  assert.equal(ones.ok, true, "a budget of one is not full before the statement takes it");
+  assert.deepEqual((await rows()).filter((r) => ["t:a", "t:b", "t:c"].includes(r.bucket)).map((r) => r.count), [1, 1, 1]);
+  const count = async (bucket) => (await row(bucket)).count;
   // A try goes back once, and never below zero: given back twice, it is not an extra try.
   await releaseRateLimits(env.DB, taken.held);
   await releaseRateLimits(env.DB, taken.held);
   assert.equal(await count("t:mine"), 0);
+  // A try given back is one try: from five, four, not none.
+  for (let n = 0; n < 4; n += 1) {
+    await reserveRateLimits(env.DB, [["t:five", 5, HOUR]], at);
+  }
+  const fifth = await reserveRateLimits(env.DB, [["t:five", 5, HOUR]], at);
+  await releaseRateLimits(env.DB, fifth.held);
+  assert.equal(await count("t:five"), 4);
   // A try goes back to the window it was taken in, not to the next one.
   const late = await reserveRateLimits(env.DB, [["t:late", 5, HOUR]], at);
   await reserveRateLimits(env.DB, [["t:late", 5, HOUR]], H + HOUR + 5);

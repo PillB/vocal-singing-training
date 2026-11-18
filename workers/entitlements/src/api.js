@@ -54,7 +54,7 @@ import {
 } from "./grants.js";
 import { googleConfigured, verifyGoogleIdToken } from "./google.js";
 import { buildTokenPayload, isLicenseIdShape, signPayload } from "./license.js";
-import { CLAIMABLE_PROVIDERS, MP_CLAIM_DEPLOYMENT_LIMIT, MP_CLAIM_IP_LIMIT, MP_CLAIM_PATIENCE_MS } from "./limits.js";
+import { CLAIMABLE_PROVIDERS, MP_CLAIM_DEPLOYMENT_LIMIT, MP_CLAIM_IP_LIMIT } from "./limits.js";
 import { addressBlockKey, ipKeyConfigured } from "./events.js";
 import { deleteProgress, getProgress, listProgress, putProgress } from "./progress.js";
 import { getEntitlement, getLicenseIdForClaim } from "./store.js";
@@ -505,28 +505,33 @@ export async function handleMe(request, env, deps) {
  * Find the license a claim or link id names, holding a walk over Mercado Pago
  * payment numbers to MP_CLAIM_IP_LIMIT and MP_CLAIM_DEPLOYMENT_LIMIT.
  *
- * What is counted is distinct numbers that name no payment, per block of
- * addresses and per deployment, an hour. The rule, the consume-then-reset
- * pattern of login throttles:
- * - a number this block has not looked up this hour is looked up only while
- *   the request holds a try from each budget, taken first (takeTries), so
- *   no more new numbers are looked up than the budgets allow, however many
- *   requests arrive at once, and a spent budget refuses whatever the number
+ * What is counted is distinct numbers looked up an hour: per block of
+ * addresses, the numbers that name no payment, and per deployment, every
+ * number. The rule:
+ * - a number this block has not looked up this hour is looked up only after
+ *   one statement has recorded it for the block and taken a try from each
+ *   budget, all or none (takeTries), so no more new numbers are looked up
+ *   than the budgets allow however many requests arrive at once, a request
+ *   refused writes nothing, and a spent budget refuses whatever the number
  *   names, or a 429 would only mean "miss";
- * - after that lookup the number is recorded for the block (settleTries),
- *   and the tries are kept for a miss and given back for a hit;
  * - a number the block has recorded this hour is looked up again for free,
  *   so a buyer polling their own number, before its webhook lands or while
- *   a cash voucher is unpaid, spends one try at most.
- * A record exists only after a lookup made while holding tries, so it never
- * lets an unpaid number through. Four reviews of this throttle, 18 November
- * 2026, each found a way past an earlier version: counting requests (the
- * payer's own polls locked them out), checking then spending after a miss (a
- * burst looked up every number), and recording the number before the tries
- * were held (every number sent twice was looked up free, a request stopped
- * between the two left its number free, and each refusal wrote two rows).
- * Measuring the next design showed that handing a twin's tries back let a
- * burst of copies write rows without bound, so a miss keeps them.
+ *   a cash voucher is unpaid, spends one try at most, and of the payer's link
+ *   and claim sent together one pays and the other finds the record, at any
+ *   latency;
+ * - a hit gives the block's try back (giveBlockTryBack) and keeps the
+ *   deployment's, so payers behind one shared address are not held back by
+ *   each other, and the rows the throttle writes have a hard ceiling: four
+ *   for each of MP_CLAIM_DEPLOYMENT_LIMIT's tries an hour.
+ * Five reviews of this throttle, 18 November 2026, each found a way past an
+ * earlier version: counting requests (the payer's own polls locked them
+ * out); checking, then spending after a miss (a burst looked up every
+ * number); writing the record and the tries as separate statements (a copy
+ * refused by the budgets left its twin a free lookup, and a request stopped
+ * between them left its number free); waiting a fixed 200 ms for the payer's
+ * twin (too short at the D1 latency a payer in Peru sees); and giving every
+ * try back on a hit while taking budgets one statement at a time (copies of a
+ * paid number, and losers at the ceiling, wrote rows no budget capped).
  *
  * Any other id is looked up untouched: Stripe's and Creem's are random, and a
  * Mercado Pago subscription is claimed by its 32-hex preapproval id. Buckets
@@ -549,71 +554,56 @@ export async function lookUpClaimId(env, request, provider, sessionId, at) {
     return { licenseId: null, refused: tries.refused };
   }
   const licenseId = await getLicenseIdForClaim(ledgerReader(env), provider, sessionId);
-  if (number) {
-    await settleTries(env.DB, number, tries.held, licenseId, at);
+  if (licenseId && tries.held.length) {
+    await giveBlockTryBack(env.DB, number, tries.held);
   }
   return { licenseId };
 }
 
 /**
- * Hold a try from each budget for a lookup, or none for a number the block has
- * already recorded this hour. A refused request waits a moment and asks again
- * (MP_CLAIM_PATIENCE_MS), because the request holding the block's last try may
- * be its own twin (the return page sends a link and a claim together), whose
- * hit gives the try back and records the number. A refusal writes nothing,
- * and neither does a request that loses a budget's last try to another.
+ * Record the number for the caller's block and take a try from each budget,
+ * in one statement, all or none; or take nothing for a number the block has
+ * already recorded this hour. The record is read again after a refusal: the
+ * request that took the block's last try may be this one's twin (the return
+ * page sends a link and a claim together), and its record is written in the
+ * same statement as that try, so whoever sees the try gone sees the record.
  * @param {Object} db D1 binding.
- * @param {{record: Array, budgets: Array}} number The number's buckets.
+ * @param {{record: Array, block: Array, ceiling: Array}} number The number's buckets.
  * @param {number} at Unix seconds.
  * @returns {Promise<{held: Array<[string, number]>, refused?: Object}>}
- *   The tries held, none for a recorded number, or the refusal.
+ *   The rows taken, none for a recorded number, or the refusal.
  */
 async function takeTries(db, number, at) {
-  for (let attempt = 0; ; attempt += 1) {
-    const recorded = await peekRateLimit(db, ...number.record, at);
-    if (!recorded.ok) {
-      return { held: [] };
-    }
-    const tries = await reserveRateLimits(db, number.budgets, at);
-    if (tries.ok) {
-      return { held: tries.held };
-    }
-    if (attempt >= MP_CLAIM_PATIENCE_MS.length) {
-      return { held: [], refused: tries };
-    }
-    await new Promise((resolve) => setTimeout(resolve, MP_CLAIM_PATIENCE_MS[attempt]));
+  const tries = await reserveRateLimits(db, [number.record, number.block, number.ceiling], at);
+  if (tries.ok) {
+    return { held: tries.held };
   }
+  const recorded = await peekRateLimit(db, ...number.record, at);
+  return recorded.ok ? { held: [], refused: tries } : { held: [] };
 }
 
 /**
- * After a lookup made holding tries: record the number for the block, and
- * keep the tries for a miss, give them back for a hit (the number is
- * somebody's payment, found, not walked). Copies of one number sent together
- * each keep their own: a walk that sends every number twice covers half as
- * many, and nothing is handed back to be spent again, so the rows written stay
- * bounded by the budgets whatever arrives at once.
+ * After a hit, give back the block's try; the record and the deployment's try
+ * stay. Best effort: the payment has been found, and a write that fails here
+ * leaves one try spent, which costs the block a try and nobody a payment.
  * @param {Object} db D1 binding.
- * @param {{record: Array}} number The number's buckets.
- * @param {Array<[string, number]>} held The tries this request holds.
- * @param {string|null} licenseId What the lookup found.
- * @param {number} at Unix seconds.
- * @returns {Promise<void>} Resolves when written.
+ * @param {{block: Array}} number The number's buckets.
+ * @param {Array<[string, number]>} held The rows takeTries took.
+ * @returns {Promise<void>} Resolves when written, or when the write failed.
  */
-async function settleTries(db, number, held, licenseId, at) {
-  if (!held.length) {
-    return;
-  }
-  await hitRateLimit(db, ...number.record, at);
-  if (licenseId) {
-    await releaseRateLimits(db, held);
+async function giveBlockTryBack(db, number, held) {
+  try {
+    await releaseRateLimits(db, held.filter(([bucket]) => bucket === number.block[0]));
+  } catch (error) {
+    console.error("claim throttle give-back failed", error && error.message);
   }
 }
 
 /**
  * A Mercado Pago payment number's buckets for the caller's block of
- * addresses, as `[bucket, limit, windowSeconds]`: its record (looked up this
- * hour) and the two budgets; or null when the id is not a payment number, or
- * there is nothing to count with.
+ * addresses, as `[bucket, limit, windowSeconds]`: its record (looked up by
+ * this block this hour), the block's budget and the deployment's; or null
+ * when the id is not a payment number, or there is nothing to count with.
  */
 async function paymentNumber(env, request, provider, sessionId, at) {
   if (provider !== "mercadopago" || !/^\d+$/.test(sessionId) || !env.DB || !ipKeyConfigured(env)) {
@@ -623,10 +613,8 @@ async function paymentNumber(env, request, provider, sessionId, at) {
   const numberKey = await addressBlockKey(env, request, at, `mpclaimn:${sessionId}`);
   return {
     record: [`mpclaimn:${numberKey}`, 1, MP_CLAIM_IP_LIMIT[1]],
-    budgets: [
-      [`mpclaim:${await addressBlockKey(env, request, at, "mpclaim")}`, ...MP_CLAIM_IP_LIMIT],
-      ["mpclaim:all", ...MP_CLAIM_DEPLOYMENT_LIMIT]
-    ]
+    block: [`mpclaim:${await addressBlockKey(env, request, at, "mpclaim")}`, ...MP_CLAIM_IP_LIMIT],
+    ceiling: ["mpclaim:all", ...MP_CLAIM_DEPLOYMENT_LIMIT]
   };
 }
 

@@ -19,7 +19,7 @@ import { createAccountEnv } from "../../workers/entitlements/test/fixtures.mjs";
 export const API = "https://entitlements.test";
 const ORIGIN = "https://site.test";
 const SOURCES = Object.fromEntries(
-  ["storage.js", "account.js", "sync.js"].map((f) => [f, readFileSync(new URL(`../../js/${f}`, import.meta.url), "utf8")])
+  ["storage.js", "practice-days.js", "account.js", "sync.js"].map((f) => [f, readFileSync(new URL(`../../js/${f}`, import.meta.url), "utf8")])
 );
 
 /** One account worker (one database), shared by every browser built on it. */
@@ -100,14 +100,20 @@ function makeStorage(store, quota) {
 /**
  * One browser tab: its own storage, the three real modules, and a fetch to `worker`.
  * @param {object} worker From createWorker().
- * @param {{store?: Map, quota?: number, extra?: object}} [opts] Shared storage (a reload,
- *   or a second tab), a quota in characters, and more window globals (VT_WEEK_ELEMENTS).
+ * @param {{store?: Map, quota?: number, extra?: object, days?: boolean}} [opts] Shared
+ *   storage (a reload, or a second tab), a quota in characters, more window globals
+ *   (VT_WEEK_ELEMENTS), and the real day ledger (js/practice-days.js), which a take
+ *   then records on as the app's save does.
  */
 export function createBrowser(worker, opts = {}) {
   const store = opts.store || new Map();
   const localStorage = makeStorage(store, opts.quota);
   const log = [];
   const holds = [];
+  // Requests the worker is still answering. Its crypto and its database run
+  // off the event loop, so a count of turns alone is not "settled" on a busy
+  // machine. A request held at a gate is not counted: the test releases it.
+  let busy = 0;
   const fetch = async (url, init) => {
     const path = String(url).slice(API.length);
     const auth = (init.headers && init.headers.authorization) || "";
@@ -115,7 +121,13 @@ export function createBrowser(worker, opts = {}) {
     const body = init.body === undefined ? undefined : JSON.parse(init.body);
     const entry = { method: init.method, path, token, body };
     log.push(entry);
-    const answer = await worker.serve(init.method, path, { body, token: token || undefined });
+    busy += 1;
+    let answer;
+    try {
+      answer = await worker.serve(init.method, path, { body, token: token || undefined });
+    } finally {
+      busy -= 1;
+    }
     entry.status = answer.status;
     const hold = holds.find((h) => !h.used && h.match(entry));
     if (hold) {
@@ -157,10 +169,24 @@ export function createBrowser(worker, opts = {}) {
     AbortController, Response, Request, Headers, Blob, TextEncoder, URL, Intl,
     console, crypto: webcrypto, CustomEvent: class { constructor(type) { this.type = type; } }
   };
-  for (const [name, src] of Object.entries(SOURCES)) runInNewContext(src, ctx, { filename: name });
+  for (const [name, src] of Object.entries(SOURCES)) {
+    if (name !== "practice-days.js" || opts.days) runInNewContext(src, ctx, { filename: name });
+  }
+  // The page reads the ledger as it first draws (its backfill runs then, once),
+  // before any take is recorded on it.
+  if (opts.days) win.VTDays.read();
 
+  /**
+   * Let everything under way finish: until no request is being answered and
+   * then 300 turns pass with none, time for what each answer sets off (the
+   * next request of a cycle goes out within a few turns of the last answer).
+   */
   const settle = async () => {
-    for (let i = 0; i < 300; i += 1) await new Promise((r) => setImmediate(r));
+    const deadline = Date.now() + 10000;
+    for (let quiet = 0; quiet < 300; quiet = busy ? 0 : quiet + 1) {
+      if (Date.now() > deadline) throw new Error("settle: the worker is still answering after 10 s");
+      await new Promise((r) => setImmediate(r));
+    }
   };
   /** Fire every pending timer set for one of `delays` (ms), then let everything settle. */
   async function fire(delays) {
@@ -177,9 +203,11 @@ export function createBrowser(worker, opts = {}) {
     await win.VTAccount.startEmailSignIn(email);
     return win.VTAccount.verifyEmailCode(email, worker.mail.get(email));
   }
-  /** One rated take on `exerciseId`, with `marker` in its notes. */
+  /** One rated take on `exerciseId`, with `marker` in its notes, recorded on the day ledger when there is one. */
   function take(marker, exerciseId = "ex-1") {
-    return win.VTStorage.saveExerciseResult(exerciseId, { score: 7, notes: marker, durationSec: 60 });
+    const entry = win.VTStorage.saveExerciseResult(exerciseId, { score: 7, notes: marker, durationSec: 60 });
+    if (opts.days) win.VTDays.record({ exerciseId, sec: 60, saved: true, bump: true, source: "save", day: entry.day });
+    return entry;
   }
   return { win, store, log, gate, timers, fire, settle, signIn, take, localStorage };
 }

@@ -28,6 +28,14 @@
    * browser and is merged back when its account signs in here again.
    */
   const LS_ASIDE = "vt_sync_aside_v1";
+  /**
+   * When this browser stopped being its owner's: {owner, me, since}. Written
+   * the moment another account signs in here, and gone when that account
+   * leaves. What was done here from `since` on was done by `me`, and stays
+   * theirs whatever they answer, or if they leave without answering (RES-2).
+   * It is read only while `owner` is still the browser's owner on record.
+   */
+  const LS_HANDOVER = "vt_sync_handover_v1";
   /** Most entries kept per exercise, matching the browser's own history cap. */
   const HISTORY_CAP = 50;
   /** Attempts at the read-merge-write cycle before giving up until next time. */
@@ -309,6 +317,41 @@
       // refusing, is not asked.
       ownerKept = id;
     }
+  }
+
+  /** The handover on record (see LS_HANDOVER), or null. */
+  function readHandover() {
+    try {
+      const h = JSON.parse(localStorage.getItem(LS_HANDOVER) || "null");
+      return h && typeof h.owner === "string" && ms(h.since) ? h : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Record a handover, or clear it with null. Not kept in memory when storage
+   * refuses it, unlike the owner: setting practice aside needs storage too,
+   * and fails as a whole when it has none (see putAside).
+   */
+  function writeHandover(h) {
+    try {
+      if (h) localStorage.setItem(LS_HANDOVER, JSON.stringify(h));
+      else localStorage.removeItem(LS_HANDOVER);
+    } catch {
+      /* no handover on record: everything goes aside, as before RES-2 */
+    }
+  }
+
+  /**
+   * Somebody just signed in. If this browser's practice is another account's,
+   * note when it stopped being theirs: everything done here from now on is
+   * the newcomer's, even before they answer whose the rest is.
+   */
+  function noteHandover() {
+    const owner = readOwner();
+    const me = accountId();
+    writeHandover(owner && owner !== me ? { owner, me, since: new Date().toISOString() } : null);
   }
 
   /** The put-aside list, dropping anything malformed. */
@@ -617,6 +660,125 @@
       days: obj(b.days),
       loop: obj(b.loop)
     };
+  }
+
+  /** The local calendar day of a moment, as the day ledger names it, or null. */
+  function dayOf(at) {
+    const d = new Date(at);
+    if (!Number.isFinite(d.getTime())) return null;
+    const pad = (n) => String(n).padStart(2, "0");
+    return global.VTDays?.dayKey?.(d) || `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  /** One exercise's row over `history` (newest first), counted `completedCount`. */
+  function rowOf(base, history, completedCount) {
+    const sorted = history.slice().sort((x, y) => ms(y.at) - ms(x.at));
+    const scored = sorted.find((h) => h.score !== null && h.score !== undefined);
+    return {
+      ...base,
+      completedCount,
+      history: sorted,
+      lastScore: scored ? scored.score : null,
+      lastAt: sorted.length ? sorted[0].at : null
+    };
+  }
+
+  /**
+   * Every exercise's row split at `since`. The earlier row keeps the count of
+   * takes the history cap no longer lists; the later one counts its own.
+   */
+  function splitProgress(progress, since) {
+    const before = {};
+    const after = {};
+    for (const [id, row] of Object.entries(progress)) {
+      const late = row.history.filter((h) => ms(h.at) >= since);
+      if (!late.length) {
+        before[id] = row;
+        continue;
+      }
+      after[id] = rowOf({}, late, late.length);
+      const early = row.history.filter((h) => ms(h.at) < since);
+      const count = Math.max(early.length, row.completedCount - late.length);
+      if (count > 0) before[id] = rowOf(row, early, count);
+    }
+    return { before, after };
+  }
+
+  /**
+   * The day ledger of a part split off at a handover, rebuilt from its takes
+   * as the app records them (js/practice-days.js record()): one count and the
+   * take's time on the day it was sung. A held note is part of its take and
+   * adds nothing of its own. No rest bank: the ledger's merge gives the
+   * starting one, and takes the account's when it has one.
+   */
+  function daysOf(part) {
+    const days = {};
+    for (const [ex, row] of Object.entries(part.progress)) {
+      for (const h of row.history) {
+        const key = h.day || dayOf(h.at);
+        if (!key) continue;
+        const day = days[key] || (days[key] = { sec: 0, n: 0, ex: [] });
+        day.sec += Math.max(0, Number(h.durationSec) || 0);
+        day.n += 1;
+        if (h.score !== null && h.score !== undefined) day.saved = true;
+        if (!day.ex.includes(ex)) day.ex.push(ex);
+      }
+    }
+    return Object.keys(days).length ? { v: 1, days, backfilled: true } : null;
+  }
+
+  /**
+   * The day ledger with a split-off part's days taken out of it: its time and
+   * its count, and a day left with neither (and no routine) dropped.
+   */
+  function lessDays(days, minus) {
+    const all = obj(days);
+    if (!all || !minus || !obj(all.days)) return days;
+    const out = { ...all, days: { ...all.days } };
+    for (const [key, m] of Object.entries(minus.days)) {
+      const row = obj(out.days[key]);
+      if (!row) continue;
+      const left = { ...row, sec: Math.max(0, (Number(row.sec) || 0) - m.sec), n: Math.max(0, (Number(row.n) || 0) - m.n) };
+      if (left.n > 0 || left.sec > 0 || Number(left.basics) > 0) out.days[key] = left;
+      else delete out.days[key];
+    }
+    return out;
+  }
+
+  /**
+   * Split one profile's bag at a moment: what was done here before it, and
+   * what after. Takes, held notes and week reviews go by their own time, a
+   * goal by when it was set. The plan, the achievements and the daily loop
+   * grew from the earlier practice and stay with it; the plan's own reviews
+   * carry that person's notes. The day ledger goes by its takes (daysOf).
+   * @param {object} bag A sync bag.
+   * @param {number} since The moment (ms); 0 keeps everything in `before`.
+   * @returns {{before: object, after: object|null}} The two parts.
+   */
+  function splitBag(bag, since) {
+    if (!since) return { before: bag, after: null };
+    const b = { v: 1, profileId: bag && bag.profileId, ...normalizeBag(bag) };
+    const late = (e) => ms(e.at) >= since;
+    const progress = splitProgress(b.progress, since);
+    const goals = b.goals && ms(b.goals.updatedAt) >= since ? b.goals : null;
+    const after = {
+      v: 1,
+      profileId: b.profileId,
+      progress: progress.after,
+      reviews: b.reviews.filter(late),
+      holdLogs: b.holdLogs.filter(late),
+      goals
+    };
+    after.days = daysOf(after);
+    const before = {
+      ...b,
+      progress: progress.before,
+      reviews: b.reviews.filter((e) => !late(e)),
+      holdLogs: b.holdLogs.filter((e) => !late(e)),
+      goals: goals ? null : b.goals,
+      days: lessDays(b.days, after.days)
+    };
+    return { before, after };
   }
 
   /**
@@ -1262,6 +1424,8 @@
    * revisions and copies, why it failed, what it turned down.
    */
   function forgetAccount() {
+    setAsideLeaver();
+    writeHandover(null);
     confirmed.clear();
     // "Guardado en tu cuenta" was about the account that just left.
     lastError = null;
@@ -1330,31 +1494,100 @@
   }
 
   /**
-   * Put this browser's practice aside under the account that last synced it,
-   * merged with whatever that account already had aside here, and clear it
-   * from every profile. Nothing is cleared unless the copy put aside was stored.
-   * @param {string} owner The account the practice is put aside for.
-   * @param {string[]} ids Every profile on this browser.
-   * @returns {boolean} Whether it was stored (and cleared).
+   * Store `bags` aside for `owner`, merged with whatever that owner already
+   * has aside here.
+   * @param {string} owner Whose practice it is.
+   * @param {Object<string, object>} bags Profile id to bag.
+   * @returns {boolean} Whether it was stored.
    */
-  function putAside(owner, ids) {
-    const bags = {};
-    ids.forEach((id) => {
-      const bag = global.VTStorage.readSyncBag(id);
-      if (bagHasPractice(bag)) bags[id] = bag;
-    });
+  function addAside(owner, bags) {
+    const all = { ...bags };
     const list = readAside();
     const prev = list.find((e) => e.owner === owner);
     if (prev) {
-      for (const [id, bag] of Object.entries(prev.bags)) bags[id] = bags[id] ? mergeBag(bags[id], bag) : bag;
+      for (const [id, bag] of Object.entries(prev.bags)) all[id] = all[id] ? mergeBag(all[id], bag) : bag;
     }
-    const next = list.filter((e) => e.owner !== owner).concat([{ owner, at: new Date().toISOString(), bags }]);
-    if (!writeAside(next)) return false;
+    const next = list.filter((e) => e.owner !== owner).concat([{ owner, at: new Date().toISOString(), bags: all }]);
+    return writeAside(next);
+  }
+
+  /**
+   * Put this browser's practice from before the handover aside under the
+   * account that last synced it, and leave only what was done since in every
+   * profile. Nothing is cleared unless the copy put aside was stored.
+   *
+   * Everything used to go aside, and so the takes the person signed in saved
+   * while the question waited vanished from their record and their account,
+   * and reached the previous owner's account the next time it signed in here
+   * (RES-2). With no handover on record (a sign-in from before this build)
+   * everything goes aside, as it did.
+   * @param {string} owner The account the practice is put aside for.
+   * @param {string[]} ids Every profile on this browser.
+   * @param {number} since When this browser stopped being `owner`'s (ms), or 0.
+   * @returns {Object<string, object>|null} Per profile, what was kept here, or
+   *   null when nothing could be stored (and nothing was cleared).
+   */
+  function putAside(owner, ids, since) {
+    const bags = {};
+    const kept = {};
+    ids.forEach((id) => {
+      const parts = splitBag(global.VTStorage.readSyncBag(id), since);
+      if (bagHasPractice(parts.before)) bags[id] = parts.before;
+      if (bagHasPractice(parts.after)) kept[id] = parts.after;
+    });
+    if (!addAside(owner, bags)) return null;
     ids.forEach((id) => {
       global.VTStorage.clearProfileData(id);
-      pushedAt.set(id, version);
+      if (!kept[id]) {
+        pushedAt.set(id, version);
+        return;
+      }
+      global.VTStorage.writeSyncBag(kept[id], id);
+      version += 1;
+      changedAt.set(id, version);
     });
-    return true;
+    return kept;
+  }
+
+  /**
+   * The previous owner's part of this browser's practice goes aside for them,
+   * split at the handover when there is one on record for them.
+   * @param {string} me The account signed in.
+   * @param {string[]} ids Every profile on this browser.
+   * @returns {Object<string, object>|null} What putAside() kept here; {} when
+   *   the practice here is nobody else's.
+   */
+  function setAsideOwners(me, ids) {
+    const owner = readOwner();
+    if (!owner || owner === me) return {};
+    const h = readHandover();
+    return putAside(owner, ids, h && h.owner === owner ? ms(h.since) : 0);
+  }
+
+  /**
+   * Somebody who was asked whose this browser's practice is left without
+   * answering. What they did here since they signed in goes aside for them,
+   * and comes back when they sign in here again; the rest stays here as the
+   * previous owner's. Left in place, their takes reached the previous owner's
+   * account the next time it signed in here.
+   */
+  function setAsideLeaver() {
+    const h = readHandover();
+    if (!h || !h.me || readOwner() !== h.owner) return;
+    const theirs = {};
+    const rest = {};
+    for (const id of localProfileIds()) {
+      const parts = splitBag(global.VTStorage.readSyncBag(id), ms(h.since));
+      if (!bagHasPractice(parts.after)) continue;
+      theirs[id] = parts.after;
+      rest[id] = parts.before;
+    }
+    if (!Object.keys(theirs).length || !addAside(h.me, theirs)) return;
+    for (const [id, bag] of Object.entries(rest)) {
+      global.VTStorage.clearProfileData(id);
+      global.VTStorage.writeSyncBag(bag, id);
+      dataChanged(id);
+    }
   }
 
   /**
@@ -1369,14 +1602,16 @@
     const me = accountId();
     if (!isAvailable() || !me) return { ok: false, reason: "signed_out" };
     const token = sessionToken();
-    const owner = readOwner();
     const ids = localProfileIds();
-    if (owner && owner !== me && !putAside(owner, ids)) return { ok: false, reason: "storage" };
+    const kept = setAsideOwners(me, ids);
+    if (!kept) return { ok: false, reason: "storage" };
     writeOwner(me);
     if (lastError === "other_owner") lastError = null;
     let result = { ok: true };
     for (const id of ids) {
-      const res = await pullOverwrite(id, token);
+      // A profile with practice of this account's own merges into the
+      // account's copy; one without takes the account's copy as it is.
+      const res = kept[id] ? await syncNow(id) : await pullOverwrite(id, token);
       if (sessionMoved(token)) return sessionGone();
       if (!res.ok && res.reason !== "empty" && result.ok) result = res;
     }
@@ -1426,6 +1661,7 @@
       const arrived = !!token && token !== seenToken;
       seenToken = token;
       if (arrived) {
+        noteHandover();
         // Signing in is the moment a sync is most wanted: read the account
         // now. The quiet period is for batching writes, and making a sign-in
         // wait it out showed a returning learner an empty record (FLOW-7).

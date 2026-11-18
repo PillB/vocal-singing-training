@@ -66,6 +66,8 @@
   let timer = null;
   let running = null;
   let runningFor = null;
+  // The session the running cycle reads and writes as (RES-1).
+  let runningAs = null;
   let lastError = null;
   // The worker's own word for a refused write ("profile_limit"), so the panel
   // can say why instead of promising a retry that will not come.
@@ -238,6 +240,33 @@
     } catch {
       return false;
     }
+  }
+
+  /** The session token signed in now, or null. */
+  function sessionToken() {
+    try {
+      return global.VTAccount?.getSessionToken?.() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Whether the session a step started as is gone: signed out, or another
+   * account signed in on this browser while a request was out. Every await in
+   * a cycle is followed by this check, because what the request was for (one
+   * account's practice, read from or written to that account) is nobody's
+   * business once somebody else is signed in.
+   * @param {string|null} token The session the step started as.
+   * @returns {boolean} True when that session is no longer the one here.
+   */
+  function sessionMoved(token) {
+    return sessionToken() !== token;
+  }
+
+  /** What a step returns when its session went while it waited. */
+  function sessionGone() {
+    return { ok: false, reason: "signed_out" };
   }
 
   /** The signed-in account's id, once /v1/me has said; null before. */
@@ -567,21 +596,25 @@
   }
 
   /**
-   * Record the signed-in account as this browser's owner after a write it
-   * accepted. If /v1/me has not answered yet, ask it, and record the answer
-   * only if the same session is still the one signed in.
+   * Record the account a write was for as this browser's owner, once the
+   * account took it. That is the account of the session the write went out
+   * as, and only while that session is still the one here: one that left
+   * while the write was out says nothing about whoever signed in after it.
+   * If /v1/me has not answered yet, ask it, and record the answer under the
+   * same condition.
+   * @param {string|null} token The session the write went out as.
    */
-  function noteOwner() {
+  function noteOwner(token) {
+    if (sessionMoved(token)) return;
     const me = accountId();
     if (me) {
       writeOwner(me);
       return;
     }
-    const token = global.VTAccount?.getSessionToken?.();
     Promise.resolve(global.VTAccount?.refresh?.())
       .then(() => {
         const id = accountId();
-        if (id && !readOwner() && global.VTAccount?.getSessionToken?.() === token) writeOwner(id);
+        if (id && !readOwner() && !sessionMoved(token)) writeOwner(id);
       })
       .catch(() => {});
   }
@@ -630,10 +663,11 @@
    * @param {string} profileId Whose bag.
    * @param {object} pushed The PUT's answer.
    * @param {{serverRev: number, seen: number, merged: object}} step What mergePulled() returned.
+   * @param {string|null} token The session the write went out as.
    * @returns {{ok: true, rev: number|null}} Result.
    */
-  function pushAccepted(profileId, pushed, { serverRev, seen, merged }) {
-    noteOwner();
+  function pushAccepted(profileId, pushed, { serverRev, seen, merged }, token) {
+    noteOwner(token);
     writeRev(profileId, Number(pushed.data?.rev) || serverRev + 1);
     confirmed.set(profileId, { rev: Number(pushed.data?.rev) || serverRev + 1, doc: merged });
     pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
@@ -672,15 +706,109 @@
   }
 
   /**
-   * Run one read-merge-write cycle for one profile.
+   * Whose practice this is comes first: nothing of another account's is read
+   * into, merged with or sent to this one until somebody chooses.
+   * @param {string} token The session the cycle runs as.
+   * @returns {Promise<{ok: false, reason: string}|null>} What the cycle stops on, or null to go on.
+   */
+  async function ownerStop(token) {
+    let who = ownerState();
+    if (who.state === "unknown") {
+      const me = await global.VTAccount.refresh();
+      if (sessionMoved(token)) return sessionGone();
+      who = ownerState();
+      if (who.state === "unknown") {
+        lastError = me && me.reason === "offline" ? "offline" : "error";
+        return { ok: false, reason: lastError };
+      }
+    }
+    if (who.state === "other") return { ok: false, reason: "other_owner" };
+    if (who.me) {
+      writeOwner(who.me);
+      restoreAside(who.me);
+    }
+    return null;
+  }
+
+  /**
+   * Read the account's copy of one profile, as one session.
+   * @param {string} profileId Whose copy.
+   * @param {string} token The session to read as.
+   * @returns {Promise<object>} The GET's answer.
+   */
+  function readAccount(profileId, token) {
+    return global.VTAccount.request(
+      "GET",
+      `/v1/me/progress?profileId=${encodeURIComponent(profileId)}`,
+      null,
+      { timeoutMs: REQUEST_TIMEOUT_MS, token }
+    );
+  }
+
+  /**
+   * The read-merge-write cycle itself, as one session from end to end.
    *
    * The server's `409` is the whole concurrency story: it means the stored
    * revision moved while we were thinking, so we take its copy, merge, and try
    * again rather than overwriting somebody's evening.
    *
+   * Each request goes out as the session the cycle started as, and after each
+   * one the cycle stops if that session has gone. A request that took the
+   * session current when it was sent wrote one account's practice into the
+   * next account signed in on this browser, over that account's own copy when
+   * the two revisions happened to match (RES-1).
+   *
+   * @param {string} profileId Profile to sync.
+   * @param {string} token The session the cycle runs as.
+   * @returns {Promise<{ok: boolean, reason?: string, rev?: number}>} Result.
+   */
+  async function runCycle(profileId, token) {
+    const stop = await ownerStop(token);
+    if (stop) return stop;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      const pulled = await readAccount(profileId, token);
+      if (sessionMoved(token)) return sessionGone();
+      const halt = pullStop(pulled, profileId);
+      if (halt) return halt;
+
+      const step = mergePulled(profileId, pulled);
+      const pushed = await global.VTAccount.request(
+        "PUT",
+        "/v1/me/progress",
+        { profileId, doc: step.merged, baseRev: step.serverRev },
+        { timeoutMs: REQUEST_TIMEOUT_MS, token }
+      );
+      // The write went to the account that made it; whoever is here now is not told it was theirs.
+      if (sessionMoved(token)) return sessionGone();
+      if (pushed.ok) return pushAccepted(profileId, pushed, step, token);
+      const failed = pushFailed(pushed);
+      if (failed) return failed;
+    }
+    lastError = "conflict";
+    emit();
+    return { ok: false, reason: "conflict" };
+  }
+
+  /**
+   * A cycle that threw (a merge meeting a shape it did not expect) failed like
+   * any other: the panel stops saying "saved" and the retry is armed. It used
+   * to reject past every caller, and the panel kept its last "saved" (RES-4).
+   * @param {unknown} err What was thrown.
+   * @returns {{ok: false, reason: "error"}} Result.
+   */
+  function cycleThrew(err) {
+    console.warn(err);
+    lastError = "error";
+    return { ok: false, reason: "error" };
+  }
+
+  /**
+   * Run one read-merge-write cycle for one profile.
+   *
    * The cycle reads and writes the profile it started for, by name. Following
    * the active profile instead mixed two people's practice when the learner
-   * switched profile while the request was out.
+   * switched profile while the request was out. It reads and writes as the
+   * session it started as, for the same reason (see runCycle).
    *
    * @param {string} [id] Profile to sync; the active one when omitted.
    * @returns {Promise<{ok: boolean, reason?: string, rev?: number}>} Result.
@@ -692,12 +820,13 @@
     // was written after it read the bag. That write is not in what it pushes,
     // and this ask is the write's own timer running out (or the hidden-tab
     // flush that cancelled it), so nothing else would ask again: go round once
-    // more for it.
+    // more for it. Nor is it shared when it ran as a session that has since
+    // gone: what it did was for the account that left.
     while (running) {
       const cycle = running;
-      const same = runningFor === profileId;
-      const result = await cycle.catch(() => null);
-      if (same && !(result && result.ok && unpushed(profileId))) return cycle;
+      const sharedAs = runningFor === profileId ? runningAs : undefined;
+      const result = await cycle;
+      if (sharedAs === sessionToken() && !(result && result.ok && unpushed(profileId))) return cycle;
     }
     if (!isAvailable()) return { ok: false, reason: "signed_out" };
     // A profile deleted while this waited has nothing left to sync, and its bag
@@ -707,50 +836,10 @@
     // Every change up to here can be in what this cycle sends; one made while
     // it is out may not be (see standingRefusal).
     const before = version;
+    const token = sessionToken();
     runningFor = profileId;
-    running = (async () => {
-      // Whose practice this is comes first: nothing of another account's is
-      // read into, merged with or sent to this one until somebody chooses.
-      let who = ownerState();
-      if (who.state === "unknown") {
-        const me = await global.VTAccount.refresh();
-        if (!isAvailable()) return { ok: false, reason: "signed_out" };
-        who = ownerState();
-        if (who.state === "unknown") {
-          lastError = me && me.reason === "offline" ? "offline" : "error";
-          return { ok: false, reason: lastError };
-        }
-      }
-      if (who.state === "other") return { ok: false, reason: "other_owner" };
-      if (who.me) {
-        writeOwner(who.me);
-        restoreAside(who.me);
-      }
-      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-        const pulled = await global.VTAccount.request(
-          "GET",
-          `/v1/me/progress?profileId=${encodeURIComponent(profileId)}`,
-          null,
-          { timeoutMs: REQUEST_TIMEOUT_MS }
-        );
-        const stop = pullStop(pulled, profileId);
-        if (stop) return stop;
-
-        const step = mergePulled(profileId, pulled);
-        const pushed = await global.VTAccount.request(
-          "PUT",
-          "/v1/me/progress",
-          { profileId, doc: step.merged, baseRev: step.serverRev },
-          { timeoutMs: REQUEST_TIMEOUT_MS }
-        );
-        if (pushed.ok) return pushAccepted(profileId, pushed, step);
-        const failed = pushFailed(pushed);
-        if (failed) return failed;
-      }
-      lastError = "conflict";
-      emit();
-      return { ok: false, reason: "conflict" };
-    })();
+    runningAs = token;
+    running = runCycle(profileId, token).catch(cycleThrew);
 
     let result = null;
     try {
@@ -759,6 +848,7 @@
     } finally {
       running = null;
       runningFor = null;
+      runningAs = null;
       noteRefusal(profileId, result, before);
       retryIfFailed(result);
       // The emits above run while `running` is still set, so every listener
@@ -929,15 +1019,16 @@
    * @param {string} [id] Profile to pull; the active one when omitted.
    * @returns {Promise<{ok: boolean, reason?: string}>} Result.
    */
-  async function pullOverwrite(id) {
+  async function pullOverwrite(id, asToken) {
     if (!isAvailable()) return { ok: false, reason: "signed_out" };
+    // As one session, like a cycle: an answer landing after somebody else
+    // signed in is the last account's copy, and kept here with its revision it
+    // would arm the closing page's write with that account's base.
+    const token = asToken || sessionToken();
+    if (sessionMoved(token)) return sessionGone();
     const profileId = id || global.VTStorage.getActiveProfileId();
-    const pulled = await global.VTAccount.request(
-      "GET",
-      `/v1/me/progress?profileId=${encodeURIComponent(profileId)}`,
-      null,
-      { timeoutMs: REQUEST_TIMEOUT_MS }
-    );
+    const pulled = await readAccount(profileId, token);
+    if (sessionMoved(token)) return sessionGone();
     if (!pulled.ok) return { ok: false, reason: pulled.offline ? "offline" : "error" };
     if (!pulled.data?.doc) return { ok: false, reason: "empty" };
     if (deleted(profileId)) return { ok: false, reason: "deleted" };
@@ -961,6 +1052,7 @@
   async function addDeviceToAccount() {
     const me = accountId();
     if (!isAvailable() || !me) return { ok: false, reason: "signed_out" };
+    const token = sessionToken();
     writeOwner(me);
     if (lastError === "other_owner") lastError = null;
     emit();
@@ -970,8 +1062,38 @@
     for (const id of [active, ...ids.filter((x) => x !== active)]) {
       const res = await syncNow(id);
       if (!first) first = res;
+      // Whoever chose is gone: the next account is asked for itself.
+      if (sessionMoved(token)) return first.ok ? sessionGone() : first;
     }
     return first || { ok: true };
+  }
+
+  /**
+   * Put this browser's practice aside under the account that last synced it,
+   * merged with whatever that account already had aside here, and clear it
+   * from every profile. Nothing is cleared unless the copy put aside was stored.
+   * @param {string} owner The account the practice is put aside for.
+   * @param {string[]} ids Every profile on this browser.
+   * @returns {boolean} Whether it was stored (and cleared).
+   */
+  function putAside(owner, ids) {
+    const bags = {};
+    ids.forEach((id) => {
+      const bag = global.VTStorage.readSyncBag(id);
+      if (bagHasPractice(bag)) bags[id] = bag;
+    });
+    const list = readAside();
+    const prev = list.find((e) => e.owner === owner);
+    if (prev) {
+      for (const [id, bag] of Object.entries(prev.bags)) bags[id] = bags[id] ? mergeBag(bags[id], bag) : bag;
+    }
+    const next = list.filter((e) => e.owner !== owner).concat([{ owner, at: new Date().toISOString(), bags }]);
+    if (!writeAside(next)) return false;
+    ids.forEach((id) => {
+      global.VTStorage.clearProfileData(id);
+      pushedAt.set(id, version);
+    });
+    return true;
   }
 
   /**
@@ -985,31 +1107,16 @@
   async function useAccountOnly() {
     const me = accountId();
     if (!isAvailable() || !me) return { ok: false, reason: "signed_out" };
+    const token = sessionToken();
     const owner = readOwner();
     const ids = localProfileIds();
-    if (owner && owner !== me) {
-      const bags = {};
-      ids.forEach((id) => {
-        const bag = global.VTStorage.readSyncBag(id);
-        if (bagHasPractice(bag)) bags[id] = bag;
-      });
-      const list = readAside();
-      const prev = list.find((e) => e.owner === owner);
-      if (prev) {
-        for (const [id, bag] of Object.entries(prev.bags)) bags[id] = bags[id] ? mergeBag(bags[id], bag) : bag;
-      }
-      const next = list.filter((e) => e.owner !== owner).concat([{ owner, at: new Date().toISOString(), bags }]);
-      if (!writeAside(next)) return { ok: false, reason: "storage" };
-      ids.forEach((id) => {
-        global.VTStorage.clearProfileData(id);
-        pushedAt.set(id, version);
-      });
-    }
+    if (owner && owner !== me && !putAside(owner, ids)) return { ok: false, reason: "storage" };
     writeOwner(me);
     if (lastError === "other_owner") lastError = null;
     let result = { ok: true };
     for (const id of ids) {
-      const res = await pullOverwrite(id);
+      const res = await pullOverwrite(id, token);
+      if (sessionMoved(token)) return sessionGone();
       if (!res.ok && res.reason !== "empty" && result.ok) result = res;
     }
     // After the pull, never before: a pull overwrites, and what this account

@@ -756,7 +756,7 @@ export const MUTANTS = {
       // Site data blocked (cross-04): the boot shows the open tab's whole catalogue, counted from the catalogue (main's voice drills made it 24, not 20)
       ["D15 the exercise list leaves one exercise out: a boot with site data blocked shows 23 of 24", "js/app.js", "const exercises = catalogOrder(filteredExercises());", "const exercises = catalogOrder(filteredExercises()).slice(1);", "tests/redteam-boot-a11y-privacy.spec.js", "cross-04"],
       // PR #39 review (Codex, P1): "Usar solo la de mi cuenta" on the returning account's own browser
-      ["D16 the returning account's put-aside takes are restored before its pull, which overwrites them: a take that never reached the account is lost", "js/sync.js", "    let result = { ok: true };\n    for (const id of ids) {\n      const res = await pullOverwrite(id);", "    restoreAside(me);\n    let result = { ok: true };\n    for (const id of ids) {\n      const res = await pullOverwrite(id);", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"],
+      ["D16 the returning account's put-aside takes are restored before its pull, which overwrites them: a take that never reached the account is lost", "js/sync.js", "    let result = { ok: true };\n    for (const id of ids) {\n      const res = await pullOverwrite(id, token);", "    restoreAside(me);\n    let result = { ok: true };\n    for (const id of ids) {\n      const res = await pullOverwrite(id, token);", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"],
       ["D17 the put-aside takes are restored but nothing sends them: they wait on this shared browser for the account's next save", "js/sync.js", "    if (restoreAside(me)) schedule();\n", "    restoreAside(me);\n", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"],
       // PR #39 review (RT3): a count against whichever tab is open let a blocked boot land on the wrong tab
       ["D18 a browser with no stored settings opens the singing tab: a blocked boot shows the wrong list, whole", "js/storage.js", '      return read(LS.settings, { lastTab: "vocal", maleRange: true });', '      return read(LS.settings, { lastTab: "singing", maleRange: true });', "tests/redteam-boot-a11y-privacy.spec.js", "cross-04"],
@@ -1098,6 +1098,16 @@ export const MUTANTS = {
   // multi-step writes made single batches (audit WH-*, KV-*, D1-*, SW-1, SC-1). Node only, so it
   // runs in the contracts job with the default sets. "Sequential" mutants replace a D1 batch (one
   // transaction) with the same statements run one by one, which is what the code did before.
+  // The client sync on a shared browser and against a malformed account copy (red-team round of 2026-11-18,
+  // findings RES-1/2/4/5/6/7, FLOW-6/7, CXSS-1 part 2). Each mutant runs only the node test written for it,
+  // against the real js/storage.js, js/account.js and js/sync.js and the real worker router (tests/node/sync-env.mjs).
+  syncing: [
+    ["SY1 a write answered after the account changed is recorded as the next account's", "js/sync.js", "      // The write went to the account that made it; whoever is here now is not told it was theirs.\n      if (sessionMoved(token)) return sessionGone();\n", "", "sync-account-switch"],
+    ["SY2 each request of a cycle goes out as whichever session is current, and nothing checks between them (RES-1)", "js/sync.js", "      const pulled = await readAccount(profileId, token);\n      if (sessionMoved(token)) return sessionGone();\n      const halt = pullStop(pulled, profileId);\n      if (halt) return halt;\n\n      const step = mergePulled(profileId, pulled);\n      const pushed = await global.VTAccount.request(\n        \"PUT\",\n        \"/v1/me/progress\",\n        { profileId, doc: step.merged, baseRev: step.serverRev },\n        { timeoutMs: REQUEST_TIMEOUT_MS, token }\n      );\n      // The write went to the account that made it; whoever is here now is not told it was theirs.\n      if (sessionMoved(token)) return sessionGone();\n", "      const pulled = await readAccount(profileId, null);\n      const halt = pullStop(pulled, profileId);\n      if (halt) return halt;\n\n      const step = mergePulled(profileId, pulled);\n      const pushed = await global.VTAccount.request(\n        \"PUT\",\n        \"/v1/me/progress\",\n        { profileId, doc: step.merged, baseRev: step.serverRev },\n        { timeoutMs: REQUEST_TIMEOUT_MS }\n      );\n", "sync-account-switch"],
+    ["SY3 a read answered after the account changed is merged into this browser: the last account's other devices show to the next", "js/sync.js", "      const pulled = await readAccount(profileId, token);\n      if (sessionMoved(token)) return sessionGone();\n      const halt", "      const pulled = await readAccount(profileId, token);\n      const halt", "sync-account-switch"],
+    ["SY4 'use my saved progress' answered after the account changed is kept with the last account's revision", "js/sync.js", "    const pulled = await readAccount(profileId, token);\n    if (sessionMoved(token)) return sessionGone();\n    if (!pulled.ok)", "    const pulled = await readAccount(profileId, token);\n    if (!pulled.ok)", "sync-account-switch"],
+    ["SY5 the next account's sync is handed the result of the last account's cycle", "js/sync.js", "      if (sharedAs === sessionToken() && !(result", "      if (sharedAs !== undefined && !(result", "sync-account-switch"]
+  ].map(([name, file, from, to, test]) => ({ name, file, from, to, cmd: node([`tests/node/${test}.test.mjs`]) })),
   ledger: [
     ["LG1 the first validation chunk always passes: a stale read commits", "src/ledger.js", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed})", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed}) OR 1", "ledger"],
     ["LG2 later validation chunks are ignored", "src/ledger.js", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed})", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed}) AND 0", "ledger"],
@@ -1251,7 +1261,7 @@ export const MUTANTS = {
   }))
 };
 
-export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger"];
+export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger", "syncing"];
 
 /** What the last failing command printed, so a red baseline in CI says which test failed. */
 let lastFailure = "";

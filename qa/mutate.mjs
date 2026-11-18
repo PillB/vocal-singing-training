@@ -1094,6 +1094,19 @@ export const MUTANTS = {
       ? node([spec])
       : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
   })),
+  // The learner's flows (red team 2026-11-18, FLOW-1 to FLOW-10): a take thrown away unasked, a paused step
+  // restarted, focus lost in a dialog, no way to report from the exercise, a trial forgotten after sign-in.
+  // Each mutant puts one defect back and is judged by the test in tests/learner-flows.spec.js written for it.
+  learner: [
+    ["LF1 a started short take is told to press Start first", "js/app.js", 'return tt(s === 1 ? "rate.practiceMore_one" : "rate.practiceMore", { s });', 'return tt("rate.practiceFirst", { s });', "FLOW-10"],
+    ["LF2 one more second reads in the plural", "js/app.js", 'tt(s === 1 ? "rate.practiceMore_one" : "rate.practiceMore", { s })', 'tt("rate.practiceMore", { s })', "FLOW-10"]
+  ].map(([name, file, from, to, grep]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: [...PIANO_SPEC.slice(0, 3), "tests/learner-flows.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", grep]
+  })),
   // The payment ledger in D1 (one optimistic transaction per webhook) and the account layer's
   // multi-step writes made single batches (audit WH-*, KV-*, D1-*, SW-1, SC-1). Node only, so it
   // runs in the contracts job with the default sets. "Sequential" mutants replace a D1 batch (one

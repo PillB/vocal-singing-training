@@ -84,6 +84,8 @@
   let failures = 0;
   // The owner this page recorded when storage would not keep it (see writeOwner).
   let ownerKept = null;
+  // The last restoreAside()'s recordings coming back (see giveRecordingsBack).
+  let recordingsBack = Promise.resolve(0);
   // The session signed in on this page a moment ago whose account has not been
   // read yet: the panel says "fetching" rather than "never saved" (FLOW-7).
   let fetchingFor = null;
@@ -441,6 +443,7 @@
     const list = readAside();
     const entry = list.find((e) => e.owner === me);
     if (!entry) return false;
+    recordingsBack = giveRecordingsBack(me);
     const left = {};
     let restored = false;
     for (const [profileId, bag] of Object.entries(entry.bags)) {
@@ -460,6 +463,40 @@
     if (Object.keys(left).length) rest.push({ ...entry, bags: left });
     writeAside(rest);
     return restored;
+  }
+
+  /**
+   * Set this browser's recorded takes aside with the rest of its practice
+   * (RES-7). They live in IndexedDB, apart from the bags; a failure leaves
+   * them listed, and says so in the console, rather than failing the answer.
+   * @param {string} owner Whose they are.
+   * @param {{from?: number, to?: number}} range When they were made (ms).
+   * @returns {Promise<number>} How many were set aside.
+   */
+  async function recordingsAside(owner, range) {
+    try {
+      return (await global.VTStorage.setRecordingsAside?.(owner, range)) || 0;
+    } catch (err) {
+      console.warn(err);
+      return 0;
+    }
+  }
+
+  /**
+   * Give back the recorded takes set aside for this account, and redraw what
+   * lists them once they are back.
+   * @param {string} me The account signed in.
+   * @returns {Promise<number>} How many came back.
+   */
+  async function giveRecordingsBack(me) {
+    try {
+      const n = (await global.VTStorage.restoreRecordings?.(me)) || 0;
+      if (n) dataChanged(global.VTStorage.getActiveProfileId());
+      return n;
+    } catch (err) {
+      console.warn(err);
+      return 0;
+    }
   }
 
   /**
@@ -1554,14 +1591,19 @@
    * split at the handover when there is one on record for them.
    * @param {string} me The account signed in.
    * @param {string[]} ids Every profile on this browser.
-   * @returns {Object<string, object>|null} What putAside() kept here; {} when
-   *   the practice here is nobody else's.
+   * @returns {Promise<Object<string, object>|null>} What putAside() kept
+   *   here; {} when the practice here is nobody else's.
    */
-  function setAsideOwners(me, ids) {
+  async function setAsideOwners(me, ids) {
     const owner = readOwner();
     if (!owner || owner === me) return {};
     const h = readHandover();
-    return putAside(owner, ids, h && h.owner === owner ? ms(h.since) : 0);
+    const since = h && h.owner === owner ? ms(h.since) : 0;
+    const kept = putAside(owner, ids, since);
+    // The recordings go with the rest: "ves solo la práctica de tu cuenta"
+    // was said while the last owner's takes still played here (RES-7).
+    if (kept) await recordingsAside(owner, since ? { to: since } : {});
+    return kept;
   }
 
   /**
@@ -1583,6 +1625,7 @@
       rest[id] = parts.before;
     }
     if (!Object.keys(theirs).length || !addAside(h.me, theirs)) return;
+    recordingsAside(h.me, { from: ms(h.since) });
     for (const [id, bag] of Object.entries(rest)) {
       global.VTStorage.clearProfileData(id);
       global.VTStorage.writeSyncBag(bag, id);
@@ -1603,7 +1646,8 @@
     if (!isAvailable() || !me) return { ok: false, reason: "signed_out" };
     const token = sessionToken();
     const ids = localProfileIds();
-    const kept = setAsideOwners(me, ids);
+    const kept = await setAsideOwners(me, ids);
+    if (sessionMoved(token)) return sessionGone();
     if (!kept) return { ok: false, reason: "storage" };
     writeOwner(me);
     if (lastError === "other_owner") lastError = null;
@@ -1619,6 +1663,7 @@
     // left here may hold takes that never reached it. Restoring merges them
     // into the account's copy, and they are sent without waiting for a save.
     if (restoreAside(me)) schedule();
+    await recordingsBack;
     dataChanged(global.VTStorage.getActiveProfileId());
     emit();
     return result;

@@ -309,3 +309,90 @@ test.describe("The account panel says where the practice is", () => {
     await expect(page.locator("#account-sync")).not.toHaveText("Aún no guardado en tu cuenta.");
   });
 });
+
+// RES-7. "Usar solo la de mi cuenta" said "Listo: ves solo la práctica de tu
+// cuenta." while the last account's recorded takes were still listed and
+// played here: recordings live in IndexedDB, apart from what was put aside.
+// They now go aside with the rest of that practice and come back with it.
+test.describe("A shared browser: the recordings go with the practice", () => {
+  test.use({ viewport: { width: 1280, height: 800 }, locale: "es-PE" });
+
+  /** Keep one recorded take on this browser, labelled `label`; its id. */
+  function saveRecording(page, label) {
+    return page.evaluate(async (l) => {
+      const blob = new Blob([new Uint8Array([1, 2, 3, 4])], { type: "audio/webm" });
+      return (await window.VTStorage.saveRecording({ exerciseId: "v2-volume", blob, label: l })).id;
+    }, label);
+  }
+
+  /** The labels of the recorded takes this browser lists for the active profile. */
+  function listed(page) {
+    return page.evaluate(async () => (await window.VTStorage.listRecordings()).map((r) => r.label).sort());
+  }
+
+  /** Salir from the open panel, then sign in as `email` through the code form. */
+  async function switchTo(page, email, id) {
+    await openPanel(page);
+    await page.click("#btn-logout");
+    await expect(page.locator("#account-logged-out")).toBeVisible({ timeout: 8000 });
+    await signInByCode(page, email);
+    await page.waitForFunction((who) => window.VTAccount.getState().account?.id === who, id);
+  }
+
+  /** Answer "Usar solo la de mi cuenta" in the panel. */
+  async function useMine(page) {
+    await expect(page.locator("#account-other-owner")).toBeVisible();
+    await page.click("#btn-owner-mine");
+    await expect(page.locator("#account-other-owner")).toBeHidden();
+  }
+
+  test("Bruno does not see or play Ana's recording once he answers, keeps his own, and Ana gets hers back", async ({ page }) => {
+    const worker = createWorker();
+    const ana = PEOPLE["ana@example.test"];
+    const bruno = PEOPLE["bruno@example.test"];
+    await bootAsAna(page, worker);
+    await saveTake(page, "ana-take-1");
+    const anaRec = await saveRecording(page, "ana-voice");
+    expect((await page.evaluate(() => window.VTSync.syncNow())).ok).toBe(true);
+
+    await switchTo(page, bruno.email, bruno.id);
+    // He records a take of his own before answering: it stays his (RES-2).
+    await saveTake(page, "bruno-take-1");
+    await saveRecording(page, "bruno-voice");
+    await useMine(page);
+    expect(await listed(page)).toEqual(["bruno-voice"]);
+    expect(await page.evaluate((id) => window.VTStorage.getRecordingBlob(id).then((b) => b === null), anaRec)).toBe(true);
+    expect(await page.evaluate((id) => window.VTStorage.deleteRecording(id), anaRec)).toBe(false);
+
+    // Ana comes back. Bruno's practice is on the laptop now, so she is asked in turn.
+    await switchTo(page, ana.email, ana.id);
+    await useMine(page);
+    expect(await listed(page)).toEqual(["ana-voice"]);
+    expect(await page.evaluate((id) => window.VTStorage.getRecordingBlob(id).then((b) => b && b.size), anaRec)).toBe(4);
+  });
+
+  test("Bruno leaves without answering: Ana does not see his recording, and he gets it back", async ({ page }) => {
+    const worker = createWorker();
+    const ana = PEOPLE["ana@example.test"];
+    const bruno = PEOPLE["bruno@example.test"];
+    await bootAsAna(page, worker);
+    await saveTake(page, "ana-take-1");
+    await saveRecording(page, "ana-voice");
+    expect((await page.evaluate(() => window.VTSync.syncNow())).ok).toBe(true);
+
+    await switchTo(page, bruno.email, bruno.id);
+    await expect(page.locator("#account-other-owner")).toBeVisible();
+    await saveTake(page, "bruno-take-1");
+    await saveRecording(page, "bruno-voice");
+
+    // Control: the laptop is still Ana's, so she is not asked, and her recording is there.
+    await switchTo(page, ana.email, ana.id);
+    await expect.poll(() => page.evaluate(() => window.VTSync.getStatus().syncing)).toBe(false);
+    await expect(page.locator("#account-other-owner")).toBeHidden();
+    expect(await listed(page)).toEqual(["ana-voice"]);
+
+    await switchTo(page, bruno.email, bruno.id);
+    await useMine(page);
+    expect(await listed(page)).toEqual(["bruno-voice"]);
+  });
+});

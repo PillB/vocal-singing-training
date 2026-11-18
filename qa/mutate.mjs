@@ -1140,7 +1140,14 @@ export const MUTANTS = {
     ["SY35 the newcomer's part has no day ledger: the day they practised is not counted", "js/sync.js", "    after.days = daysOf(after);", "    after.days = null;", "sync-handover"],
     ["SY36 the last owner's day ledger keeps the newcomer's time", "js/sync.js", "      days: lessDays(b.days, after.days)", "      days: b.days", "sync-handover"],
     ["SY37 the leaver's part is taken from a browser that is already theirs", "js/sync.js", "    if (!h || !h.me || readOwner() !== h.owner) return;", "    if (!h || !h.me) return;", "sync-handover"],
-    ["SY38 an owner signing in again on her own browser is a handover: signing out puts her practice aside", "js/sync.js", "    writeHandover(owner && owner !== me ? { owner, me, since: new Date().toISOString() } : null);", "    writeHandover(owner ? { owner, me, since: new Date().toISOString() } : null);", "sync-handover"]
+    ["SY38 an owner signing in again on her own browser is a handover: signing out puts her practice aside", "js/sync.js", "    writeHandover(owner && owner !== me ? { owner, me, since: new Date().toISOString() } : null);", "    writeHandover(owner ? { owner, me, since: new Date().toISOString() } : null);", "sync-handover"],
+    ["SY39 a recording set aside is still listed and played (RES-7)", "js/storage.js", "    return !!record && recordingProfile(record) === active && !record.asideFor;", "    return !!record && recordingProfile(record) === active;", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY40 'Usar solo la de mi cuenta' leaves the last owner's recordings where they were", "js/sync.js", "    if (kept) await recordingsAside(owner, since ? { to: since } : {});\n", "", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY41 the newcomer's own recordings go aside with the last owner's", "js/sync.js", "    if (kept) await recordingsAside(owner, since ? { to: since } : {});", "    if (kept) await recordingsAside(owner, {});", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY42 recordings set aside never come back to their account", "js/sync.js", "    recordingsBack = giveRecordingsBack(me);\n", "", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY43 leaving without answering leaves the leaver's recordings for the last owner to see", "js/sync.js", "    recordingsAside(h.me, { from: ms(h.since) });\n", "", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY44 the leaver's recordings are taken with everything recorded before them", "js/storage.js", "        if (r.asideFor || (range.from && at < range.from) || (range.to && at >= range.to)) return null;", "        if (r.asideFor || (range.to && at >= range.to)) return null;", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY45 a recording set aside still plays by its id", "js/storage.js", "          if (!shown(r, active)) return resolve(null);", "          if (!r || recordingProfile(r) !== active) return resolve(null);", "sync-shared-browser.spec.js", "recordings go with"]
   ].map(([name, file, from, to, test, grep]) => ({
     name,
     file,

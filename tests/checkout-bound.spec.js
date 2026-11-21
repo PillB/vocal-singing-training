@@ -77,12 +77,14 @@ async function meBody(state, license) {
     : null;
   const ent = state.entitlement || paid || { pro: false, plan: null, status: "free", source: null, periodEnd: null };
   const token = ent.pro ? await license.sign({ ...licenceClaims(ACCOUNT.id), source: ent.source, provider: ent.provider }) : null;
-  return { ok: true, account: ACCOUNT, entitlement: ent, grants: [], paid: [], licenseId: ent.pro ? LIC : null, token };
+  const billingRails = state.billingRails || [];
+  return { ok: true, account: ACCOUNT, entitlement: ent, grants: [], paid: [], licenseId: ent.pro ? LIC : null, token, billingRails };
 }
 
 /** `/v1/me/link`, as the real route answers: 202 before the webhook, the account after. */
 async function linkAnswer(state, body, license) {
   state.links.push(body);
+  if (state.linkDelayMs) await new Promise((r) => setTimeout(r, state.linkDelayMs));
   if (state.linkAnswer) return state.linkAnswer;
   if (body.sessionId && !state.landed) return [202, { ok: false, reason: "pending" }];
   if (!state.linked) state.linkedAt = Date.now();
@@ -120,20 +122,42 @@ async function answer(state, license, request) {
     body = {};
   }
   if (path === "/v1/events") return [200, { ok: true }];
-  if (path === "/v1/health") return [200, health()];
-  if (path === "/v1/auth/methods") return [200, { ok: true, email: true, google: false, googleClientId: null, trialDays: 7 }];
+  if (path === "/v1/health") return [200, health(state)];
+  if (path === "/v1/auth/methods") return [200, { ok: true, ...authMethods(state) }];
   if (path === "/v1/claim") return claimAnswer(state, license);
   const signedIn = (request.headers().authorization || "") === `Bearer ${SESSION}`;
   if (path.startsWith("/v1/me") && !signedIn) return [401, { ok: false, reason: "no_session" }];
-  if (path === "/v1/me") return [200, await meBody(state, license)];
+  if (path === "/v1/me") return meAnswer(state, license);
   if (path === "/v1/me/link") return linkAnswer(state, body, license);
   if (path === "/v1/me/checkout" || path === "/v1/me/billing-portal") return payAnswer(state, path, body);
   if (path === "/v1/me/progress") return [200, { ok: true, profiles: [], rev: 0, doc: null, updatedAt: 1 }];
   return [404, { ok: false, reason: "not_found" }];
 }
 
+/** `/v1/me`, held until the first link request when the case asks for it. */
+async function meAnswer(state, license) {
+  if (state.meWaitsForLink) await firstLink(state);
+  return [200, await meBody(state, license)];
+}
+
+/**
+ * Until the first link request has arrived, or 5 s. Holding the load's
+ * `/v1/me` this long makes the order certain: the return page's link is out
+ * before the load's own retry, which follows `/v1/me`, is sent.
+ */
+async function firstLink(state) {
+  for (let waited = 0; !state.links.length && waited < 5000; waited += 50) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
+/** How the stand-in worker signs people in: emailed codes, unless the case says otherwise. */
+function authMethods(state) {
+  return state.authMethods || { email: true, google: false, googleClientId: null, trialDays: 7 };
+}
+
 /** The worker's health, with the two routes this file is about switched on. */
-function health() {
+function health(state) {
   return {
     ok: true,
     signingKeyConfigured: true,
@@ -142,7 +166,7 @@ function health() {
     creemCheckoutConfigured: true,
     creemPortalConfigured: true,
     mercadopagoConfigured: true,
-    authMethods: { email: true, google: false, googleClientId: null, trialDays: 7 },
+    authMethods: authMethods(state),
     siteOrigin: BASE
   };
 }
@@ -153,7 +177,7 @@ function health() {
  * @param {import('@playwright/test').Page} page Page.
  * @param {object} state From `freshState`.
  * @param {object} license From `mintLicense`.
- * @param {{config?: object, stored?: string, pending?: object}} [opts] Extras.
+ * @param {{config?: object, stored?: string, pending?: object, signedOut?: boolean}} [opts] Extras.
  */
 async function install(page, state, license, opts) {
   const o = opts || {};
@@ -184,7 +208,7 @@ async function install(page, state, license, opts) {
       sessionStorage.setItem("vt_debug", "1");
       if (!sessionStorage.getItem("vt_seeded")) {
         sessionStorage.setItem("vt_seeded", "1");
-        localStorage.setItem("vt_account_session_v1", JSON.stringify({ token: seed.session, expiresAt: 4102444800 }));
+        if (seed.session) localStorage.setItem("vt_account_session_v1", JSON.stringify({ token: seed.session, expiresAt: 4102444800 }));
         if (seed.stored) {
           localStorage.setItem("vt_license_v1", JSON.stringify({ licenseId: seed.lic, token: seed.stored, storedAt: new Date().toISOString() }));
         }
@@ -193,7 +217,7 @@ async function install(page, state, license, opts) {
     } catch {
       /* ignore */
     }
-  }, { session: SESSION, stored: o.stored || null, lic: LIC, pending: o.pending || null });
+  }, { session: o.signedOut ? null : SESSION, stored: o.stored || null, lic: LIC, pending: o.pending || null });
   return { navigations };
 }
 
@@ -238,13 +262,19 @@ test.describe("VG-83: a purchase made while signed in reaches the account howeve
 
   test("a link still pending when the tab closes is tried again on the next load", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
-    const state = freshState({ claimsPendForever: true });
+    // The load's /v1/me waits for the return's link, and the link is slow to
+    // answer, so the load's retry is certain to come while the first is out.
+    // Left to timing, the two missed each other on some runs, and a page that
+    // sent both passed.
+    const state = freshState({ claimsPendForever: true, meWaitsForLink: true, linkDelayMs: 400 });
     await install(page, state, license);
     await open(page, "?billing=success&checkout_id=ch_1");
     await expect.poll(() => state.links.length, { timeout: 5000 }).toBeGreaterThan(0);
     // The return and the load's own retry asked at once: one request answers both
     // (the next in-page retry is 4 s away).
     await page.waitForTimeout(1500);
+    // Off for the next visit, which should link at once.
+    Object.assign(state, { meWaitsForLink: false, linkDelayMs: 0 });
     expect(state.links).toHaveLength(1);
     const kept = await page.evaluate(() => JSON.parse(localStorage.getItem("vt_pending_link_v1") || "null"));
     expect(kept).toMatchObject({ provider: "creem", sessionId: "ch_1" });
@@ -357,6 +387,11 @@ test.describe("a checkout the worker opens for the account", () => {
     ];
     for (const [reply, said] of cases) {
       state.checkoutAnswer = reply;
+      // Emptied first: the last two cases say the same words, so the third
+      // passed on the second's toast even when its own press said nothing.
+      await page.evaluate(() => {
+        document.querySelector("#toast").textContent = "";
+      });
       await cta.click();
       await expect(page.locator("#toast")).toContainText(said);
       await expect(cta).not.toHaveAttribute("aria-busy", "true");
@@ -419,6 +454,37 @@ test.describe("VG-86: a Creem subscriber cancels from inside the site", () => {
     expect(navigations).toEqual([]);
   });
 
+  test("a renewal still being retried after the paid month: no Pro, the button stays, and the line says why", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    // The worker's /v1/me: no entitlement, and a Creem subscription not over (CK15).
+    const state = freshState({ landed: true, billingRails: ["creem"] });
+    const { navigations } = await install(page, state, license, ON_SALE);
+    await open(page, "");
+    await expect.poll(() => page.evaluate(() => window.VTAccount.getState().billingRails)).toEqual(["creem"]);
+    expect(await licenceNow(page)).toEqual({ pro: false, provider: null, accountId: null });
+    await openPricing(page);
+    const note = page.locator("#pricing-cancel-note");
+    // Wrong (before): no Pro, so no button and no line, for the subscriber
+    // whose card is still being charged.
+    await expect(page.locator("#btn-manage-billing")).toBeVisible();
+    await expect(note).toBeVisible();
+    await expect(note).toHaveAttribute("data-i18n", "pricing.cancel.lapsed");
+    await expect(note).toContainText(/still open, but Pro is off/);
+    await page.locator("#btn-manage-billing").click();
+    await page.waitForURL(PORTAL_PAGE);
+    expect(navigations).toEqual([PORTAL_PAGE]);
+  });
+
+  test("control: an account with no open subscription and no Pro has neither the button nor the line", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    await install(page, freshState({ landed: true }), license, ON_SALE);
+    await open(page, "");
+    await expect.poll(() => page.evaluate(() => window.VTAccount.getState().signedIn)).toBe(true);
+    await openPricing(page);
+    await expect(page.locator("#btn-manage-billing")).toBeHidden();
+    await expect(page.locator("#pricing-cancel-note")).toBeHidden();
+  });
+
   test("control: a trial has nothing to cancel, so no button", async ({ page }) => {
     const license = await mintLicense({ origin: BASE });
     const trial = { pro: true, plan: "pro_monthly", status: "active", source: "trial", provider: "grant", periodEnd: Math.floor(Date.now() / 1000) + 7 * DAY };
@@ -428,5 +494,61 @@ test.describe("VG-86: a Creem subscriber cancels from inside the site", () => {
     await expect.poll(() => licenceNow(page)).toEqual({ pro: true, provider: "grant", accountId: ACCOUNT.id });
     await openPricing(page);
     await expect(page.locator("#btn-manage-billing")).toBeHidden();
+  });
+});
+
+test.describe("VG-88: where this browser cannot sign in, the account panel offers to go on and pay", () => {
+  test.use({ locale: "en-US", timezoneId: "America/New_York" });
+
+  const LINK = "https://www.creem.io/payment/prod_test_monthly";
+  const GOOGLE_ONLY = { email: false, google: true, googleClientId: "test-client.apps.googleusercontent.com", trialDays: 7 };
+  const WITH_LINK = { config: { rails: { creem: { apiCheckout: true } }, links: { creem: { pro_monthly: LINK } } }, signedOut: true };
+
+  /** Press Subscribe signed out, with Google's script refused: the press lands on the account panel. */
+  async function pressSignedOut(page, state, license) {
+    // A content blocker refusing Google's script, as the real one does.
+    await page.route("https://accounts.google.com/**", (route) => {
+      state.googleRefused = (state.googleRefused || 0) + 1;
+      return route.abort();
+    });
+    const { navigations } = await install(page, state, license, WITH_LINK);
+    for (const glob of ["https://www.creem.io/**"]) {
+      await page.route(glob, (route) => {
+        navigations.push(route.request().url());
+        return route.fulfill({ status: 200, contentType: "text/html", body: "<p>Creem</p>" });
+      });
+    }
+    await open(page, "");
+    const cta = await openPricing(page);
+    await cta.click();
+    await expect(page.locator("#account-modal")).toBeVisible();
+    return navigations;
+  }
+
+  test("the offer shows once Google fails, the 'sign in first' toast goes, and the button pays by the link", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    const navigations = await pressSignedOut(page, freshState({ authMethods: GOOGLE_ONLY }), license);
+    const offer = page.locator("#account-pay-anyway");
+    await expect(offer).toBeVisible({ timeout: 8000 });
+    await expect(offer).toContainText(/You can still pay from this browser/);
+    // Wrong: the toast that sent them here ("sign in first") stays over the
+    // panel, saying the opposite of the offer under it.
+    // Read once, not polled: the toast leaves on its own after 4.6 s, and a
+    // retried assertion waited that out and passed.
+    expect(await page.locator("#toast").getAttribute("class")).not.toMatch(/\bshow\b/);
+    await page.locator("#account-pay-anyway-btn").click();
+    await expect.poll(() => navigations).toEqual([LINK]);
+  });
+
+  test("control: with emailed codes on, signing in is possible, so there is no offer", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    const state = freshState({ authMethods: { ...GOOGLE_ONLY, email: true } });
+    const navigations = await pressSignedOut(page, state, license);
+    await expect(page.locator("#account-email-form")).toBeVisible();
+    // Google refused here too; the offer, where it shows, follows within a moment.
+    await expect.poll(() => state.googleRefused || 0, { timeout: 8000 }).toBeGreaterThan(0);
+    await page.waitForTimeout(1500);
+    await expect(page.locator("#account-pay-anyway")).toBeHidden();
+    expect(navigations).toEqual([]);
   });
 });

@@ -4382,6 +4382,11 @@ body.account-open {
   margin: 0 0 0.75rem;
   font-size: 0.8rem;
 }
+/* VG-88's offer to pay without signing in: its button stood flush on the
+   retry row below, two pills touching. */
+.account-pay-anyway {
+  margin: 0 0 0.75rem;
+}
 .account-redeem {
   margin-top: 0.85rem;
   padding-top: 0.65rem;

@@ -8183,8 +8183,11 @@
    * button that is not there.
    */
   function cancelNoteKey(ent, B, cfg) {
+    // Pro is off, and a subscription is still open (a renewal being retried,
+    // or paused): the button is drawn for it, so say why it is there.
+    if (!ent.pro) return manageRoute(B, ent, cfg) ? "pricing.cancel.lapsed" : "";
     const rail = String(ent.provider || "").toLowerCase();
-    if (!ent.pro || !["stripe", "creem", "mercadopago"].includes(rail)) return "";
+    if (!["stripe", "creem", "mercadopago"].includes(rail)) return "";
     if (rail === "creem" && manageRoute(B, ent, cfg) !== "creem") return "pricing.cancel.creemEmail";
     return "pricing.cancel." + rail;
   }
@@ -10121,7 +10124,11 @@
     const box = $("#account-pay-anyway");
     if (!box) return;
     const want = payAfterSignIn;
-    box.hidden = !(want && offer.blocked && window.VTBilling?.checkoutUrl?.(want.plan, want.rail));
+    const show = !!(want && offer.blocked && window.VTBilling?.checkoutUrl?.(want.plan, want.rail));
+    // The "sign in first" toast that sent them here says the opposite of this
+    // offer, and sat over the panel's first lines: gone once the offer shows.
+    if (show && box.hidden) hideToast();
+    box.hidden = !show;
   }
 
   /** Go on to the checkout the "sign in first" press was for. */

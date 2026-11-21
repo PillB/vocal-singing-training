@@ -33,6 +33,10 @@ Paddle at the same time as a backup.**
   Peru's consumer code wants the price in soles (section 4). Mercado Pago is
   also how most Peruvians pay. It is not a merchant of record, so its sales
   are the seller's own for tax.
+- **Mercado Pago is Peru only.** A Mercado Pago seller account belongs to one
+  country, and a Peruvian one charges soles to Peruvian accounts and cards.
+  The rest of Latin America (Mexico, Argentina, Chile, Colombia, Brazil) buys
+  on Creem in US$ until there is a seller account in their country.
 
 **Why not Shopify, which the request named?** Shopify is a shop builder, not a
 merchant of record. A Peruvian store gets PayPal Express rather than Shopify
@@ -123,10 +127,32 @@ terms made a promise the product could not keep (VG-86).
    - Prices carry their currency: "S/ 0", "US$ 7.99" outside the US (a bare
      "$" is the peso in Mexico, Argentina, Chile and Colombia), and the region
      line says "precios en soles (S/)" rather than "PEN".
+   - The euro markets are shown US$, the money the Creem products charge
+     (VG-85's recommended answer), so the panel and the terms agree.
+7. **What the first red-team round fixed** (25 findings, two serious, none
+   critical):
+   - A pending purchase link is kept per account and per sign-in, so it is
+     never sent for whoever signs in next on a shared computer, and signing
+     out forgets it.
+   - Every attempt is bounded (15 s), and a licence is cleared only on a
+     final answer from the worker, never on a timeout or a 503.
+   - One checkout at a time: a second press, or a press on a button drawn
+     again under the first, joins the checkout being opened.
+   - A session that ended elsewhere (a 401 on a press) signs this page out,
+     so the next press asks to sign in instead of failing until a reload.
+   - The "Manage or cancel" button stays while a renewal is being retried
+     after the paid month ends: Pro is gone, the card is still being charged,
+     and that subscriber needs the button most.
+   - A Creem subscriber with no button drawn (signed out, or a worker without
+     the portal) is pointed at Creem's emailed link, not at a missing button.
+   - Where this browser cannot sign in at all, the account panel offers to go
+     on and pay (VG-88), instead of ending at "could not load".
+   - `/v1/health` reports `creemKeyMode` ("test" or "live", never the key),
+     so a worker left on the test key is visible.
 
 Each behaviour has a test that models the right and the wrong result, proven
-red with `node qa/mutate.mjs`: worker mutants CK1 to CK13 (with CK3b and CK8b)
-and browser mutants B118 to B139.
+red with `node qa/mutate.mjs`: worker mutants CK1 to CK16 (with CK3b, CK8b,
+CK12b, CK12c, CK15b and CK16b) and browser mutants B118 to B139 and B190.
 
 ---
 
@@ -186,8 +212,9 @@ Each item gives what would show it and what we would do.
    reviewers.
    - *What we'd do:* turn Bot Fight Mode off on the Worker's zone, run a real
      test purchase, a cancel and a refund before applying for review, and
-     watch `/v1/health`, which reports `creemCheckoutConfigured` and
-     `creemPortalConfigured`.
+     watch `/v1/health`, which reports `creemCheckoutConfigured`,
+     `creemPortalConfigured` and `creemKeyMode`. The last must read `"live"`
+     once the test purchase is done.
 8. **A forwarded checkout link pays for the wrong account.** A checkout URL
    created for one account and opened by another person still pays for the
    first account. This is **accepted**: a buyer who forwards their own
@@ -197,7 +224,19 @@ Each item gives what would show it and what we would do.
    `tax_mode: exclusive`. EU law requires the displayed price to include VAT.
    - *What we'd do:* create the products as **tax-inclusive** at US$ 7.99 and
      US$ 49, so VAT comes out of the price rather than on top of it. This is
-     the recommended answer to VG-85, and it is Pablo's call.
+     the recommended answer to VG-85, and it is Pablo's call. The branch
+     already shows euro markets the US$ price; euro products would mean
+     putting `priceEur` back and changing the terms' prices with it.
+10. **The billing portal trusts any licence linked to the account.** The
+    worker opens the Creem portal of whichever customer a linked licence
+    names, however that licence was linked. Round one's red team showed a
+    shared computer replaying one account's pending link under the next
+    account to sign in, which then opened the first account's portal. The
+    browser no longer does that (the link is kept per account and per
+    sign-in), so what is left is defence in depth, and it is **not done**: a
+    follow-up should have the worker open the portal only for a licence bound
+    through the account's own checkout reference, or whose Creem customer
+    email is the account's.
 
 **Improvements considered and not taken now:**
 - *One rail for everyone through Paddle, in soles for Peru.* It would remove
@@ -232,10 +271,13 @@ in his name.
 7. **Store the keys on the Worker, never in a chat:**
    `wrangler secret put CREEM_API_KEY` and `wrangler secret put
    CREEM_WEBHOOK_SECRET`. Put the two product ids in `wrangler.toml`.
-8. **Buy it yourself in test mode** with `CREEM_ALLOW_TEST_MODE = "true"`.
-   Then cancel, refund, and set the flag back to `"false"`.
-9. **Flip `providers.creem.apiCheckout` to `true`.** This is the commit that
-   puts Pro on sale.
+8. **Flip `providers.creem.apiCheckout` to `true` while the worker is still
+   on the test key,** with `CREEM_ALLOW_TEST_MODE = "true"`, and buy it
+   yourself. The in-app checkout can only be walked on the live site, so this
+   commit is also the one that puts Pro on sale.
+9. **Refund every test purchase, then swap to the live key** and live product
+   ids, set the flag back to `"false"`, redeploy, and check that
+   `/v1/health` says `"creemKeyMode": "live"`.
 10. **Apply to Paddle** in parallel, and ask for its custom pricing under $10.
 
 `docs/40-GO-LIVE-GATE.md` has each step with its cost, its proof and its undo.

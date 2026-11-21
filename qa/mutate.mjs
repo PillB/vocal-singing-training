@@ -1069,6 +1069,14 @@ export const MUTANTS = {
     ["B137 the region line names the market's currency code, PEN or MXN, not the money on the cards", "js/app.js", "${tt(\"pricing.currency.\" + cur)}`;", "${B.marketFor(priceRegion).currency}`;", ["tests/pricing-prelaunch.spec.js", "tests/checkout-rail.spec.js"]],
     ["B138 'no ads' is Pro's second bullet again, on the card's face", "js/billing-config.js", "          \"all_free\",\n          \"pro_insights\",", "          \"all_free\",\n          \"ad_free\",\n          \"pro_insights\",", ["tests/pricing-prelaunch.spec.js"]],
     ["B139 the ad-free bullet says only 'no ads', against 'never while you practise'", "js/i18n.js", "\"pricing.feat.ad_free\": \"Sin anuncios ni consejos patrocinados en ninguna parte\"", "\"pricing.feat.ad_free\": \"Sin anuncios ni recomendaciones patrocinadas\"", ["tests/pricing-prelaunch.spec.js"]],
+    // The refusal cases in checkout-bound.spec.js once read a toast left from the case before.
+    ["B190 a worker answer naming a page that is not a checkout is dropped without a word", "js/billing.js", "        const mode = WORKER_CHECKOUT_REFUSALS[res && res.reason] || \"checkout_failed\";", "        const mode = res && res.ok ? \"ignored\" : WORKER_CHECKOUT_REFUSALS[res && res.reason] || \"checkout_failed\";", ["tests/checkout-bound.spec.js"]],
+    // Aesthetic pass, round one: a Manage button with no line saying why, and VG-88's offer under a toast saying the opposite.
+    ["B191 a subscriber whose renewal is being retried gets the button with no line saying why", "js/app.js", "    if (!ent.pro) return manageRoute(B, ent, cfg) ? \"pricing.cancel.lapsed\" : \"\";", "    if (!ent.pro) return \"\";", ["tests/checkout-bound.spec.js"]],
+    ["B192 without Pro the Manage button ignores the subscriptions /v1/me still lists", "js/app.js", "    return [\"creem\", \"mercadopago\"].find((r) => rails.includes(r)) || null;", "    return null;", ["tests/checkout-bound.spec.js"]],
+    ["B193 the 'sign in first' toast stays over VG-88's offer to pay without signing in", "js/app.js", "    if (show && box.hidden) hideToast();\n", "", ["tests/checkout-bound.spec.js"]],
+    ["B194 the offer to pay without an account shows where emailed codes could sign them in", "js/app.js", "const show = !!(want && offer.blocked && window.VTBilling", "const show = !!(want && window.VTBilling", ["tests/checkout-bound.spec.js"]],
+    ["B195 'Continue to payment' does nothing", "js/app.js", "    $(\"#account-pay-anyway-btn\")?.addEventListener(\"click\", payAnyway);\n", "", ["tests/checkout-bound.spec.js"]],
     ["B117 the claim reads the throttle's clock before its body", "workers/entitlements/src/index.js", "async function handleClaim(request, env, cors, options) {\n  const body = await readRawBody(request);", "async function handleClaim(request, env, cors, options) {\n  options = { ...options, now: clockSeconds(options) };\n  const body = await readRawBody(request);", ["workers/entitlements/test/payment-rails-redteam.test.mjs"]]
   ].map(([name, file, from, to, only]) => ({
     name,
@@ -1458,7 +1466,14 @@ export const MUTANTS = {
     ["CK11 health offers checkouts with no webhook secret, so a paid checkout can never become a licence", "src/checkout.js", "      && readVar(env, \"CREEM_WEBHOOK_SECRET\")\n", "", "checkout-bound"],
     ["CK12 checkout references are kept for years", "src/db.js", "[\"checkout_refs\", \"created_at < ?1\", at - CHECKOUT_REF_TTL_SECONDS]", "[\"checkout_refs\", \"created_at < ?1\", at - CHECKOUT_REF_TTL_SECONDS * 100]", "checkout-bound"],
     ["CK13 a GET reaches the checkout handler", "src/checkout.js", "  if (request.method !== \"POST\") {\n    return Promise.resolve(", "  if (false) {\n    return Promise.resolve(", "checkout-bound"],
-    ["CK14 CREEM_API_KEY is read by the worker and missing from the README's settings", "README.md", "| `CREEM_API_KEY` | Creem API key,", "| (the Creem API key) | Creem API key,", "config"]
+    ["CK14 CREEM_API_KEY is read by the worker and missing from the README's settings", "README.md", "| `CREEM_API_KEY` | Creem API key,", "| (the Creem API key) | Creem API key,", "config"],
+    // CK12 tested one row well inside and one well outside the 30 days; these move the boundary by a day.
+    ["CK12b checkout references are kept 31 days, past the 30 the docs promise", "src/db.js", "export const CHECKOUT_REF_TTL_SECONDS = 30 * 86400;", "export const CHECKOUT_REF_TTL_SECONDS = 31 * 86400;", "checkout-bound"],
+    ["CK12c checkout references are dropped after 29 days", "src/db.js", "export const CHECKOUT_REF_TTL_SECONDS = 30 * 86400;", "export const CHECKOUT_REF_TTL_SECONDS = 29 * 86400;", "checkout-bound"],
+    ["CK15 /v1/me names no subscription, so a renewal in dunning has no Manage button", "src/api.js", "    billingRails: resolution.billingRails || [],", "    billingRails: [],", "checkout-bound"],
+    ["CK15b a cancelled subscription is still offered for managing", "src/grants.js", "if (record.provider && record.status !== \"canceled\") billingRails.add(record.provider);", "if (record.provider) billingRails.add(record.provider);", "checkout-bound"],
+    ["CK16 health says nothing of which Creem key is set, so a test key goes live unnoticed", "src/index.js", "    creemKeyMode: creemKeyMode(env),", "    creemKeyMode: null,", "router"],
+    ["CK16b every Creem key reads as live, test keys too", "src/checkout.js", "  return key.startsWith(CREEM_TEST_KEY_PREFIX) ? \"test\" : \"live\";", "  return \"live\";", "router"]
   ].map(([name, file, from, to, test]) => ({
     name,
     file: `workers/entitlements/${file}`,

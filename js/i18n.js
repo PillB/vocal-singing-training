@@ -221,6 +221,7 @@
       // muestra ninguna, porque no hay nada que cancelar.
       "pricing.cancel.stripe": "Pagaste con tarjeta vía Stripe. El botón «Gestionar o cancelar suscripción» abre el portal donde puedes cambiar la tarjeta o cancelar.",
       "pricing.cancel.creem": "Pagaste con tarjeta vía Creem. «Gestionar o cancelar suscripción» abre tu portal de Creem, donde cancelas o cambias la tarjeta; Creem también te manda ese enlace por correo después de cada pago.",
+      "pricing.cancel.lapsed": "Tu suscripción sigue abierta, pero Pro no está activo: suele ser un cobro que no pasó. Con «Gestionar o cancelar suscripción» cambias la tarjeta o la cancelas.",
       "pricing.cancel.creemEmail": "Pagaste con tarjeta vía Creem. Después de cada pago, Creem te manda por correo tu enlace para gestionar o cancelar la suscripción.",
       "pricing.cancel.mercadopago": "Pagaste con Mercado Pago. «Gestionar o cancelar suscripción» abre tus suscripciones en tu propia cuenta de Mercado Pago, donde se cancela.",
       // Creem es quien vende la suscripción (merchant of record) y sus términos
@@ -1407,6 +1408,7 @@
       "pricing.note": "Secure checkout on the payment processor's own page: your card details never pass through this site. You can cancel any time, and we tell you how right here.",
       "pricing.cancel.stripe": "You paid by card through Stripe. The “Manage or cancel subscription” button opens the portal where you can change the card or cancel.",
       "pricing.cancel.creem": "You paid by card through Creem. “Manage or cancel subscription” opens your Creem portal, where you cancel or change the card; Creem also emails you that link after every payment.",
+      "pricing.cancel.lapsed": "Your subscription is still open, but Pro is off: usually a payment that didn't go through. Use “Manage or cancel subscription” to change the card or cancel.",
       "pricing.cancel.creemEmail": "You paid by card through Creem. After every payment, Creem emails you your own link to manage or cancel the subscription.",
       "pricing.cancel.mercadopago": "You paid with Mercado Pago. “Manage or cancel subscription” opens the subscriptions in your own Mercado Pago account, where it is cancelled.",
       "pricing.morNote": "Card payments are processed by Creem (Armitage Labs OÜ, Estonia), which sells you the subscription as merchant of record and issues your invoice; its name is the one on your card statement.",

@@ -31,7 +31,7 @@ every step is safe to stop after.
 | Gifted and comp months | **On**, admin panel | `ADMIN_EMAILS` |
 | Problem reports | **On** | `REPORTS_ENABLED` |
 | Anonymous usage events | **On** in the file, **off** for the first of the two deploys | `EVENTS_ENABLED` |
-| Checkout — Peru / LATAM | **Closed.** No Mercado Pago link, no secret | `js/billing-config.js` links + `MP_*` |
+| Checkout — Peru | **Closed.** No Mercado Pago link, no secret | `js/billing-config.js` links + `MP_*` |
 | Checkout — rest of world | **Closed.** Built and switched off: `apiCheckout` is `false`, and the worker has no `CREEM_API_KEY` or product ids | `js/billing-config.js` `providers.creem.apiCheckout` + `CREEM_*` |
 | Checkout — Stripe | **Closed, and staying closed.** A Peru-registered seller cannot hold a Stripe merchant account | kept in code for a company abroad |
 | The trial-length A/B test | **Off** | `TRIAL_LEN_EXPERIMENT` |
@@ -201,12 +201,43 @@ Do not let the first real purchase be the first purchase. With
 drives the whole path — checkout, webhook, licence, the browser believing it —
 without money moving.
 
-Walk all of it: sign in, buy monthly, see Pro arrive; refund it in Creem's
-dashboard and see Pro end; buy yearly; cancel and see the period you paid for
-survive to its end, using the in-app «Gestionar o cancelar suscripción»
-button, which is the route Creem's review checks. Once, buy without signing in and in a fresh tab: Pro
-should still arrive from the return alone, and the address bar should end as
-the plain site address with no `checkout_id` or `signature` left in it.
+**The in-app checkout can only be walked on the live site with step 5's
+switch on.** The shipped config keeps `apiCheckout` off and is frozen once the
+page loads, so no console line turns it on, and the worker answers only its
+one `SITE_ORIGIN`, so a copy served from your own machine cannot reach it.
+So steps 4 and 5 are one sitting, in this order:
+
+1. The worker holds the **test** key (`creem_test_…`), the test product ids,
+   and `CREEM_ALLOW_TEST_MODE = "true"`. `/v1/health` says
+   `"creemKeyMode": "test"`.
+2. Push step 5's commit (`apiCheckout = true`). Creem's test checkout shows a
+   test-mode banner and takes only test cards, so no real money can move.
+3. Walk all of it: sign in, buy monthly, see Pro arrive; refund it in Creem's
+   dashboard and see Pro end; buy yearly; cancel and see the period you paid
+   for survive to its end, using the in-app «Gestionar o cancelar
+   suscripción» button, which is the route Creem's review checks. Once, start
+   the purchase signed out in a fresh tab: the panel asks you to sign in
+   first, and after signing in the purchase lands on the account. The address
+   bar should end as the plain site address with no `checkout_id` or
+   `signature` left in it.
+4. **Refund every test purchase in Creem's test-mode dashboard,** yours and
+   any you did not make, *before* the next step. While this window is open,
+   anyone who finds the site can take Pro with a test card. A refund ends Pro
+   at once (a cancel keeps it to the end of the month paid for), and it only
+   reaches the worker while test events are still accepted.
+5. Swap to live, and redeploy:
+   `wrangler secret put CREEM_API_KEY` with the **live** key, the live
+   product ids in `wrangler.toml`, `CREEM_ALLOW_TEST_MODE = "false"`.
+6. **What proves it:** `/v1/health` says `"creemKeyMode": "live"`. A worker
+   left on the test key opens checkouts that take test cards from real
+   buyers, and nothing else on the page would show it.
+
+If you would rather not open that window, the alternative is a second,
+staging worker (an `[env.staging]` section in `wrangler.toml`, with its own
+D1 and `SITE_ORIGIN = "http://127.0.0.1:8765"`), a local copy of the site
+pointed at it, and a tunnel so Creem's webhooks reach it. That is an afternoon of
+setup to avoid an hour of exposure on a site nobody has found yet, so it is
+not the recommendation.
 
 **Then set `CREEM_ALLOW_TEST_MODE` back to `"false"` and redeploy.** A test
 purchase moves no money, so while that flag is on, anyone who can make Creem
@@ -215,7 +246,8 @@ defaults to refusing those events for exactly this reason, and the flag exists
 only for this step.
 
 **What proves you put it back:** `/v1/health` does not report this flag, so
-check `wrangler.toml` and the deploy. This is the one step on this page whose
+check `wrangler.toml` and the deploy. It does report `creemKeyMode`, which must
+read `"live"` once you are done. This is the one step on this page whose
 undo is the step itself — treat it as unfinished until the flag is `"false"`.
 
 ### Step 5 — Switch the Creem checkout on. Cost: this is the gate.
@@ -242,10 +274,11 @@ steps 1 to 4 exists so that this commit is boring.
 >   the checkout to the account before payment and links it inside the
 >   webhook, and the browser keeps retrying a pending link.
 > - **VG-85 (decision).** Say what currency the Creem products are priced in.
->   The recommendation is USD, tax-inclusive, for every market: the euro
->   markets are shown euros on Creem today, which is right only if the Creem
->   products are priced in euros. If they are dollars, `priceEur` comes out of
->   the config and those markets are shown US$ like everyone else.
+>   The recommendation is USD, tax-inclusive, for every market, and this
+>   branch already assumes it: `priceEur` is out of the config, so the euro
+>   markets are shown the US$ they will be charged, and the terms say US$. If
+>   you price the products in euros instead, put `priceEur` back and change
+>   the terms' prices with it.
 
 The site's own validation refuses anything that is not an allowed checkout
 host, so a mistyped link fails closed rather than sending somebody somewhere
@@ -257,7 +290,12 @@ Pages serves the new build in a minute or two. Subscriptions already sold keep
 charging in Creem, and the cancel button keeps working for them; see step 3's
 undo.
 
-### Step 6 — Mercado Pago Perú, for Peru and Latin America. Cost: per transaction.
+### Step 6 — Mercado Pago Perú, for Peru. Cost: per transaction.
+
+A Mercado Pago seller account belongs to one country, and this one is
+Peruvian: its plans charge soles, and a buyer needs a Peruvian Mercado Pago
+account or card. So Argentina, Chile, Colombia and Mexico buy on Creem, in
+US$, until there is a seller account in their country.
 
 Peruvian issuers approve roughly 70–90% of locally acquired charges against
 30–50% acquired abroad, which is why this rail exists alongside Creem rather

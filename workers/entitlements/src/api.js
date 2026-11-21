@@ -20,7 +20,10 @@ import {
   createSession,
   ensureAccount,
   getAccountByEmail,
+  getAccountByIdentity,
+  identitySubjects,
   isAdmin,
+  isDisabled,
   issueLoginCode,
   recordIdentity,
   resolveSession,
@@ -403,6 +406,11 @@ export async function handleEmailVerify(request, env, deps) {
     { locale: parsed.body.locale, adminEmails: adminEmails(env) },
     at
   );
+  if (isDisabled(account)) {
+    // Before the code is spent and before any session or licence exists: a
+    // switched-off account gets nothing to hold on to (red team AUTHN-2).
+    return json({ ok: false, reason: "disabled" }, 403, cors);
+  }
   await recordIdentity(env.DB, account.id, "email", email, at);
   const payload = await buildMePayload(env, account, at);
   const session = await startSessionWithCode(env.DB, checked.codeId, account.id, at);
@@ -411,6 +419,48 @@ export async function handleEmailVerify(request, env, deps) {
     return json({ ok: false, reason: "no_code" }, 401, cors);
   }
   return json({ ...payload, sessionToken: session.token, expiresAt: session.expiresAt }, 200, cors);
+}
+
+/**
+ * The account a verified Google identity signs in to (red team AUTHN-1).
+ *
+ * Google's `sub` is the stable id of a Google account; its email can change
+ * (and, for an address that is not Gmail or a Workspace domain, a second
+ * Google account can hold the same verified address). So the account this
+ * `sub` already opened wins, whatever the token's email says now: a renamed
+ * Google account keeps its practice and its Pro. Only a `sub` seen for the
+ * first time is matched by email, and it may not join an account that
+ * already belongs to a different Google account. An account with no Google
+ * identity yet (made by an emailed code, or by an admin's gift before the
+ * person ever signed in) is joined by email, as before.
+ *
+ * Switched-off accounts are refused here, before any session or licence is
+ * issued (red team AUTHN-2); before this they were refused only on the next
+ * request, after a session and a signed licence had been handed out.
+ * @param {Object} env Worker env bindings.
+ * @param {{subject: string, email: string, name: ?string, locale: ?string}} identity Verified identity.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{ok: true, account: Object}|{ok: false, status: number, reason: string}>} Result.
+ */
+async function googleAccount(env, identity, at) {
+  let account = await getAccountByIdentity(env.DB, "google", identity.subject);
+  if (!account) {
+    ({ account } = await ensureAccount(
+      env.DB,
+      identity.email,
+      { displayName: identity.name, locale: identity.locale, adminEmails: adminEmails(env) },
+      at
+    ));
+    const known = await identitySubjects(env.DB, account.id, "google");
+    if (known.length && !known.includes(identity.subject)) {
+      return { ok: false, status: 409, reason: "identity_conflict" };
+    }
+  }
+  if (isDisabled(account)) {
+    return { ok: false, status: 403, reason: "disabled" };
+  }
+  await recordIdentity(env.DB, account.id, "google", identity.subject, at);
+  return { ok: true, account };
 }
 
 /**
@@ -443,17 +493,11 @@ export async function handleGoogleSignIn(request, env, deps) {
   if (!verified.ok) {
     return json({ ok: false, reason: verified.reason }, 401, cors);
   }
-  const { account } = await ensureAccount(
-    env.DB,
-    verified.identity.email,
-    {
-      displayName: verified.identity.name,
-      locale: verified.identity.locale,
-      adminEmails: adminEmails(env)
-    },
-    at
-  );
-  await recordIdentity(env.DB, account.id, "google", verified.identity.subject, at);
+  const resolved = await googleAccount(env, verified.identity, at);
+  if (!resolved.ok) {
+    return json({ ok: false, reason: resolved.reason }, resolved.status, cors);
+  }
+  const { account } = resolved;
   const session = await createSession(env.DB, account.id, at);
   const payload = await buildMePayload(env, account, at);
   return json({ ...payload, sessionToken: session.token, expiresAt: session.expiresAt }, 200, cors);

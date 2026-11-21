@@ -43,6 +43,10 @@
   function plainText(t) {
     return t.replace(/&(lt|gt|amp|nbsp|quot);/g, (m) => ENTITIES[m]).trim();
   }
+  /** A string made safe to put inside an element's HTML as text (stored or synced data). */
+  function escText(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  }
   /** A pair as written, and, when it holds markup, the text pieces around its elements. */
   function recordPair(map, es, en) {
     map.set(es, en);
@@ -2318,7 +2322,10 @@
       this.viz = new G.Week(this, {
         title: t("week.cta"),
         buttons,
-        words: `<span data-week-head>${model.head}</span> <span data-week-action>${model.action}</span>`,
+        // Text, not markup: the head carries the plan's stored focus, which
+        // comes from the account's document (red team CXSS-1), and the panel
+        // puts `words` into innerHTML.
+        words: `<span data-week-head>${escText(model.head)}</span> <span data-week-action>${escText(model.action)}</span>`,
         model: () => this._weekModel(),
         label: L(
           "Tu semana: siete días, en dorado los que practicaste tu foco y hoy rodeado. Debajo, las 12 semanas como una escalera, con la tuya marcada, y la próxima acción.",

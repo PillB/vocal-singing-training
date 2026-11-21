@@ -61,6 +61,9 @@ const PIANO_SPEC = [
 const TAKE_SPEC = [...PIANO_SPEC.slice(0, -1), "short of 15 seconds"];
 // The stage in a 1280x560 window: the picture whole, the stage on the window (stage-design).
 const SHORT_SPEC = [...PIANO_SPEC.slice(0, 3), "tests/stage-design.spec.js", "--project=chromium", "--workers=1", "--reporter=dot", "-g", "short laptop window"];
+// The nightly fullscreen sweep's mouse (tests/helpers/fullscreen-clicks.js), held by a spec that runs on every PR.
+const HARNESS_SPEC = [...PIANO_SPEC.slice(0, 3), "tests/fullscreen-click-harness.spec.js", "--project=chromium", "--workers=2", "--reporter=dot"];
+const START_POINT_SPEC = [...PIANO_SPEC.slice(0, 3), "tests/sweep-start-point.spec.js", "--project=chromium", "--workers=2", "--reporter=dot"];
 // QA-66. The tap-floor allowance for float32 geometry (tests/helpers/tap-floor.js), judged by its own spec.
 const TAP_SPEC = [...PIANO_SPEC.slice(0, 3), "tests/tap-floor.spec.js", "--project=chromium", "--workers=2", "--reporter=dot"];
 const FLOW_SPEC = [
@@ -153,7 +156,7 @@ export const MUTANTS = {
     ["SYR1 a save's timer still pending sends the refused write again (PR #21 merge)", "js/sync.js", "      const res = standingRefusal(id) ? { ok: false, reason: \"refused\" } : await syncNow(id);", "      const res = await syncNow(id);"],
     ["SYR2 a change made while the refused write was out is taken as refused, and never sent", "js/sync.js", "      noteRefusal(profileId, result, before);", "      noteRefusal(profileId, result, version);"],
     ["SYR3 a refusal outlives every later change", "js/sync.js", "    return refusal && (changedAt.get(profileId) || 0) <= refusal.before ? refusal : null;", "    return refusal || null;"],
-    ["SYR4 a sign-out keeps the last account's refusal", "js/sync.js", "        refusals.clear();\n", ""],
+    ["SYR4 a sign-out keeps the last account's refusal", "js/sync.js", "    refusals.clear();\n", ""],
     ["SYR5 a profile that went up after a refused one hides why that one did not", "js/sync.js", "      refusedReason = failed.reason === \"refused\" ? refusals.get(failed.id)?.reason || null : null;\n", ""],
     ["SYR6 a profile the account took is still treated as refused", "js/sync.js", "    if (result && result.ok) refusals.delete(profileId);\n    else if", "    if (result && result.ok) return;\n    if"],
     ["M22 the first match in a periodic tail, not the nearest", "js/voice-features.js", "if (j === K && (best == null || Math.abs(k - est) < Math.abs(best - est))) best = k;", "if (j === K && best == null) best = k;"],
@@ -327,6 +330,24 @@ export const MUTANTS = {
     ["L43 the base branch's name is pasted into the complexity step's shell line again (QA round 11, CI-1)", ".github/workflows/quality.yml", "        env:\n          BASE_REF: ${{ github.base_ref }}\n        run: node qa/lint-complexity.mjs --baseline-ref \"origin/$BASE_REF\"", "        run: node qa/lint-complexity.mjs --baseline-ref \"origin/${{ github.base_ref }}\"", ["tests/node/workflow-injection.test.mjs"]],
     ["L26 an English drill loses its fifth step: two languages, two drills (QA-34)", "js/exercises-data.js", '        "Then tell a 60 s story using at least 3 levels, on purpose.",\n        "Keep the same clarity and diction at every level."\n      ],', '        "Then tell a 60 s story using at least 3 levels, on purpose."\n      ],', ["tests/node/exercise-parity.test.mjs"]],
     ["L48 the first paint's mutation set is left out of CI's matrix: its mutants never run", ".github/workflows/quality.yml", "regress, boot, billing", "regress, billing", ["tests/node/mutation-matrix.test.mjs"]],
+    // The six-format mouse sweep in two jobs (nightly voice-and-live ran out of its 80 min from Nov 9 to 17).
+    ["L49 the second half of the mouse sweep leaves the fullscreen format out: no nightly job runs it", ".github/workflows/quality.yml", 'formats: "tablet,short,fullscreen"', 'formats: "tablet,short"', ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L50 the mouse sweep's job does not hand its formats to the spec, so both halves run all six and time out", ".github/workflows/quality.yml", "        env:\n          FORENSICS_FORMATS: ${{ matrix.formats }}\n", "", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    // Exactly the old matrix: a valid partition, which only the alone-in-its-jobs check (mouseSweepAlone) catches.
+    ["L51 the mouse sweep goes back into one job beside the live forensics, about 109 min against 80", ".github/workflows/quality.yml", 'specs: "tests/exercise-live-forensics.spec.js"\n          - group: formats-1-of-2\n            specs: "tests/headed-exercise-forensics.spec.js"\n            formats: "desktop,mobile,mobile-land"\n          - group: formats-2-of-2\n            specs: "tests/headed-exercise-forensics.spec.js"\n            formats: "tablet,short,fullscreen"', 'specs: "tests/exercise-live-forensics.spec.js tests/headed-exercise-forensics.spec.js"', ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L52 the live Pages smoke writes to the default test-results/ again, emptying it of a red fullscreen step's traces before the upload", ".github/workflows/quality.yml", ' --output="test-results/live-pages"', "", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    // What the mouse sweep does with its job's formats: the spec runs only at night, so the helper it reads them with is judged here.
+    ["L53 the mouse sweep reads another name than the one its job sets, so both halves run all six formats and time out", "tests/helpers/forensics-formats.js", "String(env.FORENSICS_FORMATS || \"\")", "String(env.FORENSICS_FORMAT || \"\")", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L54 a misspelt format is dropped without a word, so no job runs it", "tests/helpers/forensics-formats.js", "  if (unknown.length) {", "  if (false) {", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L55 a part's Start budget rounds up, so three jobs of two formats tolerate six failed Starts where one run tolerated four", "tests/helpers/forensics-formats.js", "Math.floor((START_FAIL_BUDGET * n)", "Math.ceil((START_FAIL_BUDGET * n)", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L56 the mouse sweep runs all six formats whatever its job names", "tests/headed-exercise-forensics.spec.js", "const formats = selectFormats(process.env);", "const formats = selectFormats({});", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L57 each half of the mouse sweep tolerates four failed Starts again, eight in all", "tests/headed-exercise-forensics.spec.js", "const p0Budget = startFailBudget(formats.length);", "const p0Budget = 4;", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L58 the mouse sweep presses Start's centre wherever it is again, under the sticky Back button", "tests/headed-exercise-forensics.spec.js", "const startPt = await clickablePoint(page, \"#btn-practice-start\");", "const startPt = await centerIfVisible(page, \"#btn-practice-start\");", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L59 the mouse sweep presses a Start it was told is covered", "tests/headed-exercise-forensics.spec.js", "if (startPt && !startPt.covered) {", "if (startPt) {", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    // A red mutation set in CI is read from its traces (PR #46: the boot set's baseline failed on one frame of 500, and left nothing to read).
+    ["L60 a red mutation job uploads nothing: a baseline that fails only in CI can be re-run, not read", ".github/workflows/quality.yml", "      - name: Preserve a red set's traces\n        if: failure()\n        uses: actions/upload-artifact@v4\n        with:\n          name: mutation-failures-${{ matrix.set }}\n          path: test-results/\n          if-no-files-found: ignore\n", "", ["tests/node/mutation-matrix.test.mjs"]],
+    ["L61 a mutation job uploads its traces only when it is green", ".github/workflows/quality.yml", "      - name: Preserve a red set's traces\n        if: failure()\n", "      - name: Preserve a red set's traces\n", ["tests/node/mutation-matrix.test.mjs"]],
+    ["L62 every mutation job uploads under one name: the second red set's traces are refused", ".github/workflows/quality.yml", "          name: mutation-failures-${{ matrix.set }}\n", "          name: mutation-failures\n", ["tests/node/mutation-matrix.test.mjs"]],
     ["L7 empty wait-may-fail reason accepted", "qa/lint-playwright-waits.mjs", "/wait-may-fail:\\s*\\S/", "/wait-may-fail:/"]
   // A mutant that edits a hashed asset (js/css) turns "every versioned asset matches its recorded content" red whatever
   // else is wrong, so it names the one test it is meant to be judged by (red-team: L25 and L26 were killed by the manifest).
@@ -418,7 +439,16 @@ export const MUTANTS = {
     // A short laptop window (stage-design "short laptop window"): the guide gives its room up before the picture is cut or the stage grows.
     ["S12 the guide is fitted beside the room the picture was left, not the room it needs: the picture is cut under a guide that kept its steps", "js/app.js", "return { left, whole: left - (shown ? panelShortfall(panel) : 0) };", "return { left, whole: left };", SHORT_SPEC],
     ["S13 the stage grows past the window before the guide gives its steps back to the picture", "js/app.js", "const over = panelShortfall(wrap) - guideYield(wrap);", "const over = panelShortfall(wrap);", SHORT_SPEC],
-    ["S14 the guide counts its button as room it can give back, so the stage does not grow and the picture stays cut", "js/app.js", "return Math.max(0, guide.offsetHeight - bare);", "return guide.offsetHeight;", SHORT_SPEC]
+    ["S14 the guide counts its button as room it can give back, so the stage does not grow and the picture stays cut", "js/app.js", "return Math.max(0, guide.offsetHeight - bare);", "return guide.offsetHeight;", SHORT_SPEC],
+    // The fullscreen sweep's mouse: red every night from Nov 12 on a toggle 5 px under a 1080 px screen.
+    ["S15 the click harness scrolls to a control under the window's edge, then fits the stage again, whose scrollTo(0, 0) puts it back under the edge", "tests/helpers/fullscreen-clicks.js", "    await page.locator(sel).scrollIntoViewIfNeeded().catch(() => {});\n    hit = await hitCenter(page, sel);", "    await page.locator(sel).scrollIntoViewIfNeeded().catch(() => {});\n    await fit(page);\n    hit = await hitCenter(page, sel);", HARNESS_SPEC],
+    ["S16 the click harness never scrolls to a control under the window's edge", "tests/helpers/fullscreen-clicks.js", "    await page.locator(sel).scrollIntoViewIfNeeded().catch(() => {});\n", "", HARNESS_SPEC],
+    ["S17 the click harness takes anything at a control's centre for the control, so a covered button passes", "tests/helpers/fullscreen-clicks.js", "const ok = !!(top && (top === el || el.contains(top)));", "const ok = !!top;", HARNESS_SPEC],
+    ["S18 the click harness scrolls to a control with no box, and waits there until the test's timeout", "tests/helpers/fullscreen-clicks.js", "  if (!hit.ok && hit.reason !== \"zero\" && hit.reason !== \"missing\") {", "  if (!hit.ok) {", HARNESS_SPEC],
+    ["S19 the sweep re-clicks the metrics toggle the open card hides, so the card stays open", "tests/helpers/fullscreen-clicks.js", "      if (wasOpen && id === \"btn-toggle-metrics\") card.classList.add(\"collapsed\");\n", "", HARNESS_SPEC],
+    // The mouse sweep's Start, pressed at its centre under the sticky Back button in a 560 px window.
+    ["S20 the mouse sweep takes whatever is at Start's centre for Start, and presses the Back button over it", "tests/helpers/ui-forensics.js", "mine: !!top && (top === el || el.contains(top))", "mine: !!top", START_POINT_SPEC],
+    ["S21 the mouse sweep sees Start is covered and does not scroll to it", "tests/helpers/ui-forensics.js", "      el.scrollIntoView({ block: \"center\", behavior: \"instant\" });\n      p = at();\n", "", START_POINT_SPEC]
   ].map(([name, file, from, to, cmd]) => ({ name, file, from, to, cmd: cmd || PIANO_SPEC })),
   // Accessibility contracts that only a browser can see.
   a11y: [
@@ -756,7 +786,7 @@ export const MUTANTS = {
       // Site data blocked (cross-04): the boot shows the open tab's whole catalogue, counted from the catalogue (main's voice drills made it 24, not 20)
       ["D15 the exercise list leaves one exercise out: a boot with site data blocked shows 23 of 24", "js/app.js", "const exercises = catalogOrder(filteredExercises());", "const exercises = catalogOrder(filteredExercises()).slice(1);", "tests/redteam-boot-a11y-privacy.spec.js", "cross-04"],
       // PR #39 review (Codex, P1): "Usar solo la de mi cuenta" on the returning account's own browser
-      ["D16 the returning account's put-aside takes are restored before its pull, which overwrites them: a take that never reached the account is lost", "js/sync.js", "    let result = { ok: true };\n    for (const id of ids) {\n      const res = await pullOverwrite(id);", "    restoreAside(me);\n    let result = { ok: true };\n    for (const id of ids) {\n      const res = await pullOverwrite(id);", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"],
+      ["D16 the returning account's put-aside takes are restored before its pull, which overwrites them: a take that never reached the account is lost", "js/sync.js", "    for (const id of ids.filter((x) => !kept[x])) {", "    restoreAside(me);\n    for (const id of ids.filter((x) => !kept[x])) {", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"],
       ["D17 the put-aside takes are restored but nothing sends them: they wait on this shared browser for the account's next save", "js/sync.js", "    if (restoreAside(me)) schedule();\n", "    restoreAside(me);\n", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"],
       // PR #39 review (RT3): a count against whichever tab is open let a blocked boot land on the wrong tab
       ["D18 a browser with no stored settings opens the singing tab: a blocked boot shows the wrong list, whole", "js/storage.js", '      return read(LS.settings, { lastTab: "vocal", maleRange: true });', '      return read(LS.settings, { lastTab: "singing", maleRange: true });', "tests/redteam-boot-a11y-privacy.spec.js", "cross-04"],
@@ -1162,10 +1192,88 @@ export const MUTANTS = {
       ? node([spec])
       : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
   })),
+  // The learner's flows (red team 2026-11-18, FLOW-1 to FLOW-10): a take thrown away unasked, a paused step
+  // restarted, focus lost in a dialog, no way to report from the exercise, a trial forgotten after sign-in.
+  // Each mutant puts one defect back and is judged by the test in tests/learner-flows.spec.js written for it.
+  learner: [
+    ["LF1 a started short take is told to press Start first", "js/app.js", 'return tt(s === 1 ? "rate.practiceMore_one" : "rate.practiceMore", { s });', 'return tt("rate.practiceFirst", { s });', "FLOW-10"],
+    ["LF2 one more second reads in the plural", "js/app.js", 'tt(s === 1 ? "rate.practiceMore_one" : "rate.practiceMore", { s })', 'tt("rate.practiceMore", { s })', "FLOW-10"],
+    // FLOW-3: a dialog taller than a phone's window wrapped focus to a control scrolled out of sight.
+    ["LF3 a trap's wrap focuses without bringing the control into view", "js/focus-trap.js", '    if (moved && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" });\n', "", "wrap brings the control into view", "tests/focus-trap.spec.js"],
+    ["LF4 Tab past the last control wraps to a first one out of sight", "js/focus-trap.js", "      moveTo(first);\n", "      focus(first);\n", "wrap brings the control into view", "tests/focus-trap.spec.js"],
+    ["LF5 Shift+Tab past the first control wraps to a last one out of sight", "js/focus-trap.js", "      moveTo(last);\n", "      focus(last);\n", "wrap brings the control into view", "tests/focus-trap.spec.js"]
+  ].map(([name, file, from, to, grep, spec]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: [...PIANO_SPEC.slice(0, 3), spec || "tests/learner-flows.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", grep]
+  })),
   // The payment ledger in D1 (one optimistic transaction per webhook) and the account layer's
   // multi-step writes made single batches (audit WH-*, KV-*, D1-*, SW-1, SC-1). Node only, so it
   // runs in the contracts job with the default sets. "Sequential" mutants replace a D1 batch (one
   // transaction) with the same statements run one by one, which is what the code did before.
+  // The client sync on a shared browser and against a malformed account copy (red-team round of 2026-11-18,
+  // findings RES-1/2/4/5/6/7, FLOW-6/7, CXSS-1 part 2). Each mutant runs only the test written for it: a node test
+  // against the real js/storage.js, js/account.js and js/sync.js and the real worker router (tests/node/sync-env.mjs),
+  // or, for what the page shows, tests/sync-shared-browser.spec.js. The browser half puts the set in the CI matrix.
+  syncing: [
+    ["SY1 a write answered after the account changed is recorded as the next account's", "js/sync.js", "      // The write went to the account that made it; whoever is here now is not told it was theirs.\n      if (sessionMoved(token)) return sessionGone();\n", "", "sync-account-switch"],
+    ["SY2 each request of a cycle goes out as whichever session is current, and nothing checks between them (RES-1)", "js/sync.js", "      const pulled = await readAccount(profileId, token);\n      if (sessionMoved(token)) return sessionGone();\n      const halt = pullStop(pulled, profileId);\n      if (halt) return halt;\n\n      const step = mergePulled(profileId, pulled);\n      const pushed = await global.VTAccount.request(\n        \"PUT\",\n        \"/v1/me/progress\",\n        { profileId, doc: step.merged, baseRev: step.serverRev },\n        { timeoutMs: REQUEST_TIMEOUT_MS, token }\n      );\n      // The write went to the account that made it; whoever is here now is not told it was theirs.\n      if (sessionMoved(token)) return sessionGone();\n", "      const pulled = await readAccount(profileId, null);\n      const halt = pullStop(pulled, profileId);\n      if (halt) return halt;\n\n      const step = mergePulled(profileId, pulled);\n      const pushed = await global.VTAccount.request(\n        \"PUT\",\n        \"/v1/me/progress\",\n        { profileId, doc: step.merged, baseRev: step.serverRev },\n        { timeoutMs: REQUEST_TIMEOUT_MS }\n      );\n", "sync-account-switch"],
+    ["SY3 a read answered after the account changed is merged into this browser: the last account's other devices show to the next", "js/sync.js", "      const pulled = await readAccount(profileId, token);\n      if (sessionMoved(token)) return sessionGone();\n      const halt", "      const pulled = await readAccount(profileId, token);\n      const halt", "sync-account-switch"],
+    ["SY4 'use my saved progress' answered after the account changed is kept with the last account's revision", "js/sync.js", "    const pulled = await readAccount(profileId, token);\n    if (sessionMoved(token)) return sessionGone();\n    if (!pulled.ok)", "    const pulled = await readAccount(profileId, token);\n    if (!pulled.ok)", "sync-account-switch"],
+    ["SY5 the next account's sync is handed the result of the last account's cycle", "js/sync.js", "      if (sharedAs === sessionToken() && !(result", "      if (sharedAs !== undefined && !(result", "sync-account-switch"],
+    ["SY6 a cycle that throws rejects past every caller, and the panel keeps saying saved (RES-4)", "js/sync.js", "    running = runCycle(profileId, token).catch(cycleThrew);", "    running = runCycle(profileId, token);", "sync-account-doc"],
+    ["SY7 the account's copy is merged as it came, unchecked (CXSS-1)", "js/sync.js", "    const b = normalizeBag(remote);", "    const b = { ...normalizeBag({}), ...remote };", "sync-account-doc"],
+    ["SY8 a count that is not a number is kept as it came", "js/sync.js", "      completedCount: Math.max(whole(r.completedCount), history.length),", "      completedCount: r.completedCount,", "sync-account-doc"],
+    ["SY9 a hold's seconds and time are kept as they came", "js/sync.js", "    if (!e || !when(e.at) || seconds === null || seconds < 0) return null;\n    return { ...e, at: when(e.at), seconds };", "    if (!e) return null;\n    return e;", "sync-account-doc"],
+    ["SY10 an entry dated 2099 is kept, first for ever", "js/sync.js", "    return t > 0 && t <= Date.now() + FUTURE_SLACK_MS ? String(value) : null;", "    return t > 0 ? String(value) : null;", "sync-account-doc"],
+    ["SY11 a plan at any week is kept: week 99 beats a real plan", "js/sync.js", "    if (!p || week < 1 || week > MAX_PLAN_WEEK) return null;", "    if (!p || week < 1) return null;", "sync-account-doc"],
+    ["SY12 a plan past week 12 is thrown away (the app keeps counting after the twelfth review)", "js/sync.js", "  const MAX_PLAN_WEEK = 52;", "  const MAX_PLAN_WEEK = 12;", "sync-account-doc"],
+    ["SY13 a week element outside the catalogue's list is kept", "js/sync.js", "    return !Array.isArray(known) || known.includes(value) ? value : null;", "    return value;", "sync-account-doc"],
+    ["SY14 two devices' takes count as the larger count alone (RES-5)", "js/sync.js", "      completedCount: Math.max(Number(a.completedCount) || 0, Number(b.completedCount) || 0, takes.length),", "      completedCount: Math.max(Number(a.completedCount) || 0, Number(b.completedCount) || 0),", "sync-account-doc"],
+    ["SY15 a log stored as an object makes the merge throw", "js/sync.js", "    for (const entry of [...list(local), ...list(remote)]) {", "    for (const entry of [...(local || []), ...(remote || [])]) {", "sync-account-doc"],
+    ["SY16 a history stored as an object makes the merge throw", "js/sync.js", "    for (const entry of [...list(b), ...list(a)]) {", "    for (const entry of [...(b || []), ...(a || [])]) {", "sync-account-doc"],
+    ["SY17 a weekly goal written as text is kept as text", "js/sync.js", "    return { ...g, weeklySessionsTarget: target, ...present(g, \"updatedAt\", when) };", "    return { ...g, ...present(g, \"updatedAt\", when) };", "sync-account-doc"],
+    ["SY18 a goal dated 2099 wins every later merge", "js/sync.js", "    return { ...g, weeklySessionsTarget: target, ...present(g, \"updatedAt\", when) };", "    return { ...g, weeklySessionsTarget: target };", "sync-account-doc"],
+    ["SY19 a review's element outside the catalogue's list is kept", "js/sync.js", "      ...present(e, \"element\", element),\n", "", "sync-account-doc"],
+    ["SY20 an owner storage refused is forgotten: the next account gets this practice unasked (RES-6)", "js/sync.js", "      ownerKept = id;\n    }", "    }", "sync-owner-quota"],
+    ["SY21 the owner kept in memory is never read", "js/sync.js", "    if (ownerKept) return ownerKept;\n    try {\n      return localStorage.getItem(LS_OWNER) || null;", "    try {\n      return localStorage.getItem(LS_OWNER) || null;", "sync-owner-quota"],
+    ["SY22 the status never says a change is waiting: the panel says saved over an unsent take (FLOW-6)", "js/sync.js", "      pending: hasUnpushed(),\n", "      pending: false,\n", "sync-status"],
+    ["SY23 a sign-in waits out the 8 s quiet period before its first read (FLOW-7)", "js/sync.js", "        fetchingFor = token;\n        schedule(0);", "        fetchingFor = token;\n        schedule();", "sync-status"],
+    ["SY24 'fetching' outlives the first read", "js/sync.js", "      if (fetchingFor && fetchingFor === asked) {", "      if (false) {", "sync-status"],
+    ["SY25 a /v1/me answer after the sign-in pushes the first read back by the quiet period", "js/sync.js", "      } else if (token && !timer) {", "      } else if (token) {", "sync-status"],
+    ["SY26 a take does not tell an open panel that something is waiting", "js/sync.js", "    // An open panel stops saying \"saved\" the moment there is something new.\n    emit();\n", "", "sync-status"],
+    ["SY27 the panel says saved while a take waits to be sent (FLOW-6)", "js/app.js", "    if (status.pending) return tt(\"auth.syncPending\");\n", "", "sync-shared-browser.spec.js", "a take not yet sent"],
+    ["SY28 the panel says 'Aún no guardado' while the account's copy is on its way (FLOW-7)", "js/app.js", "    if (status.fetching) return tt(\"auth.syncFetching\");\n", "", "sync-shared-browser.spec.js", "says it is fetching"],
+    ["SY29 everything goes aside, the handover ignored: the newcomer's own takes go to the previous owner (RES-2)", "js/sync.js", "    const since = h && h.owner === owner ? ms(h.since) : 0;", "    const since = 0;", "sync-handover"],
+    ["SY30 a sign-in does not note when the browser stopped being the last owner's", "js/sync.js", "        noteHandover();\n", "", "sync-handover"],
+    ["SY31 the handover is never stored: a reload before answering forgets it", "js/sync.js", "      if (h) localStorage.setItem(LS_HANDOVER, JSON.stringify(h));", "      if (h) throw new Error(\"not kept\");", "sync-handover"],
+    ["SY32 leaving without answering leaves the leaver's takes as the last owner's, for her next sync to send", "js/sync.js", "    setAsideLeaver();\n    writeHandover(null);", "    writeHandover(null);", "sync-handover"],
+    ["SY33 what the newcomer keeps is overwritten by the account's copy instead of merged into it", "js/sync.js", "      note(await syncNow(id));", "      note(await pullOverwrite(id, token));", "sync-handover"],
+    ["SY34 the last owner's row keeps the count of the newcomer's takes", "js/sync.js", "      const count = Math.max(early.length, row.completedCount - late.length);", "      const count = Math.max(early.length, row.completedCount);", "sync-handover"],
+    ["SY35 the newcomer's part has no day ledger: the day they practised is not counted", "js/sync.js", "    after.days = daysOf(after);", "    after.days = null;", "sync-handover"],
+    ["SY36 the last owner's day ledger keeps the newcomer's time", "js/sync.js", "      days: lessDays(b.days, after.days)", "      days: b.days", "sync-handover"],
+    ["SY37 the leaver's part is taken from a browser that is already theirs", "js/sync.js", "    if (!h || !h.me || readOwner() !== h.owner) return;", "    if (!h || !h.me) return;", "sync-handover"],
+    ["SY38 an owner signing in again on her own browser is a handover: signing out puts her practice aside", "js/sync.js", "    writeHandover(owner && owner !== me ? { owner, me, since: new Date().toISOString() } : null);", "    writeHandover(owner ? { owner, me, since: new Date().toISOString() } : null);", "sync-handover"],
+    ["SY39 a recording set aside is still listed and played (RES-7)", "js/storage.js", "    return !!record && recordingProfile(record) === active && !record.asideFor;", "    return !!record && recordingProfile(record) === active;", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY40 'Usar solo la de mi cuenta' leaves the last owner's recordings where they were", "js/sync.js", "    if (kept) await recordingsAside(owner, since ? { to: since } : {});\n", "", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY41 the newcomer's own recordings go aside with the last owner's", "js/sync.js", "    if (kept) await recordingsAside(owner, since ? { to: since } : {});", "    if (kept) await recordingsAside(owner, {});", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY42 recordings set aside never come back to their account", "js/sync.js", "    recordingsBack = giveRecordingsBack(me);\n", "", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY43 leaving without answering leaves the leaver's recordings for the last owner to see", "js/sync.js", "    recordingsAside(h.me, { from: ms(h.since) });\n", "", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY44 the leaver's recordings are taken with everything recorded before them", "js/storage.js", "        if (r.asideFor || (range.from && at < range.from) || (range.to && at >= range.to)) return null;", "        if (r.asideFor || (range.to && at >= range.to)) return null;", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY45 a recording set aside still plays by its id", "js/storage.js", "          if (!shown(r, active)) return resolve(null);", "          if (!r || recordingProfile(r) !== active) return resolve(null);", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY46 a profile the newcomer practised in syncs before the pulls: its cycle restores what was left aside, and a pull overwrites it", "js/sync.js", "    for (const id of ids.filter((x) => !kept[x])) {\n      note(await pullOverwrite(id, token));\n      if (sessionMoved(token)) return sessionGone();\n    }\n    if (restoreAside(me)) schedule();\n    for (const id of ids.filter((x) => kept[x])) {\n      note(await syncNow(id));\n      if (sessionMoved(token)) return sessionGone();\n    }\n", "    for (const id of ids.filter((x) => kept[x])) {\n      note(await syncNow(id));\n      if (sessionMoved(token)) return sessionGone();\n    }\n    for (const id of ids.filter((x) => !kept[x])) {\n      note(await pullOverwrite(id, token));\n      if (sessionMoved(token)) return sessionGone();\n    }\n    if (restoreAside(me)) schedule();\n", "sync-handover"]
+  ].map(([name, file, from, to, test, grep]) => ({
+    name,
+    file,
+    from,
+    to,
+    // A panel line is judged in the browser by the spec written for it; everything else by its node test.
+    cmd: test.endsWith(".spec.js")
+      ? [...PIANO_SPEC.slice(0, 3), `tests/${test}`, "--project=chromium", "--workers=2", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
+      : node([`tests/node/${test}.test.mjs`])
+  })),
   ledger: [
     ["LG1 the first validation chunk always passes: a stale read commits", "src/ledger.js", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed})", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed}) OR 1", "ledger"],
     ["LG2 later validation chunks are ignored", "src/ledger.js", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed})", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed}) AND 0", "ledger"],
@@ -1277,8 +1385,8 @@ export const MUTANTS = {
     ["HK28 reports status index led by created_at, so the closed-report sweep reads every report instead of searching by status", "src/schema.js", "idx_reports_status ON reports (status, created_at)", "idx_reports_status ON reports (created_at, status)", "housekeeping-edges"],
     ["SI1 the session is opened before the answer is built, so a read that fails while building it leaves an orphan session and a spent code", "src/api.js", "  const payload = await buildMePayload(env, account, at);\n  const session = await startSessionWithCode(env.DB, checked.codeId, account.id, at);", "  const session = await startSessionWithCode(env.DB, checked.codeId, account.id, at);\n  const payload = await buildMePayload(env, account, at);", "sign-in-edges"],
     ["SI2 the losing tab of a double submit reads a null session and answers 500 instead of 401 no_code", "src/api.js", "if (!session) {", "if (session === undefined) {", "sign-in-edges"],
-    ["SI3 a wrong or missing code still creates the account and records an email sign-in method", "src/api.js", "  const checked = await checkLoginCode(env.DB, email, parsed.body.code, at);\n  if (!checked.ok) {\n    return json({ ok: false, reason: checked.reason }, 401, cors);\n  }\n\n  // Everything that can fail and is safe to repeat comes before the code is\n  // spent: the account and identity writes are idempotent and the payload is\n  // reads. The code is spent in the same transaction that opens the session,\n  // so a failure anywhere leaves the person a code that still works.\n  const { account } = await ensureAccount(\n    env.DB,\n    email,\n    { locale: parsed.body.locale, adminEmails: adminEmails(env) },\n    at\n  );\n  await recordIdentity(env.DB, account.id, \"email\", email, at);\n", "  // Everything that can fail and is safe to repeat comes before the code is\n  // spent: the account and identity writes are idempotent and the payload is\n  // reads. The code is spent in the same transaction that opens the session,\n  // so a failure anywhere leaves the person a code that still works.\n  const { account } = await ensureAccount(\n    env.DB,\n    email,\n    { locale: parsed.body.locale, adminEmails: adminEmails(env) },\n    at\n  );\n  await recordIdentity(env.DB, account.id, \"email\", email, at);\n\n  const checked = await checkLoginCode(env.DB, email, parsed.body.code, at);\n  if (!checked.ok) {\n    return json({ ok: false, reason: checked.reason }, 401, cors);\n  }\n", "sign-in-edges"],
-    ["SI4 a wrong or missing code still creates the account (an admin one included)", "src/api.js", "  const checked = await checkLoginCode(env.DB, email, parsed.body.code, at);\n  if (!checked.ok) {\n    return json({ ok: false, reason: checked.reason }, 401, cors);\n  }\n\n  // Everything that can fail and is safe to repeat comes before the code is\n  // spent: the account and identity writes are idempotent and the payload is\n  // reads. The code is spent in the same transaction that opens the session,\n  // so a failure anywhere leaves the person a code that still works.\n  const { account } = await ensureAccount(\n    env.DB,\n    email,\n    { locale: parsed.body.locale, adminEmails: adminEmails(env) },\n    at\n  );\n  await recordIdentity(env.DB, account.id, \"email\", email, at);\n", "  const { account } = await ensureAccount(\n    env.DB,\n    email,\n    { locale: parsed.body.locale, adminEmails: adminEmails(env) },\n    at\n  );\n\n  const checked = await checkLoginCode(env.DB, email, parsed.body.code, at);\n  if (!checked.ok) {\n    return json({ ok: false, reason: checked.reason }, 401, cors);\n  }\n\n  // Everything that can fail and is safe to repeat comes before the code is\n  // spent: the account and identity writes are idempotent and the payload is\n  // reads. The code is spent in the same transaction that opens the session,\n  // so a failure anywhere leaves the person a code that still works.\n  await recordIdentity(env.DB, account.id, \"email\", email, at);\n", "sign-in-edges"],
+    ["SI3 a wrong or missing code still creates the account and records an email sign-in method", "src/api.js", "  const checked = await checkLoginCode(env.DB, email, parsed.body.code, at);\n  if (!checked.ok) {\n    return json({ ok: false, reason: checked.reason }, 401, cors);\n  }\n\n  // Everything that can fail and is safe to repeat comes before the code is\n  // spent: the account and identity writes are idempotent and the payload is\n  // reads. The code is spent in the same transaction that opens the session,\n  // so a failure anywhere leaves the person a code that still works.\n  const { account } = await ensureAccount(\n    env.DB,\n    email,\n    { locale: parsed.body.locale, adminEmails: adminEmails(env) },\n    at\n  );\n  if (isDisabled(account)) {\n    // Before the code is spent and before any session or licence exists: a\n    // switched-off account gets nothing to hold on to (red team AUTHN-2).\n    return json({ ok: false, reason: \"disabled\" }, 403, cors);\n  }\n  await recordIdentity(env.DB, account.id, \"email\", email, at);\n", "  // Everything that can fail and is safe to repeat comes before the code is\n  // spent: the account and identity writes are idempotent and the payload is\n  // reads. The code is spent in the same transaction that opens the session,\n  // so a failure anywhere leaves the person a code that still works.\n  const { account } = await ensureAccount(\n    env.DB,\n    email,\n    { locale: parsed.body.locale, adminEmails: adminEmails(env) },\n    at\n  );\n  if (isDisabled(account)) {\n    // Before the code is spent and before any session or licence exists: a\n    // switched-off account gets nothing to hold on to (red team AUTHN-2).\n    return json({ ok: false, reason: \"disabled\" }, 403, cors);\n  }\n  await recordIdentity(env.DB, account.id, \"email\", email, at);\n\n  const checked = await checkLoginCode(env.DB, email, parsed.body.code, at);\n  if (!checked.ok) {\n    return json({ ok: false, reason: checked.reason }, 401, cors);\n  }\n", "sign-in-edges"],
+    ["SI4 a wrong or missing code still creates the account (an admin one included)", "src/api.js", "  const checked = await checkLoginCode(env.DB, email, parsed.body.code, at);\n  if (!checked.ok) {\n    return json({ ok: false, reason: checked.reason }, 401, cors);\n  }\n\n  // Everything that can fail and is safe to repeat comes before the code is\n  // spent: the account and identity writes are idempotent and the payload is\n  // reads. The code is spent in the same transaction that opens the session,\n  // so a failure anywhere leaves the person a code that still works.\n  const { account } = await ensureAccount(\n    env.DB,\n    email,\n    { locale: parsed.body.locale, adminEmails: adminEmails(env) },\n    at\n  );\n  if (isDisabled(account)) {\n    // Before the code is spent and before any session or licence exists: a\n    // switched-off account gets nothing to hold on to (red team AUTHN-2).\n    return json({ ok: false, reason: \"disabled\" }, 403, cors);\n  }\n  await recordIdentity(env.DB, account.id, \"email\", email, at);\n", "  const { account } = await ensureAccount(\n    env.DB,\n    email,\n    { locale: parsed.body.locale, adminEmails: adminEmails(env) },\n    at\n  );\n  if (isDisabled(account)) {\n    // Before the code is spent and before any session or licence exists: a\n    // switched-off account gets nothing to hold on to (red team AUTHN-2).\n    return json({ ok: false, reason: \"disabled\" }, 403, cors);\n  }\n\n  const checked = await checkLoginCode(env.DB, email, parsed.body.code, at);\n  if (!checked.ok) {\n    return json({ ok: false, reason: checked.reason }, 401, cors);\n  }\n\n  // Everything that can fail and is safe to repeat comes before the code is\n  // spent: the account and identity writes are idempotent and the payload is\n  // reads. The code is spent in the same transaction that opens the session,\n  // so a failure anywhere leaves the person a code that still works.\n  await recordIdentity(env.DB, account.id, \"email\", email, at);\n", "sign-in-edges"],
     ["SI5 the verify answer names the moment of sign-in as the session's end, so the browser drops the session on reload", "src/accounts.js", "    return null;\n  }\n  return { token: session.token, sessionId: session.sessionId, expiresAt: session.expiresAt };", "    return null;\n  }\n  return { token: session.token, sessionId: session.sessionId, expiresAt: session.at };", "sign-in-edges"],
     ["SI6 sessions last a thousand times ninety days, so a leaked token never ages out", "src/accounts.js", "expiresAt: at + SESSION_TTL_SECONDS", "expiresAt: at + SESSION_TTL_SECONDS * 1000", "sign-in-edges"],
     ["SI7 the right code on the fifth try is refused and the code burned", "src/accounts.js", "EXISTS (SELECT 1 FROM login_codes WHERE id = ?6 AND consumed_at IS NULL)", "EXISTS (SELECT 1 FROM login_codes WHERE id = ?6 AND consumed_at IS NULL AND attempts < 5)", "sign-in-edges"],
@@ -1316,6 +1424,76 @@ export const MUTANTS = {
     from,
     to: to.replace("SEQ", SEQUENTIAL),
     cmd: node([`workers/entitlements/test/${test}.test.mjs`])
+  })),
+  // Red team, Nov 2026 (browser injection and framing). CXSS-1: three fields of the synced progress document reached
+  // innerHTML raw, and a stored <meta http-equiv="refresh"> moved every device on the account off the site under the
+  // shipped CSP; the worker stored any object. Each mutant puts one defect back and names the test written for it: a
+  // path under workers/ is a Node test file, anything else a browser spec under the real CSP, with a title filter.
+  inject: [
+    ["IJ1 the catalogue card's session count is drawn as stored: markup in the synced count becomes elements", "js/app.js", "    const n = Number(row?.completedCount);\n    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return row?.completedCount || 0;", "tests/synced-doc-injection.spec.js", "IJ1 "],
+    ["IJ2 the hold pills draw each stored entry's seconds as they are, markup and all", "js/app.js", "      .map(holdSeconds)\n      .filter((s) => s !== null)\n", "      .map((l) => l.seconds)\n", "tests/synced-doc-injection.spec.js", "IJ2 "],
+    ["IJ3 the 12-week plan's HUD puts the stored focus into its HTML unescaped", "js/practice-modes.js", "<span data-week-head>${escText(model.head)}</span>", "<span data-week-head>${model.head}</span>", "tests/synced-doc-injection.spec.js", "IJ3 "],
+    ["IJ4 the hold pills are raw again, judged by the sweep of every synced field with Pro's panels drawn", "js/app.js", "      .map(holdSeconds)\n      .filter((s) => s !== null)\n", "      .map((l) => l.seconds)\n", "tests/synced-doc-injection.spec.js", "IJ4 "],
+    // IJ5 is the end-to-end case: since js/sync.js normalises the account's copy (the syncing set), markup in the
+    // count no longer reaches the sink by sign-in sync, so the test can only go red with both layers gone at once.
+    ["IJ5 the catalogue count is raw again and the merge keeps a stored count as it is, judged end to end: the worker's copy arrives by sign-in sync and its meta refresh navigates", "js/app.js", "    const n = Number(row?.completedCount);\n    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return row?.completedCount || 0;", "tests/synced-doc-injection.spec.js", "IJ5 ", [{ file: "js/sync.js", from: "      completedCount: Math.max(whole(r.completedCount), history.length),", to: "      completedCount: r.completedCount," }]],
+    ["IJ6 the worker takes any number-shaped field: markup as a session count or a hold's seconds is stored", "workers/entitlements/src/progress.js", "  return value === undefined || (typeof value === \"number\" && Number.isFinite(value) && value >= 0);", "  return true;", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ7 the worker takes a history or a log that is not a list", "workers/entitlements/src/progress.js", "  return value === undefined || Array.isArray(value);", "  return true;", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ8 the worker no longer looks inside the exercise rows", "workers/entitlements/src/progress.js", "  return Object.values(doc.progress || {}).every(rowIsSound) && (doc.holdLogs || []).every(holdIsSound);", "  return (doc.holdLogs || []).every(holdIsSound);", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ9 the worker no longer looks inside the hold log", "workers/entitlements/src/progress.js", "  return Object.values(doc.progress || {}).every(rowIsSound) && (doc.holdLogs || []).every(holdIsSound);", "  return Object.values(doc.progress || {}).every(rowIsSound);", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ10 over-strict: a document that leaves a list out is refused, though the client may send one so", "workers/entitlements/src/progress.js", "  return value === undefined || Array.isArray(value);", "  return Array.isArray(value);", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ11 over-strict: a week plan of null, what a browser with no plan sends, is refused", "workers/entitlements/src/progress.js", "  return value === undefined || value === null || isRecord(value);", "  return value === undefined || isRecord(value);", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ12 the worker takes a list as the whole document", "workers/entitlements/src/progress.js", "  return value !== null && typeof value === \"object\" && !Array.isArray(value);", "  return value !== null && typeof value === \"object\";", "workers/entitlements/test/progress.test.mjs"],
+    // CXSS-2: GitHub Pages cannot send frame-ancestors, so the first script of each page refuses a frame.
+    ["IJ13 index.html renders in another origin's frame: boot-head.js no longer hides it", "js/boot-head.js", "  if (framed()) {\n", "  if (false) {\n", "tests/frame-guard.spec.js", "IJ13 "],
+    ["IJ14 admin.html renders in another origin's frame: its guard no longer runs", "js/frame-guard.js", "  if (!framed()) return;\n", "  return;\n", "tests/frame-guard.spec.js", "IJ13 "],
+    ["IJ15 framed by its own origin, neither page asks to be the top window", ["js/boot-head.js", "js/frame-guard.js"], "window.top.location.replace(window.location.href);", "void 0;", "tests/frame-guard.spec.js", "IJ14 "],
+    ["IJ16 over-blocking: admin.html takes itself for framed when it is the top window, and never shows", "js/frame-guard.js", "      return window.top !== window.self;", "      return true;", "tests/frame-guard.spec.js", "IJ15 "],
+    // CXSS-3: a report's contact, typed by anyone, became the admin's reply link as it was (mailto header fields).
+    ["IJ17 the reply link is the contact as typed: ?bcc=, &body= and a second recipient reach the admin's mail client", "js/admin.js", "    const href = replyHref(contact);", "    const href = `mailto:${contact}`;", "tests/admin-reply-link.spec.js"],
+    ["IJ18 any character but @ passes as the local part: a comma writes to a second recipient", "js/admin.js", "  const PLAIN_LOCAL = /^[A-Za-z0-9.!#$'*+^_`{|}~-]{1,64}$/;", "  const PLAIN_LOCAL = /^[^@\\s]{1,64}$/;", "tests/admin-reply-link.spec.js"],
+    ["IJ19 any text passes as the domain: the header fields after it are kept", "js/admin.js", "  const PLAIN_DOMAIN = /^(?=.{1,253}$)", "  const PLAIN_DOMAIN = /^(?=.*$)|^(?=.{1,253}$)", "tests/admin-reply-link.spec.js"],
+    ["IJ20 the local part is not percent-encoded: a # in it starts a fragment and the mail goes to the part before it", "js/admin.js", "    return `mailto:${encodeURIComponent(local)}@${domain}`;", "    return `mailto:${local}@${domain}`;", "tests/admin-reply-link.spec.js"],
+    // CXSS-4: the spec that stood for this wrote #ex-steps with its own escapeHtml and passed on this mutant.
+    ["IJ21 the exercise's steps are put into #ex-steps unescaped", "js/app.js", "      .map((s) => `<li>${escapeHtml(s)}</li>`)", "      .map((s) => `<li>${s}</li>`)", "tests/redteam-client.spec.js", "IJ21 "],
+    ["IJ22 a stored count of \"1e400\" is drawn as Infinity sessions (coerced, but not checked finite)", "js/app.js", "    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return Math.max(0, Math.floor(n || 0));", "tests/synced-doc-injection.spec.js", "IJ1 "]
+  ].map(([name, file, from, to, spec, grep, also]) => ({
+    name,
+    file,
+    from,
+    to,
+    ...(also ? { also } : {}),
+    cmd: spec.startsWith("workers/")
+      ? node([spec])
+      : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
+  })),
+  // Red team, Nov 2026 (sign-in). AUTHN-1: Google sign-in found the account by the token's email and ignored `sub`, so
+  // a second Google account with the same address entered the first one's account (admin included) and a Google
+  // account whose address changed got an empty one. AUTHN-2: a switched-off account still got a session and a licence
+  // from both sign-in routes. AUTHN-7: no response said nosniff. The last two mutants take the client's messages for
+  // the new refusals away, which made both read "Algo falló — inténtalo de nuevo".
+  authwall: [
+    ["AW1 Google sign-in looks the account up by email only: a renamed Google account gets an empty account", "workers/entitlements/src/api.js", "  let account = await getAccountByIdentity(env.DB, \"google\", identity.subject);", "  let account = null;", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW2 a second Google account with a taken address walks into the first one's account", "workers/entitlements/src/api.js", "    if (known.length && !known.includes(identity.subject)) {", "    if (false) {", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW3 over-strict: an account no Google account owns yet can never be joined by Google", "workers/entitlements/src/api.js", "    if (known.length && !known.includes(identity.subject)) {", "    if (!known.includes(identity.subject)) {", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW4 Google sign-in hands a switched-off account a session and a licence", "workers/entitlements/src/api.js", "  if (isDisabled(account)) {\n    return { ok: false, status: 403, reason: \"disabled\" };", "  if (false) {\n    return { ok: false, status: 403, reason: \"disabled\" };", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW5 an emailed code hands a switched-off account a session and a licence", "workers/entitlements/src/api.js", "  if (isDisabled(account)) {\n    // Before the code is spent", "  if (false) {\n    // Before the code is spent", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW6 a Google account's sub is never recorded, so its next sign-in after an address change starts over", "workers/entitlements/src/api.js", "  await recordIdentity(env.DB, account.id, \"google\", identity.subject, at);\n  return { ok: true, account };", "  return { ok: true, account };", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW7 over-strict: an account that was never switched off reads as switched off", "workers/entitlements/src/accounts.js", "  return Boolean(account) && account.disabled_at !== null && account.disabled_at !== undefined;", "  return Boolean(account) && account.disabled_at !== undefined;", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW8 JSON answers lose nosniff", "workers/entitlements/src/index.js", "      \"x-content-type-options\": \"nosniff\",\n      ...(headers || {})", "      ...(headers || {})", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW9 the preflight loses nosniff", "workers/entitlements/src/index.js", "headers: { ...cors, \"x-content-type-options\": \"nosniff\" } });", "headers: cors });", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW10 a switched-off account is told \"something went wrong\" and retries", "js/app.js", "    disabled: \"auth.err.disabled\",\n", "", "tests/redteam-accounts-profiles.spec.js", "switched-off account is told so"],
+    ["AW11 a Google account refused for a taken address is not told to use the emailed code", "js/app.js", "    identity_conflict: \"auth.err.identityConflict\"\n", "", "tests/redteam-accounts-profiles.spec.js", "address another Google account holds"],
+    ["AW12 with no emailed code on offer, an identity conflict still sends the person to one", "js/app.js", "    if (reason === \"identity_conflict\" && !accountSignIn().canEmail) return", "    if (false) return", "tests/redteam-accounts-profiles.spec.js", "address another Google account holds"],
+    ["AW13 an identity conflict always names a report, though an emailed code is on offer", "js/app.js", "    if (reason === \"identity_conflict\" && !accountSignIn().canEmail) return", "    if (reason === \"identity_conflict\") return", "tests/redteam-accounts-profiles.spec.js", "address another Google account holds"]
+  ].map(([name, file, from, to, spec, grep]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: spec.startsWith("workers/")
+      ? node([spec])
+      : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
   }))
 };
 
@@ -1336,20 +1514,35 @@ function runTests([cmd, ...args], root) {
   }
 }
 
+/** Every edit a mutant makes: its from/to in each of its files, then each of its `also` edits, in order. */
+function mutantEdits(m, root) {
+  const own = [].concat(m.file).map((f) => ({ file: path.join(root, f), from: m.from, to: m.to }));
+  return own.concat((m.also || []).map((e) => ({ file: path.join(root, e.file), from: e.from, to: e.to })));
+}
+
 /**
  * A mutant changes one file, or the same text in every file of a list (a defect
  * made on all four pages at once, which a "the pages agree" check cannot see).
+ * `also` adds further edits made together with it: a defect that only shows
+ * when two layers of one defence are both gone (an end-to-end test behind a
+ * sink escape and a normalisation upstream of it). Every anchor must occur
+ * exactly once in the text it is applied to, or the result is ANCHOR.
  * @returns {"KILLED"|"SURVIVED"|"ANCHOR"}
  */
 export function tryMutant(m, root = process.cwd()) {
-  const files = [].concat(m.file).map((f) => path.join(root, f));
-  const sources = files.map((f) => readFileSync(f, "utf8"));
-  if (sources.some((src) => src.split(m.from).length !== 2)) return "ANCHOR";
-  files.forEach((f, i) => writeFileSync(f, sources[i].replace(m.from, m.to)));
+  const edits = mutantEdits(m, root);
+  const originals = new Map(edits.map((e) => [e.file, readFileSync(e.file, "utf8")]));
+  const mutated = new Map(originals);
+  for (const e of edits) {
+    const src = mutated.get(e.file);
+    if (src.split(e.from).length !== 2) return "ANCHOR";
+    mutated.set(e.file, src.replace(e.from, e.to));
+  }
+  mutated.forEach((src, f) => writeFileSync(f, src));
   try {
     return runTests(m.cmd, root) ? "SURVIVED" : "KILLED";
   } finally {
-    files.forEach((f, i) => writeFileSync(f, sources[i]));
+    originals.forEach((src, f) => writeFileSync(f, src));
   }
 }
 

@@ -3,7 +3,9 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import { createContext, runInContext } from "node:vm";
 
 import { ensureAccount } from "../src/accounts.js";
 import { ensureSchema, resetSchemaMemo } from "../src/db.js";
@@ -195,4 +197,131 @@ test("a real-shaped practice bag round-trips intact", async () => {
   };
   assert.equal((await putProgress(env.DB, account.id, "default", doc, 0, 5000)).ok, true);
   assert.deepEqual((await getProgress(env.DB, account.id, "default")).doc, doc);
+});
+
+/*
+ * CXSS-1 (red team, Nov 2026), defence in depth. The worker stored any object,
+ * so a session holder could store markup where the browser keeps numbers and
+ * lists, and every device on the account pulled it back. The browser escapes
+ * what it shows now; the worker also refuses a document whose structure is
+ * wrong, with the reason the client already treats as a standing refusal
+ * (bad_document, 400). Wrong behaviour rejected: such a document is stored.
+ * Control: every document the current client builds (its own storage.js and
+ * sync.js, run below) is still accepted, as is a document that leaves the
+ * checked sections out.
+ */
+const MARKUP = '<meta http-equiv="refresh" content="0;url=https://evil.example/">';
+
+/** A document the way the browser would send it, with one part replaced. */
+function withPart(part) {
+  return {
+    v: 1,
+    profileId: "default",
+    progress: { "v1-diction": { completedCount: 2, history: [], lastScore: 4, lastAt: "2026-11-17T10:00:00.000Z" } },
+    weekPlan: null,
+    reviews: [],
+    holdLogs: [{ at: "2026-11-17T10:00:00.000Z", seconds: 6.5 }],
+    goals: null,
+    achievements: {},
+    days: null,
+    loop: null,
+    ...part
+  };
+}
+
+const row = (fields) => ({ progress: { "s4-lip-trills": { completedCount: 1, history: [], lastScore: null, lastAt: null, ...fields } } });
+
+const BAD_DOCUMENTS = [
+  ["a list where the document belongs", []],
+  ["markup as a session count", withPart(row({ completedCount: MARKUP }))],
+  ["a session count written as text", withPart(row({ completedCount: "3" }))],
+  ["a negative session count", withPart(row({ completedCount: -1 }))],
+  ["an endless session count", withPart(row({ completedCount: Infinity }))],
+  ["a null session count", withPart(row({ completedCount: null }))],
+  ["a history that is not a list", withPart(row({ history: MARKUP }))],
+  ["a null history", withPart(row({ history: null }))],
+  ["an exercise row that is text", withPart({ progress: { "s4-lip-trills": MARKUP } })],
+  ["progress that is a list", withPart({ progress: [] })],
+  ["progress that is text", withPart({ progress: MARKUP })],
+  ["reviews that are not a list", withPart({ reviews: { 0: MARKUP } })],
+  ["null reviews", withPart({ reviews: null })],
+  ["hold logs that are not a list", withPart({ holdLogs: MARKUP })],
+  ["null hold logs", withPart({ holdLogs: null })],
+  ["markup as a hold's seconds", withPart({ holdLogs: [{ at: "2026-11-17T10:00:00.000Z", seconds: MARKUP }] })],
+  ["a hold entry that is text", withPart({ holdLogs: [MARKUP] })],
+  ["a week plan that is text", withPart({ weekPlan: MARKUP })]
+];
+
+for (const [what, doc] of BAD_DOCUMENTS) {
+  test(`IJ6 a document with ${what} is refused as bad_document and nothing is stored`, async () => {
+    const { env, account } = await withAccount();
+    const result = await putProgress(env.DB, account.id, "default", doc, 0, 5000);
+    assert.deepEqual(result, { ok: false, reason: "bad_document" });
+    assert.equal(await getProgress(env.DB, account.id, "default"), null);
+  });
+}
+
+test("IJ6 control: the document the bad ones are built from, and one that leaves the checked sections out, are stored", async () => {
+  const { env, account } = await withAccount();
+  assert.equal((await putProgress(env.DB, account.id, "default", withPart({}), 0, 5000)).ok, true);
+  assert.equal((await putProgress(env.DB, account.id, "p_two", { v: 1, profileId: "p_two" }, 0, 5000)).ok, true);
+  // A row whose count and history are absent, a null row, and a hold with no seconds: nothing to refuse
+  const sparse = withPart({ progress: { a: {}, b: null }, holdLogs: [{ at: "2026-11-17T10:00:00.000Z" }], weekPlan: { weekNumber: 2 } });
+  assert.equal((await putProgress(env.DB, account.id, "p_three", sparse, 0, 5000)).ok, true);
+});
+
+/**
+ * The browser's own code, run in Node: js/storage.js on a localStorage held in
+ * a Map, and js/sync.js for its merge. What it builds is what a PUT carries.
+ * @returns {{S: Object, mergeBag: Function}} The storage API and the merge.
+ */
+function browserCode() {
+  const store = new Map();
+  const win = {
+    localStorage: {
+      getItem: (k) => (store.has(k) ? store.get(k) : null),
+      setItem: (k, v) => store.set(k, String(v)),
+      removeItem: (k) => store.delete(k)
+    },
+    crypto: globalThis.crypto,
+    console
+  };
+  win.window = win;
+  const context = createContext(win);
+  for (const file of ["../../../js/storage.js", "../../../js/sync.js"]) {
+    runInContext(readFileSync(new URL(file, import.meta.url), "utf8"), context);
+  }
+  return { S: win.VTStorage, mergeBag: win.VTSync.mergeBag };
+}
+
+/** One device's practice, written through the browser's storage API. */
+function practise(S, n) {
+  S.saveExerciseResult("v1-diction", { score: 4, metrics: { clarity: 4, pace: 3 }, notes: `take ${n}`, durationSec: 62 });
+  // A take recorded without a rating, then rated: the same id updated in place
+  const auto = S.saveExerciseResult("s4-lip-trills", { auto: true, durationSec: 30 });
+  S.saveExerciseResult("s4-lip-trills", { replaceId: auto.id, score: 5, metrics: {}, durationSec: 30 });
+  S.addHoldLog(6.5 + n);
+  S.saveReview({ week: n, element: "Diction", verdict: "improved", notes: "más clara", at: new Date().toISOString() });
+  S.setWeekPlan({ weekNumber: n + 1, status: "active", element: "Volume", startedAt: new Date().toISOString(), completedElements: ["Diction"], checkIns: [], reviews: [] });
+  S.setGoals({ weeklySessionsTarget: 5 });
+  S.setAchievementFlags({ firstWin: true });
+  return JSON.parse(JSON.stringify(S.readSyncBag("default")));
+}
+
+test("IJ6 control: every document the current client builds is accepted, fresh, practised and merged", async () => {
+  const { env, account } = await withAccount();
+  const fresh = browserCode();
+  const empty = JSON.parse(JSON.stringify(fresh.S.readSyncBag("default")));
+  assert.deepEqual(empty.reviews, [], "control: the browser's code ran (a fresh bag holds empty lists)");
+  assert.equal((await putProgress(env.DB, account.id, "default", empty, 0, 5000)).ok, true, "a fresh browser's bag");
+
+  const phone = practise(browserCode().S, 1);
+  const laptop = browserCode();
+  const own = practise(laptop.S, 2);
+  assert.equal(own.progress["v1-diction"].completedCount, 1, "control: the practice was saved");
+  assert.equal((await putProgress(env.DB, account.id, "default", own, 1, 5100)).ok, true, "a practised bag");
+  const merged = JSON.parse(JSON.stringify(laptop.mergeBag(own, phone)));
+  assert.equal(merged.holdLogs.length, 2, "control: the merge holds both devices' holds");
+  assert.equal((await putProgress(env.DB, account.id, "default", merged, 2, 5200)).ok, true, "two devices' bags merged");
+  assert.deepEqual((await getProgress(env.DB, account.id, "default")).doc, merged);
 });

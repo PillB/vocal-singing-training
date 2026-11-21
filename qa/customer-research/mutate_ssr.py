@@ -1,5 +1,6 @@
-"""Plant each defect test_ssr.py names into a copy of ssr.py; each must turn it red.
+"""Plant each defect the tests name into a copy of the code; each must turn its test file red.
 
+ssr.py mutants are judged by test_ssr.py; collect.py and analyze.py mutants by test_rules.py.
 Run: python qa/customer-research/mutate_ssr.py   (exit 1 if a mutant survives)
 """
 import os
@@ -25,14 +26,40 @@ MUTANTS = {
 }
 
 
-def run(module_dir: str) -> int:
+RULE_MUTANTS = {
+    "collect-ignores-the-round": (
+        "collect.py",
+        "meta = rounds[round_of(tag, rounds)][batch_id]",
+        "meta = rounds[sorted(rounds)[0]][batch_id]",
+    ),
+    "split-half-on-three-cards": ("analyze.py", "if len(concepts) < MIN_SPLIT_CONCEPTS:", "if False:"),
+    "not-worse-on-the-point-estimate": ("analyze.py", 'd["lo"] > NI_MARGIN', 'd["diff"] > NI_MARGIN'),
+}
+
+
+def run(module_dir: str, tests: str = "test_ssr") -> int:
     env = dict(os.environ, SSR_MODULE_DIR=module_dir)
-    return subprocess.run([sys.executable, "-m", "unittest", "-q", "test_ssr"], cwd=HERE, env=env,
+    return subprocess.run([sys.executable, "-m", "unittest", "-q", tests], cwd=HERE, env=env,
                           capture_output=True, text=True).returncode
 
 
+def run_rule_mutant(name, file, old, new):
+    """A copy of every module, one of them mutated, beside links to data/ and prompts/."""
+    src = (HERE / file).read_text()
+    if src.count(old) != 1:
+        print(f"{name}: anchor text not found exactly once in {file}")
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        for f in HERE.glob("*.py"):
+            Path(tmp, f.name).write_text(f.read_text())
+        Path(tmp, file).write_text(src.replace(old, new))
+        for d in ("data", "prompts"):
+            os.symlink(HERE / d, Path(tmp, d))
+        return run(tmp, "test_rules")
+
+
 def main() -> int:
-    if run(str(HERE)) != 0:
+    if run(str(HERE)) != 0 or run(str(HERE), "test_rules") != 0:
         print("baseline is red: fix the tests before judging mutants")
         return 1
     survivors = []
@@ -48,6 +75,13 @@ def main() -> int:
         if code == 0:
             survivors.append(name)
         shutil.rmtree(Path(tmp), ignore_errors=True)
+    for name, (file, old, new) in RULE_MUTANTS.items():
+        code = run_rule_mutant(name, file, old, new)
+        if code is None:
+            return 1
+        print(f"{name}: {'killed' if code != 0 else 'SURVIVED'}")
+        if code == 0:
+            survivors.append(name)
     return 1 if survivors else 0
 
 

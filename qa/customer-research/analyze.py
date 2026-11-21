@@ -30,6 +30,8 @@ import ssr  # noqa: E402
 MODELS = ("mpnet", "minilm", "e5")
 QUESTIONS = ("trial", "paid")
 B = 4000  # bootstrap resamples
+MIN_SPLIT_CONCEPTS = 4
+NI_MARGIN = -0.10  # round 2: "not worse than today" on trial intent (README, Round 2 rules)
 rng = np.random.default_rng(20261121)
 
 
@@ -85,8 +87,15 @@ def ci_mean(vals):
 
 
 def split_half(t, ids, reps=500):
-    """Correlation of concept means between random halves of the panel, Spearman-Brown corrected."""
+    """Correlation of concept means between random halves of the panel, Spearman-Brown corrected.
+
+    None with fewer than four concepts: a correlation of three nearly equal means
+    swings between -1 and 1 by chance, and Spearman-Brown turns r near -1 into
+    numbers like -2,000 (round 2, three cards). The gate needs cards that differ.
+    """
     concepts = sorted(t)
+    if len(concepts) < MIN_SPLIT_CONCEPTS:
+        return None
     rs = []
     ids = list(ids)
     for _ in range(reps):
@@ -104,31 +113,47 @@ def ranks(t):
     return {c: k + 1 for k, c in enumerate(order)}
 
 
-def analyse(responses, people):
-    by_id = {p["id"]: p for p in people}
+def segments_of(people):
     segs = {"all": [p["id"] for p in people]}
     for p in people:
         segs.setdefault(segment(p["age_band"]), []).append(p["id"])
     for lang in ("es", "en"):
         segs[lang] = [p["id"] for p in people if p["language"] == lang]
+    return segs
+
+
+def summarise(t, segs):
+    """Means, paired differences from today and from the placebo, and split-half, for one table."""
+    concepts = sorted(t)
+    res = {"by_concept": {}, "vs_today": {}, "vs_placebo": {}, "robustness": {}}
+    for seg, ids in segs.items():
+        res["by_concept"][seg] = {c: ci_mean([t[c][i] for i in ids if i in t[c]]) for c in concepts}
+        res["vs_today"][seg] = {c: paired_diff(t, c, "C0", ids) for c in concepts if c != "C0"}
+        if "C0p" in t:
+            res["vs_placebo"][seg] = {c: paired_diff(t, c, "C0p", ids) for c in concepts if c not in ("C0p",)}
+    res["split_half"] = split_half(t, segs["all"])
+    res["robustness"]["rank_ensemble"] = ranks(t)
+    return res
+
+
+def analyse_tables(tables, people):
+    """The pre-registered rules on any {question: {concept: {person: rating}}}, however it was rated."""
+    segs = segments_of(people)
     out = {"segments": {k: len(v) for k, v in segs.items()}, "questions": {}}
     for q in QUESTIONS:
-        t = table(responses, people, q)
-        concepts = sorted(t)
-        res = {"by_concept": {}, "vs_today": {}, "vs_placebo": {}, "robustness": {}}
-        for seg, ids in segs.items():
-            res["by_concept"][seg] = {c: ci_mean([t[c][i] for i in ids if i in t[c]]) for c in concepts}
-            res["vs_today"][seg] = {c: paired_diff(t, c, "C0", ids) for c in concepts if c != "C0"}
-            if "C0p" in t:
-                res["vs_placebo"][seg] = {c: paired_diff(t, c, "C0p", ids) for c in concepts if c not in ("C0p",)}
-        res["split_half"] = split_half(t, segs["all"])
-        res["robustness"]["rank_ensemble"] = ranks(t)
-        for m in MODELS:
-            res["robustness"][f"rank_{m}"] = ranks(table(responses, people, q, m))
-        out["questions"][q] = res
+        out["questions"][q] = summarise(tables[q], segs)
     out["gates"] = gates(out)
     out["verdicts"] = verdicts(out)
-    _ = by_id
+    out["not_worse_on_trial"] = {c: d["lo"] > NI_MARGIN for c, d in out["questions"]["trial"]["vs_today"]["all"].items()
+                                 if d is not None and c not in ("C0p", "N", "P")}
+    return out
+
+
+def analyse(responses, people):
+    out = analyse_tables({q: table(responses, people, q) for q in QUESTIONS}, people)
+    for q in QUESTIONS:
+        for m in MODELS:
+            out["questions"][q]["robustness"][f"rank_{m}"] = ranks(table(responses, people, q, m))
     return out
 
 
@@ -139,8 +164,10 @@ def gates(out):
         g["V1_bad_offer_lower"] = all(out["questions"][q]["vs_today"]["all"]["N"]["hi"] < 0 for q in QUESTIONS)
     if "P" in pd["vs_today"]["all"]:
         g["V2_half_price_higher_paid"] = pd["vs_today"]["all"]["P"]["lo"] > 0
-    g["V3_split_half_trial"] = tr["split_half"] >= 0.7
-    g["V3_split_half_paid"] = pd["split_half"] >= 0.7
+    if tr["split_half"] is not None:
+        g["V3_split_half_trial"] = tr["split_half"] >= 0.7
+    if pd["split_half"] is not None:
+        g["V3_split_half_paid"] = pd["split_half"] >= 0.7
     return g
 
 

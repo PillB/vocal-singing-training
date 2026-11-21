@@ -84,14 +84,16 @@ first visit (F) at least as good as today's (C0)?**
 | File | What |
 |---|---|
 | `ssr.py` | Equations 8 and 9 of the paper, anchor-set averaging, KS similarity |
-| `test_ssr.py`, `mutate_ssr.py` | Tests, and six planted defects that each must turn them red |
+| `test_ssr.py`, `test_rules.py`, `mutate_ssr.py` | Tests of the scoring and of the bookkeeping and decision rules, and nine planted defects that each must turn them red |
 | `panel.py` → `data/panel.json` | The 64 profiles (seeded, quota-sampled per age band) |
 | `data/concepts-r1.json` | Round 1 concept cards, ES and EN, with the controls |
 | `build_batches.py`, `write_prompts.py` → `prompts/` | The exact text each panel agent read |
 | `data/anchors.json` | 6 anchor sets × 2 questions × 2 languages |
 | `data/holdout-labelled.json` | 120 answers labelled 1–5, written blind to the anchors |
-| `analyze.py` | Scoring, bootstrap intervals, gates, verdicts |
+| `analyze.py` | Scoring, bootstrap intervals, gates, verdicts, and round 2's "not worse" rule |
+| `collect.py` | Gathers answers from the run journals; batch ids repeat across rounds, so each run tag is matched to its own round |
 | `data/r*-responses.json`, `data/r*-results.json` | Raw answers and results |
+| `blind_check.py`, `data/r*-blind-{key,coded,rated,results}.json` | The second reading: other agents, seeing only answer text in batches mixing every card, rated each intent 1–5 and tagged each objection; the key joins them back; the same rules run on the rating |
 
 ## Running it
 
@@ -99,8 +101,30 @@ first visit (F) at least as good as today's (C0)?**
 python3 -m venv .venv && .venv/bin/pip install fastembed numpy scipy
 .venv/bin/python -m unittest qa/customer-research/test_ssr.py   # needs the models (~2.5 GB first run)
 .venv/bin/python qa/customer-research/mutate_ssr.py             # every planted defect must be caught
+.venv/bin/python -m unittest qa/customer-research/test_rules.py  # no models needed
 .venv/bin/python qa/customer-research/analyze.py data/r1-responses.json data/r1-results.json
+.venv/bin/python qa/customer-research/analyze.py data/r2-responses.json data/r2-results.json
+.venv/bin/python qa/customer-research/blind_check.py r1   # and r2
 ```
+
+## What happened (2026-11-21)
+
+- **Round 1:** gates V1 (paid) and V3 (paid) failed on SSR, so no paying result
+  from SSR is claimed. No framing beat today and the placebo on trial intent;
+  C2 rated worse on SSR.
+- **Blind reading of round 1:** all four gates pass (bad offer lower on both
+  questions, half price higher on paying, split-half 0.98 and 0.89). Still no
+  framing beats today and the placebo. C2's SSR harm does not replicate (+0.00).
+- **Round 2:** the shipped first visit (F) is not worse than today on trial
+  intent on both readings: SSR +0.00 [−0.04, +0.05], blind +0.09 [−0.05, +0.23].
+  The 35–49 flag on SSR (−0.09) has the opposite sign on the blind reading
+  (+0.30), so it is treated as noise.
+- **Deviations from the plan, stated:** the round 2 rules were written after
+  round 1 was scored (before any round 2 answer); the split-half gate now
+  returns nothing for fewer than four cards (added after round 2 printed
+  −2,395, which is arithmetic, not reliability); `collect.py` first matched
+  round 2's C0 and C0p batches against round 1's membership and dropped most
+  answers, which was found and fixed before analysis, with a test.
 
 None of this runs in CI: it needs the embedding models and the answers come
 from model calls. It is a research record, kept so the numbers in `docs/48`

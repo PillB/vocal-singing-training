@@ -41,6 +41,8 @@
    */
   const ENTITLED_STATUSES = new Set(["active", "past_due", "canceled"]);
   const CLAIM_RETRY_DELAYS_MS = [1500, 3000, 5000, 8000];
+  /** Bumped by cancelClaims(): a claim started under an older value stops and adopts nothing. */
+  let claimGeneration = 0;
 
   /** In-memory result of the last signature check — billing reads this synchronously. */
   let verified = null;
@@ -280,25 +282,16 @@
    * @returns {Promise<{ok: boolean, reason?: string, claims?: object}>}
    */
   async function claim(input) {
-    const provider = String(input?.provider || "").trim();
-    const sessionId = String(input?.sessionId || "").trim();
     if (!isConfigured()) return { ok: false, reason: "unconfigured" };
-    if (!provider || !sessionId) return { ok: false, reason: "invalid_input" };
+    const body = claimBody(input);
+    if (!body) return { ok: false, reason: "invalid_input" };
 
     state = "checking";
     emit();
+    const generation = claimGeneration;
     for (let attempt = 0; attempt <= CLAIM_RETRY_DELAYS_MS.length; attempt++) {
-      const res = await postJson("/v1/claim", { provider, sessionId });
-      if (res.ok && res.data?.token) {
-        const claims = await adopt(res.data.token, res.data.licenseId);
-        return claims ? { ok: true, claims } : { ok: false, reason: "bad_signature" };
-      }
-      const pending = res.status === 202 || res.status === 0;
-      if (!pending) {
-        state = "none";
-        emit();
-        return { ok: false, reason: res.data?.reason || "not_found" };
-      }
+      const out = await claimOutcome(await postJson("/v1/claim", body), generation);
+      if (out) return out;
       if (attempt < CLAIM_RETRY_DELAYS_MS.length) {
         await new Promise((r) => setTimeout(r, CLAIM_RETRY_DELAYS_MS[attempt]));
       }
@@ -306,6 +299,36 @@
     state = "checking";
     emit();
     return { ok: false, reason: "pending" };
+  }
+
+  /** The `/v1/claim` body, or null when the provider or the checkout id is missing. */
+  function claimBody(input) {
+    const provider = String(input?.provider || "").trim();
+    const sessionId = String(input?.sessionId || "").trim();
+    return provider && sessionId ? { provider, sessionId } : null;
+  }
+
+  /**
+   * What one `/v1/claim` answer settles: the outcome to return, or null to
+   * ask again (pending, or no answer).
+   */
+  async function claimOutcome(res, generation) {
+    // Signed out while this ran (js/billing.js forgetPendingClaim): the
+    // licence is not this browser's to keep any more.
+    if (generation !== claimGeneration) return { ok: false, reason: "cancelled" };
+    if (res.ok && res.data?.token) {
+      const claims = await adopt(res.data.token, res.data.licenseId);
+      return claims ? { ok: true, claims } : { ok: false, reason: "bad_signature" };
+    }
+    if (res.status === 202 || res.status === 0) return null;
+    state = "none";
+    emit();
+    return { ok: false, reason: res.data?.reason || "not_found" };
+  }
+
+  /** Stop every claim running in this page; see claim(). */
+  function cancelClaims() {
+    claimGeneration += 1;
   }
 
   /**
@@ -442,6 +465,7 @@
     adopt,
     setRefresher,
     claim,
+    cancelClaims,
     refresh,
     clear,
     getClaims,

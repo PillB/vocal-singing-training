@@ -923,10 +923,12 @@
   /**
    * Drop a checkout still waiting for its licence, on sign-out: claimed
    * afterwards, it would be linked to whoever signs in next on this browser
-   * (js/account.js forget). The account that bought it keeps its own pending
-   * link, which only that account retries.
+   * (js/account.js dropPendingClaim). The account that bought it keeps its own
+   * pending link, which only that account retries.
    */
   function forgetPendingClaim() {
+    // A claim already running would store the licence after this returns.
+    global.VTLicense?.cancelClaims?.();
     const st = read();
     if (!st || (st.status !== "pending" && st.status !== "unclaimed")) return;
     try {

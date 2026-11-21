@@ -9535,14 +9535,20 @@
 
   /**
    * The region whose prices the cards show: the visitor's own on the visitor's
-   * own rail, the worldwide (dollar) one on any other. The money follows the
+   * own rail, and on any other the rail's own money. The money follows the
    * rail: a Peruvian who picks the card rail pays Creem, which cannot charge
    * soles, so showing S/ 19.90 there promised a price nobody would charge.
-   * Whether the euro markets' Creem products are priced in euros is the
-   * operator's to say (docs/VALUE-GAP-REGISTRY.md VG-85).
+   * The other way round too: Mercado Pago's plans are a Peruvian seller's and
+   * charge soles wherever the buyer is, so an Argentine who picks that rail is
+   * shown S/ 19.90, not the US$ 7.99 it never charges. A rail sold in one
+   * country (its config `regions`) is priced as there; any other at the
+   * worldwide dollar price. Whether the euro markets' Creem products are
+   * priced in euros is the operator's to say (VG-85).
    */
   function priceRegionFor(B, region) {
-    return pricingRail === B.preferredRail(region) ? region : "WW";
+    if (pricingRail === B.preferredRail(region)) return region;
+    const regions = window.VT_BILLING_CONFIG?.providers?.[pricingRail]?.regions || [];
+    return regions.length === 1 ? regions[0] : "WW";
   }
 
   /**
@@ -9603,8 +9609,13 @@
     window.VTAccount?.ensureMethods?.();
     // And which rails it can honour, for the same reason: asked when the panel
     // opens, so the answer is there by the time a plan is pressed, and never
-    // asked of somebody who never looks at the prices.
-    window.VTAccount?.ensureRails?.();
+    // asked of somebody who never looks at the prices. The dialog is drawn
+    // before that answer lands, so it is painted again when it does: a worker
+    // that cannot open the portal used to leave the Manage button, and the
+    // line naming it, on the first opening of every tab.
+    window.VTAccount?.ensureRails?.()?.then?.(() => {
+      if (!modal.hidden) updateBillingChrome();
+    }).catch(() => {});
     // Remember the trigger before renderPricingModal() rebuilds the card.
     const opener = document.activeElement;
     renderPricingModal();
@@ -11128,10 +11139,19 @@
   function openBillingPortal() {
     const B = window.VTBilling;
     if (!B) return;
-    const route = manageRoute(B, B.getEntitlement?.(), B.cfg?.() || {});
+    const ent = B.getEntitlement?.();
+    const route = manageRoute(B, ent, B.cfg?.() || {});
     if (route === "creem") return openCreemPortal();
     if (route === "mercadopago") {
       window.open(MP_SUBSCRIPTIONS_URL, "_blank", "noopener,noreferrer");
+      return;
+    }
+    // A Creem payer whose button went stale (the worker has since said it
+    // cannot open the portal): Creem's emailed link, not Stripe's "billing
+    // isn't available yet", which is false for somebody already paying.
+    if (billingRailFor(ent) === "creem") {
+      toast(tt("pricing.cancel.creemEmail"), { durationMs: 6000 });
+      updateBillingChrome();
       return;
     }
     if (!B.openCustomerPortal) return;
@@ -11160,6 +11180,14 @@
         const target = res?.ok ? window.VTBilling.validateCheckoutUrl(res.url) : null;
         if (target?.ok) {
           window.location.assign(target.url);
+          return;
+        }
+        if (res?.reason === "no_session") {
+          // The session ended elsewhere and the account layer has forgotten
+          // it: the way on is signing in again, as for a Subscribe press.
+          closePricing();
+          openAccount();
+          toast(tt("pricing.portalNeedsAccount"), { durationMs: 4600 });
           return;
         }
         toast(tt("pricing.toast.portalFailed"), { durationMs: 6000 });

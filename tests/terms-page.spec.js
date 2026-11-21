@@ -102,6 +102,29 @@ test.describe("terms of use", () => {
     }
   });
 
+  // Peru's Code art. 24.4 (added by DL 1729) wants complaint routes that are
+  // accessible and work at no needless cost, and art. 47.c the right to leave
+  // by the means used to sign up; a public GitHub repository is neither, once
+  // money is taken (deploy-readiness legal check D3-11, 2026-11-21). The page
+  // may keep it while nothing is sold; the commit that puts Pro on sale (gate
+  // step 5) turns this red until step 2's address is in.
+  test("once anything is on sale, cancelling, refunds and complaints go to an address, not the public repository", async ({ page }) => {
+    const config = fs.readFileSync(path.join(ROOT, "js", "billing-config.js"), "utf8");
+    const links = [...config.matchAll(/pro_(?:monthly|yearly):\s*"([^"]*)"/g)].map((m) => m[1]);
+    const onSale = /apiCheckout:\s*true/.test(config) || links.some((value) => value.trim() !== "");
+    await page.goto(BASE + "/terms.html", { waitUntil: "domcontentloaded" });
+    const body = (await page.locator("main").textContent()).replace(/\s+/g, " ");
+    const viaRepository = /(?:escribir|escríbenos|Escribiéndonos) por (?:ese|el) repositorio|through (?:that|the) repository/;
+    if (!onSale) {
+      // Nothing sold yet: the repository route is still on the page, which is
+      // what makes the branch above a check of the commit that changes that.
+      expect(body).toMatch(viaRepository);
+      return;
+    }
+    expect(body, "on sale, and a canceller is still sent to a public repository").not.toMatch(viaRepository);
+    expect(await page.locator('main a[href^="mailto:"]').count(), "and an address to write to is given").toBeGreaterThan(0);
+  });
+
   // VG-86 and Creem's merchant terms (3.7). The cancel section promised "the
   // management link that will appear in the Pro window", a link that could not
   // appear on any live rail, and nothing said who sells the subscription. The

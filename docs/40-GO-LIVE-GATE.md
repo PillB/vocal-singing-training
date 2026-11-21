@@ -94,7 +94,13 @@ guess and yours to state:
 1. **The seller's legal name.** Your own name until a company exists.
 2. **A contact address for cancellations and refunds.** It currently points at
    the GitHub repository, which is not a lawful cancellation route for a paid
-   subscription. An email address you will read is enough.
+   subscription: Peru's Code art. 24.4 (added by DL 1729, 2026) wants complaint
+   routes that are accessible and cost nothing needless, and art. 47.c the
+   right to leave by the means used to sign up. An email address you will
+   read is enough. `tests/terms-page.spec.js` turns red if step 5's commit
+   lands while the terms still send a canceller to the repository, and the
+   same goes for `privacy.html`'s rights requests (the deploy-readiness
+   thread's finding D3-02).
 3. **The refund window.** The page says 14 days. Say if you want another number.
 
 **The cancelling section is already fixed** (VG-86, 2026-11-21). It names
@@ -142,12 +148,24 @@ a country Stripe will take as a seller.
    costs $7 or 1%, with a $50 minimum; the route into Peru is unconfirmed.
 5. **Turn Cloudflare's Bot Fight Mode off** on the worker's zone, if it is
    on. It can block both Creem's webhooks and its reviewers.
-6. **A virtual Libro de Reclamaciones, before the first charge.** Peru's
-   consumer code (Ley 29571, Art 150) and its regulation require a supplier
-   to keep a complaints book, a virtual one for sales over the internet, and
-   the deploy-readiness review reads that as covering a natural person too.
-   That reading is being checked against the primary sources; until it is,
-   treat it as required.
+6. **A virtual Libro de Reclamaciones, before the first charge.** Checked
+   against the primary sources by the deploy-readiness thread
+   (`/mnt/project-files/readiness-2026-11-21/legal/legal.md`, D3-11; not
+   legal advice). A *proveedor virtual* is a supplier **with a RUC** that
+   sells through a website (DS 011-2011-PCM art. 3.6, as amended by DS
+   006-2014-PCM), a natural person included, and it must link a virtual
+   complaints book from its home page (art. 9). The link opens the form with
+   no sign-in; each complaint is answered within 15 working days and kept 2
+   years. A missing book is a *leve* infraction, up to 50 UIT, capped at 10%
+   of the prior year's sales for a microenterprise. The cheapest route is
+   INDECOPI's free "Tu Libro de Reclamaciones" (consumidor.indecopi.gob.pe/tulibro).
+   Whether Creem, as merchant of record, carries this on the card rail is
+   open; the Mercado Pago rail is yours either way.
+7. **Create the products with `tax_mode: "inclusive"`, explicitly.** Creem's
+   field has no documented default. A Peruvian paying by card is presumed a
+   Peruvian user of a foreign digital service (DL 1623, 2024), so Creem may
+   add 18% IGV; on a tax-exclusive product US$ 7.99 becomes about US$ 9.43,
+   against Code art. 4.1's all-in price and the terms' own promise.
 
 **Only you can do this.** Create the account as an individual, then create
 **two products**, a monthly and a yearly, because Creem has no single link
@@ -236,7 +254,10 @@ So steps 4 and 5 are one sitting, in this order:
    the purchase signed out in a fresh tab: the panel asks you to sign in
    first, and after signing in the purchase lands on the account. The address
    bar should end as the plain site address with no `checkout_id` or
-   `signature` left in it.
+   `signature` left in it. Once, buy with a Peruvian billing address and a
+   Peruvian test card, and check that the total Creem charges is the price
+   the page showed: only a purchase settles whether `tax_mode` holds for
+   Peru (step 3, item 7).
 4. **Refund every test purchase in Creem's test-mode dashboard,** yours and
    any you did not make, *before* the next step. While this window is open,
    anyone who finds the site can take Pro with a test card. A refund ends Pro
@@ -617,9 +638,6 @@ the one that says what is still open and why each open thing was left.
   merchant account (checked against `stripe.com/global`, 2026-11-03). The
   handler is kept, hardened and unused, for a company outside Peru. There is
   no step that makes it work from here.
-- **Libro de Reclamaciones.** Required of a Peruvian business selling to
-  consumers, and it attaches to a registered company. It belongs with step 6's
-  paperwork, not before it.
 - **The demo unlock.** `demoUnlockEnabled` must stay `false` in anything
   public. It is a QA switch, there is a test that it is off, and there is no
   step here that turns it on.

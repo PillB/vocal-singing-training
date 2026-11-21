@@ -281,8 +281,13 @@ price to be the total, taxes included (Código, art. 4.1), so the plan amount is
 what the buyer pays and Mercado Pago adds nothing to it. The 18% IGV the seller
 owes SUNAT therefore comes out of that amount: 18/118, about 15.3% of every
 Peru charge, is not in the "Net" column above. The dollar rows are exports
-through a merchant of record and carry no Peruvian IGV, so the two sets of rows
-are not comparable until that 15.3% is taken off the soles ones. One offset:
+through a merchant of record and carry no Peruvian IGV for the seller, so the
+two sets of rows are not comparable until that 15.3% is taken off the soles
+ones. A Peruvian buyer on the dollar rows is the exception for the buyer, not
+the seller: under DL 1623 (2024) a foreign digital service charges IGV to a
+Peruvian user, presumed from a Peruvian card, so Creem may add 18%. The Creem
+products must be tax-inclusive (`tax_mode: "inclusive"`), or US$ 7.99 becomes
+about US$ 9.43 at the checkout, against Code art. 4.1 (gate step 3). One offset:
 the "Fee" column already includes the IGV on Mercado Pago's commission
 (S/ 0.31 of the S/ 2.00), which is input IGV the seller can credit against what
 it owes, provided Mercado Pago's comprobante for the fee is a factura to the

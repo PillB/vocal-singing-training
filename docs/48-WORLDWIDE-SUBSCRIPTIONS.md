@@ -153,10 +153,25 @@ terms made a promise the product could not keep (VG-86).
      Creem. Each field arrived in the same build as its route, and the live
      worker before its redeploy (VG-97) answered Creem's webhook with 404, so
      a pasted Creem link there would take money no licence could follow.
+8. **What the tests written for those fixes found in them** (all fixed):
+   - Picking "Mercado Pago (Perú)" outside Peru showed US$ 7.99 over a
+     Peruvian plan that charges S/ 19.90. A rail sold in one country is now
+     priced in that country's money wherever the buyer is.
+   - A Manage press whose session had ended said the portal failed; it now
+     opens the sign-in, as a Subscribe press does.
+   - The Pro dialog drew before the worker said whether it can open the
+     portal, and never again, so the first opening of a tab kept a button
+     that could not work. It is painted again when the answer lands.
+   - Signing out dropped the stored claim but not the one already retrying in
+     the tab, so a webhook landing in the next 17 seconds could still bring the
+     licence in for the next account. Sign-out now stops it.
+   - A session the worker refused (expired, or signed out everywhere) dropped
+     the claim too, stranding a purchase whose link named only that session.
+     Only a sign-out drops it now.
 
 Each behaviour has a test that models the right and the wrong result, proven
 red with `node qa/mutate.mjs`: worker mutants CK1 to CK16 (with CK3b, CK8b,
-CK12b, CK12c, CK15b and CK16b) and browser mutants B118 to B139 and B190.
+CK12b, CK12c, CK15b and CK16b) and browser mutants B118 to B206.
 
 ---
 
@@ -268,22 +283,27 @@ in his name.
 2. **Create a support mailbox on that domain** (for example `soporte@`) and
    answer it within 3 business days.
 3. **Fill in the three placeholders in `terms.html`:** the seller's legal
-   name, that contact address, and the refund window (14 days today). Set up
-   a virtual Libro de Reclamaciones before the first charge (Ley 29571
-   Art 150; whether it binds a natural person is being checked).
+   name, that contact address, and the refund window (14 days today). With
+   the RUC (step 4), set up a virtual Libro de Reclamaciones linked from the
+   home page before the first charge; INDECOPI's free "Tu Libro de
+   Reclamaciones" is the cheapest way (DS 011-2011-PCM arts. 3.6 and 9; the
+   deploy-readiness thread's legal check, D3-11).
 4. **Ask a contador about a RUC** and how payouts are taxed, then register.
 5. **Ask Creem support** how payouts reach a Peruvian bank, and whether a RUC
    is required.
 6. **Apply to Creem as an individual.** Create two **tax-inclusive USD**
-   products (US$ 7.99 a month, US$ 49 a year) and set cancellation to the end
-   of the period.
+   products (US$ 7.99 a month, US$ 49 a year), setting `tax_mode` to
+   `"inclusive"` explicitly (it has no documented default, and Creem may add
+   Peru's 18% IGV for a Peruvian card under DL 1623), and set cancellation to
+   the end of the period.
 7. **Store the keys on the Worker, never in a chat:**
    `wrangler secret put CREEM_API_KEY` and `wrangler secret put
    CREEM_WEBHOOK_SECRET`. Put the two product ids in `wrangler.toml`.
 8. **Flip `providers.creem.apiCheckout` to `true` while the worker is still
    on the test key,** with `CREEM_ALLOW_TEST_MODE = "true"`, and buy it
-   yourself. The in-app checkout can only be walked on the live site, so this
-   commit is also the one that puts Pro on sale.
+   yourself, once with a Peruvian address and test card to see that the total
+   is the price shown. The in-app checkout can only be walked on the live
+   site, so this commit is also the one that puts Pro on sale.
 9. **Refund every test purchase, then swap to the live key** and live product
    ids, set the flag back to `"false"`, redeploy, and check that
    `/v1/health` says `"creemKeyMode": "live"`.

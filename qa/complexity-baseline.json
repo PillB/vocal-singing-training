@@ -225,12 +225,6 @@
     },
     {
       "file": "js/license.js",
-      "sha": "c99e58d4b02bfe643aad53003b35c3cb514ac304e81958b58b3611ac167a8056",
-      "complexity": 18,
-      "name": "Async function 'claim'"
-    },
-    {
-      "file": "js/license.js",
       "sha": "14b996c539fe19739f3e460e5be53f82e54d819e2dd0e4887b7c41bac17ce9b6",
       "complexity": 19,
       "name": "Async function 'refresh'"

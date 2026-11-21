@@ -461,11 +461,27 @@
     writeLastPlan(null);
     try {
       global.VTLicense?.clear?.();
-      global.VTBilling?.forgetPendingClaim?.();
     } catch {
       /* ignore */
     }
     emit();
+  }
+
+  /**
+   * On a sign-out, and only then, drop the checkout still waiting for its
+   * licence, and stop any claim of it already running: claimed afterwards, it
+   * would be linked to whoever signs in next on this browser. Not on a session
+   * the worker rejected (expired, signed out everywhere): the buyer is still
+   * here, and the claim is how their purchase reaches them when they sign in
+   * again, since a link written before the account answered names only the
+   * session that lapsed.
+   */
+  function dropPendingClaim() {
+    try {
+      global.VTBilling?.forgetPendingClaim?.();
+    } catch {
+      /* ignore */
+    }
   }
 
   /**
@@ -745,6 +761,7 @@
     // Forget first, synchronously: the page is signed out the moment this is
     // called, whether or not the worker ever answers the call below.
     forget();
+    dropPendingClaim();
     if (token) {
       // Best effort, and bounded, so a caller that awaits this is not stuck.
       await request("POST", "/v1/auth/logout", { everywhere }, { token, timeoutMs: 6000 });

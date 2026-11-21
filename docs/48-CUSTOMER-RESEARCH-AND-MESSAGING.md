@@ -397,12 +397,23 @@ before it was acted on. "Fixed" means a change in this branch with a test.
 | No og:image, og:url or canonical; a generic brand name, and four names across the header, tab and Pro window | grep of index.html | Owner decision |
 | English mixes British and American spelling (22 and 18 strings) | Count over the English table; both an American and a British tester noticed | Owner decision: one locale, then a spelling lint |
 | "solfeo en trino" under "sin saber música"; the clock alone on a line | Screens; 3 of 3 English testers | Gamification thread (owns `js/daily-loop.js`) |
-| English browsers land on the Spanish site; no English URL or hreflang | Playwright with en-GB and en-US; grep | Its own thread ("Show English to English-language browsers") |
+| English browsers land on the Spanish site; no English URL or hreflang | Playwright with en-GB and en-US; grep | Its own thread ("Show English to English-language browsers"): `?lang=es\|en`, reciprocal hreflang and an `x-default` |
+| English link previews stay Spanish even with `?lang=en` | Link previews and crawlers read the raw HTML and never run the script that switches language | Owner decision: only a static `/en/` page with its own title, description and Open Graph tags fixes them |
+| Search engines may not pick up the English URL | hreflang is a hint, not an instruction | Owner, after deploy: submit the three URLs in Search Console and check "View crawled page" for each |
+| hreflang links are absolute `pillb.github.io` URLs | The English thread's markup | Owner: if the site moves to its own domain, move the hreflang links with it |
 | "Hablar" is pre-selected on a first visit | 5 of 6 personas who came to sing undid it first | Owner decision: the default is pinned by a test as deliberate |
 | The layout control is the first thing on screen and nobody understands it | 9 of 9, before and after the rename; "Clásica" read as classical music | Deploy and blind-pair-ratings thread; owner decision to hide it until after the first exercise |
 | "trill solfège", "Tus básicos", "1:15" | 3 of 3 English personas; 6 of 9; 3 of 9 | Gamification thread (owns `js/daily-loop.js`) |
 | PEN, "Gratis 0", "pagos no públicos" beside the trial button, ad-free as Pro's lead benefit | 5, 7 and 7 of 9; ads the top objection | Subscriptions thread, fixed there |
 | Hoarseness: 4 weeks (AAO-HNS) or 3 (NIDCD's consumer page) | C-older memo | The age warning is added; the weeks are the voice-science owner's (docs/44) |
+
+Merging with the subscriptions branch (`claude/project-thread-nrj90h`): that
+branch carries the filter that hides "no ads" in the Pro window while ads are
+off, which this branch's ads answer relies on, so merge both. The subscriptions
+thread test-merged the two; the conflicts are adjacent lines only. Keep this
+branch's `pricing.sub` and that branch's `pricing.note`, `pricing.cancel.*`,
+`pricing.morNote`, `pricing.morTerms` and `pricing.opening`, in both language
+halves, and settle the asset-stamp conflicts with `npm run assets:bump`.
 
 ## 14. Ledger
 

@@ -4938,6 +4938,15 @@ a.btn-util {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent);
+  text-wrap: balance;
+}
+/* On a phone the tracking comes down so "Para cantar y para hablar · gratis" stays one line in wide fallback
+   fonts too: in DejaVu Sans at 360 px it needs 311 px of the 308 there are at 0.1em, and 295 at 0.06em. Below
+   about 340 px it may still wrap, and then into two even lines rather than leaving "gratis" alone. */
+@media (max-width: 400px) {
+  #start-panel .start-kicker {
+    letter-spacing: 0.06em;
+  }
 }
 #start-panel .start-title {
   margin: 0 0 0.35rem;

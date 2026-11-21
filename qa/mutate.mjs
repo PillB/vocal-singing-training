@@ -1104,7 +1104,8 @@ export const MUTANTS = {
     // The marketing copy on a 360px phone (docs/48): new words that do not fit are a defect the node test cannot see.
     ["DS20 the speaking choice's description grows into a paragraph the phone stacks", "js/i18n.js", '"first.speakSub": "presentaciones, entrevistas, dicción",', '"first.speakSub": "presentaciones, entrevistas de trabajo, reuniones, clases, exposiciones y dicción para hablar claro",', "tests/marketing-copy.spec.js", "fit a 360px phone \\(es\\)"],
     ["DS21 the layout control's label grows and pushes the control to a second row", "js/i18n.js", '"sv.label": "Vista de la página",', '"sv.label": "Cómo quieres ordenar las cosas en esta página",', "tests/marketing-copy.spec.js", "fit a 360px phone \\(es\\)"],
-    ["DS22 the tab keeps the Spanish title after switching to English", "js/i18n.js", "      if (title) document.title = title;\n", "", "tests/marketing-copy.spec.js", "tab title"]
+    ["DS22 the tab keeps the Spanish title after switching to English", "js/i18n.js", "      if (title) document.title = title;\n", "", "tests/marketing-copy.spec.js", "tab title"],
+    ["DS23 the line over the title is set larger on phones, so it no longer fits one line", "css/styles.css", "    letter-spacing: 0.06em;\n  }\n", "    letter-spacing: 0.06em;\n    font-size: 0.9rem;\n  }\n", "tests/marketing-copy.spec.js", "fit a 360px phone \\(es\\)"]
   ].map(([name, file, from, to, spec, grep]) => ({
     name,
     file,

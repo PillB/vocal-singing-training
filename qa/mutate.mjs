@@ -8,7 +8,7 @@
  *
  *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets, ledger)
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage a11y flows regress boot billing scoring controls audit toast designs splits  # browser sets: need Playwright's Chromium
+ *   node qa/mutate.mjs stage a11y flows regress boot billing scoring controls audit toast designs splits promises  # browser sets: need Playwright's Chromium
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -1281,19 +1281,42 @@ export const MUTANTS = {
   // The marketing copy (docs/48): what search, a shared link and a first visit say, held to the research and to the
   // code that keeps each promise true. Each mutant is a defect the copy has had or a claim the evidence rules out.
   claims: [
-    ["MK1 the page's description is edited in the markup alone: a shared link says what the page no longer says", "index.html", '      content="Ejercicios de canto y para hablar en público, gratis y sin límite de minutos. Ves en vivo si das la nota. Sin instalar nada y sin tarjeta."\n    />\n    <!--', '      content="Práctica en casa: entrenamiento vocal y de canto, grabación, métricas, piano y plan de 12 semanas."\n    />\n    <!--'],
+    ["MK1 the page's description is edited in the markup alone: a shared link says what the page no longer says", "index.html", '      content="Ejercicios de canto y para hablar en público, gratis y sin límite de minutos. Ves en vivo si afinas. Sin instalar nada y sin tarjeta."\n    />\n    <!--', '      content="Práctica en casa: entrenamiento vocal y de canto, grabación, métricas, piano y plan de 12 semanas."\n    />\n    <!--'],
     ["MK2 the description sells an AI coach the product does not have", "js/i18n.js", '"Ejercicios de canto y para hablar en público, gratis y sin límite de minutos.', '"Ejercicios de canto con tu coach de IA, gratis y sin límite de minutos.'],
-    ["MK3 the ads gate stops checking for live practice while the Pro window promises no ads during practice", "js/ads.js", "    if (isPracticeActive()) return false;\n", ""],
-    ["MK4 the free tier is capped while the description promises no time limit", "js/billing.js", "all_exercises: true,", "all_exercises: false,"],
+    ["MK4 the free tier's every-exercise flag is turned off while the description promises no time limit (a line, not the cap: the cap is MK22)", "js/billing.js", "all_exercises: true,", "all_exercises: false,"],
     ["MK5 the layout control shows the experiment's arm letter again", "js/i18n.js", '"sv.a": "Clásica",', '"sv.a": "A · Clásico",'],
-    ["MK6 the Pro window's English promise is left in Spanish", "js/i18n.js", '"pricing.sub": "Practice is free, always, and you never see ads while you practise.', '"pricing.sub": "Practicar es gratis, siempre, and you never see ads while you practise.'],
+    ["MK6 the Pro window's English promise is left in Spanish", "js/i18n.js", '"pricing.sub": "Practice is free, always. Pro adds extras', '"pricing.sub": "Practicar es gratis, siempre. Pro adds extras'],
     ["MK7 the English title runs past what a results page shows", "js/i18n.js", '"meta.title": "Singing and speaking practice, free in your browser",', '"meta.title": "Singing and speaking practice for every voice, free in your browser, no install",'],
-    ["MK8 the first visit says progress stays in the browser and no longer that no account is needed", "js/i18n.js", '"start.step3sub": "Se guarda en este navegador. No necesitas cuenta.",', '"start.step3sub": "Tu progreso se queda en este navegador.",'],
+    ["MK8 the first visit says progress stays in the browser and no longer that no account is needed", "js/i18n.js", '"start.step3sub": "Tu progreso se guarda en este navegador. No necesitas cuenta para practicar.",', '"start.step3sub": "Tu progreso se queda en este navegador.",'],
     ["MK9 the Pro window claims almost every singing app caps free practice again", "js/i18n.js", '"pricing.proof1": "Muchas apps de canto con suscripción limitan', '"pricing.proof1": "Casi todas las apps de canto limitan'],
-    ["MK10 the progress board says one private lesson costs about a year of Pro", "js/i18n.js", '"value.anchor": "Un año de Pro cuesta menos que 3 clases particulares. Practicar es gratis, siempre.",', '"value.anchor": "Una clase particular ≈ el año de Pro. Practica gratis siempre.",'],
+    ["MK10 the progress board says one private lesson costs about a year of Pro", "js/i18n.js", '"value.anchor": "Un año de Pro cuesta menos que 3 clases particulares en Lima. Practicar es gratis, siempre.",', '"value.anchor": "Una clase particular ≈ el año de Pro. Practica gratis siempre.",'],
     ["MK11 the terms stop saying the free plan asks for no card while the first visit says no card", "terms.html", "El plan gratis no cuesta nada ni pide tarjeta, y da acceso", "El plan gratis no cuesta nada y da acceso"],
-    ["MK12 the privacy page stops promising the voice stays on the device while the first visit promises it", "privacy.html", "tu dispositivo. No enviamos tu voz a un servidor nuestro.", "tu dispositivo. Podemos enviar tu voz a nuestro servidor para mejorar el servicio."]
+    ["MK12 the privacy page stops promising the voice stays on the device while the first visit promises it", "privacy.html", "tu dispositivo. No enviamos tu voz a un servidor nuestro.", "tu dispositivo. Podemos enviar tu voz a nuestro servidor para mejorar el servicio."],
+    ["MK13 the first visit labels the reader with Peru's official plural, which the old word list let through", "js/i18n.js", '"first.singSub": "canciones, coro, afinación",', '"first.singSub": "canciones, coro, afinación, para personas adultas mayores",'],
+    ["MK14 the trial-ending note says progress is lost unless it is downloaded again", "js/i18n.js", '"value.moment.trial_ending_one": "Tu prueba de Pro termina en {n} día. Tu progreso se queda en este navegador y todo lo gratis sigue igual.",', '"value.moment.trial_ending_one": "Tu prueba de Pro termina en {n} día. Descarga tu progreso si quieres guardarlo.",'],
+    ["MK15 the guide's Spanish advice drops the warning not to put lasting hoarseness down to age", "guide.html", "No la atribuyas a la edad: a cualquier edad, una ronquera", "A cualquier edad, una ronquera"],
+    ["MK16 the guide's English advice moves to three weeks while the Spanish keeps four", "guide.html", "if hoarseness lasts more than\n          about 4 weeks", "if hoarseness lasts more than\n          about 3 weeks"],
+    ["MK17 the progress board compares a year of Pro with lessons everywhere, though the only lesson price is Lima's", "js/i18n.js", '"value.anchor": "Un año de Pro cuesta menos que 3 clases particulares en Lima.', '"value.anchor": "Un año de Pro cuesta menos que 3 clases particulares.'],
+    ["MK18 the yearly plan says a whole year costs less than one lesson, which the Lima price does not support", "js/i18n.js", '"pricing.feat.lesson_anchor": "Un año entero cuesta menos que 3 clases particulares en Lima",', '"pricing.feat.lesson_anchor": "Un año entero cuesta menos que una clase particular en Lima",'],
+    ["MK23 the catalog's singing switch keeps its own words one scroll below the first visit's", "js/i18n.js", '"tab.singing": "canciones, coro, afinación",', '"tab.singing": "canciones, afinación",'],
+    ["MK24 the search text says \"si das la nota\", Spain's idiom for making a scene", "js/i18n.js", "gratis y sin límite de minutos. Ves en vivo si afinas. Sin instalar nada y sin tarjeta.\",", "gratis y sin límite de minutos. Ves en vivo si das la nota. Sin instalar nada y sin tarjeta.\","],
+    ["MK25 step 3 says only \"no account needed\" beside the header's Entrar", "js/i18n.js", '"start.step3sub": "Your progress is saved in this browser. You don\'t need an account to practise.",', '"start.step3sub": "Your progress is saved in this browser. No account needed.",']
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/marketing-copy.test.mjs"]) })),
+  // The copy's promises proved by behaviour (tests/marketing-claims.spec.js), each broken in the code that keeps it
+  // true: a line can stay in a file while the behaviour changes, so these need a browser (docs/48 section 11).
+  promises: [
+    ["MK3 the ads gate stops checking for live practice while the terms promise no ads during practice", "js/ads.js", "    if (isPracticeActive()) return false;\n", "", "no ad during practice"],
+    ["MK19 an end-of-task ad is drawn between the steps of a guided routine again", "js/app.js", "    if (!wasSaved && !routineGoesOn) {", "    if (!wasSaved) {", "no ad during practice"],
+    ["MK20 the recording is sent to a server when the take stops", "js/practice-engine.js", "        this.recUrl = URL.createObjectURL(this.recBlob);", '        this.recUrl = URL.createObjectURL(this.recBlob);\n        fetch("/api/voice", { method: "POST", body: this.recBlob }).catch(() => {});', "your voice stays on your device"],
+    ["MK21 progress is kept for the tab only, so it is gone without an account", "js/storage.js", "      localStorage.setItem(key, raw);\n      unsaved.delete(key);", "      sessionStorage.setItem(key, raw);\n      unsaved.delete(key);", "no account needed"],
+    ["MK22 a free visitor past an hour today is sent to Pro instead of practising", "js/app.js", "      if (startsElsewhere(ex, profile)) return;\n", '      if (startsElsewhere(ex, profile)) return;\n      if (!window.VTBilling?.isPro?.() && (VTStorage.getDays()?.days?.[new Date().toLocaleDateString("en-CA")]?.sec || 0) > 3600) {\n        openPricing();\n        return;\n      }\n', "no time limit"]
+  ].map(([name, file, from, to, spec]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: [...PIANO_SPEC.slice(0, 3), "tests/marketing-claims.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", spec]
+  })),
   ledger: [
     ["LG1 the first validation chunk always passes: a stale read commits", "src/ledger.js", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed})", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed}) OR 1", "ledger"],
     ["LG2 later validation chunks are ignored", "src/ledger.js", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed})", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed}) AND 0", "ledger"],

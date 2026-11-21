@@ -6120,8 +6120,11 @@
 
   /** After the score card: the end-of-task ad, the routine's step done, and the way out the leave question asked for. */
   function followRatedTake(ex, wasSaved, pending) {
-    // Post-session native tip (free only; never mid-practice) — research: end-of-task ads only
-    if (!wasSaved) {
+    // Post-session native tip (free only; never mid-practice) — research: end-of-task ads only.
+    // Inside a guided routine the task ends with its last step: a card between steps is an ad
+    // during the practice the learner started (terms: "nunca durante la práctica"; docs/48 §11).
+    const routineGoesOn = state.structured && !!nextAfterRatedTake(ex);
+    if (!wasSaved && !routineGoesOn) {
       try {
         setTimeout(() => window.VTAds?.onPostSession?.(), 700);
       } catch {

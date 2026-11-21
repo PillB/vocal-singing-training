@@ -110,6 +110,9 @@ REPORTS_ENABLED = "true"
 #   MP_WEBHOOK_SECRET              Mercado Pago webhook signing secret
 #   MP_ACCESS_TOKEN                Mercado Pago access token (server-side API reads)
 #   CREEM_WEBHOOK_SECRET           Creem webhook signing secret (Developers > Webhook)
+#   CREEM_API_KEY                  Creem API key: checkouts bound to the signed-in
+#                                  account and the billing portal. creem_test_... goes
+#                                  to test-api.creem.io, a live key to api.creem.io
 #   LICENSE_PRIVATE_KEY_PKCS8_B64  base64 PKCS#8 P-256 private key
 #                                  (scripts/generate-keys.mjs prints it)
 # Accounts only, and only for the provider named in EMAIL_PROVIDER:

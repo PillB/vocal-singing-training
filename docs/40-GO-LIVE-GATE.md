@@ -32,7 +32,7 @@ every step is safe to stop after.
 | Problem reports | **On** | `REPORTS_ENABLED` |
 | Anonymous usage events | **On** in the file, **off** for the first of the two deploys | `EVENTS_ENABLED` |
 | Checkout — Peru / LATAM | **Closed.** No Mercado Pago link, no secret | `js/billing-config.js` links + `MP_*` |
-| Checkout — rest of world | **Closed.** No Creem link, no secret | `js/billing-config.js` links + `CREEM_*` |
+| Checkout — rest of world | **Closed.** Built and switched off: `apiCheckout` is `false`, and the worker has no `CREEM_API_KEY` or product ids | `js/billing-config.js` `providers.creem.apiCheckout` + `CREEM_*` |
 | Checkout — Stripe | **Closed, and staying closed.** A Peru-registered seller cannot hold a Stripe merchant account | kept in code for a company abroad |
 | The trial-length A/B test | **Off** | `TRIAL_LEN_EXPERIMENT` |
 | The other six A/B tests | **Off** | `js/experiments-config.js` |
@@ -97,13 +97,15 @@ guess and yours to state:
    subscription. An email address you will read is enough.
 3. **The refund window.** The page says 14 days. Say if you want another number.
 
-**The same edit has to fix the cancelling section** (`docs/VALUE-GAP-REGISTRY.md`
-VG-86). It tells a subscriber to cancel "from the management link that will
-appear in the Pro window", and that link can never appear on Creem or Mercado
-Pago. The section should name the three real routes: the link in Creem's own
-emails, *pagos recurrentes* in the payer's Mercado Pago account, and the
-contact address in point 2. While you are there, the trial is worded as "7
-days" in both halves; step 8's test gives half of new accounts 14.
+**The cancelling section is already fixed** (VG-86, 2026-11-21). It names
+four routes: the in-app button «Gestionar o cancelar suscripción», the link in
+Creem's own emails, the subscriptions page of the payer's Mercado Pago
+account, and the contact address in point 2. It also names Creem (Armitage
+Labs OÜ, Estonia) as the merchant of record, with its buyer terms linked.
+Creem's review asks for a **branded support address** (on your own domain,
+not a webmail one) answered within 3 business days, so point 2 should be that
+address. The trial is still worded as "7 days" in both halves; step 8's test
+gives half of new accounts 14.
 
 **Undo:** it is a committed file. Edit and push.
 
@@ -115,11 +117,31 @@ charges and remits the tax, and pays you. That is why it is the choice — a
 merchant of record needs no company in the customer's country, and Peru is not
 a country Stripe will take as a seller.
 
-**Only you can do this.** Create the account, then create **two products**, a
-monthly and a yearly, because Creem has no single link that offers both.
+**Before you apply, because a Creem rejection is final** (the full case is
+`docs/48-WORLDWIDE-SUBSCRIPTIONS.md`):
 
-Give each product a return URL (Creem's success or redirect URL) that tells
-the site it is a return:
+1. **Your own domain.** Creem's review refuses `*.github.io` sites. Point a
+   domain at GitHub Pages, then change `SITE_ORIGIN` in `wrangler.toml` and
+   the Google sign-in origins to match, and redeploy. They must match
+   exactly, or every token fails its audience check.
+2. **A support address on that domain**, and step 2's three values filled in.
+3. **A RUC, or the contador's word that you need none.** Creem's Merchant
+   Terms 3.4.9 require being registered as a business or as self-employed.
+4. **Ask Creem support how payouts reach a Peruvian bank.** A bank payout
+   costs $7 or 1%, with a $50 minimum; the route into Peru is unconfirmed.
+5. **Turn Cloudflare's Bot Fight Mode off** on the worker's zone, if it is
+   on. It can block both Creem's webhooks and its reviewers.
+
+**Only you can do this.** Create the account as an individual, then create
+**two products**, a monthly and a yearly, because Creem has no single link
+that offers both. Make them **USD and tax-inclusive** (US$ 7.99 and US$ 49),
+so the price a European sees is the price they pay (VG-85). Set the store to
+**cancel at the end of the period**.
+
+Checkouts opened through the worker (step 5) carry their own return address,
+built from `SITE_ORIGIN`, so the product's own return URL matters only to the
+pasted-link fallback for a browser that cannot sign in (VG-88). Give each
+product one anyway, on your own domain, that tells the site it is a return:
 
 ```text
 https://pillb.github.io/vocal-singing-training/?billing=success&provider=creem&plan=pro_monthly
@@ -142,7 +164,12 @@ CREEM_ALLOW_TEST_MODE     = "true"    # while you test; see step 4
 
 # in your terminal, on your machine
 wrangler secret put CREEM_WEBHOOK_SECRET
+wrangler secret put CREEM_API_KEY          # a creem_test_… key while you test
 ```
+
+A `creem_test_` key sends the worker's calls to Creem's test API
+(`test-api.creem.io`) by itself; a live key goes to `api.creem.io`. Swap the
+key, not the code, when you go live.
 
 Point Creem's webhook (Dashboard → Developers → Webhook) at
 `https://<your-worker-host>/v1/webhooks/creem` and subscribe the ten events
@@ -159,8 +186,9 @@ does not refuse.
 **Worth applying to Polar at the same time.** It is the second candidate in
 VG-19 and the code shape is identical; whichever answers first can be the rail.
 
-**What proves it worked:** `/v1/health` reports `creemConfigured: true`, and
-opening the prices in the site no longer says the rail cannot be honoured.
+**What proves it worked:** `/v1/health` reports `creemConfigured: true`,
+`creemCheckoutConfigured: true` (key, webhook secret, database and a product)
+and `creemPortalConfigured: true` (what the cancel button needs).
 
 **Undo:** remove the secret and the product ids, redeploy. Any subscription
 already sold keeps charging in Creem until it is cancelled there — that is the
@@ -175,7 +203,8 @@ without money moving.
 
 Walk all of it: sign in, buy monthly, see Pro arrive; refund it in Creem's
 dashboard and see Pro end; buy yearly; cancel and see the period you paid for
-survive to its end. Once, buy without signing in and in a fresh tab: Pro
+survive to its end, using the in-app «Gestionar o cancelar suscripción»
+button, which is the route Creem's review checks. Once, buy without signing in and in a fresh tab: Pro
 should still arrive from the return alone, and the address bar should end as
 the plain site address with no `checkout_id` or `signature` left in it.
 
@@ -189,41 +218,44 @@ only for this step.
 check `wrangler.toml` and the deploy. This is the one step on this page whose
 undo is the step itself — treat it as unfinished until the flag is `"false"`.
 
-### Step 5 — Paste the Creem checkout links into the site. Cost: this is the gate.
+### Step 5 — Switch the Creem checkout on. Cost: this is the gate.
 
 ```js
 // js/billing-config.js
-providers.creem.links = {
-  pro_monthly: "https://www.creem.io/payment/prod_…",   // Products -> Share
-  pro_yearly:  "https://www.creem.io/payment/prod_…"
-}
+providers.creem.apiCheckout = true
 ```
+
+With it on, the Subscribe button asks the worker (`POST /v1/me/checkout`) to
+open a Creem checkout for the signed-in account, and the purchase is bound to
+that account inside Creem's webhook. Pasted links (`providers.creem.links`)
+are optional: they are only the way to pay for a browser that cannot sign in
+at all (VG-88).
 
 **This is the commit that makes the product sellable.** Before it, the pricing
 panel says nothing is on sale; after it, a stranger can pay. Everything in
 steps 1 to 4 exists so that this commit is boring.
 
-> **Not yet: one fault stands in front of this step, and one decision.** Both
-> were found reviewing the merge of #26 into `main` and are written up in
-> `docs/VALUE-GAP-REGISTRY.md`.
+> **The fault that stood here is fixed; one decision is left.**
 >
-> - **VG-83 (P0).** Every purchase now goes through sign-in, and a buyer whose
->   payment webhook arrives after the page's one attempt to link it to their
->   account loses the Pro they paid for on the next page load. Stripe and
->   Creem both say the webhook can arrive after the buyer is back, so this is
->   the ordinary case. It is code, with the test to write first in the row.
+> - **VG-83 (P0), fixed 2026-11-21.** A buyer whose webhook arrived after the
+>   page's one link attempt lost the Pro they paid for. The worker now binds
+>   the checkout to the account before payment and links it inside the
+>   webhook, and the browser keeps retrying a pending link.
 > - **VG-85 (decision).** Say what currency the Creem products are priced in.
->   A Peruvian paying by card is now shown the dollar price Creem charges; the
->   euro markets are still shown euros on Creem, which is right only if the
->   Creem products are priced in euros.
+>   The recommendation is USD, tax-inclusive, for every market: the euro
+>   markets are shown euros on Creem today, which is right only if the Creem
+>   products are priced in euros. If they are dollars, `priceEur` comes out of
+>   the config and those markets are shown US$ like everyone else.
 
 The site's own validation refuses anything that is not an allowed checkout
 host, so a mistyped link fails closed rather than sending somebody somewhere
 else. A test fails if the terms page still claims nothing is on sale once a
 link exists.
 
-**Undo:** remove the links and push. Pages serves the new build in a minute or
-two. Subscriptions already sold keep charging in Creem; see step 3's undo.
+**Undo:** set `apiCheckout` back to `false` (and remove any links) and push.
+Pages serves the new build in a minute or two. Subscriptions already sold keep
+charging in Creem, and the cancel button keeps working for them; see step 3's
+undo.
 
 ### Step 6 — Mercado Pago Perú, for Peru and Latin America. Cost: per transaction.
 

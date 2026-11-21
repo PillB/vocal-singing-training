@@ -53,6 +53,11 @@ function keysTheCodeReads() {
     for (const match of src.matchAll(/\(env\s*&&\s*env\.([A-Z][A-Z0-9_]*)\)/g)) {
       if (!BINDINGS.has(match[1])) found.add(match[1]);
     }
+    // checkout.js reads through `readVar(env, "X")`. This scan missed it, so
+    // CREEM_API_KEY was read and undocumented with this test green.
+    for (const match of src.matchAll(/\breadVar\(\s*env\s*,\s*"([A-Z][A-Z0-9_]*)"\s*\)/g)) {
+      if (!BINDINGS.has(match[1])) found.add(match[1]);
+    }
   }
   return found;
 }

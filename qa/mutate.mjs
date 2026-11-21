@@ -1457,7 +1457,8 @@ export const MUTANTS = {
     ["CK10 the portal forwards a link that is not Creem's", "src/checkout.js", "  const url = answer.body.customer_portal_link;\n  if (!isCreemPageUrl(url)) {", "  const url = answer.body.customer_portal_link;\n  if (!url) {", "checkout-bound"],
     ["CK11 health offers checkouts with no webhook secret, so a paid checkout can never become a licence", "src/checkout.js", "      && readVar(env, \"CREEM_WEBHOOK_SECRET\")\n", "", "checkout-bound"],
     ["CK12 checkout references are kept for years", "src/db.js", "[\"checkout_refs\", \"created_at < ?1\", at - CHECKOUT_REF_TTL_SECONDS]", "[\"checkout_refs\", \"created_at < ?1\", at - CHECKOUT_REF_TTL_SECONDS * 100]", "checkout-bound"],
-    ["CK13 a GET reaches the checkout handler", "src/checkout.js", "  if (request.method !== \"POST\") {\n    return Promise.resolve(", "  if (false) {\n    return Promise.resolve(", "checkout-bound"]
+    ["CK13 a GET reaches the checkout handler", "src/checkout.js", "  if (request.method !== \"POST\") {\n    return Promise.resolve(", "  if (false) {\n    return Promise.resolve(", "checkout-bound"],
+    ["CK14 CREEM_API_KEY is read by the worker and missing from the README's settings", "README.md", "| `CREEM_API_KEY` | Creem API key,", "| (the Creem API key) | Creem API key,", "config"]
   ].map(([name, file, from, to, test]) => ({
     name,
     file: `workers/entitlements/${file}`,

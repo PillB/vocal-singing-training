@@ -129,6 +129,8 @@ routes above are untouched):
 | POST | `/v1/auth/logout` | Drops the bearer session. |
 | GET | `/v1/me` | The account, its entitlement, and a fresh license token when entitled. |
 | POST | `/v1/me/link` | `{provider, sessionId}` — attaches a checkout the visitor paid for anonymously. |
+| POST | `/v1/me/checkout` | `{plan, returnPath}` → `{url}`. Opens a Creem checkout for the signed-in account: a random `request_id` (`vtr_` + 22 base64url characters) is stored in D1 `checkout_refs` for 30 days, and the `checkout.completed` webhook binds the licence to that account (VG-83). `503 checkout_unconfigured` until `CREEM_API_KEY`, the webhook secret and a product id are set. |
+| POST | `/v1/me/billing-portal` | → `{url}`. Creem's customer portal for the account's own Creem customer, where a subscriber manages or cancels (VG-86). `503 portal_unconfigured` without `CREEM_API_KEY`. |
 | POST | `/v1/me/trial` | Starts the one free trial. `409 {reason:"trial_used"}` the second time. |
 | POST | `/v1/me/redeem` | `{code}` — redeems a gift code. |
 | GET/PUT/DELETE | `/v1/me/progress` | Saved progress for one profile. `PUT` takes `{profileId, doc, baseRev}` and answers `409` with the server's copy when the revision moved. |
@@ -240,6 +242,7 @@ Secrets — **never** in this repo, only `wrangler secret put`:
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` for *this* endpoint (test and live differ). |
 | `MP_WEBHOOK_SECRET` | Mercado Pago webhook signing secret. |
 | `CREEM_WEBHOOK_SECRET` | Creem webhook signing secret, from Developers → Webhook. Empty refuses every Creem webhook with `secret_not_configured` rather than trusting an unsigned body. |
+| `CREEM_API_KEY` | Creem API key, for `/v1/me/checkout` and `/v1/me/billing-portal`. A `creem_test_…` key sends those calls to `test-api.creem.io`, a live key to `api.creem.io`; `/v1/health` reports `creemCheckoutConfigured` and `creemPortalConfigured`. |
 | `MP_ACCESS_TOKEN` | Mercado Pago access token, used only for server-side reads. |
 | `LICENSE_PRIVATE_KEY_PKCS8_B64` | base64 PKCS#8 P-256 private key. |
 | `LICENSE_ID_KEY` | Optional. The key a new license id is derived under, so two webhooks for one new customer agree on one license. Without it a key derived from `LICENSE_PRIVATE_KEY_PKCS8_B64` is used; with neither, a new license gets a random id. Set it to keep derivation stable across a signing-key rotation. Any long random string. |
@@ -326,6 +329,7 @@ node scripts/generate-keys.mjs k1
 wrangler secret put STRIPE_WEBHOOK_SECRET
 wrangler secret put MP_WEBHOOK_SECRET
 wrangler secret put CREEM_WEBHOOK_SECRET
+wrangler secret put CREEM_API_KEY         # Creem checkouts bound to the account, and the portal
 wrangler secret put MP_ACCESS_TOKEN
 wrangler secret put LICENSE_PRIVATE_KEY_PKCS8_B64
 wrangler secret put RESEND_API_KEY        # accounts only, matching EMAIL_PROVIDER
@@ -770,11 +774,11 @@ because if a hit still passed a `429` would only mean "miss". That is the
 price of the ceiling: whoever spends it holds one-off payments back for the
 rest of the hour, and since buyers' own lookups count against it too, more
 than fifty buyers an hour would hold each other back. A held-back claim
-waits and is claimed on a later load; a held-back account link is lost,
-because the site sends `/v1/me/link` once and drops any answer but success,
-so a signed-in payer refused there ends without Pro on the account. That is
-VG-83, which a late webhook already triggers, and which has to be fixed
-before one-off payments are sold. Subscriptions, claimed by their
+waits and is claimed on a later load; a held-back account link used to be lost.
+Since 2026-11-21 the site keeps a pending link and
+retries it on load, after sign-in and at 4, 12, 30 and 90 seconds, and
+links by the licence id once the claim lands, which this throttle does not
+count (VG-83). Subscriptions, claimed by their
 preapproval id, are never held back. The block's bucket and the number's
 record are named after keyed daily pseudonyms, never the address or the
 number itself, and like every `rate_limits` row they are swept a day after

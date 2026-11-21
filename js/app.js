@@ -7991,7 +7991,7 @@
     } catch {
       /* ignore */
     }
-    const healthNote = paintHealthNote(B);
+    const healthNote = paintHealthNote(B, !!(prelaunch && trialBtn && !trialBtn.hidden));
     paintPrelaunchStanding(ent, prelaunch, healthNote, trialBtn);
   }
 
@@ -8121,7 +8121,24 @@
       payNote.setAttribute("data-i18n", key);
       payNote.textContent = tt(key);
       payNote.hidden = prelaunch && (!trialBtn || trialBtn.hidden);
+      placePayNote(payNote, prelaunch);
     }
+  }
+
+  /**
+   * Pre-launch, "no card, nothing is charged when it ends" sits right under
+   * the trial button it is about, not at the foot below every plan: every
+   * one of nine simulated visitors asked exactly that before pressing it, and
+   * the older ones said they leave at any card prompt. Back in the foot once
+   * checkout is live, where it is the note about paying.
+   */
+  function placePayNote(payNote, prelaunch) {
+    const launch = $("#pricing-launch");
+    const foot = $("#pricing-modal .pricing-foot");
+    const slot = prelaunch ? launch : foot;
+    if (!slot || payNote.parentElement === slot) return;
+    if (prelaunch) slot.appendChild(payNote);
+    else slot.insertBefore(payNote, $("#pricing-cancel-note"));
   }
 
   /** How to cancel, for the rail this person actually paid on; no line for a trial or a gift. */
@@ -8180,8 +8197,10 @@
     const rail = String(ent.provider || "").toLowerCase();
     if (rail === "creem") return creemPortalOffered() ? "creem" : null;
     if (rail === "mercadopago") return "mercadopago";
-    // A worker trial or a gift is a licence too, from no rail: nothing to cancel.
-    return rail === "stripe" && stripePortalConfigured(B, cfg) ? "stripe" : null;
+    // A worker trial or a gift is a licence too, naming no paid rail
+    // ("trial", "grant"): nothing to cancel. The QA demo, and a licence older
+    // than the rail field, keep the Stripe portal they always had.
+    return ["stripe", "demo", ""].includes(rail) && stripePortalConfigured(B, cfg) ? "stripe" : null;
   }
 
   /** A Creem portal needs somebody signed in (it is their customer the worker asks for) and a worker that has not said no. */
@@ -8197,8 +8216,12 @@
     return !!portalRaw && !!B.isPortalUrl?.(portalRaw);
   }
 
-  /** The Pro dialog's checkout-health line, for free users only; returns the element so the launch box can read it. */
-  function paintHealthNote(B) {
+  /**
+   * The Pro dialog's checkout-health line, for free users only; returns the element so the launch box can read it.
+   * @param {Object} B VTBilling.
+   * @param {boolean} trialOffered Pre-launch with the trial button showing: the line leads into it.
+   */
+  function paintHealthNote(B, trialOffered) {
     // Soft note for free users when checkout not live (no developer/issue jargon).
     // Only for free users: "Sigue practicando gratis; Pro se activará cuando
     // estén listos" was also told to people already holding Pro.
@@ -8214,8 +8237,11 @@
           healthNote.hidden = false;
           healthNote.textContent = tt("pricing.verifyUnavailable");
         } else if (h && !h.ok) {
+          // "Pro se activará cuando estén listos" right above "Probar Pro 7
+          // días gratis" read as "can I or can't I?" to seven of nine simulated
+          // visitors; with the trial on offer the line leads into it instead.
           healthNote.hidden = false;
-          healthNote.textContent = tt("pricing.toast.unconfigured");
+          healthNote.textContent = tt(trialOffered ? "pricing.prelaunchLead" : "pricing.toast.unconfigured");
         } else {
           healthNote.hidden = true;
           healthNote.textContent = "";
@@ -9175,7 +9201,12 @@
     const prelaunch = isCheckoutPrelaunch();
     const regionEl = $("#pricing-region-label");
     if (regionEl) {
-      regionEl.textContent = `${tt("pricing.region")}: ${market.name} · ${B.marketFor(priceRegion).currency}`;
+      // The currency of the price on the cards, in words: "PEN" meant nothing to
+      // 5 of 9 think-aloud readers who know it as soles or S/, and the market's
+      // own code claimed pesos above prices charged in dollars.
+      const paid = (cfg.plans || []).find((p) => p.interval) || {};
+      const cur = B.formatPrice(paid, priceRegion).currency;
+      regionEl.textContent = `${tt("pricing.region")}: ${market.name} · ${tt("pricing.currency." + cur)}`;
     }
     const status = $("#pricing-status");
     if (status) {
@@ -9336,7 +9367,11 @@
   function planFeaturesHtml(p) {
     // Eleven bullets pushed every plan's button off the modal. Show the
     // five that decide the purchase, keep the rest one click away.
-    const featList = p.features || [];
+    // "No ads" sells the absence of something a free user never sees while
+    // ads are off (js/ads-config.js ships them off): a misleading omission, so
+    // the bullet waits until there are ads for Pro to take away.
+    const adsOn = window.VT_ADS_CONFIG?.adsEnabled === true;
+    const featList = (p.features || []).filter((f) => f !== "ad_free" || adsOn);
     const FEAT_MAX = 5;
     const item = (f) => `<li>${tt("pricing.feat." + f)}</li>`;
     const feats = featList.slice(0, FEAT_MAX).map(item).join("");

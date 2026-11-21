@@ -449,7 +449,9 @@ test.describe("the Pro dialog's choice of how to pay, in Peru", () => {
     // Creem cannot charge soles: the card rail shows the price it charges.
     await expect(monthly).toContainText("$");
     await expect(monthly).not.toContainText("S/");
-    await expect(page.locator("#pricing-region-label")).toContainText("USD");
+    // The region line follows the money on the cards: dollars, not soles.
+    await expect(page.locator("#pricing-region-label")).toContainText("dólares de EE. UU.");
+    await expect(page.locator("#pricing-region-label")).not.toContainText("soles");
     await page.locator('#pricing-modal .plan-cta[data-plan="pro_monthly"]').click();
     await expect.poll(() => navigations.join(" ")).toContain("checkout.creem.io");
   });

@@ -111,7 +111,11 @@ test.describe("Pro dialog before checkout is live", () => {
 
     const launch = page.locator("#pricing-launch");
     await expect(launch).toBeVisible();
-    await expect(launch.locator("#pricing-health-note")).toHaveText(/no están públicos/);
+    // What can be done today, leading into the button. Wrong (before): "Pro se
+    // activará cuando estén listos" right above "Probar Pro 7 días gratis",
+    // which seven of nine simulated visitors read as "can I or can't I?".
+    await expect(launch.locator("#pricing-health-note")).toHaveText(/Todavía no vendemos planes de pago/);
+    await expect(launch.locator("#pricing-health-note")).not.toHaveText(/Pro se activará/);
     const trial = launch.locator("#btn-start-trial");
     await expect(trial).toBeVisible();
     await expect(trial).toHaveText("Probar Pro 7 días gratis");
@@ -122,6 +126,42 @@ test.describe("Pro dialog before checkout is live", () => {
     expect(box.y + box.height).toBeLessThanOrEqual(844);
     // The dialog describes itself with the note, so it is heard on opening.
     await expect(page.locator("#pricing-modal")).toHaveAttribute("aria-describedby", "pricing-health-note");
+    // "No card, nothing charged when it ends" is the next thing after the
+    // button, inside the launch box, not at the foot below every plan.
+    const next = await trial.evaluate((b) => b.nextElementSibling && b.nextElementSibling.id);
+    expect(next).toBe("pricing-pay-note");
+    await expect(launch.locator("#pricing-pay-note")).toHaveText(/no pide tarjeta/);
+    const note = await launch.locator("#pricing-pay-note").boundingBox();
+    expect(note.y + note.height).toBeLessThanOrEqual(844);
+  });
+
+  test("while ads are off, Pro is not sold as taking them away; control: with ads on, it is", async ({ page }) => {
+    // Selling the absence of something a free user never sees is a misleading
+    // omission (the claims memo of 21 November 2026): js/ads-config.js ships
+    // adsEnabled false, so "Sin anuncios" waits until there are ads.
+    await boot(page);
+    await openPricing(page);
+    const sells = () => page.locator("#pricing-grid").evaluate((g) => /Sin anuncios/.test(g.textContent));
+    expect(await sells()).toBe(false);
+    await page.click("#pricing-close");
+    await page.evaluate(() => {
+      window.VT_ADS_CONFIG.adsEnabled = true;
+    });
+    await openPricing(page);
+    expect(await sells()).toBe(true);
+    // With ads on, the bullet says what a free learner does not get: the
+    // pricing line promises no ads *while practising*, so a bare "no ads" read
+    // as a contradiction (3 of 9 think-aloud readers, "¿en qué quedamos?").
+    const card = page.locator('#pricing-grid .plan-card[data-plan="pro_monthly"]');
+    await expect(card.locator("li", { hasText: "Sin anuncios" })).toHaveText(/en ninguna parte/);
+    // And it is not one of the five on the card's face: what Pro adds that a
+    // learner asked for comes first. Wrong (before): second, right under
+    // "Todo lo del plan Gratis", the one Pro benefit a phone showed.
+    const face = await card.locator(":scope > ul.plan-features > li").allInnerTexts();
+    expect(face).toHaveLength(5);
+    expect(face.join(" | ")).not.toMatch(/anuncios/);
+    expect(face[1]).toMatch(/28 días/);
+    expect(face[2]).toMatch(/profesor/);
   });
 
   test("plan buttons say not available yet and are disabled, readably", async ({ page }) => {
@@ -204,6 +244,59 @@ test.describe("Pro dialog before checkout is live", () => {
     await expect(page.locator("#btn-start-trial")).toHaveText("Try Pro free for 7 days");
     await expect(page.locator('#pricing-grid .plan-cta[data-plan="pro_yearly"]')).toHaveText("Not available yet");
     await expect(page.locator("#pricing-pay-note")).toHaveText(/needs no card/);
+  });
+});
+
+/**
+ * The price on a card and the region line name the money they are in. Seen
+ * wrong in the think-aloud of 21 November 2026: "PEN" meant nothing to 5 of 9
+ * readers who know soles as S/, and "Gratis 0" with no symbol looked broken.
+ * A bare "$" is the peso in Mexico, so "$7.99" there reads as pesos.
+ * @param {import('@playwright/test').Page} page Page.
+ * @returns {Promise<{region: string, free: string, monthly: string}>} What the dialog shows.
+ */
+async function pricesShown(page) {
+  await openPricing(page);
+  const price = (plan) => page.locator(`#pricing-grid .plan-card[data-plan="${plan}"] .plan-price`).innerText();
+  return {
+    region: await page.locator("#pricing-region-label").innerText(),
+    free: (await price("free")).trim(),
+    monthly: (await price("pro_monthly")).trim()
+  };
+}
+
+test.describe("prices say which money they are in: Peru", () => {
+  test.use({ locale: "es-PE", timezoneId: "America/Lima" });
+  test("soles, by name and symbol, on every card", async ({ page }) => {
+    await boot(page);
+    const s = await pricesShown(page);
+    expect(s.region).toMatch(/soles \(S\/\)/i);
+    expect(s.region).not.toMatch(/\bPEN\b/);
+    expect(s.free).toBe("S/ 0");
+    expect(s.monthly).toMatch(/^S\/ 19\.90/);
+  });
+});
+
+test.describe("prices say which money they are in: Mexico", () => {
+  test.use({ locale: "es-MX", timezoneId: "America/Mexico_City" });
+  test("dollars that say they are US dollars, and no claim of pesos", async ({ page }) => {
+    await boot(page);
+    const s = await pricesShown(page);
+    expect(s.region).toMatch(/dólares de EE\. UU\. \(US\$\)/i);
+    expect(s.region).not.toMatch(/MXN/);
+    expect(s.free).toBe("US$ 0");
+    expect(s.monthly).toMatch(/^US\$ 7\.99/);
+  });
+});
+
+test.describe("prices say which money they are in: United States (control)", () => {
+  test.use({ locale: "en-US", timezoneId: "America/New_York" });
+  test("at home the dollar sign alone is right", async ({ page }) => {
+    await boot(page, "en");
+    const s = await pricesShown(page);
+    expect(s.region).toMatch(/US dollars \(US\$\)/i);
+    expect(s.free).toBe("$0");
+    expect(s.monthly).toMatch(/^\$7\.99/);
   });
 });
 

@@ -1096,17 +1096,34 @@
     return Number.isInteger(n) ? String(n) : n.toFixed(2);
   }
 
+  /**
+   * The symbol a price is written with. A bare "$" is the local peso in Mexico,
+   * Argentina, Chile and Colombia, so "$7.99" there reads as 7.99 pesos: the
+   * dollar carries its country everywhere but the United States.
+   * @param {string} cur Currency charged.
+   * @param {string} marketCode The market the price is shown in.
+   * @returns {string}
+   */
+  function currencySymbol(cur, marketCode) {
+    if (cur === "PEN") return "S/ ";
+    if (cur === "EUR") return "€";
+    return marketCode === "US" ? "$" : "US$ ";
+  }
+
+  /**
+   * A plan's price in the currency it is charged in, with that currency's
+   * symbol. The free plan gets one too: a bare "0" under "Gratis" read as a
+   * broken price (customer-research think-aloud, 2026-11-21).
+   * @param {object} plan A plan from the billing config.
+   * @param {string} [region] Market code; the detected one when left out.
+   * @returns {{text: string, currency: string, amount: number}}
+   */
   function formatPrice(plan, region) {
     const m = marketFor(region || detectRegion());
-    const cur = m.currency || "USD";
-    if (plan.priceUsd === 0) return { text: "0", currency: cur };
-    if (cur === "PEN" && plan.pricePen != null) {
-      return { text: `S/ ${money(plan.pricePen)}`, currency: "PEN", amount: plan.pricePen };
-    }
-    if (cur === "EUR" && plan.priceEur != null) {
-      return { text: `€${money(plan.priceEur)}`, currency: "EUR", amount: plan.priceEur };
-    }
-    return { text: `$${money(plan.priceUsd)}`, currency: "USD", amount: plan.priceUsd };
+    const local = { PEN: plan.pricePen, EUR: plan.priceEur }[m.currency];
+    const cur = local != null ? m.currency : "USD";
+    const amount = local != null ? local : plan.priceUsd;
+    return { text: currencySymbol(cur, m.code) + money(amount), currency: cur, amount };
   }
 
   /**

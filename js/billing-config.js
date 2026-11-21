@@ -222,15 +222,21 @@
         pricePen: 19.9,
         priceEur: 7.99,
         popular: true,
-        // Only list features actually delivered in product (trust > feature stack theater)
+        // Only list features actually delivered in product (trust > feature stack theater).
+        // The card shows the first five: what Pro adds that a learner asked for
+        // comes first, in the order the Pro panel's "Pro suma" line names it
+        // (the 28-day chart, the teacher summary, weekly goals, profiles). "No
+        // ads" sits behind the fold: in the 2026-11 concept test ads were the
+        // most common hesitation (33-44% of answers per concept), driven by
+        // "Pro adds: no ads"; and it is only drawn at all while ads are on.
         features: [
           "all_free",
-          "ad_free",
-          "export_progress",
-          "coach_pack",
           "pro_insights",
-          "multi_profile",
+          "coach_pack",
           "studio_goals",
+          "multi_profile",
+          "export_progress",
+          "ad_free",
           "pro_progressions",
           "achievements_export",
           "extra_reminders",

@@ -177,15 +177,6 @@ export function isoSeconds(value) {
 }
 
 /**
- * Accept only plan ids this worker issues.
- * @param {unknown} value Candidate plan id.
- * @returns {string|null} Normalized plan id or null.
- */
-function normalizePlanId(value) {
-  return value === "pro_monthly" || value === "pro_yearly" ? value : null;
-}
-
-/**
  * Map a Creem product id to a plan id using the configured env bindings.
  * @param {unknown} productId Creem product id.
  * @param {Object} env Worker env bindings.
@@ -260,14 +251,25 @@ export function planFromBillingPeriod(period) {
 }
 
 /**
- * Derive the plan for a Creem product: product id, then (for a product the
- * allow-list does not refuse) metadata, then the product's own billing period.
+ * Derive the plan for a Creem product: its id in the product table, then its
+ * own billing period, then a month.
+ *
+ * Metadata is never read. On Creem the buyer can write it: a payment link
+ * passes `?metadata[key]=value` into the checkout and "Metadata is included
+ * in webhook events" (Creem docs, Checkout Links, read 12 November 2026), and
+ * the site's own links write none. Read ahead of the allow-list, `metadata[plan]`
+ * on a donation's link turned the donation into Pro (B22); read ahead of the
+ * billing period with no table written down (how the repository ships),
+ * `?metadata[plan]=pro_yearly` on the monthly link counted one monthly charge
+ * as a year wherever the store counts a plan's interval from the charge
+ * (red-team WH-2, 18 November 2026). The product, its id and its billing
+ * period are the seller's statements; a product with neither is sold as the
+ * shorter plan.
  * @param {Object} product Creem product object (or its id).
- * @param {Object} metadata The subscription's or checkout's metadata.
  * @param {Object} env Worker env bindings.
  * @returns {{plan: string|undefined, planSource: string, unlisted?: boolean}} Plan and how we got it.
  */
-export function planForProduct(product, metadata, env) {
+export function planForProduct(product, env) {
   const productId = idOf(product);
   const byProduct = planFromProductId(productId, env);
   if (byProduct) {
@@ -275,21 +277,9 @@ export function planForProduct(product, metadata, env) {
   }
   if (productVerdict(productId, env) === "unlisted") {
     // Not ours. The plan stays unnamed and the caller suspends the record,
-    // rather than turning somebody else's purchase into Pro.
-    //
-    // This comes before metadata, unlike on Stripe, because on Creem the buyer
-    // can write metadata: a payment link passes `?metadata[key]=value` into the
-    // checkout and "Metadata is included in webhook events" (Creem docs,
-    // Checkout Links, read 12 November 2026). Read first, `metadata[plan]`
-    // added to the link of a donation turned the donation into Pro. The remedy
-    // for a product of ours missing from the table is to add its id.
+    // rather than turning somebody else's purchase into Pro. The remedy for a
+    // product of ours missing from the table is to add its id.
     return { plan: undefined, planSource: "unlisted_product", unlisted: true };
-  }
-  const byMetadata = normalizePlanId(metadata && metadata.plan);
-  if (byMetadata) {
-    // With no table to check against, metadata is the best name there is for
-    // the plan, and a deployment that sells only Pro has nothing else to sell.
-    return { plan: byMetadata, planSource: "metadata" };
   }
   const byPeriod = planFromBillingPeriod(product && product.billing_period);
   if (byPeriod) {
@@ -364,8 +354,7 @@ function transactionIdOf(object) {
  */
 function mapCheckout(checkout, env) {
   const subscription = checkout && checkout.subscription;
-  const metadata = checkoutMetadata(checkout, subscription);
-  const { plan, planSource, unlisted } = planForProduct(checkout && checkout.product, metadata, env);
+  const { plan, planSource, unlisted } = planForProduct(checkout && checkout.product, env);
   const paid = checkoutPaid(checkout);
   return {
     provider: "creem",
@@ -386,13 +375,6 @@ function mapCheckout(checkout, env) {
     // rather than a lifetime.
     periodEnd: subscriptionPeriodEnd(subscription && typeof subscription === "object" ? subscription : null)
   };
-}
-
-/** The checkout's own metadata, else its nested subscription's, else null. */
-function checkoutMetadata(checkout, subscription) {
-  return (checkout && checkout.metadata)
-    || (subscription && typeof subscription === "object" && subscription.metadata)
-    || null;
 }
 
 /** Whether a checkout says its money arrived: the checkout completed and its order is paid or names no status. */
@@ -428,8 +410,7 @@ function checkoutPaid(checkout) {
 function mapSubscription(subscription, env, eventType) {
   const paid = eventType === "subscription.paid";
   const expired = eventType === "subscription.expired";
-  const metadata = (subscription && subscription.metadata) || null;
-  const { plan, planSource, unlisted } = planForProduct(subscriptionProduct(subscription), metadata, env);
+  const { plan, planSource, unlisted } = planForProduct(subscriptionProduct(subscription), env);
   const endedAt = isoSeconds(subscription && subscription.canceled_at);
   const status = subscriptionEventStatus(subscription, eventType);
   return {

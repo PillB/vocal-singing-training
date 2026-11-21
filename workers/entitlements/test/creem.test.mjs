@@ -288,30 +288,21 @@ test("a subscription's ISO dates are parsed, and nothing else is", () => {
 
 /* -------------------------------------------------------------------- plans */
 
-test("a product id names the plan, then metadata, then the billing period", () => {
+test("a product id names the plan, then the billing period, then a month", () => {
   const env = { CREEM_PRODUCT_PRO_MONTHLY: "prod_m", CREEM_PRODUCT_PRO_YEARLY: "prod_y" };
-  assert.deepEqual(planForProduct({ id: "prod_y" }, null, env), { plan: "pro_yearly", planSource: "product_id" });
+  assert.deepEqual(planForProduct({ id: "prod_y" }, env), { plan: "pro_yearly", planSource: "product_id" });
   assert.deepEqual(
-    planForProduct({ id: "prod_other" }, { plan: "pro_yearly" }, env),
+    planForProduct({ id: "prod_other", billing_period: "every-year" }, env),
     { plan: undefined, planSource: "unlisted_product", unlisted: true },
-    "the allow-list outranks metadata: a buyer can write metadata into a Creem payment link"
+    "a product that is not ours names no plan, whatever its period"
   );
   assert.deepEqual(
-    planForProduct({ id: "prod_other" }, { plan: "pro_yearly" }, {}),
-    { plan: "pro_yearly", planSource: "metadata" },
-    "control: with no table to check against, metadata names the plan"
-  );
-  assert.deepEqual(
-    planForProduct({ id: "prod_other" }, null, env),
-    { plan: undefined, planSource: "unlisted_product", unlisted: true },
-    "a product that is not ours names no plan"
-  );
-  assert.deepEqual(
-    planForProduct({ id: "prod_other", billing_period: "every-year" }, null, {}),
+    planForProduct({ id: "prod_other", billing_period: "every-year" }, {}),
     { plan: "pro_yearly", planSource: "billing_period" },
     "with no table written down, the product's own period answers"
   );
-  assert.deepEqual(planForProduct(null, null, {}), { plan: "pro_monthly", planSource: "default" });
+  assert.deepEqual(planForProduct({ id: "prod_other" }, {}), { plan: "pro_monthly", planSource: "default" });
+  assert.deepEqual(planForProduct(null, {}), { plan: "pro_monthly", planSource: "default" });
 });
 
 test("a billing period nobody recognised reads as monthly, which is the short answer", () => {

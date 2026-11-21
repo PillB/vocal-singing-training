@@ -30,7 +30,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { mapStripeEvent } from "../src/stripe.js";
-import { planForPreapproval } from "../src/mercadopago.js";
+import { mapAuthorizedPaymentResource, mapPaymentResource, planForPreapproval } from "../src/mercadopago.js";
 import { upsertEntitlement } from "../src/store.js";
 import { createFakeKv } from "./fixtures.mjs";
 
@@ -97,9 +97,11 @@ test("WT2/WT3: a checkout that carries its line items is priced by the first one
   assert.deepEqual([mapped.update.plan, mapped.update.planSource], ["pro_yearly", "price_id"]);
 
   // Control: a first line item whose price is not in the table names nothing,
-  // and a one-time payment with nothing else to go by is a month.
+  // and with the table filled in a one-time payment that names nothing is
+  // not ours. It used to be a month (red-team WH-3: a donation was Pro).
   const unknown = checkout(session({ line_items: { data: [{ price: { id: "price_other" } }] } }), PRICED);
-  assert.deepEqual([unknown.update.plan, unknown.update.planSource], ["pro_monthly", "default"]);
+  assert.deepEqual([unknown.update.plan, unknown.update.planSource, unknown.update.status],
+    [undefined, "unlisted_one_time", "suspended"]);
 });
 
 test("WT1: when a checkout's price and its metadata both name a plan, the price is recorded as the source", () => {
@@ -244,4 +246,40 @@ test("WT8: the operator's monthly Mercado Pago plan id buys a month, whatever th
     planForPreapproval({ preapproval_plan_id: "2c93_y", reason: "Pro mensual" }, env),
     { plan: "pro_yearly", planSource: "preapproval_plan_id" }
   );
+});
+
+// Three Mercado Pago mappers were split under the complexity ceiling when the
+// red-team round of 18 November 2026 changed their claim ids. Defects planted
+// back into the moved logic were caught by the suites above, except these three.
+
+test("WM1: a one-off payment that names no plan says the default chose it, not its text", () => {
+  // Correct: nothing in the payment names a plan, so the record says the
+  // default chose a month. Wrong: it claims the payment's text did, and an
+  // operator reading the record goes looking for text that is not there.
+  const bare = mapPaymentResource({ id: 11, status: "approved", date_approved: "2026-03-01T10:00:00.000-05:00" }, {});
+  assert.deepEqual([bare.plan, bare.planSource], ["pro_monthly", "default(payment)"]);
+  // Control: text that names the plan is the source.
+  const named = mapPaymentResource({ id: 12, status: "approved", external_reference: "pro_yearly" }, {});
+  assert.deepEqual([named.plan, named.planSource], ["pro_yearly", "payment_text"]);
+});
+
+test("WM2: a refunded recurring charge with no dates of its own is dated by when it was due, not by the refund", () => {
+  // Correct: the charge paid for the period that started when it was due.
+  // Wrong: the refund's own time stands in, and the store ends a later period.
+  const due = "2026-03-01T10:00:00.000-05:00";
+  const refunded = mapAuthorizedPaymentResource({
+    id: 21, preapproval_id: "pre_wm2", status: "processed", debit_date: due,
+    last_modified: "2026-03-20T10:00:00.000-05:00", payment: { id: 22, status: "refunded" }
+  }, {});
+  assert.equal(refunded.reversedChargeAt, Math.floor(Date.parse(due) / 1000));
+  assert.equal(refunded.reversedAt, Math.floor(Date.parse("2026-03-20T10:00:00.000-05:00") / 1000), "control: the refund is dated by itself");
+});
+
+test("WM3: a payment whose metadata names the plan is that plan", () => {
+  // The merchant writes a payment's metadata through the API (a Checkout Pro
+  // preference), so it is the seller's statement, unlike Creem's.
+  const yearly = mapPaymentResource({ id: 31, status: "approved", metadata: { plan: "pro_yearly" } }, {});
+  assert.deepEqual([yearly.plan, yearly.planSource], ["pro_yearly", "payment_text"]);
+  // Control: with no metadata, a one-off payment is a month.
+  assert.equal(mapPaymentResource({ id: 32, status: "approved" }, {}).plan, "pro_monthly");
 });

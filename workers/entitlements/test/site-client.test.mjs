@@ -188,6 +188,26 @@ test("the site keeps a Mercado Pago license whose charge was refunded, and Pro c
   assert.equal(charged.billing.isPro(), true);
 });
 
+test("coming back from a Mercado Pago subscription with both ids, the site claims by the preapproval id", async () => {
+  // A subscription's charge is no longer filed under its payment number (the
+  // number is on the receipt, and anybody holding it claimed the subscription:
+  // red-team WH-1), so a return URL carrying both ids has to be claimed by
+  // the preapproval's. The site used to read payment_id first.
+  const env = createTestEnv();
+  const storage = new Map();
+  const now = Math.floor(Date.now() / 1000);
+  await mercadoPago(env, "subscription_preapproval", {
+    id: "PRE-BOTH", status: "authorized", reason: "Pro mensual", payer_id: 4,
+    auto_recurring: { frequency: 1, frequency_type: "months" },
+    next_payment_date: iso(now + 30 * DAY), last_modified: iso(now - 60)
+  });
+  await mercadoPago(env, "payment", {
+    id: 4321, status: "approved", preapproval_id: "PRE-BOTH", date_created: iso(now - 50), date_approved: iso(now - 50), date_last_updated: iso(now - 40)
+  });
+  const back = await returnFromCheckout(env, storage, "?billing=success&plan=pro_monthly&provider=mercadopago&payment_id=4321&preapproval_id=PRE-BOTH");
+  assert.equal(back.license.getStatus().pro, true, "Pro, from the preapproval id");
+});
+
 test("the site still lets go of a refunded Mercado Pago one-off payment and of a cancelled subscription", async () => {
   const now = Math.floor(Date.now() / 1000);
 

@@ -111,7 +111,7 @@ once the old token has expired or is a day old) gets a token again.
 |--------|------|---------|
 | POST | `/v1/webhooks/stripe` | Signed Stripe events. 400 on a bad signature. |
 | POST | `/v1/webhooks/mercadopago` | Signed Mercado Pago notifications; state is then re-read from the MP API. |
-| POST | `/v1/claim` | `{provider, sessionId}` → `200 {ok, licenseId, token, entitlement}`, `202 {ok:false,reason:"pending"}` while the webhook is still in flight *or* while an async payment settles, `402 {reason:"suspended"}` and `403 {reason:"inactive"}` as for `/v1/license`, `404` for garbage. |
+| POST | `/v1/claim` | `{provider, sessionId}` → `200 {ok, licenseId, token, entitlement}`, `202 {ok:false,reason:"pending"}` while the webhook is still in flight *or* while an async payment settles, `402 {reason:"suspended"}` and `403 {reason:"inactive"}` as for `/v1/license`, `404` for garbage, `429 {reason:"rate_limited"}` once a Mercado Pago payment number's budget is spent (`MP_CLAIM_IP_LIMIT`, `MP_CLAIM_DEPLOYMENT_LIMIT`, below). |
 | POST | `/v1/license` | `{licenseId}` → a fresh token from live KV state. `404` unknown, `202 {reason:"pending"}` while an async payment settles, `402 {reason:"suspended"}` while a later payment can still bring it back, `403 {reason:"inactive"}` once nothing can (see "402 or 403" above). |
 | GET | `/v1/jwks` | The public key as a JWK set, with `kid`. |
 | GET | `/v1/health` | `{ok, stripeConfigured, mercadopagoConfigured, signingKeyConfigured, siteOrigin, accountsConfigured, authMethods}` — booleans and the public Google client id only. |
@@ -222,7 +222,7 @@ Public, committed in `wrangler.toml`:
 | `LICENSE_TTL_SECONDS` | Token lifetime (clamped to 60…2592000). |
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. Filling either one in also makes it an **allow-list** — see below. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
-| `CREEM_PRODUCT_PRO_MONTHLY` / `CREEM_PRODUCT_PRO_YEARLY` | Optional Creem product id → plan mapping. Filling either one in makes it an **allow-list** too, as the Stripe prices do, and one that `metadata.plan` cannot get past (a buyer can write Creem metadata). |
+| `CREEM_PRODUCT_PRO_MONTHLY` / `CREEM_PRODUCT_PRO_YEARLY` | Optional Creem product id → plan mapping. Filling either one in makes it an **allow-list** too, as the Stripe prices do. Creem metadata is never read for the plan (a buyer can write it). |
 | `CREEM_ALLOW_TEST_MODE` | `"true"` lets a Creem event whose `mode` is `test`, `sandbox` or `local` entitle. Defaults off: a test purchase moves no money, so honouring one hands out the paid tier for nothing. Switch it on to prove the rail end to end, and off again before the first real sale. An unrecognised mode entitles either way, so a live value Creem renames cannot silently stop every sale. |
 | `TRIAL_DAYS` | Length of the free trial, in days. One per account, ever. Default 7. |
 | `TRIAL_LEN_EXPERIMENT` | `"on"` runs the trial-length A/B test (`trial_len_2026_11`): each account's trial is 7 or 14 days, assigned from its account id. **It overrides `TRIAL_DAYS`** — with the test on, that setting is ignored. Off (the default) everybody gets `TRIAL_DAYS`. It also needs `LICENSE_ID_KEY` or `LICENSE_PRIVATE_KEY_PKCS8_B64` to key the assignment with; without one the test stays off, because an arm anyone can predict is an arm anyone can pick. The browser cannot switch this on: the `enabled` flag in `js/experiments-config.js` governs only what the statistics record. |
@@ -231,7 +231,7 @@ Public, committed in `wrangler.toml`:
 | `EMAIL_FROM` / `EMAIL_FROM_NAME` | Sender of the code emails. Must be a verified sender at the provider. |
 | `EVENTS_ENABLED` | `"false"` stops recording anonymous events at once (nothing is stored, not even counters). Deletions still work. |
 | `REPORTS_ENABLED` | Problem reports and ideas from the site. Unlike `EVENTS_ENABLED` this defaults **on** when absent. `"false"` closes the route; the form then shows the reporter their own text to copy, so nothing they typed is lost. |
-| `EVENTS_DAILY_CAP` | Optional. Events stored per deployment per rolling day; `10000` when absent. It exists so analytics cannot spend D1's free 100,000 rows a day and take sign-in, saved progress and the trial down with it: one stored event is three rows now and three more when the 180-day sweep deletes it, so the default leaves about 40,000 rows a day for the account layer. Past it the route answers `202 {accepted: 0, reason: "daily_capped"}` and writes nothing but the counter. On the $5 Workers Paid plan the same ceiling is 500 times higher, so raise it there. |
+| `EVENTS_DAILY_CAP` | Optional. Events stored per deployment per rolling day; `10000` when absent. It exists so analytics cannot spend D1's free 100,000 rows a day and take sign-in, saved progress and the trial down with it: one stored event is three rows now and three more when the 180-day sweep deletes it, so the default leaves about 40,000 rows a day for the account layer. Past it the route answers `202 {accepted: 0, reason: "daily_capped"}` and writes nothing but the counter. On the $5 Workers Paid plan D1 has no daily limit (50 million rows written a month are included, then $1.00 a million), so raise it there. |
 
 Secrets — **never** in this repo, only `wrangler secret put`:
 
@@ -375,7 +375,8 @@ interval from when the money arrived (31 days for `pro_monthly`; for
 29 February), and each renewal charge extends it. A charge never *shortens* an
 existing period. Stripe webhook sessions carry no line items, so a one-time
 Stripe Payment Link meant as a yearly pass needs `metadata.plan = pro_yearly`;
-without it the pass counts as one month. A Stripe checkout that bought neither
+without it the pass counts as one month, and once the price table is filled in
+it does not count at all (see the allow-list below). A Stripe checkout that bought neither
 a subscription nor a one-time payment (a session in `setup` mode, which saves a
 card and charges nothing) entitles to nothing.
 
@@ -558,13 +559,27 @@ it must not get the grace that an existing subscriber gets;
 session names the plan only through a configured price id or its own
 `metadata.plan`; when it has neither it says nothing about the plan, and the
 subscription's events decide it, whichever order they arrive in. Only a
-one-time checkout with neither counts as `pro_monthly`.
+one-time checkout with neither counts as `pro_monthly`, and only while the price
+table is empty.
 
 **The price table is also an allow-list, wherever it is filled in.** With
 `STRIPE_PRICE_PRO_*` empty — how this repository ships — nothing is gated and
 the mapping above is all it does. Fill either id in and a Stripe subscription
 on a price that is *not* named there is stored `suspended`: it issues no token,
-and a paid invoice on that price does not lift it. That is what stops anything
+and a paid invoice on that price does not lift it. A checkout cannot vouch for a price
+either, because a webhook's session carries no line items: with the table
+filled in, a one-time checkout without `metadata.plan` is stored `suspended`
+too, and a subscription's checkout without it leaves entitling to the
+subscription and invoice events, which carry the price. Before that, a donation
+link on the same account bought a month of Pro, and a subscription's checkout
+landing seconds after its subscription (Stripe usually sends it last) lifted
+the suspension its unlisted price had just been given (red-team WH-3). A
+subscription's checkout stripped that way also leaves the license's clock
+alone, because Stripe creates it after the subscription's own events: when it
+was delivered first, it made them stale, and a paid subscription stayed
+`pending` until its renewal (the review of that fix). And a deleted
+subscription on an unlisted price, which is "canceled" rather than
+"suspended", ends at its deletion instead of keeping its period. That is what stops anything
 else ever sold from the same Stripe account — a donation, a one-off lesson, a
 subscription at any price — from becoming Pro.
 
@@ -622,9 +637,14 @@ link that offers both, and put their ids in `CREEM_PRODUCT_PRO_MONTHLY` and
 `CREEM_PRODUCT_PRO_YEARLY`. Filling either one in makes it an allow-list as
 well as a label, so a donation or a one-off lesson sold from the same Creem
 account cannot become Pro. Unlike Stripe, `metadata.plan` is no way past that
-list: a Creem payment link takes `?metadata[plan]=…` from whoever opens it and
-passes it to the webhook, so it is only read for a product the list does not
-refuse. A product of ours missing from the list is fixed by adding its id.
+list, or a way to name a plan at all: a Creem payment link takes
+`?metadata[plan]=…` from whoever opens it and passes it to the webhook, so the
+plan comes from the product's id in the list, else from the product's own
+`billing_period`, else it is a month. Metadata used to be read ahead of the
+billing period while the list was empty, which let `?metadata[plan]=pro_yearly`
+on the monthly link count one monthly charge as a year (red-team WH-2,
+18 November 2026). A product of ours missing from the list is fixed by adding
+its id.
 Paste each product's share link into `js/billing-config.js` under
 `providers.creem.links`.
 
@@ -687,7 +707,83 @@ Subscribe: `payment`, `subscription_preapproval`,
 
 The `x-signature` header is verified against the documented manifest
 `id:<data.id lowercased>;request-id:<x-request-id>;ts:<ts>;` (segments whose
-value is absent are omitted). After that the notification body is treated as a
+value is absent are omitted). The `data.id` signed is the query string's, as
+the documentation says (`data.id_url`: "los parámetros con el sufijo _url
+provienen de query params"); the body's stands in only when the query has
+none, and the id verified is the id fetched. An id that is not a string or a
+number is no id: an object such as `{"toString":1}` used to throw before the
+signature was checked.
+
+**Claim keys.** A subscription is claimed (and linked to an account) by its
+preapproval id, the 32-hex id the payer's browser comes back with. A payment's
+id is Mercado Pago's operation number, sequential and printed on the payer's
+receipt, so a subscription's charges are never filed under it: holding a
+receipt, or walking the numbers near one, used to hand out the subscription's
+token, and linking by it took the subscription from its payer for good
+(red-team WH-1). A one-off Checkout Pro payment comes back with nothing but
+that number, so it stays the payment's claim key, and what is limited is the
+walk, counted in distinct numbers. Before a number is looked up, one SQL
+statement records it for the caller's IPv4 address or IPv6 /56 and takes a
+try from each of two budgets, all or none: one of `MP_CLAIM_IP_LIMIT` (20 an
+hour) for that block and one of `MP_CLAIM_DEPLOYMENT_LIMIT` (50 an hour) for
+the whole deployment. A request refused, or one that loses the last try to
+another, writes nothing; one that loses only because another request opened
+the next hour between its read and its write reads again and takes its try
+in the new hour. A miss keeps both tries; a hit, a number that names a
+payment of ours, gives the block's try back and keeps the deployment's.
+Asking again for a number the block has recorded this hour is free, and
+costs one read: a buyer polling their own number before its webhook lands,
+or while a cash voucher is unpaid, spends one try at most, and of the link
+and the claim the return page sends together, one pays and the other finds
+the record, whatever the latency to D1. A request refused at the budgets
+reads the record again before it answers, because its twin wrote the record
+in the same statement as the try it took. Both routes read the throttle's
+clock after the request body, so a request cannot hold its body back to
+pick an hour. So no more numbers are looked up than the budgets allow
+however many requests arrive at once, and every row the throttle writes
+belongs to one of the deployment's tries: as D1 bills them (a new row is two,
+the table and its primary-key index), at most eight a try with the sweep's
+deletes a day later, so at most 9,600 rows a day (and three for the
+ceiling's own row), a quarter of the roughly 40,000 the events cap leaves
+the account layer (`EVENTS_DAILY_CAP`); a test holds the shipped ceiling to
+that budget. On the Workers Paid plan, where D1 has no daily limit, raise
+the ceiling and that budget together. If D1 refuses the throttle's
+writes, a claim or link by a number fails closed (500) and nothing is looked
+up.
+
+Six reviews shaped this order: counting requests locked the payer out with
+their own polls; checking, looking up and spending only after a miss let a
+burst look up every number; recording the number in a statement of its own
+let a copy refused by the budgets leave its twin a free lookup, and a request
+stopped between the two leave its number free; a fixed 200 ms wait for the
+payer's twin was shorter than the twin's own round trips from Lima, since D1
+has no South American location; taking the budgets one statement each, and
+giving every try back on a hit, let the losers at the ceiling and copies of
+one paid number from many blocks write rows no budget capped; and a cap
+counted in changed rows, not billed ones, let 200 an hour spend 38,400 rows
+a day. A give-back that fails after the payment was found costs the block a
+try, not the payer an answer.
+
+Once either budget is spent, every claim and link by a number the block has
+not recorded is refused until the hour turns, the payer's own included,
+because if a hit still passed a `429` would only mean "miss". That is the
+price of the ceiling: whoever spends it holds one-off payments back for the
+rest of the hour, and since buyers' own lookups count against it too, more
+than fifty buyers an hour would hold each other back. A held-back claim
+waits and is claimed on a later load; a held-back account link is lost,
+because the site sends `/v1/me/link` once and drops any answer but success,
+so a signed-in payer refused there ends without Pro on the account. That is
+VG-83, which a late webhook already triggers, and which has to be fixed
+before one-off payments are sold. Subscriptions, claimed by their
+preapproval id, are never held back. The block's bucket and the number's
+record are named after keyed daily pseudonyms, never the address or the
+number itself, and like every `rate_limits` row they are swept a day after
+their window.
+
+**The alarm.** A webhook failure leaves the `webhook_failed` flag that turns
+`/v1/health?probe=1` red, but only for work after the signature has verified.
+Before 18 November 2026 an unsigned request that made the handler throw, or
+whose body stream broke half way, raised it for an hour (red-team INPUT-1). After that the notification body is treated as a
 *pointer only* — the worker re-reads state from the API with `MP_ACCESS_TOKEN`:
 
 | Kind | Endpoint |

@@ -98,25 +98,27 @@ test("a checkout is paid only when it completed and its order is paid or names n
   assert.deepEqual(verdict({ status: "pending" }), unpaidUpdate, "a checkout that has not completed");
 });
 
-test("a checkout's plan comes from its own metadata first, then from its nested subscription's", () => {
+test("no metadata names a checkout's plan, the checkout's own or its nested subscription's: the buyer can write both", () => {
+  // WC5 and WC6 pinned which of the two metadata came first. Neither is read
+  // any more (red-team WH-2, 18 November 2026): a Creem payment link takes
+  // `?metadata[plan]=` from whoever opens it, so the product decides.
   const plan = (over) => {
     const { update } = map("checkout.completed", checkout(over), {}, 1793664000000);
     return [update.plan, update.planSource];
   };
-  // No metadata on the checkout: the subscription nested in it is the only
-  // place the owner's plan is written. Wrong: the monthly billing period wins.
   assert.deepEqual(
     plan({ subscription: { id: "sub_k", object: "subscription", metadata: { plan: "pro_yearly" } } }),
-    ["pro_yearly", "metadata"]
+    ["pro_monthly", "billing_period"],
+    "the nested subscription's metadata says yearly; the monthly product decides"
   );
-  // Both written: the checkout's own outranks the subscription's.
   assert.deepEqual(
     plan({
       metadata: { plan: "pro_monthly" },
       product: { id: "prod_k", billing_period: "every-year" },
-      subscription: { id: "sub_k", object: "subscription", metadata: { plan: "pro_yearly" } }
+      subscription: { id: "sub_k", object: "subscription", metadata: { plan: "pro_monthly" } }
     }),
-    ["pro_monthly", "metadata"]
+    ["pro_yearly", "billing_period"],
+    "both say monthly; the yearly product decides"
   );
   // Control: neither written, so the product's billing period decides.
   assert.deepEqual(plan({ product: { id: "prod_k", billing_period: "every-year" } }), ["pro_yearly", "billing_period"]);

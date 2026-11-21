@@ -32,7 +32,7 @@ import {
   startSessionWithCode,
   toPublicAccount
 } from "./accounts.js";
-import { callerIp, ensureSchema, hitRateLimit, normalizeEmail, nowSec, sweepExpired } from "./db.js";
+import { callerIp, ensureSchema, hitRateLimit, normalizeEmail, nowSec, peekRateLimit, releaseRateLimits, reserveRateLimits, sweepExpired } from "./db.js";
 import { emailConfigured, sendLoginCode } from "./email.js";
 import {
   MAX_GRANT_DAYS,
@@ -57,7 +57,8 @@ import {
 } from "./grants.js";
 import { googleConfigured, verifyGoogleIdToken } from "./google.js";
 import { buildTokenPayload, isLicenseIdShape, signPayload } from "./license.js";
-import { CLAIMABLE_PROVIDERS } from "./limits.js";
+import { CLAIMABLE_PROVIDERS, MP_CLAIM_DEPLOYMENT_LIMIT, MP_CLAIM_IP_LIMIT } from "./limits.js";
+import { addressBlockKey, ipKeyConfigured } from "./events.js";
 import { deleteProgress, getProgress, listProgress, putProgress } from "./progress.js";
 import { getEntitlement, getLicenseIdForClaim } from "./store.js";
 import { ledgerReader } from "./ledger.js";
@@ -545,6 +546,130 @@ export async function handleMe(request, env, deps) {
 }
 
 /**
+ * Find the license a claim or link id names, holding a walk over Mercado Pago
+ * payment numbers to MP_CLAIM_IP_LIMIT and MP_CLAIM_DEPLOYMENT_LIMIT.
+ *
+ * What is counted is distinct numbers looked up an hour: per block of
+ * addresses, the numbers that name no payment, and per deployment, every
+ * number. The rule:
+ * - a number this block has not looked up this hour is looked up only after
+ *   one statement has recorded it for the block and taken a try from each
+ *   budget, all or none (takeTries), so no more new numbers are looked up
+ *   than the budgets allow however many requests arrive at once, a request
+ *   refused writes nothing, and a spent budget refuses whatever the number
+ *   names, or a 429 would only mean "miss";
+ * - a number the block has recorded this hour is looked up again for free,
+ *   so a buyer polling their own number, before its webhook lands or while
+ *   a cash voucher is unpaid, spends one try at most, and of the payer's link
+ *   and claim sent together one pays and the other finds the record, at any
+ *   latency;
+ * - a hit gives the block's try back (giveBlockTryBack) and keeps the
+ *   deployment's, so payers behind one shared address are not held back by
+ *   each other, and every row the throttle writes belongs to one of
+ *   MP_CLAIM_DEPLOYMENT_LIMIT's tries: at most eight as D1 bills them.
+ * Writes refused before the lookup fail the request (500): the throttle never
+ * steps aside. Six reviews of this throttle, 18 November 2026, each found a
+ * way past an earlier version: counting requests (the payer's own polls
+ * locked them out); checking, then spending after a miss (a burst looked up
+ * every number); writing the record and the tries as separate statements (a
+ * copy refused by the budgets left its twin a free lookup, and a request
+ * stopped between them left its number free); waiting a fixed 200 ms for the
+ * payer's twin (too short at the D1 latency a payer in Peru sees); giving
+ * every try back on a hit while taking budgets one statement at a time
+ * (copies of a paid number, and losers at the ceiling, wrote rows no budget
+ * capped); and reading the link's clock before its body (held bodies picked
+ * their hour).
+ *
+ * Any other id is looked up untouched: Stripe's and Creem's are random, and a
+ * Mercado Pago subscription is claimed by its 32-hex preapproval id. Buckets
+ * are keyed daily pseudonyms, never an address or a number (VG-87). Without
+ * D1 (the KV-only mode) or a key to pseudonymise under there is nothing to
+ * count with, and nothing is held back: the shipped worker has both, and a
+ * deployment without the signing key cannot hand out a token.
+ * @param {Object} env Worker env bindings.
+ * @param {Request} request Incoming request.
+ * @param {string} provider Provider the caller named.
+ * @param {string} sessionId The id the caller is claiming by.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{licenseId: string|null, refused?: {retryAfter: number}}>}
+ *   The license, null for none yet, or the budget that refused.
+ */
+export async function lookUpClaimId(env, request, provider, sessionId, at) {
+  const number = await paymentNumber(env, request, provider, sessionId, at);
+  const tries = number ? await takeTries(env.DB, number, at) : { held: [] };
+  if (tries.refused) {
+    return { licenseId: null, refused: tries.refused };
+  }
+  const licenseId = await getLicenseIdForClaim(ledgerReader(env), provider, sessionId);
+  if (licenseId && tries.held.length) {
+    await giveBlockTryBack(env.DB, number, tries.held);
+  }
+  return { licenseId };
+}
+
+/**
+ * Record the number for the caller's block and take a try from each budget,
+ * in one statement, all or none; or take nothing for a number the block has
+ * already recorded this hour (the record is read first, so such a poll costs
+ * one read). The record is read again after a budget refuses: the request
+ * that took the block's last try may be this one's twin (the return page
+ * sends a link and a claim together), and its record is written in the same
+ * statement as that try, so whoever sees the try gone sees the record.
+ * @param {Object} db D1 binding.
+ * @param {{record: Array, block: Array, ceiling: Array}} number The number's buckets.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{held: Array<[string, number]>, refused?: Object}>}
+ *   The rows taken, none for a recorded number, or the refusal.
+ */
+async function takeTries(db, number, at) {
+  const tries = await reserveRateLimits(db, [number.record, number.block, number.ceiling], at);
+  if (tries.ok) {
+    return { held: tries.held };
+  }
+  if (tries.refusedAt === 0) {
+    return { held: [] };
+  }
+  const recorded = await peekRateLimit(db, ...number.record, at);
+  return recorded.ok ? { held: [], refused: tries } : { held: [] };
+}
+
+/**
+ * After a hit, give back the block's try; the record and the deployment's try
+ * stay. Best effort: the payment has been found, and a write that fails here
+ * leaves one try spent, which costs the block a try and nobody a payment.
+ * @param {Object} db D1 binding.
+ * @param {{block: Array}} number The number's buckets.
+ * @param {Array<[string, number]>} held The rows takeTries took.
+ * @returns {Promise<void>} Resolves when written, or when the write failed.
+ */
+async function giveBlockTryBack(db, number, held) {
+  try {
+    await releaseRateLimits(db, held.filter(([bucket]) => bucket === number.block[0]));
+  } catch (error) {
+    console.error("claim throttle give-back failed", error && error.message);
+  }
+}
+
+/**
+ * A Mercado Pago payment number's buckets for the caller's block of
+ * addresses, as `[bucket, limit, windowSeconds]`: its record (looked up by
+ * this block this hour), the block's budget and the deployment's; or null
+ * when the id is not a payment number, or there is nothing to count with.
+ */
+async function paymentNumber(env, request, provider, sessionId, at) {
+  if (provider !== "mercadopago" || !/^\d+$/.test(sessionId) || !env.DB || !ipKeyConfigured(env)) {
+    return null;
+  }
+  await ensureSchema(env.DB);
+  const numberKey = await addressBlockKey(env, request, at, `mpclaimn:${sessionId}`);
+  return {
+    record: [`mpclaimn:${numberKey}`, 1, MP_CLAIM_IP_LIMIT[1]],
+    block: [`mpclaim:${await addressBlockKey(env, request, at, "mpclaim")}`, ...MP_CLAIM_IP_LIMIT],
+    ceiling: ["mpclaim:all", ...MP_CLAIM_DEPLOYMENT_LIMIT]
+  };
+}
+
+/**
  * POST /v1/me/link — attach a completed checkout to the signed-in account.
  *
  * Accepts either the provider checkout id (same one `/v1/claim` takes) or a
@@ -578,7 +703,13 @@ export async function handleLink(request, env, deps) {
     if (!sessionId || sessionId.length > 200) {
       return json({ ok: false, reason: "bad_request" }, 400, cors);
     }
-    licenseId = await getLicenseIdForClaim(ledgerReader(env), provider, sessionId);
+    // The throttle's clock is read after the body, as /v1/claim's is: one
+    // read before it let a request that held its body back pick an hour.
+    const found = await lookUpClaimId(env, request, provider, sessionId, nowSec(deps.now));
+    if (found.refused) {
+      return json({ ok: false, reason: "rate_limited", retryAfter: found.refused.retryAfter }, 429, cors);
+    }
+    licenseId = found.licenseId;
     if (!licenseId) {
       // The webhook has not landed yet; the browser retries, same as /v1/claim.
       return json({ ok: false, reason: "pending" }, 202, cors);

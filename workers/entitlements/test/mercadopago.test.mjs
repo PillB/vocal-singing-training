@@ -282,7 +282,8 @@ test("a subscription's charge that did not go through says nothing about the sub
     date_last_updated: "2026-03-01T10:00:00.000-05:00"
   }, {});
   assert.equal(rejected.subscriptionId, "pre_r");
-  assert.equal(rejected.claimId, "502", "the payment id still finds the subscription's license");
+  assert.equal(rejected.claimId, null,
+    "found through its subscription: a receipt's number is never a key to the subscription (red-team WH-1)");
   assert.equal(rejected.status, undefined);
   assert.equal(rejected.plan, undefined);
   assert.equal(rejected.periodEndFromCharge, null);

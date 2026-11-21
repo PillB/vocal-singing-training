@@ -1,0 +1,30 @@
+You are taking part in a consumer research survey, playing several different respondents, one after another.
+
+For each respondent listed below, become that person: their age, gender, where they live, their money situation, their occupation, what they would want to train, their experience, and the device they would use. Each respondent has just been shown the same short description of a website (below), plus the price and terms that apply to them. Each one answers four questions in their own words, in Spanish (the respondent's own variety of Spanish), briefly (one to three sentences per question), the way that person would really answer, in their own voice. Answer each respondent independently: they do not know about each other. Do not compare respondents, summarise, or add commentary.
+
+THE DESCRIPTION EVERY RESPONDENT SAW
+"""
+CANTO Y ORATORIA, GRATIS
+Tres minutos al día para entrenar tu voz.
+Tu estudio de voz, dentro del navegador: escoges un ejercicio, practicas con el micrófono y guardas tu resultado.
+
+• Escoge qué practicar: Hablar si es para presentaciones, Cantar si es para canciones.
+• Practica con tu micrófono, con el piano y el afinador guiándote en la pantalla.
+• Guarda tu sesión y revísala: tu avance queda en este navegador.
+"""
+
+RESPONDENTS
+- Respondent R56: 67-year-old man, lives in Bogotá, Colombia. Money: "Cubro lo básico y a veces me doy un gusto pequeño." Occupation: retired. Would want to train: singing. Voice experience: sings casually (at home, karaoke, at church or with family). Would use it on: phone. What Pro would cost this person and the terms: Funciona en el navegador del teléfono o la computadora, sin instalar nada y sin crear cuenta. En español y en inglés. Todos los ejercicios son gratis, sin límite de tiempo. Pro es opcional: US$ 7.99 al mes o US$ 49 al año. Pro agrega: sin anuncios, descargar tu progreso, hasta 3 perfiles, un gráfico de tus últimos 28 días y un resumen para enviar a tu profesor. Prueba de Pro de 7 días sin tarjeta.
+- Respondent R17: 31-year-old woman, lives in Lima, Peru. Money: "Cubro lo básico y a veces me doy un gusto pequeño." Occupation: self-employed. Would want to train: both. Voice experience: sings casually (at home, karaoke, at church or with family). Would use it on: phone. What Pro would cost this person and the terms: Funciona en el navegador del teléfono o la computadora, sin instalar nada y sin crear cuenta. En español y en inglés. Todos los ejercicios son gratis, sin límite de tiempo. Pro es opcional: S/ 19.90 al mes o S/ 119.90 al año. Pro agrega: sin anuncios, descargar tu progreso, hasta 3 perfiles, un gráfico de tus últimos 28 días y un resumen para enviar a tu profesor. Prueba de Pro de 7 días sin tarjeta.
+- Respondent R50: 77-year-old man, lives in Lima, Peru. Money: "Vivo cómodo y puedo gastar en mis aficiones." Occupation: retired. Would want to train: speaking. Voice experience: sings casually (at home, karaoke, at church or with family). Would use it on: phone. What Pro would cost this person and the terms: Funciona en el navegador del teléfono o la computadora, sin instalar nada y sin crear cuenta. En español y en inglés. Todos los ejercicios son gratis, sin límite de tiempo. Pro es opcional: S/ 19.90 al mes o S/ 119.90 al año. Pro agrega: sin anuncios, descargar tu progreso, hasta 3 perfiles, un gráfico de tus últimos 28 días y un resumen para enviar a tu profesor. Prueba de Pro de 7 días sin tarjeta.
+- Respondent R59: 80-year-old woman, lives in Santiago, Chile. Money: "Cubro lo básico y a veces me doy un gusto pequeño." Occupation: retired. Would want to train: singing. Voice experience: none: has never trained their voice. Would use it on: phone. What Pro would cost this person and the terms: Funciona en el navegador del teléfono o la computadora, sin instalar nada y sin crear cuenta. En español y en inglés. Todos los ejercicios son gratis, sin límite de tiempo. Pro es opcional: US$ 7.99 al mes o US$ 49 al año. Pro agrega: sin anuncios, descargar tu progreso, hasta 3 perfiles, un gráfico de tus últimos 28 días y un resumen para enviar a tu profesor. Prueba de Pro de 7 días sin tarjeta.
+- Respondent R04: 18-year-old woman, lives in Lima, Peru. Money: "Vivo cómodo y puedo gastar en mis aficiones." Occupation: works full-time. Would want to train: both. Voice experience: none: has never trained their voice. Would use it on: phone. What Pro would cost this person and the terms: Funciona en el navegador del teléfono o la computadora, sin instalar nada y sin crear cuenta. En español y en inglés. Todos los ejercicios son gratis, sin límite de tiempo. Pro es opcional: S/ 19.90 al mes o S/ 119.90 al año. Pro agrega: sin anuncios, descargar tu progreso, hasta 3 perfiles, un gráfico de tus últimos 28 días y un resumen para enviar a tu profesor. Prueba de Pro de 7 días sin tarjeta.
+- Respondent R28: 47-year-old man, lives in Madrid, España. Money: "Vivo cómodo y puedo gastar en mis aficiones." Occupation: nurse. Would want to train: singing. Voice experience: sings casually (at home, karaoke, at church or with family). Would use it on: phone. What Pro would cost this person and the terms: Funciona en el navegador del teléfono o la computadora, sin instalar nada y sin crear cuenta. En español y en inglés. Todos los ejercicios son gratis, sin límite de tiempo. Pro es opcional: 7,99 € al mes o 49 € al año. Pro agrega: sin anuncios, descargar tu progreso, hasta 3 perfiles, un gráfico de tus últimos 28 días y un resumen para enviar a tu profesor. Prueba de Pro de 7 días sin tarjeta.
+
+QUESTIONS (each respondent answers all four)
+P1. Según lo que acabas de leer, ¿qué tan probable es que pruebes este sitio web?
+P2. Imagina que lo usaste gratis una semana. ¿Qué tan probable es que pagues por Pro?
+P3. ¿Qué te haría dudar o te echaría para atrás, si hay algo?
+P4. En una frase: ¿qué es este sitio y para quién es?
+
+Return one entry per respondent, with the respondent id exactly as given (R56, R17, R50, R59, R04, R28).

@@ -60,6 +60,25 @@ The winning framing is chosen from several, so its score is biased upward
 (winner's curse). Round 2 re-tests the copy actually shipped against `C0` and
 `C0p` with fresh prompts before anything is claimed about it.
 
+## Round 2 rules (written 2026-11-21, after round 1 was scored, before any round 2 answer was collected)
+
+Round 1 ended with no framing beating today on either question, the "you are
+not tone-deaf" reframe (C2) worse on trial intent, and paid intent failing its
+gates (V1 on paid, V3 on paid). So the copy shipped is a clarity pass on today's
+copy, not a new framing, and round 2 asks a narrower question: **is the shipped
+first visit (F) at least as good as today's (C0)?**
+
+- Same 64 profiles, concepts C0, C0p and F only, batch seed 2 (round 1 used 0),
+  prompts written fresh into `prompts/r2/`.
+- **Non-inferiority on trial intent**: F is "not worse" if the lower end of the
+  paired 95% interval of F − C0 is above −0.10 (about the size of C2's harm in
+  round 1, −0.11). F "beats today" only by the round 1 rule (above zero against
+  both C0 and C0p).
+- Paid intent is reported, but no decision rests on it: it failed its
+  reliability gate in round 1.
+- The comparison of C0 with C0p is re-run as a check on round 1: if C0p again
+  rates no differently from C0, novelty alone does not move this panel.
+
 ## Files
 
 | File | What |

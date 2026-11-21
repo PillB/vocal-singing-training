@@ -852,7 +852,7 @@ export const MUTANTS = {
     // PR #42 review: the first load's hero as the app draws it, at every width, arm and way in
     ["D35 a first load with an experiment's arm forced in the address shows a hero the app then rewrites", "js/boot-head.js", "      if (name.indexOf(\"ab_\") === 0) arm = true;", "      if (false) arm = true;", "tests/redteam-boot-a11y-privacy.spec.js", "first load at \\?"],
     ["D36 a person who read the guide first is held like a returning one: the guide's statistics id taken for the app's", "js/boot-head.js", "\"vt_tour_v1\", \"vt_mic_sens\"];", "\"vt_tour_v1\", \"vt_mic_sens\", \"vt_ab_v1\"];", "tests/redteam-boot-a11y-privacy.spec.js", "straight from the guide"],
-    ["D37 the line over the first load's hero changes as the app starts", "index.html", 'data-i18n="start.kickerNew">Canto y oratoria \u00b7 gratis</p>', 'data-i18n="start.kickerNew">Empieza aqu\u00ed</p>', "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D37 the line over the first load's hero changes as the app starts", "index.html", 'data-i18n="start.kickerNew">Para cantar y para hablar \u00b7 gratis</p>', 'data-i18n="start.kickerNew">Empieza aqu\u00ed</p>', "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
     ["D38 on a laptop the first load's title is laid out narrower and larger, and shrinks as the app starts", "css/styles.css", "  body.loop-first #start-panel .start-title,\n  html.vt-boot-hero:not(.vt-boot-ready) #start-panel .start-title {", "  body.loop-first #start-panel .start-title {", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
     ["D41 on a laptop the first load's title is laid out in the whole width, and its column narrows as the app starts", "css/styles.css", "  body.loop-first #start-panel.start-panel,\n  html.vt-boot-hero:not(.vt-boot-ready) #start-panel.start-panel {", "  body.loop-first #start-panel.start-panel {", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
     ["D42 the first load's hero is laid out and styled visible, but drawn at no opacity", "css/styles.css", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n}\n", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n  opacity: 0;\n}\n", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
@@ -1100,7 +1100,11 @@ export const MUTANTS = {
     ["DS16 the design control takes focus behind the sticky header and stays there", "js/app.js", "          window.scrollBy({ top: r.top - hdr.bottom - 8, behavior: \"instant\" });\n", "", "tests/site-version.spec.js", "comes out from under it"],
     ["DS17 high-contrast mode loses the border on the current Progreso tab", "css/site-version.css", "    outline: 2px solid Highlight;\n", "", "tests/site-version.spec.js", "high-contrast"],
     ["DS18 a tapped button stays lifted and outlined on a touch screen", "css/styles.css", "@media (hover: hover) {\n  .btn:hover {", "@media all {\n  .btn:hover {", "tests/touch-hover.spec.js"],
-    ["DS19 a tapped account button keeps the accent border on a touch screen", "css/styles.css", "@media (hover: hover) {\n  .header-door:hover {", "@media all {\n  .header-door:hover {", "tests/touch-hover.spec.js"]
+    ["DS19 a tapped account button keeps the accent border on a touch screen", "css/styles.css", "@media (hover: hover) {\n  .header-door:hover {", "@media all {\n  .header-door:hover {", "tests/touch-hover.spec.js"],
+    // The marketing copy on a 360px phone (docs/48): new words that do not fit are a defect the node test cannot see.
+    ["DS20 the speaking choice's description grows into a paragraph the phone stacks", "js/i18n.js", '"first.speakSub": "presentaciones, entrevistas, dicción",', '"first.speakSub": "presentaciones, entrevistas de trabajo, reuniones, clases, exposiciones y dicción para hablar claro",', "tests/marketing-copy.spec.js", "fit a 360px phone \\(es\\)"],
+    ["DS21 the layout control's label grows and pushes the control to a second row", "js/i18n.js", '"sv.label": "Vista de la página",', '"sv.label": "Cómo quieres ordenar las cosas en esta página",', "tests/marketing-copy.spec.js", "fit a 360px phone \\(es\\)"],
+    ["DS22 the tab keeps the Spanish title after switching to English", "js/i18n.js", "      if (title) document.title = title;\n", "", "tests/marketing-copy.spec.js", "tab title"]
   ].map(([name, file, from, to, spec, grep]) => ({
     name,
     file,
@@ -1274,6 +1278,21 @@ export const MUTANTS = {
       ? [...PIANO_SPEC.slice(0, 3), `tests/${test}`, "--project=chromium", "--workers=2", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
       : node([`tests/node/${test}.test.mjs`])
   })),
+  // The marketing copy (docs/48): what search, a shared link and a first visit say, held to the research and to the
+  // code that keeps each promise true. Each mutant is a defect the copy has had or a claim the evidence rules out.
+  claims: [
+    ["MK1 the page's description is edited in the markup alone: a shared link says what the page no longer says", "index.html", '      content="Ejercicios de canto y para hablar en público, gratis y sin límite de minutos. Ves en vivo si das la nota. Sin instalar nada y sin tarjeta."\n    />\n    <!--', '      content="Práctica en casa: entrenamiento vocal y de canto, grabación, métricas, piano y plan de 12 semanas."\n    />\n    <!--'],
+    ["MK2 the description sells an AI coach the product does not have", "js/i18n.js", '"Ejercicios de canto y para hablar en público, gratis y sin límite de minutos.', '"Ejercicios de canto con tu coach de IA, gratis y sin límite de minutos.'],
+    ["MK3 the ads gate stops checking for live practice while the Pro window promises no ads during practice", "js/ads.js", "    if (isPracticeActive()) return false;\n", ""],
+    ["MK4 the free tier is capped while the description promises no time limit", "js/billing.js", "all_exercises: true,", "all_exercises: false,"],
+    ["MK5 the layout control shows the experiment's arm letter again", "js/i18n.js", '"sv.a": "Clásica",', '"sv.a": "A · Clásico",'],
+    ["MK6 the Pro window's English promise is left in Spanish", "js/i18n.js", '"pricing.sub": "Practice is free, always, and you never see ads while you practise.', '"pricing.sub": "Practicar es gratis, siempre, and you never see ads while you practise.'],
+    ["MK7 the English title runs past what a results page shows", "js/i18n.js", '"meta.title": "Singing and speaking practice, free in your browser",', '"meta.title": "Singing and speaking practice for every voice, free in your browser, no install",'],
+    ["MK8 the first visit says progress stays in the browser and no longer that no account is needed", "js/i18n.js", '"start.step3sub": "Se guarda en este navegador. No necesitas cuenta.",', '"start.step3sub": "Tu progreso se queda en este navegador.",'],
+    ["MK9 the Pro window claims almost every singing app caps free practice again", "js/i18n.js", '"pricing.proof1": "Muchas apps de canto con suscripción limitan', '"pricing.proof1": "Casi todas las apps de canto limitan'],
+    ["MK10 the progress board says one private lesson costs about a year of Pro", "js/i18n.js", '"value.anchor": "Un año de Pro cuesta menos que 3 clases particulares. Practicar es gratis, siempre.",', '"value.anchor": "Una clase particular ≈ el año de Pro. Practica gratis siempre.",'],
+    ["MK11 the terms stop saying the free plan asks for no card while the first visit says no card", "terms.html", "El plan gratis no cuesta nada ni pide tarjeta, y da acceso", "El plan gratis no cuesta nada y da acceso"]
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/marketing-copy.test.mjs"]) })),
   ledger: [
     ["LG1 the first validation chunk always passes: a stale read commits", "src/ledger.js", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed})", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed}) OR 1", "ledger"],
     ["LG2 later validation chunks are ignored", "src/ledger.js", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed})", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed}) AND 0", "ledger"],
@@ -1497,7 +1516,7 @@ export const MUTANTS = {
   }))
 };
 
-export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger"];
+export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger", "claims"];
 
 /** What the last failing command printed, so a red baseline in CI says which test failed. */
 let lastFailure = "";

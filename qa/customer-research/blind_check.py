@@ -2,9 +2,10 @@
 
 Run: python qa/customer-research/blind_check.py [r1|r2]   (default r1)
 
-Why: the plan (README, "Checks") called for a second way of reading the same
-answers, because SSR compresses differences and round 1's paid-intent gates
-failed (V1 and V3 on paid). Here other agents, who saw only the answer text in
+Why: round 1's paid-intent gates failed on SSR (V1 and V3 on paid), so a second
+way of reading the same answers was added. It was not in the pre-registration:
+it is exploratory, chosen after those gates failed (README, "Deviations from the
+plan"). Here other agents, who saw only the answer text in
 batches that mixed all nine cards, gave each intent answer a 1-5 rating and
 tagged each objection. This script joins their work to the key and applies the
 same rules analyze.py applies to SSR, so the two readings can be compared.
@@ -16,7 +17,10 @@ Output: data/<r>-blind-results.json.
 
 What it cannot do: the raters are models too, so agreement between the two
 readings is agreement between two machine readings of machine answers, not
-evidence about people.
+evidence about people. The raters were blind to the card's label but not to its
+offer: answers that repeat a price or a claim reveal the card. One rater coded
+each answer, so agreement between coders is not measured. V4 (the holdout) was
+not run for this reading.
 """
 import json
 import sys

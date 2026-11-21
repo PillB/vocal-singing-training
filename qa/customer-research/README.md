@@ -84,7 +84,7 @@ first visit (F) at least as good as today's (C0)?**
 | File | What |
 |---|---|
 | `ssr.py` | Equations 8 and 9 of the paper, anchor-set averaging, KS similarity |
-| `test_ssr.py`, `test_rules.py`, `mutate_ssr.py` | Tests of the scoring and of the bookkeeping and decision rules, and eleven planted defects that each must turn them red |
+| `test_ssr.py`, `test_rules.py`, `mutate_ssr.py` | Tests of the scoring and of the bookkeeping and decision rules, and thirteen planted defects that each must turn them red |
 | `panel.py` → `data/panel.json` | The 64 profiles (seeded, quota-sampled per age band) |
 | `data/concepts-r1.json` | Round 1 concept cards, ES and EN, with the controls |
 | `build_batches.py`, `write_prompts.py` → `prompts/` | The exact text each panel agent read |
@@ -109,22 +109,56 @@ python3 -m venv .venv && .venv/bin/pip install fastembed numpy scipy
 
 ## What happened (2026-11-21)
 
-- **Round 1:** gates V1 (paid) and V3 (paid) failed on SSR, so no paying result
-  from SSR is claimed. No framing beat today and the placebo on trial intent;
-  C2 rated worse on SSR.
-- **Blind reading of round 1:** all four gates pass (bad offer lower on both
-  questions, half price higher on paying, split-half 0.98 and 0.89). Still no
-  framing beats today and the placebo. C2's SSR harm does not replicate (+0.00).
+- **Round 1:** V1 (paid) failed on SSR, and so did split-half on paid (0.54
+  with every card, 0.62 among the framings alone), so no paying result from
+  SSR is claimed. V1 on paid is also ambiguous: the bad offer caps free
+  practice, which could rationally raise paying for Pro. No framing beat today
+  and the placebo on trial intent; C2 rated worse on SSR.
+- **Blind reading of round 1 (exploratory, see below):** V1, V2 and V3 pass
+  with every card (split-half 0.98 and 0.89), but that reliability comes from
+  the planted bad offer. Among the seven framings alone it is −0.09 on trial and
+  0.64 on paying, so this reading cannot rank framings either, and under the
+  stricter gate it gives no verdict. C2's SSR harm does not replicate (+0.00).
+  C1, C3 and C4 are tied on paying (+0.12 to +0.17, none significant after
+  correcting for five framings).
 - **Round 2:** the shipped first visit (F) is not worse than today on trial
   intent on both readings: SSR +0.00 [−0.04, +0.05], blind +0.09 [−0.05, +0.23].
-  The 35–49 flag on SSR (−0.09) has the opposite sign on the blind reading
-  (+0.30), so it is treated as noise.
-- **Deviations from the plan, stated:** the round 2 rules were written after
-  round 1 was scored (before any round 2 answer); the split-half gate now
-  returns nothing for fewer than four cards (added after round 2 printed
-  −2,395, which is arithmetic, not reliability); `collect.py` first matched
-  round 2's C0 and C0p batches against round 1's membership and dropped most
-  answers, which was found and fixed before analysis, with a test.
+  SSR cannot separate "probably" from "definitely" on trial (mean SSR 3.68 and
+  3.69 for answers the blind rater gave 4 and 5), so this rules out large
+  harms only. The 35–49 flag on SSR (−0.09) has the opposite sign on the blind
+  reading (+0.30), so it is treated as noise.
+- **What the checks measured, and what they did not:** V4 passed on a holdout
+  written to fit its labels (12 per label); on the real answers SSR agrees with
+  the blind rater at Spearman 0.34 (es) and 0.49 (en) for trying, below the 0.6
+  bar. The temperature T was not re-tuned for the local models, so SSR's
+  distributions are near-flat (mean top probability 0.34) and its differences
+  are in compressed units; the paper found SSR spread wider than people, so
+  the compression is this setup's, not the method's. Batching up to eight
+  people per call adds between-call variance (1.2 to 1.3 times chance in round
+  1); allowing for it widens intervals by about a third and removes the SSR
+  C4 paying difference, and changes nothing else.
+- **Deviations from the plan, stated:**
+  1. The round 2 rules were written after round 1 was scored (before any round
+     2 answer), in the commit that shipped F, without a stated action if F had
+     failed. Round 2 had no bad-offer arm, so it could not show it would fail.
+  2. The blind second reading was not pre-registered. It was added after SSR
+     failed V1 and V3 on paid, so its results are exploratory. The anchors and
+     the holdout were committed with the round 1 answers, not before them.
+  3. Split-half returns nothing for fewer than four cards (added after round 2
+     printed −2,395), and since the red team it averages the correlations over
+     the splits and corrects once, only when positive: correcting split by split
+     has no lower bound and gave −32 for four near-equal cards.
+  4. A stricter gate added after the red team, V3f: split-half among the
+     framings alone, without the bad offer and half price, must also reach
+     0.7. It only removes verdicts, never adds one.
+  5. `collect.py` first matched round 2's C0 and C0p batches against round 1's
+     membership and dropped most answers, which was found and fixed before
+     analysis, with a test.
+- **Next time:** commit the anchors, rater prompts and the action on failure
+  before collecting; one respondent per prompt (as in the paper) or an
+  age-swap control before any age split is reported; mask prices and claims
+  before a blind re-rating; double-code about 60 answers for agreement; keep
+  the bad offer in every round.
 
 None of this runs in CI: it needs the embedding models and the answers come
 from model calls. It is a research record, kept so the numbers in `docs/48`

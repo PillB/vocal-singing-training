@@ -31,6 +31,7 @@ MODELS = ("mpnet", "minilm", "e5")
 QUESTIONS = ("trial", "paid")
 B = 4000  # bootstrap resamples
 MIN_SPLIT_CONCEPTS = 4
+CONTROLS = ("N", "P")  # the bad offer and half price: manipulation checks, not framings to choose between
 NI_MARGIN = -0.10  # round 2: "not worse than today" on trial intent (README, Round 2 rules)
 rng = np.random.default_rng(20261121)
 
@@ -86,26 +87,32 @@ def ci_mean(vals):
     return {"n": len(vals), "mean": float(vals.mean()), "lo": float(lo), "hi": float(hi)}
 
 
-def split_half(t, ids, reps=500):
+def split_half(t, ids, reps=500, gen=None):
     """Correlation of concept means between random halves of the panel, Spearman-Brown corrected.
 
-    None with fewer than four concepts: a correlation of three nearly equal means
-    swings between -1 and 1 by chance, and Spearman-Brown turns r near -1 into
-    numbers like -2,000 (round 2, three cards). The gate needs cards that differ.
+    The correlations are averaged over the random splits and corrected once, and
+    only when the average is positive: Spearman-Brown has no meaning for r <= 0 and
+    no lower bound as r nears -1, so correcting split by split printed -2,395 for
+    round 2 and -32 for four near-equal round 1 cards. A non-positive average is
+    returned as it is, in [-1, 0], and fails the gate.
+
+    None with fewer than four concepts: a correlation of three means swings
+    between -1 and 1 by chance. The gate needs cards that differ.
     """
     concepts = sorted(t)
     if len(concepts) < MIN_SPLIT_CONCEPTS:
         return None
+    gen = rng if gen is None else gen
     rs = []
     ids = list(ids)
     for _ in range(reps):
-        perm = rng.permutation(ids)
+        perm = gen.permutation(ids)
         h1, h2 = perm[: len(ids) // 2], perm[len(ids) // 2:]
         m1 = [np.mean([t[c][i] for i in h1 if i in t[c]]) for c in concepts]
         m2 = [np.mean([t[c][i] for i in h2 if i in t[c]]) for c in concepts]
-        r = np.corrcoef(m1, m2)[0, 1]
-        rs.append(2 * r / (1 + r))
-    return float(np.mean(rs))
+        rs.append(np.corrcoef(m1, m2)[0, 1])
+    r = float(np.nanmean(rs))
+    return 2 * r / (1 + r) if r > 0 else r
 
 
 def ranks(t):
@@ -132,6 +139,12 @@ def summarise(t, segs):
         if "C0p" in t:
             res["vs_placebo"][seg] = {c: paired_diff(t, c, "C0p", ids) for c in concepts if c not in ("C0p",)}
     res["split_half"] = split_half(t, segs["all"])
+    # Reliability among the framings alone: the bad offer is planted far below the rest, and one extreme card makes
+    # split-half high whether or not the framings themselves can be told apart (red team, docs/48 section 11).
+    # Its own generator, so adding it leaves every other interval's random draws as they were.
+    res["split_half_framings"] = (split_half({c: t[c] for c in concepts if c not in CONTROLS}, segs["all"],
+                                             gen=np.random.default_rng(20261122))
+                                  if any(c in t for c in CONTROLS) else None)
     res["robustness"]["rank_ensemble"] = ranks(t)
     return res
 
@@ -168,6 +181,10 @@ def gates(out):
         g["V3_split_half_trial"] = tr["split_half"] >= 0.7
     if pd["split_half"] is not None:
         g["V3_split_half_paid"] = pd["split_half"] >= 0.7
+    for q in QUESTIONS:
+        f = out["questions"][q].get("split_half_framings")
+        if f is not None:
+            g[f"V3f_split_half_framings_{q}"] = f >= 0.7
     return g
 
 
@@ -175,7 +192,8 @@ NOT_JUDGED = "not judged: the panel failed its checks on this question"
 
 
 def question_valid(out, q):
-    """This question's own checks: the bad offer below today, half price above it on paying, split-half >= 0.7."""
+    """This question's own checks: the bad offer below today, half price above it on paying, split-half >= 0.7
+    with every card and among the framings alone."""
     res = out["questions"][q]
     n = res["vs_today"]["all"].get("N")
     p = res["vs_today"]["all"].get("P")
@@ -183,7 +201,7 @@ def question_valid(out, q):
         return False
     if q == "paid" and p is not None and not p["lo"] > 0:
         return False
-    return res["split_half"] is None or res["split_half"] >= 0.7
+    return all(r is None or r >= 0.7 for r in (res["split_half"], res.get("split_half_framings")))
 
 
 def verdicts(out):

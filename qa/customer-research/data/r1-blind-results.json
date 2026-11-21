@@ -965,7 +965,8 @@
       "N": 9
      }
     },
-    "split_half": 0.9845457125387745
+    "split_half": 0.984622511453092,
+    "split_half_framings": -0.08778517695534944
    },
    "paid": {
     "by_concept": {
@@ -1923,102 +1924,105 @@
       "N": 9
      }
     },
-    "split_half": 0.8882018455954276
+    "split_half": 0.8910156079873481,
+    "split_half_framings": 0.6369116399296614
    }
   },
   "gates": {
    "V1_bad_offer_lower": true,
    "V2_half_price_higher_paid": true,
    "V3_split_half_trial": true,
-   "V3_split_half_paid": true
+   "V3_split_half_paid": true,
+   "V3f_split_half_framings_trial": false,
+   "V3f_split_half_framings_paid": false
   },
   "verdicts": {
    "trial": {
     "all": {
-     "C1": "no evidence of a difference",
-     "C2": "no evidence of a difference",
-     "C3": "no evidence of a difference",
-     "C4": "no evidence of a difference",
-     "C5": "no evidence of a difference"
+     "C1": "not judged: the panel failed its checks on this question",
+     "C2": "not judged: the panel failed its checks on this question",
+     "C3": "not judged: the panel failed its checks on this question",
+     "C4": "not judged: the panel failed its checks on this question",
+     "C5": "not judged: the panel failed its checks on this question"
     },
     "18-34": {
-     "C1": "no evidence of a difference",
-     "C2": "no evidence of a difference",
-     "C3": "no evidence of a difference",
-     "C4": "no evidence of a difference",
-     "C5": "no evidence of a difference"
+     "C1": "not judged: the panel failed its checks on this question",
+     "C2": "not judged: the panel failed its checks on this question",
+     "C3": "not judged: the panel failed its checks on this question",
+     "C4": "not judged: the panel failed its checks on this question",
+     "C5": "not judged: the panel failed its checks on this question"
     },
     "35-49": {
-     "C1": "no evidence of a difference",
-     "C2": "no evidence of a difference",
-     "C3": "no evidence of a difference",
-     "C4": "no evidence of a difference",
-     "C5": "no evidence of a difference"
+     "C1": "not judged: the panel failed its checks on this question",
+     "C2": "not judged: the panel failed its checks on this question",
+     "C3": "not judged: the panel failed its checks on this question",
+     "C4": "not judged: the panel failed its checks on this question",
+     "C5": "not judged: the panel failed its checks on this question"
     },
     "50+": {
-     "C1": "no evidence of a difference",
-     "C2": "no evidence of a difference",
-     "C3": "no evidence of a difference",
-     "C4": "no evidence of a difference",
-     "C5": "no evidence of a difference"
+     "C1": "not judged: the panel failed its checks on this question",
+     "C2": "not judged: the panel failed its checks on this question",
+     "C3": "not judged: the panel failed its checks on this question",
+     "C4": "not judged: the panel failed its checks on this question",
+     "C5": "not judged: the panel failed its checks on this question"
     },
     "es": {
-     "C1": "no evidence of a difference",
-     "C2": "no evidence of a difference",
-     "C3": "no evidence of a difference",
-     "C4": "no evidence of a difference",
-     "C5": "no evidence of a difference"
+     "C1": "not judged: the panel failed its checks on this question",
+     "C2": "not judged: the panel failed its checks on this question",
+     "C3": "not judged: the panel failed its checks on this question",
+     "C4": "not judged: the panel failed its checks on this question",
+     "C5": "not judged: the panel failed its checks on this question"
     },
     "en": {
-     "C1": "no evidence of a difference",
-     "C2": "no evidence of a difference",
-     "C3": "no evidence of a difference",
-     "C4": "no evidence of a difference",
-     "C5": "no evidence of a difference"
+     "C1": "not judged: the panel failed its checks on this question",
+     "C2": "not judged: the panel failed its checks on this question",
+     "C3": "not judged: the panel failed its checks on this question",
+     "C4": "not judged: the panel failed its checks on this question",
+     "C5": "not judged: the panel failed its checks on this question"
     }
    },
    "paid": {
     "all": {
-     "C1": "no evidence of a difference",
-     "C2": "no evidence of a difference",
-     "C3": "no evidence of a difference",
-     "C4": "no evidence of a difference",
-     "C5": "no evidence of a difference"
+     "C1": "not judged: the panel failed its checks on this question",
+     "C2": "not judged: the panel failed its checks on this question",
+     "C3": "not judged: the panel failed its checks on this question",
+     "C4": "not judged: the panel failed its checks on this question",
+     "C5": "not judged: the panel failed its checks on this question"
     },
     "18-34": {
-     "C1": "no evidence of a difference",
-     "C2": "no evidence of a difference",
-     "C3": "no evidence of a difference",
-     "C4": "no evidence of a difference",
-     "C5": "no evidence of a difference"
+     "C1": "not judged: the panel failed its checks on this question",
+     "C2": "not judged: the panel failed its checks on this question",
+     "C3": "not judged: the panel failed its checks on this question",
+     "C4": "not judged: the panel failed its checks on this question",
+     "C5": "not judged: the panel failed its checks on this question"
     },
     "35-49": {
-     "C1": "no evidence of a difference",
-     "C2": "no evidence of a difference",
-     "C3": "no evidence of a difference",
-     "C4": "beats today and placebo",
-     "C5": "no evidence of a difference"
+     "C1": "not judged: the panel failed its checks on this question",
+     "C2": "not judged: the panel failed its checks on this question",
+     "C3": "not judged: the panel failed its checks on this question",
+     "C4": "not judged: the panel failed its checks on this question",
+     "C5": "not judged: the panel failed its checks on this question"
     },
     "50+": {
-     "C1": "no evidence of a difference",
-     "C2": "no evidence of a difference",
-     "C3": "no evidence of a difference",
-     "C4": "no evidence of a difference",
-     "C5": "no evidence of a difference"
+     "C1": "not judged: the panel failed its checks on this question",
+     "C2": "not judged: the panel failed its checks on this question",
+     "C3": "not judged: the panel failed its checks on this question",
+     "C4": "not judged: the panel failed its checks on this question",
+     "C5": "not judged: the panel failed its checks on this question"
     },
     "es": {
-     "C1": "beats today and placebo",
-     "C2": "no evidence of a difference",
-     "C3": "no evidence of a difference",
-     "C4": "no evidence of a difference",
-     "C5": "no evidence of a difference"
+     "C1": "not judged: the panel failed its checks on this question",
+     "C2": "not judged: the panel failed its checks on this question",
+     "C3": "not judged: the panel failed its checks on this question",
+     "C4": "not judged: the panel failed its checks on this question",
+     "C5": "not judged: the panel failed its checks on this question"
     },
     "en": {
-     "C1": "no evidence of a difference",
-     "C2": "no evidence of a difference",
-     "C3": "no evidence of a difference",
-     "C4": "no evidence of a difference",
-     "C5": "no evidence of a difference"
+     "C1": "not judged: the panel failed its checks on this question",
+     "C2": "not judged: the panel failed its checks on this question",
+     "C3": "not judged: the panel failed its checks on this question",
+     "C4": "not judged: the panel failed its checks on this question",
+     "C5": "not judged: the panel failed its checks on this question"
     }
    }
   },

@@ -94,6 +94,30 @@ class Rules(unittest.TestCase):
         t = {f"K{k}": {i: k * 0.3 + rng.normal(0, 0.3) for i in ids} for k in range(9)}
         self.assertGreater(analyze.split_half(t, ids), 0.7)
 
+    def test_split_half_stays_between_minus_one_and_one_for_four_equal_cards(self):
+        # Wrong behaviour: Spearman-Brown applied split by split, which has no lower bound as r nears -1:
+        # four near-equal round 1 cards gave values down to -32 although four cards pass the guard.
+        rng = np.random.default_rng(9)
+        ids = [p["id"] for p in people()]
+        for _ in range(5):
+            t = {f"K{k}": {i: 3.5 + rng.normal(0, 0.5) for i in ids} for k in range(4)}
+            v = analyze.split_half(t, ids)
+            self.assertTrue(-1.0 <= v <= 1.0, v)
+
+    def test_reliability_made_by_the_bad_offer_alone_is_not_enough(self):
+        # Wrong behaviour: split-half over every card passes because the planted bad offer sits far below the rest,
+        # while the framings cannot be told apart (round 1's blind trial reading: 0.98 with it, below zero without).
+        rng = np.random.default_rng(5)
+        ps = people()
+        base = {p["id"]: rng.uniform(3.0, 4.0) for p in ps}
+        t = {c: {i: b + rng.normal(0, 0.4) for i, b in base.items()} for c in ("C0", "C0p", "C1", "C2", "C3", "C4", "C5", "P")}
+        t["N"] = {i: b - 1.5 + rng.normal(0, 0.4) for i, b in base.items()}
+        out = analyze.analyse_tables({q: t for q in analyze.QUESTIONS}, ps)
+        self.assertGreater(out["questions"]["trial"]["split_half"], 0.7, "premise: every card together looks reliable")
+        self.assertLess(out["questions"]["trial"]["split_half_framings"], 0.7)
+        self.assertFalse(out["gates"]["V3f_split_half_framings_trial"])
+        self.assertFalse(analyze.question_valid(out, "trial"))
+
     def test_not_worse_needs_the_whole_interval_above_the_margin(self):
         # Wrong behaviour: judging non-inferiority on the point estimate. A mean
         # of -0.05 with an interval reaching -0.2 has not shown "not worse".

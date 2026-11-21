@@ -997,7 +997,8 @@
      "N": 9
     }
    },
-   "split_half": 0.9733474334961681
+   "split_half": 0.9735871023856104,
+   "split_half_framings": 0.7994658307945194
   },
   "paid": {
    "by_concept": {
@@ -1988,14 +1989,17 @@
      "C5": 9
     }
    },
-   "split_half": 0.49357987715051455
+   "split_half": 0.5381926220910102,
+   "split_half_framings": 0.619869391551074
   }
  },
  "gates": {
   "V1_bad_offer_lower": false,
   "V2_half_price_higher_paid": true,
   "V3_split_half_trial": true,
-  "V3_split_half_paid": false
+  "V3_split_half_paid": false,
+  "V3f_split_half_framings_trial": true,
+  "V3f_split_half_framings_paid": false
  },
  "verdicts": {
   "trial": {

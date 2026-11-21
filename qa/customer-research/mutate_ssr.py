@@ -36,6 +36,16 @@ RULE_MUTANTS = {
     "not-worse-on-the-point-estimate": ("analyze.py", 'd["lo"] > NI_MARGIN', 'd["diff"] > NI_MARGIN'),
     "verdict-on-a-failed-question": ("analyze.py", "= verdict if valid else NOT_JUDGED", "= verdict"),
     "better-while-a-gate-failed": ("analyze.py", "if beats and all_gates else", "if beats else"),
+    "framings-reliability-from-every-card": (
+        "analyze.py",
+        'split_half({c: t[c] for c in concepts if c not in CONTROLS}, segs["all"],',
+        'split_half(t, segs["all"],',
+    ),
+    "spearman-brown-split-by-split": (
+        "analyze.py",
+        "        rs.append(np.corrcoef(m1, m2)[0, 1])\n    r = float(np.nanmean(rs))\n    return 2 * r / (1 + r) if r > 0 else r",
+        "        r = np.corrcoef(m1, m2)[0, 1]\n        rs.append(2 * r / (1 + r))\n    return float(np.mean(rs))",
+    ),
 }
 
 

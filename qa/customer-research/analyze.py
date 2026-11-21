@@ -171,10 +171,30 @@ def gates(out):
     return g
 
 
+NOT_JUDGED = "not judged: the panel failed its checks on this question"
+
+
+def question_valid(out, q):
+    """This question's own checks: the bad offer below today, half price above it on paying, split-half >= 0.7."""
+    res = out["questions"][q]
+    n = res["vs_today"]["all"].get("N")
+    p = res["vs_today"]["all"].get("P")
+    if n is not None and not n["hi"] < 0:
+        return False
+    if q == "paid" and p is not None and not p["lo"] > 0:
+        return False
+    return res["split_half"] is None or res["split_half"] >= 0.7
+
+
 def verdicts(out):
+    """Pre-registered: no framing is called better unless every gate passed, and a
+    question that failed its own checks gets no verdict at all (round 1's SSR once
+    printed "beats today" for C4 on paying while that question's gates had failed)."""
     v = {}
+    all_gates = all(out.get("gates", gates(out)).values())
     for q in QUESTIONS:
         res = out["questions"][q]
+        valid = question_valid(out, q)
         for seg in res["vs_today"]:
             for c, d in res["vs_today"][seg].items():
                 if c in ("N", "P", "C0p") or d is None:
@@ -182,8 +202,9 @@ def verdicts(out):
                 p = res["vs_placebo"].get(seg, {}).get(c)
                 beats = d["lo"] > 0 and (p is not None and p["lo"] > 0)
                 worse = d["hi"] < 0
-                v.setdefault(q, {}).setdefault(seg, {})[c] = "beats today and placebo" if beats else (
+                verdict = "beats today and placebo" if beats and all_gates else (
                     "worse than today" if worse else "no evidence of a difference")
+                v.setdefault(q, {}).setdefault(seg, {})[c] = verdict if valid else NOT_JUDGED
     return v
 
 

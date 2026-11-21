@@ -34,6 +34,8 @@ RULE_MUTANTS = {
     ),
     "split-half-on-three-cards": ("analyze.py", "if len(concepts) < MIN_SPLIT_CONCEPTS:", "if False:"),
     "not-worse-on-the-point-estimate": ("analyze.py", 'd["lo"] > NI_MARGIN', 'd["diff"] > NI_MARGIN'),
+    "verdict-on-a-failed-question": ("analyze.py", "= verdict if valid else NOT_JUDGED", "= verdict"),
+    "better-while-a-gate-failed": ("analyze.py", "if beats and all_gates else", "if beats else"),
 }
 
 

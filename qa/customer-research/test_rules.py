@@ -112,5 +112,46 @@ class Rules(unittest.TestCase):
         self.assertFalse(analyze.analyse_tables(worse, ps)["not_worse_on_trial"]["F"])
 
 
+def panel_tables(n_paid_shift):
+    """Nine cards with a real spread, so split-half can pass. F is clearly better on both
+    questions; the bad offer N is clearly worse on trial and shifted by n_paid_shift on paying."""
+    rng = np.random.default_rng(11)
+    ps = people()
+    base = {p["id"]: rng.uniform(2.0, 4.0) for p in ps}
+    shifts = {"C0": (0, 0), "C0p": (0, 0), "F": (0.6, 0.6), "N": (-1.0, n_paid_shift), "P": (0, 0.6),
+              "K1": (0.3, 0.3), "K2": (-0.3, -0.3), "K3": (0.9, 0.9), "K4": (-0.6, -0.6)}
+    t = {q: {} for q in analyze.QUESTIONS}
+    for c, (st, sp) in shifts.items():
+        for q, sh in zip(analyze.QUESTIONS, (st, sp)):
+            t[q][c] = {i: base[i] + sh + rng.normal(0, 0.15) for i in base}
+    return t, ps
+
+
+class Verdicts(unittest.TestCase):
+
+    def test_a_clear_win_is_called_when_every_gate_passes(self):
+        # Control for the two tests below: the rules can say "better" at all.
+        t, ps = panel_tables(-1.0)
+        out = analyze.analyse_tables(t, ps)
+        self.assertTrue(all(out["gates"].values()), out["gates"])
+        self.assertEqual(out["verdicts"]["paid"]["all"]["F"], "beats today and placebo")
+
+    def test_a_question_that_failed_its_checks_gets_no_verdict(self):
+        # Wrong behaviour: round 1 printed "beats today and placebo" for C4 on
+        # paying although the bad offer rated no lower than today on paying.
+        t, ps = panel_tables(0.0)
+        out = analyze.analyse_tables(t, ps)
+        self.assertFalse(out["gates"]["V1_bad_offer_lower"])
+        self.assertEqual(out["verdicts"]["paid"]["all"]["F"], analyze.NOT_JUDGED)
+
+    def test_nothing_is_called_better_while_any_gate_failed(self):
+        # Pre-registered: "all required before any concept is called better". Trial
+        # passed its own checks here, but the bad offer failed on paying.
+        t, ps = panel_tables(0.0)
+        out = analyze.analyse_tables(t, ps)
+        self.assertTrue(analyze.question_valid(out, "trial"))
+        self.assertEqual(out["verdicts"]["trial"]["all"]["F"], "no evidence of a difference")
+
+
 if __name__ == "__main__":
     unittest.main()

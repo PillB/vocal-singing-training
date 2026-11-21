@@ -84,7 +84,7 @@ first visit (F) at least as good as today's (C0)?**
 | File | What |
 |---|---|
 | `ssr.py` | Equations 8 and 9 of the paper, anchor-set averaging, KS similarity |
-| `test_ssr.py`, `test_rules.py`, `mutate_ssr.py` | Tests of the scoring and of the bookkeeping and decision rules, and nine planted defects that each must turn them red |
+| `test_ssr.py`, `test_rules.py`, `mutate_ssr.py` | Tests of the scoring and of the bookkeeping and decision rules, and eleven planted defects that each must turn them red |
 | `panel.py` → `data/panel.json` | The 64 profiles (seeded, quota-sampled per age band) |
 | `data/concepts-r1.json` | Round 1 concept cards, ES and EN, with the controls |
 | `build_batches.py`, `write_prompts.py` → `prompts/` | The exact text each panel agent read |

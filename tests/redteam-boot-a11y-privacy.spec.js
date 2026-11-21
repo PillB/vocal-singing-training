@@ -613,8 +613,19 @@ const frameWatch = () => {
   };
   requestAnimationFrame(sample);
 };
-/** Frames drawn otherwise than the last one: faded, hidden, or the title elsewhere. */
-const unsteady = (frames) => frames.filter((f) => f.opacity !== "1" || !f.shown || Math.abs(f.top - frames[frames.length - 1].top) > 0.5);
+/**
+ * Frames drawn otherwise than the last one: faded, hidden, or the title
+ * elsewhere. Each says where it falls (its index of how many) and where the
+ * title stays, so a failure seen once in CI says which frame it was: the first
+ * one drawn, one mid-hold or the one the hold ends in (CI on PR #46 said only
+ * "held, top 176.3").
+ */
+const unsteady = (frames) => {
+  const last = frames[frames.length - 1];
+  return frames
+    .map((f, at) => ({ ...f, at, of: frames.length, stays: last.top }))
+    .filter((f) => f.opacity !== "1" || !f.shown || Math.abs(f.top - last.top) > 0.5);
+};
 /**
  * What fades in when the hold ends: the targets of js/boot-ready.js's
  * vt-boot-reveal animations over the first six frames after it.

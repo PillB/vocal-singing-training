@@ -113,7 +113,7 @@ export function corsHeaders(request, env) {
 }
 
 /**
- * Build a JSON response with CORS and no-store caching.
+ * Build a JSON response with CORS, no-store caching and nosniff.
  * @param {unknown} body Serializable body.
  * @param {number} status HTTP status.
  * @param {Object} [headers] Extra headers.
@@ -125,6 +125,9 @@ export function json(body, status, headers) {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
+      // A JSON body is never a page or a script, whatever a browser would
+      // guess from its bytes (red team AUTHN-7).
+      "x-content-type-options": "nosniff",
       ...(headers || {})
     }
   });
@@ -815,7 +818,7 @@ export async function handleRequest(request, env, options) {
   const cors = corsHeaders(request, env);
 
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: cors });
+    return new Response(null, { status: 204, headers: { ...cors, "x-content-type-options": "nosniff" } });
   }
 
   const ownResponse = routeOwnPaths(request, env, url, path, cors, options);

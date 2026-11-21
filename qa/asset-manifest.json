@@ -4,8 +4,8 @@
     "sha": "18027e516f4057ab"
   },
   "css/admin.css": {
-    "v": "20261112a",
-    "sha": "d020a8e7c8bf12d2"
+    "v": "20261118b",
+    "sha": "0e117cfde7d7f1dd"
   },
   "css/exercise-viz.css": {
     "v": "20261002a",
@@ -64,8 +64,8 @@
     "sha": "d1a309907c0e8b86"
   },
   "js/admin.js": {
-    "v": "20261113a",
-    "sha": "f327a63dcd332a39"
+    "v": "20261118b",
+    "sha": "63623aaff918b896"
   },
   "js/ads-config.js": {
     "v": "20261113a",
@@ -80,8 +80,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261117c",
-    "sha": "c61155e9c33b0ba4"
+    "v": "20261118g",
+    "sha": "e46f966ca495111b"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -104,8 +104,8 @@
     "sha": "c01b6050bcbccf84"
   },
   "js/boot-head.js": {
-    "v": "20261117c",
-    "sha": "d232127e9ca2a6d8"
+    "v": "20261118a",
+    "sha": "cee3392cf03ba60c"
   },
   "js/boot-ready.js": {
     "v": "20261117c",
@@ -136,16 +136,20 @@
     "sha": "2b6012c2a85ab79a"
   },
   "js/focus-trap.js": {
-    "v": "20261113a",
-    "sha": "82b1844ca021a77b"
+    "v": "20261118a",
+    "sha": "e70af0ec7f8bb034"
+  },
+  "js/frame-guard.js": {
+    "v": "20261118a",
+    "sha": "24b048d7e4683c91"
   },
   "js/i18n-early.js": {
     "v": "20261112a",
     "sha": "4c1c38110f0a3699"
   },
   "js/i18n.js": {
-    "v": "20261113b",
-    "sha": "4fe488a5b3607e3b"
+    "v": "20261118e",
+    "sha": "9e4dea1f50a13e79"
   },
   "js/license.js": {
     "v": "20261103d",
@@ -176,8 +180,8 @@
     "sha": "1155596a5c7cd831"
   },
   "js/practice-modes.js": {
-    "v": "20261113a",
-    "sha": "fb906e7eb94e3b96"
+    "v": "20261118a",
+    "sha": "9c4a6a6c4eeb0442"
   },
   "js/practice-profiles.js": {
     "v": "20261112b",
@@ -260,12 +264,12 @@
     "sha": "ec7d58f3059f97f6"
   },
   "js/storage.js": {
-    "v": "20261113b",
-    "sha": "1ef49e4137f9ba76"
+    "v": "20261118a",
+    "sha": "b4d0d814c3138e46"
   },
   "js/sync.js": {
-    "v": "20261113c",
-    "sha": "d3fa1bd28e48d6e2"
+    "v": "20261118g",
+    "sha": "17b5d830dfdcfb8a"
   },
   "js/tour.js": {
     "v": "20261113a",

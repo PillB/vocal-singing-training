@@ -102,6 +102,20 @@
     return document.activeElement === el;
   }
 
+  /**
+   * Focus a control the trap moved to, and bring it into view. A wrap goes
+   * from the last control to the first (or back), which in a dialog that
+   * scrolls inside a short window is out of sight, and preventScroll kept it
+   * there (red team FLOW-3: the report and Pro dialogs at 360x740). "nearest"
+   * scrolls only when the control is not already in view. A dialog's first
+   * focus on opening keeps preventScroll: the dialog sets its own scroll.
+   */
+  function moveTo(el) {
+    const moved = focus(el);
+    if (moved && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" });
+    return moved;
+  }
+
   /** Focus a container that has nothing tabbable in it yet. */
   function focusContainer(container) {
     if (!container.hasAttribute("tabindex")) container.setAttribute("tabindex", "-1");
@@ -161,15 +175,15 @@
     const active = document.activeElement;
     if (!trap.container.contains(active)) {
       e.preventDefault();
-      focus(e.shiftKey ? last : first);
+      moveTo(e.shiftKey ? last : first);
       return;
     }
     if (e.shiftKey && active === first) {
       e.preventDefault();
-      focus(last);
+      moveTo(last);
     } else if (!e.shiftKey && active === last) {
       e.preventDefault();
-      focus(first);
+      moveTo(first);
     }
   }
 
@@ -177,7 +191,7 @@
     const trap = top();
     if (!trap || trap.container.contains(e.target)) return;
     const items = focusables(trap.container);
-    if (items.length) focus(items[0]);
+    if (items.length) moveTo(items[0]);
     else focusContainer(trap.container);
   }
 

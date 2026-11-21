@@ -486,9 +486,23 @@ function createStub(opts) {
     methods: { email: true, google: false, trialDays: 7, ...(o.methods || {}) },
     account: { id: "acct_tina", email: "tina@example.com", displayName: "Tina Prueba", role: "member", trialUsed: true, createdAt: 1 },
     entitlement: o.entitlement || { pro: false, plan: null, status: "free", source: null, periodEnd: null, provider: null },
-    codes: { current: "424242", next: ["135790"], attempts: 0, burned: false }
+    codes: { current: "424242", next: ["135790"], attempts: 0, burned: false },
+    gis: false,
+    googleCalls: 0,
+    googleAnswer: null,
+    verifyAnswer: null
   };
 }
+
+/** A stand-in for Google's script whose button signs in: a click hands the page a credential. */
+const SIGNING_GIS = `window.google = { accounts: { id: {
+  initialize: function (o) { window.__gisCallback = o.callback; },
+  renderButton: function (el) {
+    var b = document.createElement("button"); b.type = "button"; b.className = "fake-gsi"; b.textContent = "Google";
+    b.onclick = function () { window.__gisCallback({ credential: "stub.google.credential" }); };
+    el.appendChild(b);
+  }
+} } };`;
 
 /** A request's JSON body, or {} when it has none. */
 function requestBody(request) {
@@ -524,6 +538,22 @@ function stubRefusal(stub, code) {
   return [401, { ok: false, reason: "bad_code" }];
 }
 
+/**
+ * The two sign-in routes: a refusal as [status, body], "session" for a sign-in
+ * that works, null for any other path. `googleAnswer` and `verifyAnswer` stand
+ * for the worker refusing a person whose credential is fine (a switched-off
+ * account, an address another Google account holds).
+ */
+function stubSignIn(stub, path, body) {
+  if (path === "/v1/auth/google") {
+    stub.googleCalls += 1;
+    return stub.googleAnswer || "session";
+  }
+  if (path !== "/v1/auth/email/verify") return null;
+  if (stub.verifyAnswer && body.code === stub.codes.current) return stub.verifyAnswer;
+  return stubRefusal(stub, body.code) || "session";
+}
+
 /** GET /v1/me as `stub.me` says: up, down, a 402, or held (hang). */
 async function stubMe(stub, route, json, mePayload) {
   stub.meCalls += 1;
@@ -541,7 +571,11 @@ async function installStub(page, stub, license) {
   await patchBillingConfig(page, {
     verification: { apiBaseUrl: API, publicKeyJwk: license.publicKeyJwk, required: true, revalidateHours: 24 * 365 }
   });
-  await page.route("https://accounts.google.com/**", (route) => route.abort("failed"));
+  await page.route("https://accounts.google.com/**", (route) =>
+    stub.gis
+      ? route.fulfill({ status: 200, contentType: "text/javascript", body: SIGNING_GIS }).catch(() => {})
+      : route.abort("failed")
+  );
   await page.route(`${API}/**`, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -556,11 +590,11 @@ async function installStub(page, stub, license) {
       stubNewCode(stub);
       return json(200, { ok: true, sent: true, expiresInSeconds: 900 });
     }
-    if (url.pathname === "/v1/auth/email/verify") {
-      const refused = stubRefusal(stub, body.code);
-      if (refused) return json(...refused);
+    const signIn = stubSignIn(stub, url.pathname, body);
+    if (signIn === "session") {
       return json(200, { ok: true, sessionToken: "sess-stub-1", expiresAt: 4102444800, ...(await mePayload()) });
     }
+    if (signIn) return json(...signIn);
     if (url.pathname === "/v1/me" && method === "GET") return stubMe(stub, route, json, mePayload);
     if (url.pathname === "/v1/me/progress" && method === "GET") return json(200, { ok: true, rev: 0, doc: null, updatedAt: null });
     if (url.pathname === "/v1/me/progress") return json(200, { ok: true, rev: 1, updatedAt: 2 });
@@ -1068,6 +1102,54 @@ test.describe("Copy that says only what is true", () => {
       await expect(page.locator("#pricing-status")).toBeVisible();
       await expect(page.locator("#pricing-status")).not.toContainText(t.renew);
       await expect(page.locator("#pricing-status")).toContainText(t.pill);
+    });
+  }
+
+  // Red team AUTHN-1/2: the worker now refuses a switched-off account at
+  // sign-in, and a second Google account that claims an address another
+  // Google account holds. Without their own messages both read "Algo falló —
+  // inténtalo de nuevo", which sends the person into retries that cannot work.
+  test("a switched-off account is told so when its emailed code is refused", async ({ page }) => {
+    const license = await mintLicense({ origin: BASE });
+    const stub = createStub();
+    stub.verifyAnswer = [403, { ok: false, reason: "disabled" }];
+    await installStub(page, stub, license);
+    await seed(page);
+    await openApp(page);
+    await openPanel(page);
+    await page.fill("#account-email", "apagada@example.com");
+    await page.click("#account-email-submit");
+    await expect(page.locator("#account-code-form")).toBeVisible();
+    await page.fill("#account-code", "424242");
+    await page.click("#account-code-submit");
+    await expect(page.locator("#account-error")).toHaveText(
+      "Esta cuenta está desactivada. Si crees que es un error, cuéntanoslo con «Reportar un problema»."
+    );
+    await expect(page.locator("#account-logged-in")).toBeHidden();
+    expect(await page.evaluate(() => localStorage.getItem("vt_account_session_v1"))).toBeNull();
+  });
+
+  // Where the deploy offers no emailed code (production signs in with Google
+  // only), the message must not send the person to one: it names the report.
+  for (const [lang, email, text] of [
+    ["es", true, "Este correo ya está unido a otra cuenta de Google aquí. Entra con el código por correo."],
+    ["en", true, "This email already belongs to a different Google account here. Sign in with the emailed code instead."],
+    ["es", false, "Este correo ya está unido a otra cuenta de Google aquí. Cuéntanoslo con «Reportar un problema» y lo resolvemos."]
+  ]) {
+    test(`${lang}: a Google account whose address another Google account holds is sent to ${email ? "the emailed code" : "a report, with no emailed code on offer"}`, async ({ page }) => {
+      const license = await mintLicense({ origin: BASE });
+      const stub = createStub({ methods: { email, google: true, googleClientId: "stub-client.apps.googleusercontent.com" } });
+      stub.gis = true;
+      stub.googleAnswer = [409, { ok: false, reason: "identity_conflict" }];
+      await installStub(page, stub, license);
+      await seed(page, { lang });
+      await openApp(page);
+      await openPanel(page);
+      await page.locator(".fake-gsi").click();
+      await expect.poll(() => stub.googleCalls).toBe(1);
+      await expect(page.locator("#account-error")).toHaveText(text);
+      await expect(page.locator("#account-logged-in")).toBeHidden();
+      expect(await page.evaluate(() => localStorage.getItem("vt_account_session_v1"))).toBeNull();
     });
   }
 

@@ -87,7 +87,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        set: [stage, a11y, flows, regress, boot, billing, scoring, controls, audit, toast, designs, splits]
+        set: [stage, a11y, flows, regress, boot, billing, scoring, controls, audit, toast, designs, splits, syncing, inject, learner, authwall]
     env:
       CI: '1'
       MIC_HELP: '0'
@@ -101,6 +101,17 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: "Mutation check (${{ matrix.set }}): every planted defect must turn its test red"
         run: node qa/mutate.mjs ${{ matrix.set }}
+      # A red set is read from its traces, not only re-run: under CI Playwright keeps one per failing test, and
+      # qa/mutate.mjs stops a set at its first red command, so test-results/ still holds that run. Without this the
+      # boot set's red baseline on PR #46 (one frame of 500, not seen in 110 runs elsewhere) left nothing to read.
+      # One name per set: two jobs that upload under one name, the second is refused.
+      - name: Preserve a red set's traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-failures-${{ matrix.set }}
+          path: test-results/
+          if-no-files-found: ignore
 
   safari-audio:
     needs: contracts

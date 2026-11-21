@@ -38,3 +38,43 @@ test("the check finds a set left out of the matrix, and a matrix entry that name
   assert.deepEqual(unrun(sets, ["audio"], ["regress", "boot", "bot"]), { missing: [], unknown: ["bot"] });
   assert.deepEqual(matrixSets("jobs:\n  mutation:\n    strategy:\n      matrix:\n        set: [a, b]\n"), ["a", "b"]);
 });
+
+/** One job of the workflow: its text from its own header to the next job's. */
+export function jobText(yaml, name) {
+  const start = yaml.indexOf(`\n  ${name}:\n`);
+  if (start === -1) return "";
+  const next = yaml.slice(start + 1).search(/\n  [A-Za-z0-9_-]+:\n/);
+  return next === -1 ? yaml.slice(start) : yaml.slice(start, start + 1 + next);
+}
+
+/**
+ * Whether a matrix job uploads test-results/ when it fails, under a name of
+ * its own per matrix entry (upload-artifact v4 refuses a second artifact of
+ * the same name in one run, so a shared name keeps only the first job's).
+ */
+export function keepsTraces(job, matrixKey) {
+  const steps = job.split(/\n {6}- /).slice(1);
+  return steps.some((s) =>
+    /\n\s+if: failure\(\)/.test(s) &&
+    /\buses: actions\/upload-artifact@v\d+/.test(s) &&
+    new RegExp(`\\n\\s+name: [^\\n]*\\$\\{\\{ matrix\\.${matrixKey} \\}\\}`).test(s) &&
+    /\n\s+path: (?:\|[\s\S]*?\n\s+)?test-results\//.test(s)
+  );
+}
+
+test("a red mutation job keeps its traces, under a name of its own: a set whose unmutated tests fail in CI can be read, not only re-run", () => {
+  assert.equal(keepsTraces(jobText(workflow, "browser"), "shard"), true, "control: the browser shards keep theirs, and the check reads them");
+  assert.equal(keepsTraces(jobText(workflow, "mutation"), "set"), true);
+});
+
+test("the check tells a job that keeps its traces from one that keeps none, or one name for every job", () => {
+  const job = (step) => `\n  mutation:\n    steps:\n      - run: node qa/mutate.mjs \${{ matrix.set }}\n${step}\n  next:\n    steps: []\n`;
+  const kept = "      - name: Keep\n        if: failure()\n        uses: actions/upload-artifact@v4\n        with:\n          name: m-${{ matrix.set }}\n          path: test-results/\n";
+  assert.equal(keepsTraces(jobText(job(kept), "mutation"), "set"), true, "control: a step that keeps them passes");
+  assert.equal(keepsTraces(jobText(job(""), "mutation"), "set"), false, "no upload");
+  assert.equal(keepsTraces(jobText(job(kept.replace("        if: failure()\n", "")), "mutation"), "set"), false, "an upload that runs only when the job is green");
+  assert.equal(keepsTraces(jobText(job(kept.replace("m-${{ matrix.set }}", "mutation-failures")), "mutation"), "set"), false, "one name for every job of the matrix");
+  assert.equal(keepsTraces(jobText(job(kept.replace("test-results/", "playwright-report/")), "mutation"), "set"), false, "not where the traces are");
+  assert.equal(keepsTraces(jobText(job("") + "  other:\n    steps:\n" + kept, "mutation"), "set"), false, "another job's step is not this one's");
+  assert.equal(keepsTraces(jobText(job(kept.replace("path: test-results/", "path: |\n            playwright-report/\n            test-results/")), "mutation"), "set"), true, "control: a list of paths with test-results/ in it");
+});

@@ -20,7 +20,7 @@
     "test:stamps": "node qa/asset-versions.mjs",
     "test:alert": "node --test qa/health-ping.test.mjs && node --test qa/health-ping-failure-paths.test.mjs",
     "test:geometry": "node qa/capture-geometry.mjs && python3 qa/analyze_geometry.py",
-    "test:redteam": "node qa/redteam-static.mjs && playwright test tests/max-effort-journeys.spec.js tests/redteam-client.spec.js tests/space-assist.spec.js tests/hit-targets.spec.js tests/format-hit-clicks.spec.js tests/sh-air-detect.spec.js tests/billing.spec.js tests/auth.spec.js tests/i18n-copy.spec.js tests/viewport-overflow.spec.js --reporter=line",
+    "test:redteam": "node qa/redteam-static.mjs && playwright test tests/max-effort-journeys.spec.js tests/redteam-client.spec.js tests/synced-doc-injection.spec.js tests/frame-guard.spec.js tests/admin-reply-link.spec.js tests/space-assist.spec.js tests/hit-targets.spec.js tests/format-hit-clicks.spec.js tests/sh-air-detect.spec.js tests/billing.spec.js tests/auth.spec.js tests/i18n-copy.spec.js tests/viewport-overflow.spec.js --reporter=line",
     "test:live": "LIVE_PAGES=1 playwright test tests/live-pages.spec.js --reporter=line",
     "test:ui-forensics": "HEADED=1 SLOWMO=50 LIVE_SECS=10 playwright test tests/exercise-live-forensics.spec.js --headed --project=sweep --reporter=line",
     "test:ui-forensics:headed": "HEADED=1 SLOWMO=50 LIVE_SECS=10 playwright test tests/exercise-live-forensics.spec.js --headed --project=sweep --reporter=line",

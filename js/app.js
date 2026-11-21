@@ -568,6 +568,33 @@
     return VTStorage.getProgress()[id] || null;
   }
 
+  /** A row's saved sessions as a whole number >= 0; 0 for a count that is not a finite number ("<b>", "1e400"). */
+  function sessionCount(row) {
+    const n = Number(row?.completedCount);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  }
+
+  /**
+   * A catalogue card's sessions badge, or nothing before the first session.
+   * The count is made a number whatever the stored row holds: the row can come
+   * from the account's document, which anyone holding the session can write,
+   * and the badge is HTML (red team CXSS-1).
+   */
+  function sessionsBadge(row) {
+    const n = sessionCount(row);
+    if (!n) return "";
+    return `<span class="badge done">${tt(n === 1 ? "card.sessions" : "card.sessions_plural", { n })}</span>`;
+  }
+
+  /** What a catalogue card says the exercise uses: the piano, the pitch line, a recording or plain practice. */
+  function cardTools(ex) {
+    return (
+      (ex.audio.piano ? tt("card.piano") : "") +
+      (ex.audio.pitchViz || ex.practice?.showPitch ? tt("card.pitch") : "") +
+      (ex.audio.record ? tt("card.record") : tt("card.practice"))
+    );
+  }
+
   function formatTime(sec) {
     sec = Math.max(0, Math.floor(sec));
     const m = Math.floor(sec / 60);
@@ -2361,15 +2388,7 @@
         head.innerHTML = `<span>${name}</span><span class="grid-group-n">${tt("group.count", { n })}</span>`;
         list.appendChild(head);
       }
-      const tools =
-        (ex.audio.piano ? tt("card.piano") : "") +
-        (ex.audio.pitchViz || ex.practice?.showPitch ? tt("card.pitch") : "") +
-        (ex.audio.record ? tt("card.record") : tt("card.practice"));
-      const sessions = prog?.completedCount || 0;
-      const sessLabel =
-        sessions === 1
-          ? tt("card.sessions", { n: sessions })
-          : tt("card.sessions_plural", { n: sessions });
+      const tools = cardTools(ex);
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = `card card-ex track-${track}`;
@@ -2383,7 +2402,7 @@
       // badge only once filtered (grouped, the head names the group).
       btn.innerHTML = `
         <span class="card-ex-body">
-          ${sessions ? `<span class="badge done">${sessLabel}</span>` : ""}
+          ${sessionsBadge(prog)}
           <h3>${exName(ex)}</h3>
           <p class="card-ex-desc">${escapeHtml(exerciseSummary(ex))}</p>
           <p class="meta">${tt("card.meta", { min: ex.durationMin, tools })}</p>
@@ -5274,6 +5293,17 @@
   // a short take; the stricter 15–45 s rule remains for automatic credit.
   const RATED_MIN_TAKE_SEC = 15;
 
+  /**
+   * What a take short of the 15 s needs (FLOW-10): "press Start" only to someone who has not, else how many
+   * more seconds, in the singular for one ("1 more seconds" read wrong, and so did "Primero pulsa Empezar"
+   * after Empezar was pressed).
+   */
+  function shortTakeHint() {
+    const s = Math.max(1, Math.ceil(RATED_MIN_TAKE_SEC - getPracticedSec()));
+    if (!state.sessionPractice.everStarted) return tt("rate.practiceFirst", { s });
+    return tt(s === 1 ? "rate.practiceMore_one" : "rate.practiceMore", { s });
+  }
+
   /** One invariant shared by one-tap, detailed Save, and automatic practice.
    * Rating an unopened or negligible run is not evidence of a completed take.
    */
@@ -5281,9 +5311,7 @@
     const practiced = getPracticedSec();
     const required = RATED_MIN_TAKE_SEC;
     if (state.sessionPractice.everStarted && practiced >= required) return true;
-    const message = tt("rate.practiceFirst", {
-      s: Math.max(1, Math.ceil(required - practiced))
-    });
+    const message = shortTakeHint();
     const note = $("#rate-note");
     if (note) note.textContent = message;
     toast(message);
@@ -5365,9 +5393,7 @@
       note.textContent = r.result
         ? tt("rate.saved", { score: VTMetrics.formatScore(r.result) })
         : !state.sessionPractice.everStarted || getPracticedSec() < RATED_MIN_TAKE_SEC
-          ? tt("rate.practiceFirst", {
-              s: Math.max(1, Math.ceil(RATED_MIN_TAKE_SEC - getPracticedSec()))
-            })
+          ? shortTakeHint()
           : tt("rate.hint");
     }
     const kicker = $("#rate-done");
@@ -6450,16 +6476,26 @@
     }
   }
 
+  /**
+   * A hold's length in seconds, or null when the entry holds no usable number.
+   * The stored log is synced from the account, so an entry can carry anything
+   * (red team CXSS-1: markup in `seconds` reached the pills' innerHTML).
+   */
+  function holdSeconds(entry) {
+    const s = Number(entry?.seconds);
+    return Number.isFinite(s) && s > 0 ? Math.round(s * 10) / 10 : null;
+  }
+
   function renderHoldHistory() {
     const el = $("#hold-history");
     if (!el) return;
     const fromEngine = state.practice?.getHolds?.() || [];
-    const stored = VTStorage.getHoldLogs().slice(0, 8);
-    const logs = fromEngine.length
-      ? fromEngine.slice(0, 8).map((h) => ({ seconds: h.seconds }))
-      : stored;
+    const logs = (fromEngine.length ? fromEngine : VTStorage.getHoldLogs())
+      .map(holdSeconds)
+      .filter((s) => s !== null)
+      .slice(0, 8);
     el.innerHTML = logs.length
-      ? logs.map((l) => `<span class="pill">${l.seconds}s</span>`).join("")
+      ? logs.map((s) => `<span class="pill">${s}s</span>`).join("")
       : `<span class="muted">${escapeHtml(tt("ex.holdsEmpty"))}</span>`;
   }
 
@@ -9546,7 +9582,13 @@
     email_not_configured: "auth.err.emailUnavailable",
     // What every /v1/auth route answers on a deploy with no database, which the
     // operator runbook explicitly allows. Without this it read as a bug.
-    accounts_not_configured: "auth.err.accountsOff"
+    accounts_not_configured: "auth.err.accountsOff",
+    // Both sign-in routes refuse a switched-off account before any session
+    // exists, and Google sign-in refuses a second Google account that claims
+    // an address another Google account already holds here (red team AUTHN-1/2).
+    // The emailed code still proves the inbox, so that is the way in it names.
+    disabled: "auth.err.disabled",
+    identity_conflict: "auth.err.identityConflict"
   };
 
   function accountError(message) {
@@ -9562,7 +9604,19 @@
   }
 
   function accountErrorFor(reason) {
-    accountError(tt(ACCOUNT_ERROR_KEYS[reason] || "auth.err.generic"));
+    accountError(tt(accountErrorKey(reason)));
+  }
+
+  /**
+   * The message for a refusal. An identity conflict names the way in that
+   * this deploy offers: the emailed code where there is one, and otherwise a
+   * report, since the operator then unlinks the old Google account by hand
+   * (docs/ADMIN-GUIDE.md 8.6). Pointing at a code nobody can ask for is a
+   * dead end.
+   */
+  function accountErrorKey(reason) {
+    if (reason === "identity_conflict" && !accountSignIn().canEmail) return "auth.err.identityConflictNoEmail";
+    return ACCOUNT_ERROR_KEYS[reason] || "auth.err.generic";
   }
 
   /** Format a unix-seconds period end the way the rest of the UI writes dates. */
@@ -9641,6 +9695,9 @@
   function accountSyncLine() {
     const status = window.VTSync?.getStatus?.();
     if (!status || !status.available) return "";
+    // Just signed in and the account's copy is on its way: "Aún no guardado"
+    // over an empty record told a returning learner their account was empty.
+    if (status.fetching) return tt("auth.syncFetching");
     if (status.syncing) return tt("auth.syncing");
     if (status.lastError === "refused") {
       // Turned down for what it is, and the same write would be turned down
@@ -9648,6 +9705,9 @@
       return tt(status.refusedReason === "profile_limit" ? "auth.syncRefused" : "auth.syncRefusedOther");
     }
     if (status.lastError) return tt("auth.syncError");
+    // Something written here is still waiting out the quiet period (or was
+    // never taken): "saved" would be about the copy before it.
+    if (status.pending) return tt("auth.syncPending");
     // "Aún no guardado" is only true of a device that has never synced. After a
     // reload `lastSyncedAt` starts empty, but a revision on file means this
     // device's progress has been in the account before.

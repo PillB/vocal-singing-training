@@ -99,6 +99,51 @@ export async function getAccountByEmail(db, email) {
 }
 
 /**
+ * The account a provider identity already belongs to (the account it first
+ * signed in to), or null. Google keeps `sub` for the life of a Google
+ * account while its email can change, so this, not the email, is who is
+ * signing in (red team AUTHN-1).
+ * @param {Object} db D1 binding.
+ * @param {string} provider One of IDENTITY_PROVIDERS.
+ * @param {string} subject Provider-side subject.
+ * @returns {Promise<Object|null>} Account row or null.
+ */
+export async function getAccountByIdentity(db, provider, subject) {
+  if (!subject) {
+    return null;
+  }
+  return (
+    (await db
+      .prepare(
+        `SELECT accounts.* FROM identities JOIN accounts ON accounts.id = identities.account_id
+         WHERE identities.provider = ?1 AND identities.subject = ?2`
+      )
+      .bind(provider, String(subject).slice(0, 255))
+      .first()) || null
+  );
+}
+
+/**
+ * The subjects an account has signed in with through one provider.
+ * @param {Object} db D1 binding.
+ * @param {string} accountId Account id.
+ * @param {string} provider One of IDENTITY_PROVIDERS.
+ * @returns {Promise<string[]>} Subjects, oldest first.
+ */
+export async function identitySubjects(db, accountId, provider) {
+  const { results } = await db
+    .prepare("SELECT subject FROM identities WHERE account_id = ?1 AND provider = ?2 ORDER BY created_at")
+    .bind(accountId, provider)
+    .all();
+  return (results || []).map((row) => row.subject);
+}
+
+/** Whether an account row has been switched off by an operator. */
+export function isDisabled(account) {
+  return Boolean(account) && account.disabled_at !== null && account.disabled_at !== undefined;
+}
+
+/**
  * Find or create the account for an email.
  *
  * The insert uses `ON CONFLICT DO NOTHING` and then re-reads, so two sign-ins
@@ -292,7 +337,7 @@ export async function resolveSession(db, token, now) {
   if (!account) {
     return { ok: false, reason: "no_account" };
   }
-  if (account.disabled_at !== null && account.disabled_at !== undefined) {
+  if (isDisabled(account)) {
     return { ok: false, reason: "disabled" };
   }
   if (at - Number(session.last_seen_at) > 3600) {

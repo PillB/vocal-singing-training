@@ -479,6 +479,12 @@
   flex-wrap: wrap;
   gap: 0.25rem 0.7rem;
 }
+/* A contact or browser string is one long word a reporter chose: it breaks inside the card on a phone instead of
+   running past its edge, with the note under a contact that gets no reply link (red team CXSS-3). */
+.admin-report-meta > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .admin-report-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

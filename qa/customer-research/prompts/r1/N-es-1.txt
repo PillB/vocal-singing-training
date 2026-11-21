@@ -1,0 +1,31 @@
+You are taking part in a consumer research survey, playing several different respondents, one after another.
+
+For each respondent listed below, become that person: their age, gender, where they live, their money situation, their occupation, what they would want to train, their experience, and the device they would use. Each respondent has just been shown the same short description of a website (below), plus the price and terms that apply to them. Each one answers four questions in their own words, in Spanish (the respondent's own variety of Spanish), briefly (one to three sentences per question), the way that person would really answer, in their own voice. Answer each respondent independently: they do not know about each other. Do not compare respondents, summarise, or add commentary.
+
+THE DESCRIPTION EVERY RESPONDENT SAW
+"""
+COACH VOCAL CON IA
+Tu coach de IA te convierte en cantante profesional en 30 días.
+Descarga la app. Prueba gratis de 3 días; después, la práctica gratis se limita a 5 minutos al día.
+
+• Solo en inglés por ahora.
+• Requiere crear cuenta con tarjeta para empezar la prueba.
+• Pro: US$ 14.99 al mes; se renueva automáticamente.
+"""
+
+RESPONDENTS
+- Respondent R46: 54-year-old woman, lives in Trujillo, Peru. Money: "El dinero no me alcanza ni para lo básico." Occupation: office job. Would want to train: speaking. Voice experience: sings casually (at home, karaoke, at church or with family). Would use it on: tablet. What Pro would cost this person and the terms: Hay que descargar una app y crear una cuenta con tarjeta. Pro: US$ 14.99 al mes (se renueva automáticamente). Sin Pro, 5 minutos de práctica al día.
+- Respondent R52: 69-year-old man, lives in Lima, Peru. Money: "Vivo cómodo y puedo gastar en mis aficiones." Occupation: retired. Would want to train: speaking. Voice experience: sings casually (at home, karaoke, at church or with family). Would use it on: laptop or desktop. What Pro would cost this person and the terms: Hay que descargar una app y crear una cuenta con tarjeta. Pro: US$ 14.99 al mes (se renueva automáticamente). Sin Pro, 5 minutos de práctica al día.
+- Respondent R16: 29-year-old woman, lives in Lima, Peru. Money: "El dinero no es un problema para mis aficiones." Occupation: works in sales or customer service. Would want to train: speaking. Voice experience: has taken a few voice or singing lessons. Would use it on: laptop or desktop. What Pro would cost this person and the terms: Hay que descargar una app y crear una cuenta con tarjeta. Pro: US$ 14.99 al mes (se renueva automáticamente). Sin Pro, 5 minutos de práctica al día.
+- Respondent R30: 41-year-old woman, lives in Lima, Peru. Money: "Cubro lo básico, pero no me sobra nada para extras." Occupation: office job. Would want to train: singing. Voice experience: has sung in a choir or a band. Would use it on: laptop or desktop. What Pro would cost this person and the terms: Hay que descargar una app y crear una cuenta con tarjeta. Pro: US$ 14.99 al mes (se renueva automáticamente). Sin Pro, 5 minutos de práctica al día.
+- Respondent R15: 28-year-old woman, lives in Lima, Peru. Money: "Cubro lo básico y a veces me doy un gusto pequeño." Occupation: office job. Would want to train: singing. Voice experience: none: has never trained their voice. Would use it on: phone. What Pro would cost this person and the terms: Hay que descargar una app y crear una cuenta con tarjeta. Pro: US$ 14.99 al mes (se renueva automáticamente). Sin Pro, 5 minutos de práctica al día.
+- Respondent R20: 33-year-old man, lives in Santiago, Chile. Money: "Cubro lo básico, pero no me sobra nada para extras." Occupation: self-employed. Would want to train: singing. Voice experience: none: has never trained their voice. Would use it on: phone. What Pro would cost this person and the terms: Hay que descargar una app y crear una cuenta con tarjeta. Pro: US$ 14.99 al mes (se renueva automáticamente). Sin Pro, 5 minutos de práctica al día.
+- Respondent R31: 47-year-old man, lives in Madrid, España. Money: "El dinero no es un problema para mis aficiones." Occupation: manager. Would want to train: singing. Voice experience: sings casually (at home, karaoke, at church or with family). Would use it on: phone. What Pro would cost this person and the terms: Hay que descargar una app y crear una cuenta con tarjeta. Pro: US$ 14.99 al mes (se renueva automáticamente). Sin Pro, 5 minutos de práctica al día.
+
+QUESTIONS (each respondent answers all four)
+P1. Según lo que acabas de leer, ¿qué tan probable es que pruebes este sitio web?
+P2. Imagina que lo usaste gratis una semana. ¿Qué tan probable es que pagues por Pro?
+P3. ¿Qué te haría dudar o te echaría para atrás, si hay algo?
+P4. En una frase: ¿qué es este sitio y para quién es?
+
+Return one entry per respondent, with the respondent id exactly as given (R46, R52, R16, R30, R15, R20, R31).

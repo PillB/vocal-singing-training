@@ -149,6 +149,10 @@ terms made a promise the product could not keep (VG-86).
      on and pay (VG-88), instead of ending at "could not load".
    - `/v1/health` reports `creemKeyMode` ("test" or "live", never the key),
      so a worker left on the test key is visible.
+   - A worker that answers health without the Creem fields is a no for
+     Creem. Each field arrived in the same build as its route, and the live
+     worker before its redeploy (VG-97) answered Creem's webhook with 404, so
+     a pasted Creem link there would take money no licence could follow.
 
 Each behaviour has a test that models the right and the wrong result, proven
 red with `node qa/mutate.mjs`: worker mutants CK1 to CK16 (with CK3b, CK8b,
@@ -258,10 +262,15 @@ in his name.
 1. **Buy a domain** and point GitHub Pages at it. Then change `SITE_ORIGIN` in
    `workers/entitlements/wrangler.toml` and the Google sign-in origins, and
    redeploy. They must match exactly, or every token fails its audience check.
+   Creem needs it, and so does security: on `pillb.github.io` every page of
+   the account's Pages sites shares the app's origin and can read its
+   sign-in session.
 2. **Create a support mailbox on that domain** (for example `soporte@`) and
    answer it within 3 business days.
 3. **Fill in the three placeholders in `terms.html`:** the seller's legal
-   name, that contact address, and the refund window (14 days today).
+   name, that contact address, and the refund window (14 days today). Set up
+   a virtual Libro de Reclamaciones before the first charge (Ley 29571
+   Art 150; whether it binds a natural person is being checked).
 4. **Ask a contador about a RUC** and how payouts are taxed, then register.
 5. **Ask Creem support** how payouts reach a Peruvian bank, and whether a RUC
    is required.

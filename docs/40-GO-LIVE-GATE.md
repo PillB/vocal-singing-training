@@ -124,6 +124,17 @@ a country Stripe will take as a seller.
    domain at GitHub Pages, then change `SITE_ORIGIN` in `wrangler.toml` and
    the Google sign-in origins to match, and redeploy. They must match
    exactly, or every token fails its audience check.
+   There is a second reason, a security one. Every GitHub Pages site of the
+   account is served from the one origin `https://pillb.github.io`, the
+   user-site repository's page included, and an origin is the browser's only
+   wall: any page on it can read this app's storage, the sign-in session
+   (`vt_account_session_v1`) among it. The worker cannot tell them apart
+   either, because `SITE_ORIGIN` cannot name a path. The deploy-readiness
+   review found that page loading a third-party script with no integrity
+   check and no Content Security Policy. A domain of its own gives the app
+   an origin nobody else's page shares.
+   Progress saved in this browser stays with the old origin; how it moves to
+   the new one is being worked out in the deploy-readiness thread.
 2. **A support address on that domain**, and step 2's three values filled in.
 3. **A RUC, or the contador's word that you need none.** Creem's Merchant
    Terms 3.4.9 require being registered as a business or as self-employed.
@@ -131,6 +142,12 @@ a country Stripe will take as a seller.
    costs $7 or 1%, with a $50 minimum; the route into Peru is unconfirmed.
 5. **Turn Cloudflare's Bot Fight Mode off** on the worker's zone, if it is
    on. It can block both Creem's webhooks and its reviewers.
+6. **A virtual Libro de Reclamaciones, before the first charge.** Peru's
+   consumer code (Ley 29571, Art 150) and its regulation require a supplier
+   to keep a complaints book, a virtual one for sales over the internet, and
+   the deploy-readiness review reads that as covering a natural person too.
+   That reading is being checked against the primary sources; until it is,
+   treat it as required.
 
 **Only you can do this.** Create the account as an individual, then create
 **two products**, a monthly and a yearly, because Creem has no single link

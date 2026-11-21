@@ -298,9 +298,27 @@ test.describe("a rail the worker cannot honour", () => {
     const known = await page.evaluate(() => window.VTAccount.knownRails());
     expect(known.mercadopago).toBe(null);
     expect(known.stripe).toBe(null);
-    expect(known.creem).toBe(null);
     const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "mercadopago"));
     expect(res.mode).toBe("redirect");
+  });
+
+  test("a worker older than the Creem route stops a Creem sale, and only that one", async ({ page }) => {
+    // The live worker before its redeploy (VG-97): health with no Creem field,
+    // and Creem's webhook answered 404. A payment through a pasted Creem link
+    // there is money that can never become Pro. Each Creem field arrived with
+    // its route, so a worker that answers without it has no such route.
+    const { navigations } = await boot(page, { health: healthBody({ mercadopagoConfigured: true, stripeConfigured: false }) });
+    await askTheWorker(page);
+    const known = await page.evaluate(() => window.VTAccount.knownRails());
+    expect(known.creem, "no Creem field in an answer is a no").toBe(false);
+    expect(known.creemCheckout).toBe(false);
+    expect(known.creemPortal).toBe(false);
+    const creem = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "creem"));
+    expect(creem.mode, "wrong: sent to pay where the payment is never seen").toBe("provider_unavailable");
+    expect(navigations).toEqual([]);
+    // Control: the same answer still sells on the rail it does report.
+    const mp = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "mercadopago"));
+    expect(mp.mode).toBe("redirect");
   });
 
   test("a worker answering nonsense is not a no", async ({ page }) => {

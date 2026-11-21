@@ -566,15 +566,19 @@
       rails = d
         ? {
           // A worker too old to report a field leaves it null, and null is not
-          // a no: it must not stop a sale.
+          // a no: it must not stop a sale. Health has carried these two since
+          // the first build, so a missing one is a broken answer, not an old one.
           stripe: typeof d.stripeConfigured === "boolean" ? d.stripeConfigured : null,
           mercadopago: typeof d.mercadopagoConfigured === "boolean" ? d.mercadopagoConfigured : null,
-          creem: typeof d.creemConfigured === "boolean" ? d.creemConfigured : null,
-          // Whether the worker can open a Creem checkout bound to the account,
-          // and hand a subscriber the billing portal. Null from a worker too
-          // old to say, which, as above, is not a no.
-          creemCheckout: typeof d.creemCheckoutConfigured === "boolean" ? d.creemCheckoutConfigured : null,
-          creemPortal: typeof d.creemPortalConfigured === "boolean" ? d.creemPortalConfigured : null,
+          // The Creem fields are the opposite case: each arrived in the same
+          // build as the route it reports on (the webhook; the bound checkout
+          // and the billing portal), so a worker that answers without one has
+          // no such route. A Creem payment taken there can never become Pro
+          // (the live worker before its redeploy answered the Creem webhook
+          // with 404), so missing is a no.
+          creem: d.creemConfigured === true,
+          creemCheckout: d.creemCheckoutConfigured === true,
+          creemPortal: d.creemPortalConfigured === true,
           ok: true
         }
         : { stripe: null, mercadopago: null, creem: null, creemCheckout: null, creemPortal: null, ok: false };

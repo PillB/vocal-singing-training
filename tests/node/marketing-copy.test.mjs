@@ -155,6 +155,12 @@ export const BACKED = [
     why: "the terms say the free plan asks for no card; the copy may say so only while the terms do"
   },
   {
+    claim: /tu voz se queda en tu dispositivo|your voice stays on your device/i,
+    file: "privacy.html",
+    proof: /El audio se procesa en\s+tu dispositivo\.\s+No enviamos tu voz a un servidor nuestro\./,
+    why: "the privacy page says the audio is processed on the device and never sent to our server; the copy may say so only while it does"
+  },
+  {
     claim: /no necesitas cuenta|sin cuenta|no account needed/i,
     file: "js/storage.js",
     proof: /localStorage/,

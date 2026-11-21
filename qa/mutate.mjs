@@ -1291,7 +1291,8 @@ export const MUTANTS = {
     ["MK8 the first visit says progress stays in the browser and no longer that no account is needed", "js/i18n.js", '"start.step3sub": "Se guarda en este navegador. No necesitas cuenta.",', '"start.step3sub": "Tu progreso se queda en este navegador.",'],
     ["MK9 the Pro window claims almost every singing app caps free practice again", "js/i18n.js", '"pricing.proof1": "Muchas apps de canto con suscripción limitan', '"pricing.proof1": "Casi todas las apps de canto limitan'],
     ["MK10 the progress board says one private lesson costs about a year of Pro", "js/i18n.js", '"value.anchor": "Un año de Pro cuesta menos que 3 clases particulares. Practicar es gratis, siempre.",', '"value.anchor": "Una clase particular ≈ el año de Pro. Practica gratis siempre.",'],
-    ["MK11 the terms stop saying the free plan asks for no card while the first visit says no card", "terms.html", "El plan gratis no cuesta nada ni pide tarjeta, y da acceso", "El plan gratis no cuesta nada y da acceso"]
+    ["MK11 the terms stop saying the free plan asks for no card while the first visit says no card", "terms.html", "El plan gratis no cuesta nada ni pide tarjeta, y da acceso", "El plan gratis no cuesta nada y da acceso"],
+    ["MK12 the privacy page stops promising the voice stays on the device while the first visit promises it", "privacy.html", "tu dispositivo. No enviamos tu voz a un servidor nuestro.", "tu dispositivo. Podemos enviar tu voz a nuestro servidor para mejorar el servicio."]
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/marketing-copy.test.mjs"]) })),
   ledger: [
     ["LG1 the first validation chunk always passes: a stale read commits", "src/ledger.js", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed})", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed}) OR 1", "ledger"],

@@ -67,12 +67,14 @@ import {
 } from "./license.js";
 import { reportsEnabled, routeReportsApi } from "./reports.js";
 import { mapStripeEvent, verifyStripeSignature } from "./stripe.js";
-import { CREEM_SIGNATURE_HEADER, mapCreemEvent, verifyCreemSignature } from "./creem.js";
+import { CREEM_SIGNATURE_HEADER, creemCheckoutBinding, mapCreemEvent, verifyCreemSignature } from "./creem.js";
+import { bindCheckoutRef, creemCheckoutConfigured, creemPortalConfigured, routeCheckoutApi } from "./checkout.js";
 import { CLAIMABLE_PROVIDERS, MAX_BODY_BYTES, MAX_SESSION_ID_LENGTH } from "./limits.js";
 import { confirmAndMapNotification, resolveNotificationTarget, verifyMercadoPagoSignature } from "./mercadopago.js";
 import {
   clearEventSeen,
   getEntitlement,
+  getLicenseIdForClaim,
   markEventSeen,
   noteRefusal,
   toPublicEntitlement,
@@ -378,8 +380,39 @@ async function handleCreemWebhook(request, env, options) {
   if (!event || typeof event.id !== "string") {
     return json({ ok: false, reason: "malformed_event" }, 400);
   }
-  return recordingFailure(env, "creem", options,
-    () => runLedgerTransaction(env, (kv) => applyCreemEvent(kv, event, env, options), ledgerOptions(options)));
+  return recordingFailure(env, "creem", options, async () => {
+    const outcome = { licenseId: null };
+    const response = await runLedgerTransaction(env, (kv) => applyCreemEvent(kv, event, env, options, outcome), ledgerOptions(options));
+    await bindCreemCheckout(env, event, outcome, options);
+    return response;
+  });
+}
+
+/**
+ * Link the licence a Creem checkout bought to the account that opened it
+ * (checkout.js). Runs after the ledger has committed, for a fresh delivery
+ * and for a duplicate alike: the duplicate is how a link that failed is
+ * retried, because the event marker committed with the licence and Creem
+ * would otherwise never be heard from again for this checkout. A failure here
+ * throws, so Creem retries and the alarm row is written; the licence itself
+ * is already recorded, and the page's own link is the second way in.
+ * @param {Object} env Worker env bindings.
+ * @param {Object} event Parsed, verified Creem event.
+ * @param {{licenseId: string|null}} outcome What the ledger transaction recorded.
+ * @param {{now?: number}} [options] Injectable clock.
+ * @returns {Promise<void>} Resolves when bound, or when there is nothing to bind.
+ */
+async function bindCreemCheckout(env, event, outcome, options) {
+  const binding = creemCheckoutBinding(event);
+  if (!binding || !env.DB) {
+    return;
+  }
+  const licenseId = outcome.licenseId
+    || await getLicenseIdForClaim(ledgerReader(env), "creem", binding.checkoutId);
+  const result = await bindCheckoutRef(env, { ...binding, licenseId }, clockSeconds(options));
+  if (result.bound) {
+    console.log("creem checkout bound to its account");
+  }
 }
 
 /**
@@ -390,7 +423,7 @@ async function handleCreemWebhook(request, env, options) {
  * @param {{now?: number}} [options] Injectable clock.
  * @returns {Promise<Response>} Response for Creem.
  */
-async function applyCreemEvent(kv, event, env, options) {
+async function applyCreemEvent(kv, event, env, options, outcome) {
   const fresh = await markEventSeen(kv, "creem", event.id);
   if (!fresh) {
     return json({ ok: true, reason: "duplicate" }, 200);
@@ -403,6 +436,9 @@ async function applyCreemEvent(kv, event, env, options) {
     const { record, missing } = await upsertEntitlement(kv, mapped.update, { idSecret: licenseIdSecret(env) });
     if (missing) {
       return await answerUnknownLicense(kv, "creem", event.id, event.eventType, options);
+    }
+    if (outcome) {
+      outcome.licenseId = record.licenseId;
     }
     console.log("creem entitlement updated", event.eventType, record.status, record.plan);
   } catch (error) {
@@ -624,6 +660,12 @@ function healthConfiguration(env) {
     // server-side read to decide an entitlement: its webhook carries the
     // whole of what the store needs, unlike Mercado Pago.
     creemConfigured: Boolean(env.CREEM_WEBHOOK_SECRET),
+    // Whether the worker can open a Creem checkout bound to the signed-in
+    // account (API key, webhook secret, database, a product), and hand a
+    // subscriber their billing portal (API key, database). The page opens
+    // checkouts through the worker only when the first is true.
+    creemCheckoutConfigured: creemCheckoutConfigured(env),
+    creemPortalConfigured: creemPortalConfigured(env),
     signingKeyConfigured: Boolean(env.LICENSE_PRIVATE_KEY_PKCS8_B64),
     accountsConfigured: Boolean(env.DB),
     eventsEnabled: Boolean(env.DB) && String(env.EVENTS_ENABLED || "").trim().toLowerCase() !== "false",
@@ -812,6 +854,20 @@ async function routeSubRouters(request, env, url, path, cors, options) {
   });
   if (reportsResponse) {
     return reportsResponse;
+  }
+
+  // Before the account router as well: it claims every /v1/me path.
+  const checkoutResponse = routeCheckoutApi(request, env, path, {
+    json,
+    cors,
+    now: options && options.now,
+    fetchImpl: options && options.fetchImpl,
+    timeoutMs: options && options.timeoutMs,
+    requireSession,
+    readJsonBody
+  });
+  if (checkoutResponse) {
+    return checkoutResponse;
   }
 
   return routeAccountApi(request, env, url, path, {

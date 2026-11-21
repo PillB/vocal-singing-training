@@ -8141,7 +8141,9 @@
     // of them a button.
     //
     // So the page names the route instead of implying one. A trial or a gift
-    // gets no line at all, because there is nothing to cancel.
+    // gets no line at all, because there is nothing to cancel. (Since VG-86
+    // the Creem and Mercado Pago routes are a button too, "Gestionar o
+    // cancelar suscripción", and the line says where it goes.)
     const cancelNote = $("#pricing-cancel-note");
     if (cancelNote) {
       const rail = String(ent.provider || "").toLowerCase();
@@ -8160,15 +8162,39 @@
     }
   }
 
-  /** The Customer Portal button: for Pro or a trial, and only when a valid portal URL is configured. */
+  /**
+   * The "Manage or cancel" button: for whoever pays, on the rail they pay on.
+   * Creem requires cancelling to be possible from inside the product, and
+   * Peru's consumer code wants it as easy as subscribing (VG-86): on Creem it
+   * opens the subscriber's own billing portal through the worker; on Mercado
+   * Pago, the payer's subscriptions page; on Stripe, the configured portal.
+   */
   function paintManageBilling(B, ent, cfg) {
-    // Customer Portal: show for Pro/trial when a valid portal URL is configured
     const manage = $("#btn-manage-billing");
-    if (manage) {
-      const portalRaw = String(cfg.customerPortalUrl || "").trim();
-      const portalOk = portalRaw && (B.isPortalUrl ? B.isPortalUrl(portalRaw) : true);
-      manage.hidden = !(portalOk && (ent.pro || ent.status === "trial"));
-    }
+    if (manage) manage.hidden = !manageRoute(B, ent, cfg);
+  }
+
+  /** Which way "Manage or cancel" goes for this entitlement, or null for none (a trial, a gift, free). */
+  function manageRoute(B, ent, cfg) {
+    if (!ent?.pro || ent.source === "trial") return null;
+    const rail = String(ent.provider || "").toLowerCase();
+    if (rail === "creem") return creemPortalOffered() ? "creem" : null;
+    if (rail === "mercadopago") return "mercadopago";
+    // A worker trial or a gift is a licence too, from no rail: nothing to cancel.
+    return rail === "stripe" && stripePortalConfigured(B, cfg) ? "stripe" : null;
+  }
+
+  /** A Creem portal needs somebody signed in (it is their customer the worker asks for) and a worker that has not said no. */
+  function creemPortalOffered() {
+    const acct = window.VTAccount?.getState?.();
+    const rails = window.VTAccount?.knownRails?.();
+    return !!acct?.signedIn && rails?.creemPortal !== false;
+  }
+
+  /** Whether a Stripe customer-portal link is configured and is one. */
+  function stripePortalConfigured(B, cfg) {
+    const portalRaw = String(cfg?.customerPortalUrl || "").trim();
+    return !!portalRaw && !!B.isPortalUrl?.(portalRaw);
   }
 
   /** The Pro dialog's checkout-health line, for free users only; returns the element so the launch box can read it. */
@@ -9180,33 +9206,101 @@
       $$(".plan-cta", grid).forEach((btn) => {
         btn.addEventListener("click", () => {
           const planId = btn.dataset.plan;
-          if (!planId || planId === "free") return;
+          if (!planId || planId === "free" || btn.getAttribute("aria-busy") === "true") return;
           const res = B.startCheckout(planId, pricingRail);
-          if (res.mode === "demo") {
-            toast(tt("pricing.toast.demo"));
-            updateBillingChrome();
-            renderPricingModal();
-          } else if (res.mode === "signin_required") {
-            // Same handling as the trial's needs_account branch below: the press
-            // worked, and it sent them one step back rather than nowhere.
-            toast(tt("pricing.checkoutNeedsAccount"), { durationMs: 4600 });
-            closePricing();
-            openAccount();
-          } else if (res.mode === "provider_unavailable") {
-            // The worker said it cannot honour this rail, so the press stops
-            // here rather than sending them to pay for something we could not
-            // then switch on.
-            toast(tt("pricing.toast.railUnavailable"), { durationMs: 6000 });
-          } else if (res.mode === "verification_unavailable") {
-            toast(tt("pricing.toast.verifyUnavailable"), { durationMs: 5200 });
-          } else if (res.mode === "unconfigured") {
-            toast(tt("pricing.toast.unconfigured"));
+          if (res.mode === "opening" && res.done) {
+            // The worker is opening a checkout bound to this account (VG-83):
+            // a round trip, so the press shows it is working and cannot be
+            // pressed twice into two checkouts.
+            setPlanButtonBusy(btn, true);
+            res.done.then((out) => {
+              if (out?.mode === "redirect") return; // navigating away
+              setPlanButtonBusy(btn, false);
+              answerCheckout(out || { mode: "checkout_failed" });
+            });
+            return;
           }
-          // redirect mode navigates away
+          answerCheckout(res);
         });
       });
     }
+    paintMorNote(prelaunch);
     updateBillingChrome();
+  }
+
+  /**
+   * A plan button while the worker opens its checkout: disabled, marked busy
+   * for assistive technology, and saying what it is doing; then back.
+   * @param {HTMLButtonElement} btn The plan's button.
+   * @param {boolean} busy Whether it is waiting.
+   */
+  function setPlanButtonBusy(btn, busy) {
+    if (busy) {
+      btn.dataset.label = btn.textContent;
+      btn.textContent = tt("pricing.opening");
+      btn.disabled = true;
+      btn.setAttribute("aria-busy", "true");
+      return;
+    }
+    if (btn.dataset.label) btn.textContent = btn.dataset.label;
+    btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+  }
+
+  /** What a press of a plan's button tells the person, by the outcome startCheckout gave. */
+  const CHECKOUT_TOASTS = {
+    provider_unavailable: ["pricing.toast.railUnavailable", 6000],
+    verification_unavailable: ["pricing.toast.verifyUnavailable", 5200],
+    unconfigured: ["pricing.toast.unconfigured", 3200],
+    rate_limited: ["pricing.toast.checkoutBusy", 5200],
+    checkout_failed: ["pricing.toast.checkoutFailed", 6000]
+  };
+
+  /** Answer a checkout outcome that did not navigate away. */
+  function answerCheckout(res) {
+    if (res.mode === "demo") {
+      toast(tt("pricing.toast.demo"));
+      updateBillingChrome();
+      renderPricingModal();
+      return;
+    }
+    if (res.mode === "signin_required") {
+      // Same handling as the trial's needs_account branch below: the press
+      // worked, and it sent them one step back rather than nowhere.
+      toast(tt("pricing.checkoutNeedsAccount"), { durationMs: 4600 });
+      closePricing();
+      openAccount();
+      return;
+    }
+    // provider_unavailable: the worker said it cannot honour this rail, so the
+    // press stops here rather than sending them to pay for something we could
+    // not then switch on. A redirect navigates away and says nothing.
+    const said = CHECKOUT_TOASTS[res.mode];
+    if (said) toast(tt(said[0]), { durationMs: said[1] });
+  }
+
+  /**
+   * Who sells the subscription, said before the buyer pays: Creem is the
+   * merchant of record on the card rail, and its merchant terms (3.7) require
+   * buyers to be told so before the transaction, with its Buyer Terms beside
+   * ours. Shown only while that rail is the one chosen and something is on sale.
+   * @param {boolean} prelaunch Whether nothing is on sale yet.
+   */
+  function paintMorNote(prelaunch) {
+    const note = $("#pricing-mor-note");
+    if (!note) return;
+    const show = !prelaunch && pricingRail === "creem";
+    note.hidden = !show;
+    if (!show) {
+      note.replaceChildren();
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = "https://www.creem.io/buyer-terms";
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = tt("pricing.morTerms");
+    note.replaceChildren(document.createTextNode(tt("pricing.morNote") + " "), link);
   }
 
   /**
@@ -10911,14 +11005,52 @@
     renderPricingModal();
   }
 
+  /** Where a Mercado Pago payer's own subscriptions live (their account, not ours). */
+  const MP_SUBSCRIPTIONS_URL = "https://www.mercadopago.com.pe/subscriptions";
+
   function openBillingPortal() {
-    if (!window.VTBilling?.openCustomerPortal) return;
-    const res = VTBilling.openCustomerPortal();
+    const B = window.VTBilling;
+    if (!B) return;
+    const route = manageRoute(B, B.getEntitlement?.(), B.cfg?.() || {});
+    if (route === "creem") return openCreemPortal();
+    if (route === "mercadopago") {
+      window.open(MP_SUBSCRIPTIONS_URL, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (!B.openCustomerPortal) return;
+    const res = B.openCustomerPortal();
     if (!res?.ok) {
       toast(res?.message || tt("pricing.toast.portalUnconfigured"), { durationMs: 4200 });
       return;
     }
     toast(tt("pricing.toast.portalOpened"));
+  }
+
+  /**
+   * A Creem subscriber's portal: the worker asks Creem for a link to this
+   * account's own customer and the page goes there. Same tab, because the
+   * answer arrives after the press and a new window opened then is a pop-up
+   * most browsers block.
+   */
+  function openCreemPortal() {
+    const btn = $("#btn-manage-billing");
+    if (btn?.getAttribute("aria-busy") === "true") return;
+    btn?.setAttribute("aria-busy", "true");
+    toast(tt("pricing.toast.portalOpened"));
+    window.VTAccount.openBillingPortal()
+      .then((res) => {
+        btn?.removeAttribute("aria-busy");
+        const target = res?.ok ? window.VTBilling.validateCheckoutUrl(res.url) : null;
+        if (target?.ok) {
+          window.location.assign(target.url);
+          return;
+        }
+        toast(tt("pricing.toast.portalFailed"), { durationMs: 6000 });
+      })
+      .catch(() => {
+        btn?.removeAttribute("aria-busy");
+        toast(tt("pricing.toast.portalFailed"), { durationMs: 6000 });
+      });
   }
 
   /** The progress pack (JSON) and the coach summary (text), named for the learner's own day. */
@@ -10985,16 +11117,26 @@
    */
   function linkReturnedCheckout(ret) {
     if (!(ret?.event === "success" && ret.sessionId && ret.provider)) return;
-    window.VTAccount?.linkCheckout?.({ provider: ret.provider, sessionId: ret.sessionId })
-      .then((res) => {
-        if (res?.ok) {
-          updateBillingChrome();
-          refreshAccountUI();
-        }
-      })
+    const acct = window.VTAccount;
+    if (!acct?.linkCheckout || !acct.getState?.()?.signedIn) return;
+    const settled = (res) => {
+      if (res?.ok) {
+        updateBillingChrome();
+        refreshAccountUI();
+      }
+    };
+    // Kept and retried until the worker answers for it (VG-83): the webhook
+    // is often later than the buyer, and a 202 here used to be the end of it.
+    acct.linkCheckout({ provider: ret.provider, sessionId: ret.sessionId }, { persist: true })
+      .then(settled)
       .catch(() => {
         /* the anonymous claim path still grants Pro in this browser */
       });
+    // The claim landing means the webhook has: link again now rather than at
+    // the next scheduled retry, so the account shows Pro while they look.
+    ret.claiming?.then((res) => {
+      if (res?.ok) acct.retryPendingLink?.()?.then(settled).catch(() => {});
+    });
   }
 
   /** What the person is told on coming back from the checkout page. */

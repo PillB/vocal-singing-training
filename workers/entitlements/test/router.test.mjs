@@ -142,6 +142,12 @@ test("health reports booleans and the site origin, never key material", async ()
     // The merchant-of-record rail. One secret, because its webhook carries
     // everything the store needs and nothing has to be read back.
     creemConfigured: true,
+    // Opening a checkout bound to an account needs the API key and D1 as
+    // well; this payments-only environment has neither, so both are false
+    // and the page keeps to its static links (checkout-bound.test.mjs CK11
+    // holds the true case).
+    creemCheckoutConfigured: false,
+    creemPortalConfigured: false,
     signingKeyConfigured: true,
     // The account layer reports itself here too. `createTestEnv` has no D1
     // binding and no auth configuration, which is exactly the shape a

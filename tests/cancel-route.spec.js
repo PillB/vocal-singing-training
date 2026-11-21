@@ -36,7 +36,7 @@ const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
 /** The rails money can actually come in on, and the words each route is known by. */
 const RAILS = {
-  stripe: { says: /Gestionar suscripci|Manage subscription/i, never: [/Creem/, /Mercado Pago/] },
+  stripe: { says: /Gestionar o cancelar suscripci|Manage or cancel subscription/i, never: [/Creem/, /Mercado Pago/] },
   creem: { says: /correo|email/i, never: [/Stripe/, /Mercado Pago/] },
   mercadopago: { says: /Mercado Pago/, never: [/Stripe/, /Creem/] }
 };

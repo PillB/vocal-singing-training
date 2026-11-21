@@ -212,16 +212,22 @@
       "auth.confirmClearBilling": "¿Quitar el Pro local de este navegador?",
       "pricing.title": "Estudio Vocal Pro",
       "pricing.sub": "Practicar es gratis, siempre. Pro suma extras para seguir y compartir tu avance.",
-      "pricing.note": "Pago seguro con tarjeta. En Perú el cobro es en soles vía Mercado Pago. Puedes cancelar cuando quieras, y cómo hacerlo depende de dónde pagaste: te lo decimos aquí mismo.",
+      "pricing.note": "Pago seguro en la propia página del procesador de pagos: los datos de tu tarjeta no pasan por este sitio. Puedes cancelar cuando quieras, y aquí mismo te decimos cómo.",
       // Una línea por riel, porque la ruta para cancelar es distinta en cada uno
       // y solo una de las tres es un botón de esta página. Se muestra la del riel
       // por el que pagó esta persona; a quien tiene prueba o regalo no se le
       // muestra ninguna, porque no hay nada que cancelar.
-      "pricing.cancel.stripe": "Pagaste con tarjeta vía Stripe. El botón «Gestionar suscripción» abre el portal donde puedes cambiar la tarjeta o cancelar.",
-      "pricing.cancel.creem": "Pagaste con tarjeta internacional vía Creem. Después de cada pago, Creem te envía por correo un enlace propio para gestionar o cancelar tu suscripción.",
-      "pricing.cancel.mercadopago": "Pagaste con Mercado Pago. La suscripción se cancela desde tu propia cuenta de Mercado Pago, donde están tus pagos recurrentes.",
+      "pricing.cancel.stripe": "Pagaste con tarjeta vía Stripe. El botón «Gestionar o cancelar suscripción» abre el portal donde puedes cambiar la tarjeta o cancelar.",
+      "pricing.cancel.creem": "Pagaste con tarjeta vía Creem. «Gestionar o cancelar suscripción» abre tu portal de Creem, donde cancelas o cambias la tarjeta; Creem también te manda ese enlace por correo después de cada pago.",
+      "pricing.cancel.mercadopago": "Pagaste con Mercado Pago. «Gestionar o cancelar suscripción» abre tus suscripciones en tu propia cuenta de Mercado Pago, donde se cancela.",
+      // Creem es quien vende la suscripción (merchant of record) y sus términos
+      // de comerciante (3.7) piden decirlo antes del pago, junto a sus Términos
+      // para compradores. Se muestra solo con el riel de Creem elegido.
+      "pricing.morNote": "El pago con tarjeta lo procesa Creem (Armitage Labs OÜ, Estonia), que te vende la suscripción como comerciante registrado y emite tu factura; es su nombre el que verás en tu estado de cuenta.",
+      "pricing.morTerms": "Términos para compradores de Creem",
+      "pricing.opening": "Abriendo el pago seguro…",
       "pricing.export": "Exportar progreso (Pro)",
-      "pricing.manage": "Gestionar suscripción",
+      "pricing.manage": "Gestionar o cancelar suscripción",
       "pricing.healthPrefix": "Estado de pagos:",
       "pricing.demo": "Activar demo Pro",
       "pricing.current": "Plan actual",
@@ -537,6 +543,10 @@
       "pricing.toast.portalUnconfigured":
         "La gestión de suscripción aún no está disponible. Si ya pagaste, sigue practicando; te avisaremos cuando puedas administrarla aquí.",
       "pricing.toast.portalOpened": "Abriendo portal de facturación…",
+      "pricing.toast.portalFailed":
+        "No pudimos abrir tu portal de facturación. Usa el enlace del último correo de Creem, o escríbenos y lo cancelamos por ti.",
+      "pricing.toast.checkoutBusy": "Demasiados intentos seguidos. Espera unos minutos y vuelve a intentarlo; no se cobró nada.",
+      "pricing.toast.checkoutFailed": "No pudimos abrir el pago y no se cobró nada. Inténtalo de nuevo en un momento.",
       "pricing.toast.exportNeedPro": "Exportar requiere Pro o prueba",
       "pricing.toast.exported": "Progreso exportado",
       "pricing.toast.checkoutError":
@@ -1384,12 +1394,15 @@
       "auth.confirmClearBilling": "Remove the local Pro from this browser?",
       "pricing.title": "Vocal Studio Pro",
       "pricing.sub": "Practice is free, always. Pro adds extras to follow and share your progress.",
-      "pricing.note": "Secure card checkout. In Peru you are charged in soles through Mercado Pago. You can cancel any time, and how you do it depends on where you paid: we say so right here.",
-      "pricing.cancel.stripe": "You paid by card through Stripe. The “Manage subscription” button opens the portal where you can change the card or cancel.",
-      "pricing.cancel.creem": "You paid by international card through Creem. After every payment, Creem emails you your own link to manage or cancel the subscription.",
-      "pricing.cancel.mercadopago": "You paid with Mercado Pago. The subscription is cancelled from your own Mercado Pago account, where your recurring payments live.",
+      "pricing.note": "Secure checkout on the payment processor's own page: your card details never pass through this site. You can cancel any time, and we tell you how right here.",
+      "pricing.cancel.stripe": "You paid by card through Stripe. The “Manage or cancel subscription” button opens the portal where you can change the card or cancel.",
+      "pricing.cancel.creem": "You paid by card through Creem. “Manage or cancel subscription” opens your Creem portal, where you cancel or change the card; Creem also emails you that link after every payment.",
+      "pricing.cancel.mercadopago": "You paid with Mercado Pago. “Manage or cancel subscription” opens the subscriptions in your own Mercado Pago account, where it is cancelled.",
+      "pricing.morNote": "Card payments are processed by Creem (Armitage Labs OÜ, Estonia), which sells you the subscription as merchant of record and issues your invoice; its name is the one on your card statement.",
+      "pricing.morTerms": "Creem's Buyer Terms",
+      "pricing.opening": "Opening secure checkout…",
       "pricing.export": "Export progress (Pro)",
-      "pricing.manage": "Manage subscription",
+      "pricing.manage": "Manage or cancel subscription",
       "pricing.healthPrefix": "Payment status:",
       "pricing.demo": "Activate demo Pro",
       "pricing.current": "Current plan",
@@ -1701,6 +1714,10 @@
       "pricing.toast.portalUnconfigured":
         "Subscription management isn’t available yet. If you already paid, keep practicing — self-serve billing will open soon.",
       "pricing.toast.portalOpened": "Opening billing portal…",
+      "pricing.toast.portalFailed":
+        "We couldn't open your billing portal. Use the link in Creem's latest email, or write to us and we'll cancel it for you.",
+      "pricing.toast.checkoutBusy": "Too many tries in a row. Wait a few minutes and try again; nothing was charged.",
+      "pricing.toast.checkoutFailed": "We couldn't open the checkout, and nothing was charged. Try again in a moment.",
       "pricing.toast.exportNeedPro": "Export needs Pro or trial",
       "pricing.toast.exported": "Progress exported",
       "pricing.toast.checkoutError":

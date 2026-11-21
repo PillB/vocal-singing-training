@@ -661,3 +661,26 @@ function stampCreemUpdate(update, event, object) {
       ?? epochSeconds(object.created_at);
   }
 }
+
+/**
+ * What a verified Creem event says about whose checkout it was, for
+ * checkout.js `bindCheckoutRef`: the `request_id` the worker put on the
+ * checkout it opened, and Creem's own id for that checkout. Only
+ * `checkout.completed` names both; every other event answers null, and so
+ * does a checkout with no `request_id` (one opened from a payment link).
+ *
+ * Metadata is not read here either: a payment link writes it from the URL
+ * (see `planForProduct`), and `request_id` is what the create-checkout call
+ * sets, server to server.
+ * @param {Object} event Parsed, verified Creem event.
+ * @returns {{ref: string, checkoutId: string}|null} The binding, or null.
+ */
+export function creemCheckoutBinding(event) {
+  if (!event || event.eventType !== "checkout.completed") {
+    return null;
+  }
+  const object = event.object && typeof event.object === "object" ? event.object : null;
+  const ref = object && typeof object.request_id === "string" ? object.request_id : "";
+  const checkoutId = idOf(object && object.id);
+  return ref && checkoutId ? { ref, checkoutId } : null;
+}

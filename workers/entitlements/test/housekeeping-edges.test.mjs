@@ -635,7 +635,7 @@ test("a run after days without one deletes no more events than D1's daily write 
 test("a sweep with every table backlogged stays inside D1's 50 queries an invocation, from the cron and from the admin's route", async () => {
   // Cloudflare's D1 limits table, row "Queries per Worker invocation (read
   // subrequest limits)": "1000 (Workers Paid) / 50 (Free)". db.js plans for
-  // it, eight tables at three statements each. The cron adds one query of its
+  // it, nine tables at three statements each. The cron adds one query of its
   // own (the schema check); POST /v1/admin/sweep adds three (the session
   // lookup, its last_seen write, the schema check). At seven chunks a table
   // the cron asked for 57; D1 refuses everything past the fiftieth, so
@@ -656,7 +656,7 @@ test("a sweep with every table backlogged stays inside D1's 50 queries an invoca
   // Control: the backlog reached both sweeps: every table went past its first chunk.
   for (const { seen } of [cron, byAdmin]) {
     assert.deepEqual(Object.keys(seen.deletes).sort(), [
-      "events", "exposures", "ingest_daily", "ledger_kv", "login_codes", "rate_limits", "reports", "sessions"
+      "checkout_refs", "events", "exposures", "ingest_daily", "ledger_kv", "login_codes", "rate_limits", "reports", "sessions"
     ]);
     assert.ok(Object.values(seen.deletes).every((n) => n > 1), JSON.stringify(seen.deletes));
   }

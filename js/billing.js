@@ -145,7 +145,7 @@
     const paid = (c.plans || []).filter((p) => p.interval).map((p) => p.id);
     return [...new Set([preferredRail(region), ...named])].map((rail) => ({
       rail,
-      sellable: paid.some((id) => !!checkoutUrl(id, rail))
+      sellable: apiCheckoutEnabled(rail) || paid.some((id) => !!checkoutUrl(id, rail))
     }));
   }
 
@@ -494,8 +494,42 @@
       if (String(links.pro_monthly || "").trim() || String(links.pro_yearly || "").trim()) {
         return true;
       }
+      // A rail whose checkouts the worker opens has no link to paste and is on
+      // sale all the same: the terms, the health line and the pricing panel
+      // must read it that way.
+      if (apiCheckoutEnabled(rail)) return true;
     }
     return false;
+  }
+
+  /**
+   * Whether this build opens a rail's checkouts through the worker
+   * (`POST /v1/me/checkout`), bound to the signed-in account, instead of
+   * sending the buyer to a pasted payment link. Creem only: it is the one
+   * rail whose create-checkout API the worker calls (VG-83). Ships false;
+   * turning it on is the commit that opens sales on that rail.
+   * @param {string} rail Provider id.
+   * @returns {boolean}
+   */
+  function apiCheckoutEnabled(rail) {
+    return rail === "creem" && cfg().providers?.creem?.apiCheckout === true;
+  }
+
+  /**
+   * Whether the visitor could sign in from this browser right now, read the
+   * way the account panel reads it (js/app.js accountSignIn): an emailed code,
+   * or Google with a client id and a script that has not been refused. While
+   * the worker has not said which methods it offers, the answer is yes, so
+   * the gate holds rather than letting a payment through that sign-in could
+   * have owned (VG-88).
+   * @param {object} account `VTAccount.getState()`.
+   * @returns {boolean}
+   */
+  function signInOffered(account) {
+    const m = account && account.methods;
+    if (!m || m.ok === false) return true;
+    const google = !!m.google && !!m.googleClientId && account.googleReady !== false;
+    return !!m.email || google;
   }
 
   /**
@@ -639,6 +673,8 @@
     if (!PLAN_IDS.has(planId) || planId === "trial") {
       return { ok: false, mode: "invalid_plan", message: "Invalid plan id" };
     }
+    const viaWorker = workerCheckout(planId, providerId);
+    if (viaWorker) return viaWorker;
     const url = checkoutUrl(planId, providerId);
     if (url) {
       const refusal = checkoutRefusal(planId, providerId);
@@ -658,6 +694,82 @@
       message:
         "Checkout isn’t available yet. Keep practicing free."
     };
+  }
+
+  /**
+   * The checkout the worker opens for the signed-in account, when this rail
+   * is sold that way: a refusal now, or `mode: "opening"` with `done`, a
+   * promise of the same shape `startCheckout` returns once the worker has
+   * answered (it navigates on success). Null when the rail is not sold
+   * through the worker, or when nobody is signed in and nobody can sign in
+   * from this browser: then the pasted link, if there is one, is the way to
+   * pay, and the licence is linked when they do sign in (VG-88).
+   * @param {string} planId Plan.
+   * @param {string|undefined} providerId Rail asked for, if any.
+   * @returns {Object|null}
+   */
+  function workerCheckout(planId, providerId) {
+    const rail = providerId || preferredRail(detectRegion());
+    if (!apiCheckoutEnabled(rail)) return null;
+    const account = accountState();
+    if (!account || !account.configured) return null;
+    if (!account.signedIn && !signInOffered(account) && checkoutUrl(planId, rail)) return null;
+    const refusal = checkoutRefusal(planId, rail);
+    if (refusal) return refusal;
+    if (!account.signedIn) {
+      // signInOffered is false and there is no link to fall back on.
+      return { ok: false, mode: "signin_required", plan: planId, provider: rail };
+    }
+    const rails = accountRails();
+    if (rails && rails.creemCheckout === false) {
+      return { ok: false, mode: "provider_unavailable", plan: planId, provider: rail };
+    }
+    return { ok: true, mode: "opening", plan: planId, provider: rail, done: openWorkerCheckout(planId, rail) };
+  }
+
+  /** What the page does with each refusal from `/v1/me/checkout`, by its reason. */
+  const WORKER_CHECKOUT_REFUSALS = {
+    no_session: "signin_required",
+    session_expired: "signin_required",
+    invalid_session: "signin_required",
+    rate_limited: "rate_limited",
+    checkout_unconfigured: "provider_unavailable",
+    plan_unavailable: "provider_unavailable",
+    accounts_not_configured: "provider_unavailable"
+  };
+
+  /**
+   * Ask the worker to open the checkout, then go there.
+   * @param {string} planId Plan.
+   * @param {string} rail Provider id.
+   * @returns {Promise<Object>} The `startCheckout`-shaped outcome.
+   */
+  function openWorkerCheckout(planId, rail) {
+    const ask = global.VTAccount?.openCheckout;
+    if (typeof ask !== "function") {
+      return Promise.resolve({ ok: false, mode: "provider_unavailable", plan: planId, provider: rail });
+    }
+    return ask({ plan: planId, provider: rail, returnPath: returnPathHere() })
+      .then((res) => {
+        const target = res && res.ok ? validateCheckoutUrl(res.url) : null;
+        if (target && target.ok) {
+          rememberCheckoutIntent(planId, rail);
+          window.location.assign(target.url);
+          return { ok: true, mode: "redirect", url: target.url, plan: planId, provider: rail };
+        }
+        const mode = WORKER_CHECKOUT_REFUSALS[res && res.reason] || "checkout_failed";
+        return { ok: false, mode, plan: planId, provider: rail, reason: (res && res.reason) || "error" };
+      })
+      .catch(() => ({ ok: false, mode: "checkout_failed", plan: planId, provider: rail, reason: "error" }));
+  }
+
+  /** This page's path, which is where the checkout sends the buyer back to (the worker adds the rest). */
+  function returnPathHere() {
+    try {
+      return window.location.pathname || "/";
+    } catch {
+      return "/";
+    }
   }
 
   /**
@@ -681,8 +793,14 @@
     // sign somebody in, it has to, before the money moves. The free trial
     // already works this way (trial_result outcome "needs_account" in
     // js/app.js); this is the same gate on the paid path.
+    // Only where sign-in can actually be offered in this browser, though: a
+    // content blocker that refuses Google's script on a deployment with no
+    // emailed codes used to leave the buyer with no way to pay at all, while
+    // the trial, asking the same question, let them through (VG-88). There the
+    // anonymous claim is the way in, and the page links the licence once they
+    // sign in (js/account.js adopt).
     const account = accountState();
-    if (account && account.configured && !account.signedIn) {
+    if (account && account.configured && !account.signedIn && signInOffered(account)) {
       return { ok: false, mode: "signin_required", plan: planId, provider: providerId || null };
     }
     // A rail the worker cannot honour is not a rail. Mercado Pago's webhook
@@ -1158,6 +1276,7 @@
     checkoutUrl,
     validateCheckoutUrl,
     linksConfigured,
+    apiCheckoutEnabled,
     getBillingHealth,
     handleReturnFromCheckout,
     resumePendingClaim,

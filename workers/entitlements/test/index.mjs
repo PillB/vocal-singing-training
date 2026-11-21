@@ -93,3 +93,7 @@ import "./address-block.test.mjs";
 // off account refused before any session or licence, and nosniff on every
 // answer (red team 2026-11-18, AUTHN-1/2/7).
 import "./sign-in-identity.test.mjs";
+// Checkouts the worker opens for a signed-in account, bound to it by the
+// request_id it chose, so a purchase reaches every device from the webhook
+// alone (VG-83), and the billing portal a subscriber cancels from.
+import "./checkout-bound.test.mjs";

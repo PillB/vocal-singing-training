@@ -52,11 +52,35 @@
    * only conversion this browser will ever report.
    */
   const LS_PAID_FIRST_KEY = "vt_pro_paid_first_v1";
+  /**
+   * A checkout whose link to the signed-in account the worker has not
+   * confirmed yet (VG-83). The return page's one link attempt used to be
+   * dropped on a 202 — the webhook later than the buyer, which Creem and
+   * Stripe document as ordinary — and the next load then cleared the Pro the
+   * buyer had just paid for. The reference is kept here and retried on every
+   * load, and a few times while the page stays open, until the worker answers
+   * for it or a week has passed.
+   */
+  const LS_PENDING_LINK_KEY = "vt_pending_link_v1";
+  const PENDING_LINK_MAX_AGE_MS = 7 * 86400000;
+  /** In-page retries after a 202; past the last one, the next load tries again. */
+  const LINK_RETRY_DELAYS_MS = [4000, 12000, 30000, 90000];
+  /** Answers after which retrying cannot help: malformed, unknown, or somebody else's. */
+  const LINK_FINAL_STATUSES = new Set([400, 404, 409]);
+  /** The rails a paid licence can come from (a grant or a trial has none of these). */
+  const PAID_RAILS = new Set(["creem", "stripe", "mercadopago"]);
   /** Google Identity Services, loaded on demand so a signed-out visitor pays nothing for it. */
   const GIS_SRC = "https://accounts.google.com/gsi/client";
 
   /** @type {{token: string, expiresAt: number}|null} */
   let session = null;
+  /** Licence ids this page has already asked the worker to link, so an answer cannot loop. */
+  const linkTried = new Set();
+  /** Link requests on their way, by body, so two callers asking at once send one. */
+  const linksInFlight = new Map();
+  /** The pending link's in-page retry timer, and how many delays it has used. */
+  let linkRetryTimer = null;
+  let linkRetryStep = 0;
   /** @type {object|null} Last `/v1/me` answer. */
   let snapshot = null;
   /**
@@ -333,13 +357,50 @@
     notePaidFirst(data && data.entitlement);
     if (data && data.token && global.VTLicense?.adopt) {
       await global.VTLicense.adopt(data.token, data.licenseId);
-    } else if (global.VTLicense?.clear) {
+    } else if (global.VTLicense?.clear && !(await keptByLinking())) {
       // Entitled to nothing right now: drop any token still lying around so the
       // UI cannot keep showing Pro after a gift was revoked.
       global.VTLicense.clear();
     }
     emit();
     return data;
+  }
+
+  /**
+   * The paid licence this browser holds that is not this account's yet, by
+   * id: one claimed on the way back from a checkout, or bought signed out.
+   * A token minted for an account carries `accountId`, and for that one the
+   * account's own answer is the truth (a revoked gift must end), so it is
+   * never returned here.
+   * @returns {string|null} Licence id, or null.
+   */
+  function heldPaidLicence() {
+    try {
+      const claims = global.VTLicense?.getClaims?.();
+      const id = global.VTLicense?.getStatus?.()?.licenseId;
+      if (!claims || claims.accountId || !PAID_RAILS.has(claims.provider)) return null;
+      return typeof id === "string" && /^[A-Za-z0-9_-]{43}$/.test(id) ? id : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Before dropping a paid licence the account does not show, ask the worker
+   * once to link it (VG-83: never clear a claimed licence before a link has
+   * been tried with its id). True when the licence is to be kept: the link
+   * worked (and its answer has been adopted), or the worker did not answer
+   * for it either way, in which case what the signature proves still stands.
+   * @returns {Promise<boolean>}
+   */
+  async function keptByLinking() {
+    const licenseId = heldPaidLicence();
+    if (!licenseId || linkTried.has(licenseId) || !session?.token) return false;
+    linkTried.add(licenseId);
+    const res = await linkCheckout({ licenseId });
+    // Dropped only on an answer that settles it (malformed, unknown, or
+    // another account's); offline, throttled or failing, the signature stands.
+    return res.ok || !LINK_FINAL_STATUSES.has(res.status);
   }
 
   /** Forget the session locally. Used on sign-out and on a rejected token. */
@@ -458,9 +519,14 @@
           stripe: typeof d.stripeConfigured === "boolean" ? d.stripeConfigured : null,
           mercadopago: typeof d.mercadopagoConfigured === "boolean" ? d.mercadopagoConfigured : null,
           creem: typeof d.creemConfigured === "boolean" ? d.creemConfigured : null,
+          // Whether the worker can open a Creem checkout bound to the account,
+          // and hand a subscriber the billing portal. Null from a worker too
+          // old to say, which, as above, is not a no.
+          creemCheckout: typeof d.creemCheckoutConfigured === "boolean" ? d.creemCheckoutConfigured : null,
+          creemPortal: typeof d.creemPortalConfigured === "boolean" ? d.creemPortalConfigured : null,
           ok: true
         }
-        : { stripe: null, mercadopago: null, creem: null, ok: false };
+        : { stripe: null, mercadopago: null, creem: null, creemCheckout: null, creemPortal: null, ok: false };
       railsPending = null;
       return rails;
     })();
@@ -510,6 +576,7 @@
     session = { token: res.data.sessionToken, expiresAt: res.data.expiresAt };
     writeSession(session);
     await adopt(res.data);
+    retryPendingLink().catch(() => {});
     return { ok: true, account: res.data.account };
   }
 
@@ -608,6 +675,7 @@
     session = { token: res.data.sessionToken, expiresAt: res.data.expiresAt };
     writeSession(session);
     await adopt(res.data);
+    retryPendingLink().catch(() => {});
     return { ok: true, account: res.data.account };
   }
 
@@ -701,17 +769,151 @@
    * @param {{provider?: string, sessionId?: string, licenseId?: string}} input Checkout reference.
    * @returns {Promise<{ok: boolean, reason?: string}>} Result.
    */
-  async function linkCheckout(input) {
+  function linkCheckout(input, options) {
+    const body = linkBody(input);
+    const persist = !!(options && options.persist);
+    // Written before asking, so a tab closed mid-request still retries on the next load.
+    if (persist) writePendingLink(body);
+    // The return page and the load's own retry ask for the same reference
+    // within a moment of each other; one request answers both.
+    const key = JSON.stringify(body);
+    if (!linksInFlight.has(key)) {
+      linksInFlight.set(key, sendLink(body, persist).finally(() => linksInFlight.delete(key)));
+    }
+    return linksInFlight.get(key);
+  }
+
+  /** One `/v1/me/link` request, and what its answer does to the pending reference. */
+  async function sendLink(body, persist) {
+    const res = await request("POST", "/v1/me/link", body);
+    // Only the account's own answer is a link. A 202 is fetch's "ok" too, and
+    // its body ({ok: false, reason: "pending"}) is the webhook not having
+    // landed: taken for a link, it cleared the reference and replaced the
+    // account snapshot with a body that has no account in it (VG-83).
+    if (res.ok && res.data?.ok === true) {
+      if (persist || samePendingLink(body)) writePendingLink(null);
+      await adopt(res.data);
+      return { ok: true, status: res.status };
+    }
+    settlePendingLink(body, res.status, persist);
+    return { ok: false, status: res.status, reason: res.data?.reason || (res.status === 0 ? "offline" : "error") };
+  }
+
+  /** The `/v1/me/link` body for a checkout reference or a licence id. */
+  function linkBody(input) {
     const body = {};
     if (input && input.licenseId) body.licenseId = String(input.licenseId);
     if (input && input.provider) body.provider = String(input.provider);
     if (input && input.sessionId) body.sessionId = String(input.sessionId);
-    const res = await request("POST", "/v1/me/link", body);
-    if (res.ok && res.data) {
-      await adopt(res.data);
-      return { ok: true };
+    return body;
+  }
+
+  /**
+   * After a link the worker did not make: forget the reference when retrying
+   * cannot help (malformed, unknown, or somebody else's), otherwise try again
+   * later — 202 (the webhook has not landed), 429, 401 until they sign in
+   * again, offline and 5xx alike.
+   */
+  function settlePendingLink(body, status, persist) {
+    if (LINK_FINAL_STATUSES.has(status) && samePendingLink(body)) {
+      writePendingLink(null);
+    } else if (persist) {
+      scheduleLinkRetry();
     }
-    return { ok: false, reason: res.data?.reason || (res.status === 0 ? "offline" : "error") };
+  }
+
+  /** The checkout reference still waiting to be linked, or null; a week-old one is dropped. */
+  function readPendingLink() {
+    try {
+      const rec = JSON.parse(localStorage.getItem(LS_PENDING_LINK_KEY) || "null");
+      if (!rec || typeof rec !== "object" || !(rec.sessionId || rec.licenseId)) return null;
+      if (!(Date.now() - Number(rec.at) < PENDING_LINK_MAX_AGE_MS)) {
+        localStorage.removeItem(LS_PENDING_LINK_KEY);
+        return null;
+      }
+      return rec;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Keep (or, with null, forget) the reference to link; keeps the first time it was asked for. */
+  function writePendingLink(body) {
+    try {
+      if (!body) {
+        localStorage.removeItem(LS_PENDING_LINK_KEY);
+        return;
+      }
+      const prev = readPendingLink();
+      const at = samePendingLink(body, prev) ? prev.at : Date.now();
+      localStorage.setItem(LS_PENDING_LINK_KEY, JSON.stringify({ ...body, at }));
+    } catch {
+      /* private mode: the in-page retries still run */
+    }
+  }
+
+  /** Whether a link body names the pending reference. */
+  function samePendingLink(body, pending) {
+    const rec = pending === undefined ? readPendingLink() : pending;
+    if (!rec || !body) return false;
+    return (!!body.sessionId && body.sessionId === rec.sessionId && body.provider === rec.provider)
+      || (!!body.licenseId && body.licenseId === rec.licenseId);
+  }
+
+  /** Try the pending link again after the next delay, while the page stays open. */
+  function scheduleLinkRetry() {
+    if (linkRetryTimer || linkRetryStep >= LINK_RETRY_DELAYS_MS.length) return;
+    const delay = LINK_RETRY_DELAYS_MS[linkRetryStep];
+    linkRetryStep += 1;
+    linkRetryTimer = setTimeout(() => {
+      linkRetryTimer = null;
+      retryPendingLink().catch(() => {});
+    }, delay);
+  }
+
+  /**
+   * Link the pending checkout now, if there is one and somebody is signed in:
+   * on every load, after a sign-in, and on the in-page schedule.
+   * @returns {Promise<{ok: boolean, reason?: string}|null>} The answer, or null with nothing pending.
+   */
+  function retryPendingLink() {
+    const rec = readPendingLink();
+    if (!rec || !session?.token) return Promise.resolve(null);
+    const { at, ...body } = rec;
+    return linkCheckout(body, { persist: true });
+  }
+
+  /**
+   * Ask the worker to open a checkout bound to this account
+   * (`POST /v1/me/checkout`); js/billing.js navigates to the answer.
+   * @param {{plan: string, provider?: string, returnPath?: string}} input What to buy.
+   * @returns {Promise<{ok: boolean, url?: string, reason?: string}>} Result.
+   */
+  async function openCheckout(input) {
+    if (!session?.token) return { ok: false, reason: "no_session" };
+    const res = await request("POST", "/v1/me/checkout", {
+      plan: String(input?.plan || ""),
+      provider: String(input?.provider || "creem"),
+      returnPath: String(input?.returnPath || "/")
+    }, { timeoutMs: 20000 });
+    if (res.ok && res.data?.url) return { ok: true, url: String(res.data.url) };
+    return { ok: false, status: res.status, reason: res.data?.reason || (res.status === 0 ? "offline" : "error") };
+  }
+
+  /**
+   * The page where a subscriber manages or cancels (`POST /v1/me/billing-portal`).
+   * @returns {Promise<{ok: boolean, url?: string, reason?: string, providers?: string[]}>} Result.
+   */
+  async function openBillingPortal() {
+    if (!session?.token) return { ok: false, reason: "no_session" };
+    const res = await request("POST", "/v1/me/billing-portal", {}, { timeoutMs: 15000 });
+    if (res.ok && res.data?.url) return { ok: true, url: String(res.data.url) };
+    return {
+      ok: false,
+      status: res.status,
+      reason: res.data?.reason || (res.status === 0 ? "offline" : "error"),
+      providers: Array.isArray(res.data?.providers) ? res.data.providers : []
+    };
   }
 
   /**
@@ -817,6 +1019,7 @@
       /* ignore */
     }
     await refresh();
+    retryPendingLink().catch(() => {});
     return getState();
   }
 
@@ -840,6 +1043,9 @@
     startTrial,
     redeem,
     linkCheckout,
+    retryPendingLink,
+    openCheckout,
+    openBillingPortal,
     request,
     LS_KEY
   };

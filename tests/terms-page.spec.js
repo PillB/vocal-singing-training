@@ -83,7 +83,9 @@ test.describe("terms of use", () => {
     const config = fs.readFileSync(path.join(ROOT, "js", "billing-config.js"), "utf8");
     // The links live as `pro_monthly: ""` / `pro_yearly: ""` under each provider.
     const links = [...config.matchAll(/pro_(?:monthly|yearly):\s*"([^"]*)"/g)].map((m) => m[1]);
-    const anyLink = links.some((value) => value.trim() !== "");
+    // A rail whose checkouts the worker opens is on sale with no link at all.
+    const apiCheckout = /apiCheckout:\s*true/.test(config);
+    const anyLink = apiCheckout || links.some((value) => value.trim() !== "");
 
     await page.goto(BASE + "/terms.html", { waitUntil: "domcontentloaded" });
     const body = await page.locator("main").textContent();
@@ -96,6 +98,29 @@ test.describe("terms of use", () => {
       expect(body).toMatch(/Hoy no hay nada en venta/);
       expect(body).toMatch(/Nothing is on sale today/);
     }
+  });
+
+  // VG-86 and Creem's merchant terms (3.7). The cancel section promised "the
+  // management link that will appear in the Pro window", a link that could not
+  // appear on any live rail, and nothing said who sells the subscription. The
+  // button's name is read from js/i18n.js, so renaming the button without the
+  // terms (or the other way round) turns this red.
+  test("both halves name who sells the subscription and send a canceller to the button that exists", async ({ page }) => {
+    const i18n = fs.readFileSync(path.join(ROOT, "js", "i18n.js"), "utf8");
+    const manage = [...i18n.matchAll(/"pricing\.manage": "([^"]+)"/g)].map((m) => m[1]);
+    expect(manage, "pricing.manage in both languages").toHaveLength(2);
+    await page.goto(BASE + "/terms.html", { waitUntil: "domcontentloaded" });
+    const halves = {
+      es: (await page.locator("main").evaluate((m) => [...m.children].filter((c) => c.tagName !== "SECTION").map((c) => c.textContent).join(" "))).replace(/\s+/g, " "),
+      en: (await page.locator("main section[lang=en]").textContent()).replace(/\s+/g, " ")
+    };
+    const [manageEs, manageEn] = manage;
+    for (const [lang, text, button] of [["es", halves.es, manageEs], ["en", halves.en, manageEn]]) {
+      expect(text, `${lang}: the merchant of record is named`).toMatch(/Creem.{0,4}\(Armitage Labs OÜ, Estonia\)/);
+      expect(text, `${lang}: the cancel route is the button the app shows`).toContain(button);
+      expect(text, `${lang}: the old promise of a link that never appears`).not.toMatch(/que aparecerá en la ventana|that will appear in the Pro window/);
+    }
+    await expect(page.locator('main a[href="https://www.creem.io/buyer-terms"]')).toHaveCount(2);
   });
 
   test("the app and the privacy page both reach it, in both languages", async ({ page }) => {

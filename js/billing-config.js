@@ -131,7 +131,21 @@
         links: {
           pro_monthly: "", // e.g. https://www.creem.io/payment/prod_xxxx
           pro_yearly: ""
-        }
+        },
+        /**
+         * Open this rail's checkouts through the worker (POST /v1/me/checkout)
+         * instead of a pasted link: the worker creates the Creem checkout for
+         * the signed-in account and links the purchase inside the webhook, so
+         * a webhook later than the buyer cannot lose them their Pro (VG-83).
+         * Needs CREEM_API_KEY, the product ids and the webhook secret on the
+         * worker; /v1/health says `creemCheckoutConfigured` when it has them.
+         *
+         * Ships false. Setting it to true is the commit that puts Pro on sale
+         * on this rail (docs/40-GO-LIVE-GATE.md step 5), exactly as pasting a
+         * link used to be. The links above stay as the way to pay for a
+         * browser that cannot sign in at all (VG-88), and may stay empty.
+         */
+        apiCheckout: false
       },
       /**
        * Kept, not used. The worker still verifies and maps Stripe webhooks, so

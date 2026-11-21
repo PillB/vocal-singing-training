@@ -99,6 +99,51 @@ export async function getAccountByEmail(db, email) {
 }
 
 /**
+ * The account a provider identity already belongs to (the account it first
+ * signed in to), or null. Google keeps `sub` for the life of a Google
+ * account while its email can change, so this, not the email, is who is
+ * signing in (red team AUTHN-1).
+ * @param {Object} db D1 binding.
+ * @param {string} provider One of IDENTITY_PROVIDERS.
+ * @param {string} subject Provider-side subject.
+ * @returns {Promise<Object|null>} Account row or null.
+ */
+export async function getAccountByIdentity(db, provider, subject) {
+  if (!subject) {
+    return null;
+  }
+  return (
+    (await db
+      .prepare(
+        `SELECT accounts.* FROM identities JOIN accounts ON accounts.id = identities.account_id
+         WHERE identities.provider = ?1 AND identities.subject = ?2`
+      )
+      .bind(provider, String(subject).slice(0, 255))
+      .first()) || null
+  );
+}
+
+/**
+ * The subjects an account has signed in with through one provider.
+ * @param {Object} db D1 binding.
+ * @param {string} accountId Account id.
+ * @param {string} provider One of IDENTITY_PROVIDERS.
+ * @returns {Promise<string[]>} Subjects, oldest first.
+ */
+export async function identitySubjects(db, accountId, provider) {
+  const { results } = await db
+    .prepare("SELECT subject FROM identities WHERE account_id = ?1 AND provider = ?2 ORDER BY created_at")
+    .bind(accountId, provider)
+    .all();
+  return (results || []).map((row) => row.subject);
+}
+
+/** Whether an account row has been switched off by an operator. */
+export function isDisabled(account) {
+  return Boolean(account) && account.disabled_at !== null && account.disabled_at !== undefined;
+}
+
+/**
  * Find or create the account for an email.
  *
  * The insert uses `ON CONFLICT DO NOTHING` and then re-reads, so two sign-ins
@@ -190,19 +235,73 @@ export async function recordIdentity(db, accountId, provider, subject, now) {
  * @returns {Promise<{token: string, sessionId: string, expiresAt: number}>} The token, once.
  */
 export async function createSession(db, accountId, now) {
-  const at = nowSec(now);
+  const session = await newSession(nowSec(now));
+  await insertSession(db, session, accountId).run();
+  return { token: session.token, sessionId: session.sessionId, expiresAt: session.expiresAt };
+}
+
+/**
+ * A fresh session's token, its hash, its id and when it ends; nothing stored.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{token: string, tokenHash: string, sessionId: string, at: number, expiresAt: number}>} Session.
+ */
+async function newSession(at) {
   const token = mintToken();
-  const tokenHash = await sha256Hex(token);
-  const sessionId = mintId("sess");
-  const expiresAt = at + SESSION_TTL_SECONDS;
-  await db
+  return { token, tokenHash: await sha256Hex(token), sessionId: mintId("sess"), at, expiresAt: at + SESSION_TTL_SECONDS };
+}
+
+/**
+ * The statement that stores a session, optionally only when `when` holds as
+ * it runs; `when` may use ?6 onwards from `extra`.
+ * @param {Object} db D1 binding.
+ * @param {Object} session From `newSession`.
+ * @param {string} accountId Account id.
+ * @param {string} [when] SQL condition.
+ * @param {unknown[]} [extra] Values for the condition.
+ * @returns {Object} Prepared statement.
+ */
+function insertSession(db, session, accountId, when, extra) {
+  return db
     .prepare(
       `INSERT INTO sessions (id, account_id, token_hash, created_at, expires_at, last_seen_at, revoked_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?4, NULL)`
+       SELECT ?1, ?2, ?3, ?4, ?5, ?4, NULL WHERE ${when || "1"}`
     )
-    .bind(sessionId, accountId, tokenHash, at, expiresAt)
-    .run();
-  return { token, sessionId, expiresAt };
+    .bind(session.sessionId, accountId, session.tokenHash, session.at, session.expiresAt, ...(extra || []));
+}
+
+/**
+ * Spend a checked login code and open a session with it, as one transaction
+ * (a D1 batch, with nothing run in between): the session is written only
+ * while the code is unspent, and the code is spent in the same breath. Of two
+ * requests holding the same right code, one gets a session and the other
+ * gets null.
+ *
+ * Spending the code used to come first, in a write of its own, before the
+ * account, identity and session writes; any failure after it (a D1 error, the
+ * worker stopped) left the person with a spent code and no session, and the
+ * retry was told the code was gone (audit D1-2).
+ *
+ * @param {Object} db D1 binding.
+ * @param {string} codeId The code's row id, from `checkLoginCode`.
+ * @param {string} accountId Account id.
+ * @param {number} [now] Injected clock.
+ * @returns {Promise<{token: string, sessionId: string, expiresAt: number}|null>} The session, or null.
+ */
+export async function startSessionWithCode(db, codeId, accountId, now) {
+  const session = await newSession(nowSec(now));
+  const [opened] = await db.batch([
+    insertSession(db, session, accountId, "EXISTS (SELECT 1 FROM login_codes WHERE id = ?6 AND consumed_at IS NULL)", [codeId]),
+    db
+      .prepare(
+        `UPDATE login_codes SET consumed_at = ?2
+         WHERE id = ?1 AND consumed_at IS NULL`
+      )
+      .bind(codeId, session.at)
+  ]);
+  if (changedRows(opened) === 0) {
+    return null;
+  }
+  return { token: session.token, sessionId: session.sessionId, expiresAt: session.expiresAt };
 }
 
 /**
@@ -238,7 +337,7 @@ export async function resolveSession(db, token, now) {
   if (!account) {
     return { ok: false, reason: "no_account" };
   }
-  if (account.disabled_at !== null && account.disabled_at !== undefined) {
+  if (isDisabled(account)) {
     return { ok: false, reason: "disabled" };
   }
   if (at - Number(session.last_seen_at) > 3600) {
@@ -292,19 +391,22 @@ export async function issueLoginCode(db, email, now) {
   if (!normalized) {
     throw new Error("invalid_email");
   }
-  await db
-    .prepare("UPDATE login_codes SET consumed_at = ?2 WHERE email_normalized = ?1 AND consumed_at IS NULL")
-    .bind(normalized, at)
-    .run();
   const code = mintLoginCode();
   const expiresAt = at + LOGIN_CODE_TTL_SECONDS;
-  await db
-    .prepare(
-      `INSERT INTO login_codes (id, email_normalized, code_hash, created_at, expires_at, consumed_at, attempts)
-       VALUES (?1, ?2, ?3, ?4, ?5, NULL, 0)`
-    )
-    .bind(mintId("code"), normalized, await sha256Hex(`${normalized}:${code}`), at, expiresAt)
-    .run();
+  // One batch, so the older code is retired and the new one stored in one
+  // transaction: two requests for one address used to interleave the two
+  // writes and leave both codes live (audit D1-4).
+  await db.batch([
+    db
+      .prepare("UPDATE login_codes SET consumed_at = ?2 WHERE email_normalized = ?1 AND consumed_at IS NULL")
+      .bind(normalized, at),
+    db
+      .prepare(
+        `INSERT INTO login_codes (id, email_normalized, code_hash, created_at, expires_at, consumed_at, attempts)
+         VALUES (?1, ?2, ?3, ?4, ?5, NULL, 0)`
+      )
+      .bind(mintId("code"), normalized, await sha256Hex(`${normalized}:${code}`), at, expiresAt)
+  ]);
   return { code, expiresAt };
 }
 
@@ -321,6 +423,34 @@ export async function issueLoginCode(db, email, now) {
  * @returns {Promise<{ok: boolean, reason?: string}>} Result.
  */
 export async function consumeLoginCode(db, email, code, now) {
+  const at = nowSec(now);
+  const checked = await checkLoginCode(db, email, code, at);
+  if (!checked.ok) {
+    return checked;
+  }
+  // Right, and once: whoever flips this row is the one who signs in. Without
+  // the guard, five parallel submissions of the same right code signed in five
+  // times, which is not what "single use" means. The sign-in route spends it
+  // together with the session instead (`startSessionWithCode`).
+  const consumed = await db
+    .prepare("UPDATE login_codes SET consumed_at = ?2 WHERE id = ?1 AND consumed_at IS NULL")
+    .bind(checked.codeId, at)
+    .run();
+  return changedRows(consumed) > 0 ? { ok: true } : { ok: false, reason: "no_code" };
+}
+
+/**
+ * Judge an emailed login code without spending it: the newest live code for
+ * the address, with one guess taken off its allowance first.
+ *
+ * @param {Object} db D1 binding.
+ * @param {string} email Email in any case.
+ * @param {string} code Submitted code.
+ * @param {number} [now] Injected clock.
+ * @returns {Promise<{ok: boolean, reason?: string, codeId?: string}>} Result,
+ *   with the code's row id when it is right.
+ */
+export async function checkLoginCode(db, email, code, now) {
   const at = nowSec(now);
   const normalized = normalizeEmail(email);
   const submitted = String(code || "").replace(/\D/g, "");
@@ -394,14 +524,7 @@ export async function consumeLoginCode(db, email, code, now) {
       .run();
     return { ok: false, reason: changedRows(burned) > 0 ? "too_many_attempts" : "bad_code" };
   }
-  // Right, and once: whoever flips this row is the one who signs in. Without
-  // the guard, five parallel submissions of the same right code signed in five
-  // times, which is not what "single use" means.
-  const consumed = await db
-    .prepare("UPDATE login_codes SET consumed_at = ?2 WHERE id = ?1 AND consumed_at IS NULL")
-    .bind(row.id, at)
-    .run();
-  return changedRows(consumed) > 0 ? { ok: true } : { ok: false, reason: "no_code" };
+  return { ok: true, codeId: row.id };
 }
 
 /**

@@ -135,7 +135,12 @@ test.describe("Ads scaffold", () => {
 // three lived; each of these tests dies on one of them (SP1, SP2, SP3 in qa/mutate.mjs) and passes
 // on the code before the split as well.
 test.describe("What the split of the ad slots must keep", () => {
-  /** Ads on for a purely free visitor, in `mode`, with the throttle clocks cleared. */
+  /**
+   * Ads on for a purely free visitor, in `mode`. The app's own billing paint can
+   * render the home slot at any moment after boot, and that sets the slot's
+   * throttle clock, so each test clears the clocks with `__vtClearAdClocks()`
+   * in the same evaluate as the render it checks: nothing can run in between.
+   */
   async function adsOn(page, mode, extra) {
     await boot(page);
     await page.route("https://pagead2.googlesyndication.com/**", (route) => route.abort("blockedbyclient"));
@@ -144,9 +149,12 @@ test.describe("What the split of the ad slots must keep", () => {
       c.adsEnabled = true;
       c.mode = mode;
       Object.assign(c, extra || {});
-      for (const key of ["vt_billing_v1", "vt_billing_trial_started_v1", "vt_ads_last_home_v1", "vt_ads_last_post_v1"]) {
+      for (const key of ["vt_billing_v1", "vt_billing_trial_started_v1"]) {
         localStorage.removeItem(key);
       }
+      window.__vtClearAdClocks = () => {
+        for (const key of ["vt_ads_last_home_v1", "vt_ads_last_post_v1"]) localStorage.removeItem(key);
+      };
     }, { mode, extra });
   }
 
@@ -157,6 +165,7 @@ test.describe("What the split of the ad slots must keep", () => {
       card.href = "#pricing";
       card.action = "open-pricing";
       card.slots = ["home", "post-session", "history"];
+      window.__vtClearAdClocks();
       return {
         first: VTAds.renderSlot("home"),
         again: VTAds.renderSlot("home"),
@@ -174,6 +183,7 @@ test.describe("What the split of the ad slots must keep", () => {
       window.VT_ADS_CONFIG.nativeCards.forEach((card) => {
         card.slots = [];
       });
+      window.__vtClearAdClocks();
       const out = VTAds.renderSlot("home");
       return { out, body: document.querySelector("#ad-slot-home .ad-native-body")?.textContent };
     });
@@ -184,6 +194,7 @@ test.describe("What the split of the ad slots must keep", () => {
   test("SP3 the post-session slot borrows the home AdSense unit, since it has none of its own", async ({ page }) => {
     await adsOn(page, "adsense", { adsense: { client: "ca-pub-0000000000000000", slots: { home: "1111111111" } } });
     const r = await page.evaluate(() => {
+      window.__vtClearAdClocks();
       const out = VTAds.renderSlot("post-session");
       return { out, unit: document.querySelector("#ad-slot-post-session ins.adsbygoogle")?.getAttribute("data-ad-slot") };
     });

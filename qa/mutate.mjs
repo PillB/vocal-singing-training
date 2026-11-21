@@ -6,9 +6,9 @@
  * suite that stays green on a mutant is not testing that behaviour, however
  * high its coverage. Ported from the QA thread's mutate.py (2026-11-01).
  *
- *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets)
+ *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets, ledger)
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage a11y flows regress billing scoring controls audit toast designs splits  # browser sets: need Playwright's Chromium
+ *   node qa/mutate.mjs stage a11y flows regress boot billing scoring controls audit toast designs splits  # browser sets: need Playwright's Chromium
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -46,6 +46,8 @@ const LINT_TESTS = ["qa/lint-gate.test.mjs", "tests/node/asset-versions.test.mjs
 const node = (tests) => [process.execPath, "--test", "--test-timeout=30000", ...tests];
 const EVIDENCE = "tests/node/evidence-ledger.test.mjs";
 const READINGS = "tests/node/evidence-readings.test.mjs";
+// A D1 batch (one transaction) replaced by the same statements run one by one, for the ledger set.
+const SEQUENTIAL = "(async (list) => { const out = []; for (const s of list) out.push(await s.run()); return out; })([";
 const PIANO_SPEC = [
   process.execPath,
   "node_modules/@playwright/test/cli.js",
@@ -59,6 +61,11 @@ const PIANO_SPEC = [
 ];
 // The 15 s rule for a rated take, on a clock the test owns (production-contracts "short of 15 seconds").
 const TAKE_SPEC = [...PIANO_SPEC.slice(0, -1), "short of 15 seconds"];
+// The stage in a 1280x560 window: the picture whole, the stage on the window (stage-design).
+const SHORT_SPEC = [...PIANO_SPEC.slice(0, 3), "tests/stage-design.spec.js", "--project=chromium", "--workers=1", "--reporter=dot", "-g", "short laptop window"];
+// The nightly fullscreen sweep's mouse (tests/helpers/fullscreen-clicks.js), held by a spec that runs on every PR.
+const HARNESS_SPEC = [...PIANO_SPEC.slice(0, 3), "tests/fullscreen-click-harness.spec.js", "--project=chromium", "--workers=2", "--reporter=dot"];
+const START_POINT_SPEC = [...PIANO_SPEC.slice(0, 3), "tests/sweep-start-point.spec.js", "--project=chromium", "--workers=2", "--reporter=dot"];
 // QA-66. The tap-floor allowance for float32 geometry (tests/helpers/tap-floor.js), judged by its own spec.
 const TAP_SPEC = [...PIANO_SPEC.slice(0, 3), "tests/tap-floor.spec.js", "--project=chromium", "--workers=2", "--reporter=dot"];
 const FLOW_SPEC = [
@@ -164,7 +171,7 @@ export const MUTANTS = {
     ["SYR1 a save's timer still pending sends the refused write again (PR #21 merge)", "js/sync.js", "      const res = standingRefusal(id) ? { ok: false, reason: \"refused\" } : await syncNow(id);", "      const res = await syncNow(id);"],
     ["SYR2 a change made while the refused write was out is taken as refused, and never sent", "js/sync.js", "      noteRefusal(profileId, result, before);", "      noteRefusal(profileId, result, version);"],
     ["SYR3 a refusal outlives every later change", "js/sync.js", "    return refusal && (changedAt.get(profileId) || 0) <= refusal.before ? refusal : null;", "    return refusal || null;"],
-    ["SYR4 a sign-out keeps the last account's refusal", "js/sync.js", "        refusals.clear();\n", ""],
+    ["SYR4 a sign-out keeps the last account's refusal", "js/sync.js", "    refusals.clear();\n", ""],
     ["SYR5 a profile that went up after a refused one hides why that one did not", "js/sync.js", "      refusedReason = failed.reason === \"refused\" ? refusals.get(failed.id)?.reason || null : null;\n", ""],
     ["SYR6 a profile the account took is still treated as refused", "js/sync.js", "    if (result && result.ok) refusals.delete(profileId);\n    else if", "    if (result && result.ok) return;\n    if"],
     ["M22 the first match in a periodic tail, not the nearest", "js/voice-features.js", "if (j === K && (best == null || Math.abs(k - est) < Math.abs(best - est))) best = k;", "if (j === K && best == null) best = k;"],
@@ -337,6 +344,25 @@ export const MUTANTS = {
     ["L42 a wider connect-src written first: the browser enforces it, both CSP gates read the later, narrower one (QA-68)","index.html","connect-src ","connect-src *; connect-src ",["tests/node/csp-effective-policy.test.mjs"]],
     ["L43 the base branch's name is pasted into the complexity step's shell line again (QA round 11, CI-1)", ".github/workflows/quality.yml", "        env:\n          BASE_REF: ${{ github.base_ref }}\n        run: node qa/lint-complexity.mjs --baseline-ref \"origin/$BASE_REF\"", "        run: node qa/lint-complexity.mjs --baseline-ref \"origin/${{ github.base_ref }}\"", ["tests/node/workflow-injection.test.mjs"]],
     ["L26 an English drill loses its fifth step: two languages, two drills (QA-34)", "js/exercises-data.js", '        "Then tell a 60 s story using at least 3 levels, on purpose.",\n        "Keep the same clarity and diction at every level."\n      ],', '        "Then tell a 60 s story using at least 3 levels, on purpose."\n      ],', ["tests/node/exercise-parity.test.mjs"]],
+    ["L48 the first paint's mutation set is left out of CI's matrix: its mutants never run", ".github/workflows/quality.yml", "regress, boot, billing", "regress, billing", ["tests/node/mutation-matrix.test.mjs"]],
+    // The six-format mouse sweep in two jobs (nightly voice-and-live ran out of its 80 min from Nov 9 to 17).
+    ["L49 the second half of the mouse sweep leaves the fullscreen format out: no nightly job runs it", ".github/workflows/quality.yml", 'formats: "tablet,short,fullscreen"', 'formats: "tablet,short"', ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L50 the mouse sweep's job does not hand its formats to the spec, so both halves run all six and time out", ".github/workflows/quality.yml", "        env:\n          FORENSICS_FORMATS: ${{ matrix.formats }}\n", "", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    // Exactly the old matrix: a valid partition, which only the alone-in-its-jobs check (mouseSweepAlone) catches.
+    ["L51 the mouse sweep goes back into one job beside the live forensics, about 109 min against 80", ".github/workflows/quality.yml", 'specs: "tests/exercise-live-forensics.spec.js"\n          - group: formats-1-of-2\n            specs: "tests/headed-exercise-forensics.spec.js"\n            formats: "desktop,mobile,mobile-land"\n          - group: formats-2-of-2\n            specs: "tests/headed-exercise-forensics.spec.js"\n            formats: "tablet,short,fullscreen"', 'specs: "tests/exercise-live-forensics.spec.js tests/headed-exercise-forensics.spec.js"', ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L52 the live Pages smoke writes to the default test-results/ again, emptying it of a red fullscreen step's traces before the upload", ".github/workflows/quality.yml", ' --output="test-results/live-pages"', "", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    // What the mouse sweep does with its job's formats: the spec runs only at night, so the helper it reads them with is judged here.
+    ["L53 the mouse sweep reads another name than the one its job sets, so both halves run all six formats and time out", "tests/helpers/forensics-formats.js", "String(env.FORENSICS_FORMATS || \"\")", "String(env.FORENSICS_FORMAT || \"\")", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L54 a misspelt format is dropped without a word, so no job runs it", "tests/helpers/forensics-formats.js", "  if (unknown.length) {", "  if (false) {", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L55 a part's Start budget rounds up, so three jobs of two formats tolerate six failed Starts where one run tolerated four", "tests/helpers/forensics-formats.js", "Math.floor((START_FAIL_BUDGET * n)", "Math.ceil((START_FAIL_BUDGET * n)", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L56 the mouse sweep runs all six formats whatever its job names", "tests/headed-exercise-forensics.spec.js", "const formats = selectFormats(process.env);", "const formats = selectFormats({});", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L57 each half of the mouse sweep tolerates four failed Starts again, eight in all", "tests/headed-exercise-forensics.spec.js", "const p0Budget = startFailBudget(formats.length);", "const p0Budget = 4;", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L58 the mouse sweep presses Start's centre wherever it is again, under the sticky Back button", "tests/headed-exercise-forensics.spec.js", "const startPt = await clickablePoint(page, \"#btn-practice-start\");", "const startPt = await centerIfVisible(page, \"#btn-practice-start\");", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    ["L59 the mouse sweep presses a Start it was told is covered", "tests/headed-exercise-forensics.spec.js", "if (startPt && !startPt.covered) {", "if (startPt) {", ["tests/node/nightly-sweep-contract.test.mjs"]],
+    // A red mutation set in CI is read from its traces (PR #46: the boot set's baseline failed on one frame of 500, and left nothing to read).
+    ["L60 a red mutation job uploads nothing: a baseline that fails only in CI can be re-run, not read", ".github/workflows/quality.yml", "      - name: Preserve a red set's traces\n        if: failure()\n        uses: actions/upload-artifact@v4\n        with:\n          name: mutation-failures-${{ matrix.set }}\n          path: test-results/\n          if-no-files-found: ignore\n", "", ["tests/node/mutation-matrix.test.mjs"]],
+    ["L61 a mutation job uploads its traces only when it is green", ".github/workflows/quality.yml", "      - name: Preserve a red set's traces\n        if: failure()\n", "      - name: Preserve a red set's traces\n", ["tests/node/mutation-matrix.test.mjs"]],
+    ["L62 every mutation job uploads under one name: the second red set's traces are refused", ".github/workflows/quality.yml", "          name: mutation-failures-${{ matrix.set }}\n", "          name: mutation-failures\n", ["tests/node/mutation-matrix.test.mjs"]],
     ["L7 empty wait-may-fail reason accepted", "qa/lint-playwright-waits.mjs", "/wait-may-fail:\\s*\\S/", "/wait-may-fail:/"]
   // A mutant that edits a hashed asset (js/css) turns "every versioned asset matches its recorded content" red whatever
   // else is wrong, so it names the one test it is meant to be judged by (red-team: L25 and L26 were killed by the manifest).
@@ -424,7 +450,20 @@ export const MUTANTS = {
     ["S8 a take of exactly 15 s is not long enough to rate (the line moved a tick up)", "js/app.js", "if (state.sessionPractice.everStarted && practiced >= required) return true;", "if (state.sessionPractice.everStarted && practiced > required) return true;", TAKE_SPEC],
     ["S9 the tap-floor allowance is zero again: a 44 px box 43,99999 mid hover lift is too small (QA-66, CI red on be702cf)", "tests/helpers/tap-floor.js", "const TAP_FLOOR_EPSILON = 0.05;", "const TAP_FLOOR_EPSILON = 0;", TAP_SPEC],
     ["S10 the tap-floor allowance is 0,6 px: a 43,5 px control clears the 44 px floor (QA-66)", "tests/helpers/tap-floor.js", "const TAP_FLOOR_EPSILON = 0.05;", "const TAP_FLOOR_EPSILON = 0.6;", TAP_SPEC],
-    ["S11 the tap-floor allowance is a whole pixel: a 43 px control clears the 44 px floor (QA-66)", "tests/helpers/tap-floor.js", "const TAP_FLOOR_EPSILON = 0.05;", "const TAP_FLOOR_EPSILON = 1;", TAP_SPEC]
+    ["S11 the tap-floor allowance is a whole pixel: a 43 px control clears the 44 px floor (QA-66)", "tests/helpers/tap-floor.js", "const TAP_FLOOR_EPSILON = 0.05;", "const TAP_FLOOR_EPSILON = 1;", TAP_SPEC],
+    // A short laptop window (stage-design "short laptop window"): the guide gives its room up before the picture is cut or the stage grows.
+    ["S12 the guide is fitted beside the room the picture was left, not the room it needs: the picture is cut under a guide that kept its steps", "js/app.js", "return { left, whole: left - (shown ? panelShortfall(panel) : 0) };", "return { left, whole: left };", SHORT_SPEC],
+    ["S13 the stage grows past the window before the guide gives its steps back to the picture", "js/app.js", "const over = panelShortfall(wrap) - guideYield(wrap);", "const over = panelShortfall(wrap);", SHORT_SPEC],
+    ["S14 the guide counts its button as room it can give back, so the stage does not grow and the picture stays cut", "js/app.js", "return Math.max(0, guide.offsetHeight - bare);", "return guide.offsetHeight;", SHORT_SPEC],
+    // The fullscreen sweep's mouse: red every night from Nov 12 on a toggle 5 px under a 1080 px screen.
+    ["S15 the click harness scrolls to a control under the window's edge, then fits the stage again, whose scrollTo(0, 0) puts it back under the edge", "tests/helpers/fullscreen-clicks.js", "    await page.locator(sel).scrollIntoViewIfNeeded().catch(() => {});\n    hit = await hitCenter(page, sel);", "    await page.locator(sel).scrollIntoViewIfNeeded().catch(() => {});\n    await fit(page);\n    hit = await hitCenter(page, sel);", HARNESS_SPEC],
+    ["S16 the click harness never scrolls to a control under the window's edge", "tests/helpers/fullscreen-clicks.js", "    await page.locator(sel).scrollIntoViewIfNeeded().catch(() => {});\n", "", HARNESS_SPEC],
+    ["S17 the click harness takes anything at a control's centre for the control, so a covered button passes", "tests/helpers/fullscreen-clicks.js", "const ok = !!(top && (top === el || el.contains(top)));", "const ok = !!top;", HARNESS_SPEC],
+    ["S18 the click harness scrolls to a control with no box, and waits there until the test's timeout", "tests/helpers/fullscreen-clicks.js", "  if (!hit.ok && hit.reason !== \"zero\" && hit.reason !== \"missing\") {", "  if (!hit.ok) {", HARNESS_SPEC],
+    ["S19 the sweep re-clicks the metrics toggle the open card hides, so the card stays open", "tests/helpers/fullscreen-clicks.js", "      if (wasOpen && id === \"btn-toggle-metrics\") card.classList.add(\"collapsed\");\n", "", HARNESS_SPEC],
+    // The mouse sweep's Start, pressed at its centre under the sticky Back button in a 560 px window.
+    ["S20 the mouse sweep takes whatever is at Start's centre for Start, and presses the Back button over it", "tests/helpers/ui-forensics.js", "mine: !!top && (top === el || el.contains(top))", "mine: !!top", START_POINT_SPEC],
+    ["S21 the mouse sweep sees Start is covered and does not scroll to it", "tests/helpers/ui-forensics.js", "      el.scrollIntoView({ block: \"center\", behavior: \"instant\" });\n      p = at();\n", "", START_POINT_SPEC]
   ].map(([name, file, from, to, cmd]) => ({ name, file, from, to, cmd: cmd || PIANO_SPEC })),
   // Accessibility contracts that only a browser can see.
   a11y: [
@@ -762,7 +801,7 @@ export const MUTANTS = {
       // Site data blocked (cross-04): the boot shows the open tab's whole catalogue, counted from the catalogue (main's voice drills made it 24, not 20)
       ["D15 the exercise list leaves one exercise out: a boot with site data blocked shows 23 of 24", "js/app.js", "const exercises = catalogOrder(filteredExercises());", "const exercises = catalogOrder(filteredExercises()).slice(1);", "tests/redteam-boot-a11y-privacy.spec.js", "cross-04"],
       // PR #39 review (Codex, P1): "Usar solo la de mi cuenta" on the returning account's own browser
-      ["D16 the returning account's put-aside takes are restored before its pull, which overwrites them: a take that never reached the account is lost", "js/sync.js", "    let result = { ok: true };\n    for (const id of ids) {\n      const res = await pullOverwrite(id);", "    restoreAside(me);\n    let result = { ok: true };\n    for (const id of ids) {\n      const res = await pullOverwrite(id);", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"],
+      ["D16 the returning account's put-aside takes are restored before its pull, which overwrites them: a take that never reached the account is lost", "js/sync.js", "    for (const id of ids.filter((x) => !kept[x])) {", "    restoreAside(me);\n    for (const id of ids.filter((x) => !kept[x])) {", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"],
       ["D17 the put-aside takes are restored but nothing sends them: they wait on this shared browser for the account's next save", "js/sync.js", "    if (restoreAside(me)) schedule();\n", "    restoreAside(me);\n", "tests/redteam-accounts-profiles.spec.js", "never reached A's account"],
       // PR #39 review (RT3): a count against whichever tab is open let a blocked boot land on the wrong tab
       ["D18 a browser with no stored settings opens the singing tab: a blocked boot shows the wrong list, whole", "js/storage.js", '      return read(LS.settings, { lastTab: "vocal", maleRange: true });', '      return read(LS.settings, { lastTab: "singing", maleRange: true });', "tests/redteam-boot-a11y-privacy.spec.js", "cross-04"],
@@ -770,23 +809,20 @@ export const MUTANTS = {
       // PR #39 review (RT4): the guide's report paragraph ran on from section 15, after the ENT red flags
       ["D20 the Spanish report paragraph loses its heading: \u00bfAlgo sigue roto? reads as part of Cuida tu voz", "guide.html", '      <h2 id="reportar">Fallos e ideas</h2>\n', "", "tests/redteam-content-specs.spec.js", "heading of its own"],
       ["D21 the English report paragraph loses its heading: Still broken? reads as part of Look after your voice", "guide.html", '      <h2 id="reportar-en">Bugs and ideas</h2>\n', "", "tests/redteam-content-specs.spec.js", "heading of its own"],
-      // After the merge (review AE3/AE4): the markup's home painted first, then the app's, and the page jumped
-      ["D22 nothing is held below the header: the markup's hero is painted, then replaced, and the page under it jumps", "css/styles.css", "html.vt-boot-pending .main,\nhtml.vt-boot-pending .app-footer {\n  visibility: hidden;\n}\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "first paint"],
-      ["D23 the hold ends only when the last image has loaded, not when the app has started", "js/boot-ready.js", "    document.documentElement.classList.remove(\"vt-boot-pending\");\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "first paint"],
-      ["D24 with js/boot-ready.js missing the page stays blank for eight seconds after it has loaded", "js/boot-head.js", "  window.addEventListener(\"load\", show);\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "first paint"],
-      ["D25 a script that never arrives leaves the page blank for good", "js/boot-head.js", "  setTimeout(show, 8000);\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "first paint"],
       // After the merge (review AE3/AE4): #21's no-grow mic box on main's wrapping rail
       ["D26 the mic box is held to its own width beside hidden options: half the rail empty on every speech exercise", "css/styles.css", ".hud-bottom-rail > .hud-bc {\n  overflow: hidden;\n}\n", ".hud-bottom-rail > .hud-bc {\n  overflow: hidden;\n}\n.hud-bottom-rail:has(> #piano-mini-opts.hud-br:not(.piano-opts-compact):not(.piano-opts-expanded)) > .hud-bc {\n  flex: 0 0 auto;\n}\n", "tests/bottom-rail.spec.js", "takes the rest of its row"],
       // After the merge (review RT4): main's relabel of the trial banner without #21's one-day line
       ["D27 the trial banner relabelled after a language switch says 1 days / 1 d\u00edas", "js/app.js", "    text.textContent = tt(valueMomentKey(id, vars.n), vars);", "    text.textContent = tt(\"value.moment.\" + id, vars);", "tests/redteam-accounts-profiles.spec.js", "through language switches"],
       // After the merge (review RT5): back from a routine, the home entry kept the place from before it
-      ["D28 back from a routine the entry keeps the old place, and a reload jumps down to it", "js/app.js", "    else if (state.view !== \"exercise\" && !route.restoring) {", "    else if (false) {", "tests/redteam-router-tour.spec.js", "a reload stays where the page is"]
+      ["D28 back from a routine the entry keeps the old place, and a reload jumps down to it", "js/app.js", "    else if (state.view !== \"exercise\" && !route.restoring) {", "    else if (false) {", "tests/redteam-router-tour.spec.js", "a reload stays where the page is"],
     ].map(([name, file, from, to, spec, grep]) => ({
       name,
       file,
       from,
       to,
-      cmd: [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
+      cmd: spec.startsWith("tests/node/")
+        ? node([spec])
+        : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
     }))
   ).concat([
     // QA-57: the specs that drive the practice-mode registry fail by name when it is not there; they used to skip.
@@ -810,6 +846,92 @@ export const MUTANTS = {
       ]
     }
   ]),
+  // The first paint and the hold around the app's start (PR #40, PR #42). A set of its own, out of regress: with them
+  // regress took 28.3 of its job's 30 minutes on 9d03d8e, and was cancelled at the limit on cc0c80f (review 6 of
+  // PR #42, rt4). Each runs the tests that catch it, not the whole "first paint" describe.
+  boot: [
+    // After the merge (review AE3/AE4): the markup's home painted first, then the app's, and the page jumped
+    // Each runs the tests that catch it, not the whole "first paint" describe: 32 tests, timed ones among them, for
+    // each of 45 mutants ran this set past CI's 30 minutes (cancelled on PR #42 at cc0c80f).
+    ["D22 nothing is held below the header: the markup's hero is painted, then replaced, and the page under it jumps", "css/styles.css", "html.vt-boot-pending .main,\nhtml.vt-boot-pending .app-footer {\n  visibility: hidden;\n}\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "a later load: the markup's home"],
+    ["D23 the hold ends only when the last image has loaded, not when the app has started", "js/boot-ready.js", "    html.classList.remove(\"vt-boot-pending\");\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "released when the app has started"],
+    ["D24 with js/boot-ready.js missing the page stays blank for eight seconds after it has loaded", "js/boot-head.js", "  window.addEventListener(\"load\", function () {\n    html.classList.add(\"vt-boot-ready\");\n    if (document.body) document.body.removeAttribute(\"aria-busy\");\n    show();\n  });\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "released when the page has loaded"],
+    ["D25 a script that never arrives leaves the page blank for good", "js/boot-head.js", "  (function stalled() {\n", "  (function stalled() {\n    return;\n", "tests/redteam-boot-a11y-privacy.spec.js", "released eight seconds after the page stops arriving"],
+    // PR #40 review (red team 2): the whole page held on a first load, when nothing is cached, showed nothing for seconds
+    ["D29 a first load holds the hero too: nothing below the header for 5 s on a 4G phone", "js/boot-head.js", "  if (firstLoad()) html.classList.add(\"vt-boot-hero\");\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D30 every load shows the markup's hero, a later one too, where the app then writes another", "js/boot-head.js", "  if (firstLoad()) html.classList.add(\"vt-boot-hero\");", "  if (true) html.classList.add(\"vt-boot-hero\");", "tests/redteam-boot-a11y-privacy.spec.js", "a later load: the markup's home"],
+    ["D31 a first load at another view's address flashes the home's hero", "js/boot-head.js", "    if (location.hash || String(nav.name || \"\").indexOf(\"#\") !== -1) return true;\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "first load at #"],
+    ["D32 the markup's hero title is not the one the app writes for someone new: it changes as the app starts", "js/i18n.js", "\"first.titleMarkup\": \"Entrena tu voz 3\\u00a0minutos", "\"first.titleMarkup\": \"Entrena tu voz 5\\u00a0minutos", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D33 the first load's hero shows buttons that do nothing yet", "css/styles.css", "html.vt-boot-hero:not(.vt-boot-ready) #more-ways {\n  display: none;\n}\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D34 the hold ends before the app has drawn the page, which then jumps", "js/boot-ready.js", "  if (document.readyState === \"loading\") document.addEventListener(\"DOMContentLoaded\", ready);\n  else ready();", "  ready();", "tests/redteam-boot-a11y-privacy.spec.js", "a later load: the markup's home|the hero's words show at once"],
+    // PR #42 review: the first load's hero as the app draws it, at every width, arm and way in
+    ["D35 a first load with an experiment's arm forced in the address shows a hero the app then rewrites", "js/boot-head.js", "      if (name.indexOf(\"ab_\") === 0) arm = true;", "      if (false) arm = true;", "tests/redteam-boot-a11y-privacy.spec.js", "first load at \\?"],
+    ["D36 a person who read the guide first is held like a returning one: the guide's statistics id taken for the app's", "js/boot-head.js", "\"vt_tour_v1\", \"vt_mic_sens\"];", "\"vt_tour_v1\", \"vt_mic_sens\", \"vt_ab_v1\"];", "tests/redteam-boot-a11y-privacy.spec.js", "straight from the guide"],
+    ["D37 the line over the first load's hero changes as the app starts", "index.html", 'data-i18n="start.kickerNew">Canto y oratoria \u00b7 gratis</p>', 'data-i18n="start.kickerNew">Empieza aqu\u00ed</p>', "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D38 on a laptop the first load's title is laid out narrower and larger, and shrinks as the app starts", "css/styles.css", "  body.loop-first #start-panel .start-title,\n  html.vt-boot-hero:not(.vt-boot-ready) #start-panel .start-title {", "  body.loop-first #start-panel .start-title {", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D41 on a laptop the first load's title is laid out in the whole width, and its column narrows as the app starts", "css/styles.css", "  body.loop-first #start-panel.start-panel,\n  html.vt-boot-hero:not(.vt-boot-ready) #start-panel.start-panel {", "  body.loop-first #start-panel.start-panel {", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D42 the first load's hero is laid out and styled visible, but drawn at no opacity", "css/styles.css", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n}\n", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n  opacity: 0;\n}\n", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D43 a later load is told by a key the tests seed (the tour), not by what the app's first start keeps: every load shows the markup's hero", "js/boot-head.js", "  var APP_KEYS = [\"vt_settings_v1\", \"vt_days_v1\", \"vt_profiles_v1\", \"vt_progress_v1\", \"vt_tour_v1\", \"vt_mic_sens\"];", "  var APP_KEYS = [\"vt_tour_v1\"];", "tests/redteam-boot-a11y-privacy.spec.js", "the load after this browser's first"],
+    ["D44 a reload below the top with site data blocked shows the hero, and the app then jumps to the place it kept", "js/boot-head.js", "    if (history.state && history.state.y > 0) return true;\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "site data blocked"],
+    ["D45 a search result's text link shows the hero, and the page scrolls it away", "js/boot-head.js", "    if (location.hash || String(nav.name || \"\").indexOf(\"#\") !== -1) return true;", "    if (location.hash) return true;", "tests/redteam-boot-a11y-privacy.spec.js", "first load at #"],
+    ["D46 a forced arm spelt with an escape (%61b_) shows the control arm's hero, which the app rewrites", "js/boot-head.js", "    new URLSearchParams(location.search).forEach(function (_, name) {", "    location.search.slice(1).split(\"&\").forEach(function (name) {", "tests/redteam-boot-a11y-privacy.spec.js", "first load at \\?"],
+    // Both lines: changing only the test, a timer that fired a fraction of a millisecond early (performance.now is not
+    // the timers' clock) rescheduled by the stall's own clock and let go at 16 s, past the test's look at 9.5 s (CI, 30fa8c7).
+    ["D47 the hold is let go eight seconds after the start: on a slow phone the markup's home shows under the hero and jumps", "js/boot-head.js", "    if (waited >= STALL_MS || now - began >= CAP_MS) return show();\n    setTimeout(stalled, Math.min(STALL_MS - waited, CAP_MS - (now - began)));", "    if (now - began >= STALL_MS) return show();\n    setTimeout(stalled, STALL_MS - (now - began));", "tests/redteam-boot-a11y-privacy.spec.js", "arrive one by one"],
+    ["D48 on a first visit the home view never fades in again: its entrance is off for the page's life, not only while held", "css/styles.css", "html.vt-boot-pending.vt-boot-hero #view-home {\n  animation-duration: 0s !important;\n}\n", "html.vt-boot-hero #view-home {\n  animation: none;\n}\n", "tests/redteam-boot-a11y-privacy.spec.js", "fades in when it is opened again"],
+    ["D49 the first load's hero shows without its kicker", "css/styles.css", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n}\n", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n}\nhtml.vt-boot-pending.vt-boot-hero #start-kicker {\n  visibility: hidden;\n}\n", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D50 the first load's title is drawn lighter, and turns bold as the app starts", "css/styles.css", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n}\n", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n}\nhtml.vt-boot-pending.vt-boot-hero #start-panel .start-title {\n  font-weight: 400;\n}\n", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D51 the first load's title is centred, and jumps to the left as the app starts", "css/styles.css", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n}\n", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n}\nhtml.vt-boot-pending.vt-boot-hero #start-panel .start-title {\n  text-align: center;\n}\n", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D52 the other ways in are hidden but keep their room: an empty band under the hero that closes as the app starts", "css/styles.css", "html.vt-boot-hero:not(.vt-boot-ready) #more-ways {\n  display: none;\n}\n", "html.vt-boot-hero:not(.vt-boot-ready) #more-ways {\n  visibility: hidden;\n}\n", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D53 the first load's hero shows without its intro line (the largest words on a phone, so the page's content waits for the app)", "css/styles.css", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n}\n", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n}\nhtml.vt-boot-pending.vt-boot-hero #start-sub {\n  display: none;\n}\n", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    // Review 5 of PR #42: the scripts found one by one, and what the hold did around the app's start
+    ["D54 a reload at the top is held whole: the hero the app draws there shows only seconds later", "js/boot-head.js", "    if (history.state && history.state.y > 0) return true;", "    if (nav.type === \"reload\" || nav.type === \"back_forward\") return true;", "tests/redteam-boot-a11y-privacy.spec.js", "site data blocked"],
+    ["D55 app.js is preloaded at another address: it is asked for only once the scripts before it have run, and fetched twice", "index.html", "<link rel=\"preload\" href=\"js/app.js?v=", "<link rel=\"preload\" href=\"js/app.js?x=", "tests/redteam-boot-a11y-privacy.spec.js", "asks for every script at once"],
+    ["D56 app.js is not preloaded where it runs (the static check)", "index.html", "<link rel=\"preload\" href=\"js/app.js?v=", "<link rel=\"preload\" href=\"js/app.js?x=", "tests/node/boot-preload.test.mjs", ""],
+    ["D57 where scrollbars take room, the page keeps none for them: the header and the hero move 7.5 px sideways as the app starts, and between views", "css/styles.css", "html.vt-scrollbar-room {\n  scrollbar-gutter: stable;\n}\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "scrollbars that take room"],
+    ["D58 the hero is shown by its own rule only while held: under reduced motion it blinks out when its last resort lets the page go", "css/styles.css", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {", "html.vt-boot-pending.vt-boot-hero:not(.vt-i18n-pending) #start-panel {", "tests/redteam-boot-a11y-privacy.spec.js", "reduced motion"],
+    ["D59 the hero shows through the hidden body while the page waits for its English strings: the Spanish hero under lang=en", "css/styles.css", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {", "html.vt-boot-hero #start-panel {", "tests/redteam-boot-a11y-privacy.spec.js", "only the English choice"],
+    ["D60 the first load's hero fades and rises in with its view", "css/styles.css", "html.vt-boot-pending.vt-boot-hero #view-home {\n  animation-duration: 0s !important;\n}\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D61 what the app adds to the hero replaces the line under its words in one frame", "js/boot-ready.js", "    if (hero) reveal();\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "fades in under its words"],
+    ["D62 under reduced motion what the app adds to the hero fades in all the same", "js/boot-ready.js", "window.matchMedia(\"(prefers-reduced-motion: no-preference)\").matches", "window.matchMedia(\"all\").matches", "tests/redteam-boot-a11y-privacy.spec.js", "reduced motion"],
+    ["D63 the kicker and title fade in again as the app starts, under the reader's eye", "js/boot-ready.js", "\"#start-panel .start-main > :not(#start-kicker, #start-title), #start-panel > :not(.start-main), #site-version-bar\"", "\"#start-panel .start-main > *, #start-panel > :not(.start-main), #site-version-bar\"", "tests/redteam-boot-a11y-privacy.spec.js", "fades in under its words"],
+    ["D64 any edit of the page counts as a script read: one whose app never arrives is held the full twenty seconds", "js/boot-head.js", "    return !!node && node.nodeName === \"SCRIPT\" && !!node.src && !node.async && !node.defer && node.type !== \"module\";", "    return !!node;", "tests/redteam-boot-a11y-privacy.spec.js", "whatever the system clock does"],
+    ["D65 the stall is timed by the system clock: set back during the load, it holds the page for good", "js/boot-head.js", "    return performance.now();", "    return Date.now();", "tests/redteam-boot-a11y-privacy.spec.js", "whatever the system clock does"],
+    ["D66 the other ways in show when the hold is let go before the app, and fold away again as it starts", "css/styles.css", "html.vt-boot-hero:not(.vt-boot-ready) #more-ways {", "html.vt-boot-pending.vt-boot-hero #more-ways {", "tests/redteam-boot-a11y-privacy.spec.js", "early script stalls"],
+    ["D67 from 861 px the hero's title grows when the hold is let go before the app, and shrinks again as it starts", "css/styles.css", "  html.vt-boot-hero:not(.vt-boot-ready) #start-panel .start-title {", "  html.vt-boot-pending.vt-boot-hero #start-panel .start-title {", "tests/redteam-boot-a11y-privacy.spec.js", "early script stalls"],
+    ["D68 with js/boot-ready.js missing the hero's held layout lasts the page's life", "js/boot-head.js", "    html.classList.add(\"vt-boot-ready\");\n    if (document.body)", "    if (document.body)", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's layout is the app's to decide"],
+    ["D69 the hero's held layout lasts until the page has loaded, not until the app has started", "js/boot-ready.js", "    html.classList.add(\"vt-boot-ready\");\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's layout is the app's to decide"],
+    ["D70 the time since the last script read counts, waiting for one or not: a page whose markup arrives slowly is let go mid-stream, and its home jumps", "js/boot-head.js", "    var waited = waiting ? now - since : 0;", "    var waited = now - since;", "tests/redteam-boot-a11y-privacy.spec.js", "page itself arrives slowly"],
+    ["D71 a script another script adds counts as the page's own: an extension that adds one every few seconds holds a page whose app never arrives for twenty seconds", "js/boot-head.js", " && !node.async && ", " && ", "tests/redteam-boot-a11y-privacy.spec.js", "whatever the system clock does"],
+    ["D72 the failed request made ahead for a script lets go of an English visitor's hold: the Spanish page shows until the strings come", "js/boot-head.js", "    if (target && target !== window && target.nodeName !== \"SCRIPT\") return;\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "guard holds when a script late in the page"],
+    ["D73 with js/boot-ready.js missing the page says it is busy for its whole life", "js/boot-head.js", "    if (document.body) document.body.removeAttribute(\"aria-busy\");\n    show();", "    show();", "tests/redteam-boot-a11y-privacy.spec.js", "released when the page has loaded"],
+    ["D74 an address is decoded whole: a malformed escape hides a forced arm, and a name in another one's value is taken for one", "js/boot-head.js", "    var arm = false;\n    new URLSearchParams(location.search).forEach(function (_, name) {\n      if (name.indexOf(\"ab_\") === 0) arm = true;\n    });\n    return arm;", "    try {\n      return /[?&]ab_/.test(decodeURIComponent(location.search));\n    } catch (e) {\n      return /[?&]ab_/.test(location.search);\n    }", "tests/redteam-boot-a11y-privacy.spec.js", "first load at \\?"],
+    ["D75 on a fast first start the home view's entrance plays on at the release: the hero already read dims and rises", "js/boot-ready.js", "    settle();\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "entrance does not play when the hold ends"],
+    ["D76 what the app rebuilds in the hero as it starts fades in again from nothing", "css/styles.css", "html.vt-boot-pending.vt-boot-hero #view-home {\n  animation-duration: 0s !important;\n}\n", "html.vt-boot-pending.vt-boot-hero #view-home {\n  animation-duration: 0s !important;\n}\nhtml.vt-boot-hero #start-panel .start-main > :not(#start-kicker, #start-title) {\n  animation: fadeIn 0.2s;\n}\n", "tests/redteam-boot-a11y-privacy.spec.js", "language switch as the app starts"],
+    ["D77 a scrollbar is forced on only while held: on a later load at a view that fits the window the header moves 7.5 px sideways as the app starts", "css/styles.css", "html.vt-scrollbar-room {\n  scrollbar-gutter: stable;\n}\n", "html.vt-boot-pending {\n  overflow-y: scroll;\n}\n", "tests/redteam-boot-a11y-privacy.spec.js", "does not move sideways as the app starts"],
+    ["D78 only a first load's view is made whole at the release: a later load's home plays the tail of its entrance in sight", "js/boot-ready.js", "    settle();\n    if (hero) reveal();", "    if (hero) settle();\n    if (hero) reveal();", "tests/redteam-boot-a11y-privacy.spec.js", "view is whole when the hold ends"],
+    ["D39 a loop experiment switched on while a first load shows the control arm's hero", "js/experiments-config.js", "    loop_home_2026_10: {\n      enabled: false,", "    loop_home_2026_10: {\n      enabled: true,", "tests/node/static-copy.test.mjs", ""],
+    ["D40 the markup's hero title is not first.titleMarkup, so an English first load shows it in Spanish", "index.html", 'data-i18n="first.titleMarkup"', 'data-i18n="first.title"', "tests/node/static-copy.test.mjs", ""],
+    // Review 6 of PR #42 (rt4): what the static check missed, read as the parser reads the page
+    ["D79 a script that never runs (another type) is preloaded all the same: a wasted download", "index.html", "<script src=\"js/wake-lock.js?v=", "<script type=\"text/plain\" src=\"js/wake-lock.js?v=", "tests/node/boot-preload.test.mjs", ""],
+    ["D80 a script fetched in another mode (a module) than its preload: fetched twice", "index.html", "<script src=\"js/wake-lock.js?v=", "<script type=\"module\" src=\"js/wake-lock.js?v=", "tests/node/boot-preload.test.mjs", ""],
+    ["D81 the same, judged in the browser: a second download the parser does not wait for, seen once the page has loaded", "index.html", "<script src=\"js/wake-lock.js?v=", "<script type=\"module\" src=\"js/wake-lock.js?v=", "tests/redteam-boot-a11y-privacy.spec.js", "asks for every script at once"],
+    ["D82 the preloads stand before the hero's end: the parser sets up 53 requests before the first paint's markup is read", "index.html", "        </section>\n\n        <!-- The scripts at the end of the body, asked for now", "        <!-- The scripts at the end of the body, asked for now", "tests/node/boot-preload.test.mjs", ""],
+    ["D83 site-version.js deferred: the visitor's design is painted after the first frame", "index.html", "<script src=\"js/site-version.js?v=", "<script defer src=\"js/site-version.js?v=", "tests/node/boot-preload.test.mjs", ""],
+    ["D84 a scrollbar's room is kept where scrollbars take none: a phone-wide page in a headless run is laid out 15 px narrower than the phone", "js/boot-head.js", "  if (probe.offsetWidth > probe.clientWidth) html.classList.add(\"vt-scrollbar-room\");", "  html.classList.add(\"vt-scrollbar-room\");", "tests/redteam-boot-a11y-privacy.spec.js", "keeps none of a scrollbar's room"],
+    ["D85 no scrollbar's room is kept where scrollbars take room: the header moves sideways as the app starts", "js/boot-head.js", "  if (probe.offsetWidth > probe.clientWidth) html.classList.add(\"vt-scrollbar-room\");", "  if (probe.offsetWidth < probe.clientWidth) html.classList.add(\"vt-scrollbar-room\");", "tests/redteam-boot-a11y-privacy.spec.js", "does not move sideways as the app starts"],
+    ["D86 under reduced motion the hold ends with its transitions: the page under the header turns visible a level per frame", "js/boot-ready.js", "    if (held) instant();\n", "", "tests/redteam-boot-a11y-privacy.spec.js", "arrives in one frame when the hold ends"],
+    ["D87 the design row is drawn whole at once while the hero's content fades in under it", "js/boot-ready.js", ", #start-panel > :not(.start-main), #site-version-bar\";", ", #start-panel > :not(.start-main)\";", "tests/redteam-boot-a11y-privacy.spec.js", "fades in under its words"],
+    ["D88 a scrollbar forced on only while held, at 1024 px: the title, sized by the window, grows 1.5 % as the app starts", "css/styles.css", "html.vt-scrollbar-room {\n  scrollbar-gutter: stable;\n}\n", "html.vt-boot-pending {\n  overflow-y: scroll;\n}\n", "tests/redteam-boot-a11y-privacy.spec.js", "nor does the title change size"],
+  ].map(([name, file, from, to, spec, grep]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: spec.startsWith("tests/node/")
+      ? node([spec])
+      : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
+  })),
   // Console routes to Pro (QA-05), each closed by one freeze.
   billing: [
     ["B1 the config object left writable", "js/billing-config.js", "    return Object.freeze(o);", "    return o;"],
@@ -1016,10 +1138,313 @@ export const MUTANTS = {
     cmd: spec.startsWith("workers/")
       ? node([spec])
       : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
+  })),
+  // The learner's flows (red team 2026-11-18, FLOW-1 to FLOW-10): a take thrown away unasked, a paused step
+  // restarted, focus lost in a dialog, no way to report from the exercise, a trial forgotten after sign-in.
+  // Each mutant puts one defect back and is judged by the test in tests/learner-flows.spec.js written for it.
+  learner: [
+    ["LF1 a started short take is told to press Start first", "js/app.js", 'return tt(s === 1 ? "rate.practiceMore_one" : "rate.practiceMore", { s });', 'return tt("rate.practiceFirst", { s });', "FLOW-10"],
+    ["LF2 one more second reads in the plural", "js/app.js", 'tt(s === 1 ? "rate.practiceMore_one" : "rate.practiceMore", { s })', 'tt("rate.practiceMore", { s })', "FLOW-10"],
+    // FLOW-3: a dialog taller than a phone's window wrapped focus to a control scrolled out of sight.
+    ["LF3 a trap's wrap focuses without bringing the control into view", "js/focus-trap.js", '    if (moved && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" });\n', "", "wrap brings the control into view", "tests/focus-trap.spec.js"],
+    ["LF4 Tab past the last control wraps to a first one out of sight", "js/focus-trap.js", "      moveTo(first);\n", "      focus(first);\n", "wrap brings the control into view", "tests/focus-trap.spec.js"],
+    ["LF5 Shift+Tab past the first control wraps to a last one out of sight", "js/focus-trap.js", "      moveTo(last);\n", "      focus(last);\n", "wrap brings the control into view", "tests/focus-trap.spec.js"]
+  ].map(([name, file, from, to, grep, spec]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: [...PIANO_SPEC.slice(0, 3), spec || "tests/learner-flows.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", grep]
+  })),
+  // The payment ledger in D1 (one optimistic transaction per webhook) and the account layer's
+  // multi-step writes made single batches (audit WH-*, KV-*, D1-*, SW-1, SC-1). Node only, so it
+  // runs in the contracts job with the default sets. "Sequential" mutants replace a D1 batch (one
+  // transaction) with the same statements run one by one, which is what the code did before.
+  // The client sync on a shared browser and against a malformed account copy (red-team round of 2026-11-18,
+  // findings RES-1/2/4/5/6/7, FLOW-6/7, CXSS-1 part 2). Each mutant runs only the test written for it: a node test
+  // against the real js/storage.js, js/account.js and js/sync.js and the real worker router (tests/node/sync-env.mjs),
+  // or, for what the page shows, tests/sync-shared-browser.spec.js. The browser half puts the set in the CI matrix.
+  syncing: [
+    ["SY1 a write answered after the account changed is recorded as the next account's", "js/sync.js", "      // The write went to the account that made it; whoever is here now is not told it was theirs.\n      if (sessionMoved(token)) return sessionGone();\n", "", "sync-account-switch"],
+    ["SY2 each request of a cycle goes out as whichever session is current, and nothing checks between them (RES-1)", "js/sync.js", "      const pulled = await readAccount(profileId, token);\n      if (sessionMoved(token)) return sessionGone();\n      const halt = pullStop(pulled, profileId);\n      if (halt) return halt;\n\n      const step = mergePulled(profileId, pulled);\n      const pushed = await global.VTAccount.request(\n        \"PUT\",\n        \"/v1/me/progress\",\n        { profileId, doc: step.merged, baseRev: step.serverRev },\n        { timeoutMs: REQUEST_TIMEOUT_MS, token }\n      );\n      // The write went to the account that made it; whoever is here now is not told it was theirs.\n      if (sessionMoved(token)) return sessionGone();\n", "      const pulled = await readAccount(profileId, null);\n      const halt = pullStop(pulled, profileId);\n      if (halt) return halt;\n\n      const step = mergePulled(profileId, pulled);\n      const pushed = await global.VTAccount.request(\n        \"PUT\",\n        \"/v1/me/progress\",\n        { profileId, doc: step.merged, baseRev: step.serverRev },\n        { timeoutMs: REQUEST_TIMEOUT_MS }\n      );\n", "sync-account-switch"],
+    ["SY3 a read answered after the account changed is merged into this browser: the last account's other devices show to the next", "js/sync.js", "      const pulled = await readAccount(profileId, token);\n      if (sessionMoved(token)) return sessionGone();\n      const halt", "      const pulled = await readAccount(profileId, token);\n      const halt", "sync-account-switch"],
+    ["SY4 'use my saved progress' answered after the account changed is kept with the last account's revision", "js/sync.js", "    const pulled = await readAccount(profileId, token);\n    if (sessionMoved(token)) return sessionGone();\n    if (!pulled.ok)", "    const pulled = await readAccount(profileId, token);\n    if (!pulled.ok)", "sync-account-switch"],
+    ["SY5 the next account's sync is handed the result of the last account's cycle", "js/sync.js", "      if (sharedAs === sessionToken() && !(result", "      if (sharedAs !== undefined && !(result", "sync-account-switch"],
+    ["SY6 a cycle that throws rejects past every caller, and the panel keeps saying saved (RES-4)", "js/sync.js", "    running = runCycle(profileId, token).catch(cycleThrew);", "    running = runCycle(profileId, token);", "sync-account-doc"],
+    ["SY7 the account's copy is merged as it came, unchecked (CXSS-1)", "js/sync.js", "    const b = normalizeBag(remote);", "    const b = { ...normalizeBag({}), ...remote };", "sync-account-doc"],
+    ["SY8 a count that is not a number is kept as it came", "js/sync.js", "      completedCount: Math.max(whole(r.completedCount), history.length),", "      completedCount: r.completedCount,", "sync-account-doc"],
+    ["SY9 a hold's seconds and time are kept as they came", "js/sync.js", "    if (!e || !when(e.at) || seconds === null || seconds < 0) return null;\n    return { ...e, at: when(e.at), seconds };", "    if (!e) return null;\n    return e;", "sync-account-doc"],
+    ["SY10 an entry dated 2099 is kept, first for ever", "js/sync.js", "    return t > 0 && t <= Date.now() + FUTURE_SLACK_MS ? String(value) : null;", "    return t > 0 ? String(value) : null;", "sync-account-doc"],
+    ["SY11 a plan at any week is kept: week 99 beats a real plan", "js/sync.js", "    if (!p || week < 1 || week > MAX_PLAN_WEEK) return null;", "    if (!p || week < 1) return null;", "sync-account-doc"],
+    ["SY12 a plan past week 12 is thrown away (the app keeps counting after the twelfth review)", "js/sync.js", "  const MAX_PLAN_WEEK = 52;", "  const MAX_PLAN_WEEK = 12;", "sync-account-doc"],
+    ["SY13 a week element outside the catalogue's list is kept", "js/sync.js", "    return !Array.isArray(known) || known.includes(value) ? value : null;", "    return value;", "sync-account-doc"],
+    ["SY14 two devices' takes count as the larger count alone (RES-5)", "js/sync.js", "      completedCount: Math.max(Number(a.completedCount) || 0, Number(b.completedCount) || 0, takes.length),", "      completedCount: Math.max(Number(a.completedCount) || 0, Number(b.completedCount) || 0),", "sync-account-doc"],
+    ["SY15 a log stored as an object makes the merge throw", "js/sync.js", "    for (const entry of [...list(local), ...list(remote)]) {", "    for (const entry of [...(local || []), ...(remote || [])]) {", "sync-account-doc"],
+    ["SY16 a history stored as an object makes the merge throw", "js/sync.js", "    for (const entry of [...list(b), ...list(a)]) {", "    for (const entry of [...(b || []), ...(a || [])]) {", "sync-account-doc"],
+    ["SY17 a weekly goal written as text is kept as text", "js/sync.js", "    return { ...g, weeklySessionsTarget: target, ...present(g, \"updatedAt\", when) };", "    return { ...g, ...present(g, \"updatedAt\", when) };", "sync-account-doc"],
+    ["SY18 a goal dated 2099 wins every later merge", "js/sync.js", "    return { ...g, weeklySessionsTarget: target, ...present(g, \"updatedAt\", when) };", "    return { ...g, weeklySessionsTarget: target };", "sync-account-doc"],
+    ["SY19 a review's element outside the catalogue's list is kept", "js/sync.js", "      ...present(e, \"element\", element),\n", "", "sync-account-doc"],
+    ["SY20 an owner storage refused is forgotten: the next account gets this practice unasked (RES-6)", "js/sync.js", "      ownerKept = id;\n    }", "    }", "sync-owner-quota"],
+    ["SY21 the owner kept in memory is never read", "js/sync.js", "    if (ownerKept) return ownerKept;\n    try {\n      return localStorage.getItem(LS_OWNER) || null;", "    try {\n      return localStorage.getItem(LS_OWNER) || null;", "sync-owner-quota"],
+    ["SY22 the status never says a change is waiting: the panel says saved over an unsent take (FLOW-6)", "js/sync.js", "      pending: hasUnpushed(),\n", "      pending: false,\n", "sync-status"],
+    ["SY23 a sign-in waits out the 8 s quiet period before its first read (FLOW-7)", "js/sync.js", "        fetchingFor = token;\n        schedule(0);", "        fetchingFor = token;\n        schedule();", "sync-status"],
+    ["SY24 'fetching' outlives the first read", "js/sync.js", "      if (fetchingFor && fetchingFor === asked) {", "      if (false) {", "sync-status"],
+    ["SY25 a /v1/me answer after the sign-in pushes the first read back by the quiet period", "js/sync.js", "      } else if (token && !timer) {", "      } else if (token) {", "sync-status"],
+    ["SY26 a take does not tell an open panel that something is waiting", "js/sync.js", "    // An open panel stops saying \"saved\" the moment there is something new.\n    emit();\n", "", "sync-status"],
+    ["SY27 the panel says saved while a take waits to be sent (FLOW-6)", "js/app.js", "    if (status.pending) return tt(\"auth.syncPending\");\n", "", "sync-shared-browser.spec.js", "a take not yet sent"],
+    ["SY28 the panel says 'Aún no guardado' while the account's copy is on its way (FLOW-7)", "js/app.js", "    if (status.fetching) return tt(\"auth.syncFetching\");\n", "", "sync-shared-browser.spec.js", "says it is fetching"],
+    ["SY29 everything goes aside, the handover ignored: the newcomer's own takes go to the previous owner (RES-2)", "js/sync.js", "    const since = h && h.owner === owner ? ms(h.since) : 0;", "    const since = 0;", "sync-handover"],
+    ["SY30 a sign-in does not note when the browser stopped being the last owner's", "js/sync.js", "        noteHandover();\n", "", "sync-handover"],
+    ["SY31 the handover is never stored: a reload before answering forgets it", "js/sync.js", "      if (h) localStorage.setItem(LS_HANDOVER, JSON.stringify(h));", "      if (h) throw new Error(\"not kept\");", "sync-handover"],
+    ["SY32 leaving without answering leaves the leaver's takes as the last owner's, for her next sync to send", "js/sync.js", "    setAsideLeaver();\n    writeHandover(null);", "    writeHandover(null);", "sync-handover"],
+    ["SY33 what the newcomer keeps is overwritten by the account's copy instead of merged into it", "js/sync.js", "      note(await syncNow(id));", "      note(await pullOverwrite(id, token));", "sync-handover"],
+    ["SY34 the last owner's row keeps the count of the newcomer's takes", "js/sync.js", "      const count = Math.max(early.length, row.completedCount - late.length);", "      const count = Math.max(early.length, row.completedCount);", "sync-handover"],
+    ["SY35 the newcomer's part has no day ledger: the day they practised is not counted", "js/sync.js", "    after.days = daysOf(after);", "    after.days = null;", "sync-handover"],
+    ["SY36 the last owner's day ledger keeps the newcomer's time", "js/sync.js", "      days: lessDays(b.days, after.days)", "      days: b.days", "sync-handover"],
+    ["SY37 the leaver's part is taken from a browser that is already theirs", "js/sync.js", "    if (!h || !h.me || readOwner() !== h.owner) return;", "    if (!h || !h.me) return;", "sync-handover"],
+    ["SY38 an owner signing in again on her own browser is a handover: signing out puts her practice aside", "js/sync.js", "    writeHandover(owner && owner !== me ? { owner, me, since: new Date().toISOString() } : null);", "    writeHandover(owner ? { owner, me, since: new Date().toISOString() } : null);", "sync-handover"],
+    ["SY39 a recording set aside is still listed and played (RES-7)", "js/storage.js", "    return !!record && recordingProfile(record) === active && !record.asideFor;", "    return !!record && recordingProfile(record) === active;", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY40 'Usar solo la de mi cuenta' leaves the last owner's recordings where they were", "js/sync.js", "    if (kept) await recordingsAside(owner, since ? { to: since } : {});\n", "", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY41 the newcomer's own recordings go aside with the last owner's", "js/sync.js", "    if (kept) await recordingsAside(owner, since ? { to: since } : {});", "    if (kept) await recordingsAside(owner, {});", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY42 recordings set aside never come back to their account", "js/sync.js", "    recordingsBack = giveRecordingsBack(me);\n", "", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY43 leaving without answering leaves the leaver's recordings for the last owner to see", "js/sync.js", "    recordingsAside(h.me, { from: ms(h.since) });\n", "", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY44 the leaver's recordings are taken with everything recorded before them", "js/storage.js", "        if (r.asideFor || (range.from && at < range.from) || (range.to && at >= range.to)) return null;", "        if (r.asideFor || (range.to && at >= range.to)) return null;", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY45 a recording set aside still plays by its id", "js/storage.js", "          if (!shown(r, active)) return resolve(null);", "          if (!r || recordingProfile(r) !== active) return resolve(null);", "sync-shared-browser.spec.js", "recordings go with"],
+    ["SY46 a profile the newcomer practised in syncs before the pulls: its cycle restores what was left aside, and a pull overwrites it", "js/sync.js", "    for (const id of ids.filter((x) => !kept[x])) {\n      note(await pullOverwrite(id, token));\n      if (sessionMoved(token)) return sessionGone();\n    }\n    if (restoreAside(me)) schedule();\n    for (const id of ids.filter((x) => kept[x])) {\n      note(await syncNow(id));\n      if (sessionMoved(token)) return sessionGone();\n    }\n", "    for (const id of ids.filter((x) => kept[x])) {\n      note(await syncNow(id));\n      if (sessionMoved(token)) return sessionGone();\n    }\n    for (const id of ids.filter((x) => !kept[x])) {\n      note(await pullOverwrite(id, token));\n      if (sessionMoved(token)) return sessionGone();\n    }\n    if (restoreAside(me)) schedule();\n", "sync-handover"]
+  ].map(([name, file, from, to, test, grep]) => ({
+    name,
+    file,
+    from,
+    to,
+    // A panel line is judged in the browser by the spec written for it; everything else by its node test.
+    cmd: test.endsWith(".spec.js")
+      ? [...PIANO_SPEC.slice(0, 3), `tests/${test}`, "--project=chromium", "--workers=2", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
+      : node([`tests/node/${test}.test.mjs`])
+  })),
+  ledger: [
+    ["LG1 the first validation chunk always passes: a stale read commits", "src/ledger.js", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed})", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed}) OR 1", "ledger"],
+    ["LG2 later validation chunks are ignored", "src/ledger.js", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed})", "DELETE FROM ledger_tx WHERE tx_id = ?1 AND ?3 = ?3 AND EXISTS (${changed}) AND 0", "ledger"],
+    ["LG3 a transaction that failed validation still writes", "src/ledger.js", "SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM ledger_tx WHERE tx_id = ?3)", "SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM ledger_tx WHERE tx_id = ?3) OR 1", "ledger"],
+    ["LG4 a conflict is taken for a commit", "src/ledger.js", "return Number(last && last.meta && last.meta.changes) === 1;", "return true;", "ledger"],
+    ["LG5 one attempt only: a conflict is never retried", "src/ledger.js", "export const LEDGER_MAX_ATTEMPTS = 4;", "export const LEDGER_MAX_ATTEMPTS = 1;", "ledger"],
+    ["LG6 a tombstone lets the old KV copy show through", "src/ledger.js", "const missing = keys.filter((key) => !rows.has(key));", "const missing = keys.filter((key) => !rows.has(key) || rows.get(key).value === null);\n  missing.forEach((key) => rows.delete(key));", "ledger"],
+    ["LG7 an expired ledger key reads as live", "src/ledger.js", "return row.expires_at === null || row.expires_at === undefined || Number(row.expires_at) > at;", "return true;", "ledger"],
+    ["LG8 the ledger never uses D1", "src/ledger.js", "return Boolean(env && env.DB && typeof env.DB.prepare === \"function\" && typeof env.DB.batch === \"function\");", "return false;", "ledger"],
+    ["LG9 a transaction does not read its own writes", "src/ledger.js", "    if (this.writes.has(key)) {\n      return this.writes.get(key).value;\n    }\n", "", "ledger"],
+    ["LG10 deletes are never written: no tombstone", "src/ledger.js", "return !(seen && seen.version === null && seen.value === null);", "return false;", "ledger"],
+    ["LG11 the KV path reads the stored record only by the claim's id, not the derived one (KV-1)", "src/store.js", "const existing = await getEntitlement(kv, existingId || derived);", "const existing = await getEntitlement(kv, existingId);", "ledger"],
+    ["LG12 a Mercado Pago notification without the access token is acknowledged and lost", "src/index.js", "  if (mapped.reason === \"access_token_not_configured\") {\n    throw new Error(\"MP_ACCESS_TOKEN is not configured\");\n  }\n", "", "ledger"],
+    ["LG13 a D1 that refuses the flag leaves no trace for the probe", "src/db.js", "  await writeFlagKey(kv, name, at);\n", "", "cost"],
+    ["LG14 the probe ignores the webhook-failed flag", "src/index.js", "      checks.writes = \"failing\";", "      checks.writes = \"ok\";", "cost"],
+    ["DA1 the trial's grant and claim are two writes again (D1-5)", "src/grants.js", "const [granted] = await db.batch([", "const [granted] = await SEQ", "d1-atomicity"],
+    ["DA2 the trial grant is written whether or not the trial is claimed", "src/grants.js", "insertGrant(db, row, \"EXISTS (SELECT 1 FROM accounts WHERE id = ?2 AND trial_used_at IS NULL)\")", "insertGrant(db, row)", "grants"],
+    ["DA3 a gift redemption's three writes are separate again (D1-1)", "src/grants.js", "[claimed] = await db.batch([", "[claimed] = await SEQ", "d1-atomicity"],
+    ["DA4 a code revoked after the first read still pays out", "src/grants.js", "WHERE code_normalized = ?5 AND revoked_at IS NULL AND redeemed_count < max_redemptions", "WHERE code_normalized = ?5 AND redeemed_count < max_redemptions", "d1-atomicity"],
+    ["DA5 the last use of a code is given twice", "src/grants.js", "WHERE code_normalized = ?5 AND revoked_at IS NULL AND redeemed_count < max_redemptions", "WHERE code_normalized = ?5 AND revoked_at IS NULL", "grants"],
+    ["DA6 a refused redemption still spends a use", "src/grants.js", "WHERE code_normalized = ?1 AND EXISTS (SELECT 1 FROM gift_redemptions WHERE id = ?2)", "WHERE code_normalized = ?1 AND ?2 = ?2", "grants"],
+    ["DA7 a refused redemption still writes a grant", "src/grants.js", "insertGrant(db, grant, \"EXISTS (SELECT 1 FROM gift_redemptions WHERE id = ?11)\", [redemptionId])", "insertGrant(db, grant, \"?11 = ?11\", [redemptionId])", "grants"],
+    ["DA8 any D1 failure is answered 'already redeemed'", "src/grants.js", "if (/UNIQUE/i.test(String(error && error.message))) {", "if (/UNIQUE/i.test(String(error && error.message)) || error) {", "d1-atomicity"],
+    ["DA9 two admins revoking a grant: the second overwrites who did it", "src/grants.js", "WHERE id = ?1 AND revoked_at IS NULL\")\n    .bind(grantId, at, revokedBy || null)", "WHERE id = ?1\")\n    .bind(grantId, at, revokedBy || null)", "d1-atomicity"],
+    ["DA10 two admins revoking a gift code: the second moves the time", "src/grants.js", "UPDATE gift_codes SET revoked_at = ?2 WHERE code_normalized = ?1 AND revoked_at IS NULL", "UPDATE gift_codes SET revoked_at = ?2 WHERE code_normalized = ?1", "d1-atomicity"],
+    ["DA11 two tabs linking one license: the second hits the key and answers 500 (D1-3)", "src/grants.js", "VALUES (?1, ?2, ?3, ?4)\n       ON CONFLICT(license_id) DO NOTHING`", "VALUES (?1, ?2, ?3, ?4)`", "d1-atomicity"],
+    ["DA12 a spent code still opens a session", "src/accounts.js", "\"EXISTS (SELECT 1 FROM login_codes WHERE id = ?6 AND consumed_at IS NULL)\"", "\"EXISTS (SELECT 1 FROM login_codes WHERE id = ?6)\"", "d1-atomicity"],
+    ["DA13 the session and the spend are two writes again (D1-2)", "src/accounts.js", "const [opened] = await db.batch([", "const [opened] = await SEQ", "d1-atomicity"],
+    ["DA14 retiring old codes and storing the new one are two writes again (D1-4)", "src/accounts.js", "  await db.batch([\n    db\n      .prepare(\"UPDATE login_codes SET consumed_at = ?2 WHERE email_normalized = ?1 AND consumed_at IS NULL\")", "  await SEQ\n    db\n      .prepare(\"UPDATE login_codes SET consumed_at = ?2 WHERE email_normalized = ?1 AND consumed_at IS NULL\")", "d1-atomicity"],
+    ["DA15 the top-level 500 has no CORS headers (D1-8)", "src/index.js", "return json({ ok: false, reason: \"internal_error\" }, 500, corsHeaders(request, env));", "return json({ ok: false, reason: \"internal_error\" }, 500);", "d1-atomicity"],
+    ["DA16 one table that fails stops the sweep (SW-1)", "src/db.js", "      report.failed.push(target[0]);\n", "      report.failed.push(target[0]);\n      break;\n", "d1-atomicity"],
+    ["DA17 a failed sweep raises no flag", "src/db.js", "    await noteHealthFlag(db, SWEEP_FAILED_FLAG, report.failed.join(\",\"), at, kv);\n", "", "d1-atomicity"],
+    ["DA18 the sweep stops after one chunk however much is left", "src/db.js", "if (n < SWEEP_CHUNK_ROWS) {", "if (n <= SWEEP_CHUNK_ROWS) {", "d1-atomicity"],
+    ["DA19 a ledger key expiring this second is kept by the sweep though reads treat it as gone", "src/db.js", "[\"ledger_kv\", \"expires_at IS NOT NULL AND expires_at <= ?1\", at]", "[\"ledger_kv\", \"expires_at IS NOT NULL AND expires_at < ?1\", at]", "d1-atomicity"],
+    ["DA20 the cron run passes in silence when a table was not swept", "src/index.js", "    if (report.failed.length) {\n      // Thrown after", "    if (false) {\n      // Thrown after", "d1-atomicity"],
+    ["DA21 every cold isolate reruns the whole schema batch (SC-1)", "src/db.js", "    return Boolean(row);\n", "    return false;\n", "d1-atomicity"],
+    ["DA22 older code lowers a newer schema's version", "src/db.js", "ON CONFLICT(key) DO UPDATE SET value = ?1 WHERE CAST(schema_meta.value AS INTEGER) < CAST(?1 AS INTEGER)", "ON CONFLICT(key) DO UPDATE SET value = ?1", "d1-atomicity"],
+    ["DA23 the schema is skipped on its version number: another branch's same number hides a missing table", "src/db.js", "db.prepare(\"SELECT 1 AS ok FROM schema_meta WHERE key = ?1\").bind(SCHEMA_KEY)", "db.prepare(\"SELECT 1 AS ok FROM schema_meta WHERE key = 'version' AND CAST(value AS INTEGER) >= ?1\").bind(SCHEMA_VERSION)", "d1-atomicity"],
+    ["DA24 the schema's record is never written: every cold isolate reruns the batch", "src/db.js", "    db.prepare(\"INSERT INTO schema_meta (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO NOTHING\").bind(SCHEMA_KEY, String(SCHEMA_VERSION)),\n", "", "d1-atomicity"],
+    ["DA25 the fingerprint ignores what the statements say", "src/db.js", "hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193) >>> 0;", "hash = hash >>> 0;", "d1-atomicity"],
+    ["DL1 the login-code email has no deadline: a hung provider keeps the page spinning", "src/email.js", "response = await doFetch(url, { ...init, signal: AbortSignal.timeout(deadlineMs(options, EMAIL_SEND_TIMEOUT_MS)) });", "response = await doFetch(url, init);", "outbound-deadlines"],
+    ["DL2 Google's key fetch has no deadline: a hung fetch holds the sign-in open", "src/google.js", "{ method: \"GET\", signal: AbortSignal.timeout(deadlineMs(opts, GOOGLE_JWKS_TIMEOUT_MS)) }", "{ method: \"GET\" }", "outbound-deadlines"],
+    ["DL3 the login-code email carries a signal that never fires (Codex on PR #38)", "src/email.js", "signal: AbortSignal.timeout(deadlineMs(options, EMAIL_SEND_TIMEOUT_MS))", "signal: new AbortController().signal", "outbound-deadlines"],
+    ["DL4 Google's key fetch carries a signal that never fires (Codex on PR #38)", "src/google.js", "signal: AbortSignal.timeout(deadlineMs(opts, GOOGLE_JWKS_TIMEOUT_MS))", "signal: new AbortController().signal", "outbound-deadlines"],
+    ["DL5 the Mercado Pago API read carries a signal that never fires", "src/mercadopago.js", "signal: AbortSignal.timeout(deadlineMs(options, MP_API_TIMEOUT_MS))", "signal: new AbortController().signal", "outbound-deadlines"],
+    ["DL6 the Mercado Pago API read outlives Mercado Pago's own 22 s wait", "src/mercadopago.js", "export const MP_API_TIMEOUT_MS = 8000;", "export const MP_API_TIMEOUT_MS = 30000;", "outbound-deadlines"],
+    ["DR1 Stripe's unknown-license answer clears its marker in KV while the ledger commits it", "src/index.js", "return await answerUnknownLicense(kv, \"stripe\"", "return await answerUnknownLicense(env.ENTITLEMENTS, \"stripe\"", "d1-rails"],
+    ["DR2 Creem's unknown-license answer clears its marker in KV while the ledger commits it", "src/index.js", "return await answerUnknownLicense(kv, \"creem\"", "return await answerUnknownLicense(env.ENTITLEMENTS, \"creem\"", "d1-rails"],
+    ["DR3 Mercado Pago's unapplied answer clears its marker in KV while the ledger commits it", "src/index.js", "return await answerUnappliedNotification(kv, target, mapped, options);", "return await answerUnappliedNotification(env.ENTITLEMENTS, target, mapped, options);", "d1-rails"],
+    ["DR4 Creem events bypass the D1 ledger", "src/index.js", "(kv) => applyCreemEvent(kv, event, env, options)", "(kv) => applyCreemEvent(env.ENTITLEMENTS, event, env, options)", "d1-rails"],
+    ["DR5 Creem's record goes to KV while its marker goes to the ledger", "src/index.js", "const { record, missing } = await upsertEntitlement(kv, mapped.update, { idSecret: licenseIdSecret(env) });\n    if (missing) {\n      return await answerUnknownLicense(kv, \"creem\"", "const { record, missing } = await upsertEntitlement(env.ENTITLEMENTS, mapped.update, { idSecret: licenseIdSecret(env) });\n    if (missing) {\n      return await answerUnknownLicense(kv, \"creem\"", "d1-rails"],
+    ["DR6 Mercado Pago notifications bypass the D1 ledger", "src/index.js", "(kv) => applyMercadoPagoNotification(kv, target, env, options)", "(kv) => applyMercadoPagoNotification(env.ENTITLEMENTS, target, env, options)", "d1-rails"],
+    ["DR7 Mercado Pago's record goes to KV while its marker goes to the ledger", "src/index.js", "const { record } = await upsertEntitlement(kv, mapped.update,", "const { record } = await upsertEntitlement(env.ENTITLEMENTS, mapped.update,", "d1-rails"],
+    ["DR8 a missing Mercado Pago token is answered 500 without a throw, so the probe never hears of it", "src/index.js", "    throw new Error(\"MP_ACCESS_TOKEN is not configured\");", "    await clearEventSeen(kv, \"mercadopago\", target.eventId);\n    return json({ ok: false, reason: mapped.reason }, 500);", "d1-rails"],
+    ["DR9 without D1 a failure is not flagged in KV either", "src/db.js", "export async function noteHealthFlag(db, name, detail, now, kv) {\n  if (!name) {", "export async function noteHealthFlag(db, name, detail, now, kv) {\n  if (!db || !name) {", "d1-rails"],
+    ["DR10 the KV flag expires long before the probe's hour is over", "src/db.js", "await kv.put(healthFlagKey(name), String(at), { expirationTtl: 86400 });", "await kv.put(healthFlagKey(name), String(at), { expirationTtl: 60 });", "d1-rails"],
+    ["DR11 every KV flag is written under the webhook flag's key", "src/db.js", "await kv.put(healthFlagKey(name), String(at),", "await kv.put(healthFlagKey(WEBHOOK_FAILED_FLAG), String(at),", "d1-rails"],
+    ["DR12 the KV flag still counts in the second after its hour, unlike the D1 row", "src/index.js", "clockSeconds(deps) - stamp < HEALTH_FLAG_WINDOW_SECONDS", "clockSeconds(deps) - stamp <= HEALTH_FLAG_WINDOW_SECONDS", "d1-rails"],
+    ["DR13 /v1/license reads KV, not the ledger", "src/index.js", "const record = await getEntitlement(ledgerReader(env), licenseId);", "const record = await getEntitlement(env.ENTITLEMENTS, licenseId);", "d1-rails"],
+    ["DR14 /v1/me/link looks the checkout up in KV, not the ledger", "src/api.js", "licenseId = await getLicenseIdForClaim(ledgerReader(env), provider, sessionId);", "licenseId = await getLicenseIdForClaim(env.ENTITLEMENTS, provider, sessionId);", "d1-rails"],
+    ["DR15 /v1/me/link reads the license from KV, not the ledger", "src/api.js", "const record = await getEntitlement(ledgerReader(env), licenseId);", "const record = await getEntitlement(env.ENTITLEMENTS, licenseId);", "d1-rails"],
+    ["DR16 /v1/me resolves the license from KV, not the ledger", "src/api.js", "const resolution = await resolveEntitlement(env.DB, ledgerReader(env), account.id, now);", "const resolution = await resolveEntitlement(env.DB, env.ENTITLEMENTS, account.id, now);", "d1-rails"],
+    ["DR17 the admin lookup resolves the license from KV, not the ledger", "src/api.js", "const resolution = await resolveEntitlement(env.DB, ledgerReader(env), account.id, at);", "const resolution = await resolveEntitlement(env.DB, env.ENTITLEMENTS, account.id, at);", "d1-rails"],
+    ["DR18 a rotated license-id key reads the record under the new id first, and rebuilds the license from one event", "src/store.js", "const existing = await getEntitlement(kv, existingId || derived);", "const existing = await getEntitlement(kv, derived || existingId);", "d1-rails"],
+    ["GE1 revoking one gift code sets revoked_at on every live code in the deployment", "src/grants.js", "UPDATE gift_codes SET revoked_at = ?2 WHERE code_normalized = ?1 AND revoked_at IS NULL", "UPDATE gift_codes SET revoked_at = ?2 WHERE revoked_at IS NULL AND ?1 = ?1", "grants-edges"],
+    ["GE2 one redemption adds a use to every gift code, so untouched single-use codes read as used up", "src/grants.js", "WHERE code_normalized = ?1 AND EXISTS (SELECT 1 FROM gift_redemptions WHERE id = ?2)`", "WHERE ?1 = ?1 AND EXISTS (SELECT 1 FROM gift_redemptions WHERE id = ?2)`", "grants-edges"],
+    ["GE3 a gift grant is written whenever the account has any earlier redemption, so a code revoked or used up mid-redemption still pays out to the loser", "src/grants.js", "\"EXISTS (SELECT 1 FROM gift_redemptions WHERE id = ?11)\"", "\"EXISTS (SELECT 1 FROM gift_redemptions WHERE account_id = ?2 AND ?11 = ?11)\"", "grants-edges"],
+    ["GE4 a grant's note and issued_by are stored in each other's columns, so every list shows the admin's id as the note", "src/grants.js", "row.note, row.issued_by, row.created_at", "row.issued_by, row.note, row.created_at", "grants-edges"],
+    ["GE5 the admin who loses a concurrent grant revoke is answered ok:false, which the route turns into a 404", "src/grants.js", "return current ? { ok: true, reason: \"already_revoked\", grant: current }", "return current ? { ok: false, reason: \"already_revoked\", grant: current }", "grants-edges"],
+    ["GE6 the losing admin's re-read fetches two columns, so the answer is a grant with no id, kind or dates", "src/grants.js", "    const current = await db.prepare(\"SELECT * FROM grants WHERE id = ?1\").bind(grantId).first();", "    const current = await db.prepare(\"SELECT revoked_at, revoked_by FROM grants WHERE id = ?1\").bind(grantId).first();", "grants-edges"],
+    ["GE7 createGrant does not wait for its insert, so a grant D1 refused is answered 200", "src/grants.js", "  await insertGrant(db, row).run();\n  return row;", "  insertGrant(db, row).run();\n  return row;", "grants-edges"],
+    ["GE8 the UNIQUE match is anchored at the start, so D1's prefixed constraint error becomes a 500 instead of already_redeemed", "src/grants.js", "if (/UNIQUE/i.test(String(error && error.message))) {", "if (/^UNIQUE/i.test(String(error && error.message))) {", "grants-edges"],
+    ["GE9 a grant's note is neither cut to 200 characters nor turned into a string", "src/grants.js", "note: input.note ? String(input.note).slice(0, 200) : null,\n    issued_by", "note: input.note || null,\n    issued_by", "grants-edges"],
+    ["GE10 a grant's note is cut at 201 characters instead of 200", "src/grants.js", "note: input.note ? String(input.note).slice(0, 200) : null,\n    issued_by", "note: input.note ? String(input.note).slice(0, 201) : null,\n    issued_by", "grants-edges"],
+    ["GE11 createGrant answers with the uncut note while D1 stores the cut one", "src/grants.js", "  await insertGrant(db, row).run();\n  return row;", "  await insertGrant(db, row).run();\n  return { ...row, note: input.note || null };", "grants-edges"],
+    ["GE12 the trial claim UPDATE loses its guard, so the losing concurrent request overwrites trial_used_at with its own clock", "src/grants.js", "`UPDATE accounts SET trial_used_at = ?2, updated_at = ?2\n         WHERE id = ?1 AND trial_used_at IS NULL`", "`UPDATE accounts SET trial_used_at = ?2, updated_at = ?2\n         WHERE id = ?1`", "grants-edges"],
+    ["GE13 gift_redemptions.grant_id stores the redemption's own id, so no redemption leads to the grant it bought", "src/grants.js", "SELECT ?1, code_normalized, ?2, ?3, ?4 FROM gift_codes", "SELECT ?1, code_normalized, ?2, ?1, ?4 FROM gift_codes", "grants-edges"],
+    ["GE14 a grant's note keeps the 200 cap but is not turned into a string, so a numeric note is answered as a number and stored as \"12345.0\"", "src/grants.js", "note: input.note ? String(input.note).slice(0, 200) : null,\n    issued_by", "note: input.note ? (input.note.slice ? input.note.slice(0, 200) : input.note) : null,\n    issued_by", "grants-edges"],
+    ["GE15 revoking a gift code matches every code that sorts at or after it (a range key), not only its own row", "src/grants.js", "UPDATE gift_codes SET revoked_at = ?2 WHERE code_normalized = ?1 AND revoked_at IS NULL", "UPDATE gift_codes SET revoked_at = ?2 WHERE code_normalized >= ?1 AND revoked_at IS NULL", "grants-edges"],
+    ["GE16 a redemption spends a use of every code that sorts at or before the redeemed one (a range key)", "src/grants.js", "WHERE code_normalized = ?1 AND EXISTS (SELECT 1 FROM gift_redemptions WHERE id = ?2)`", "WHERE code_normalized <= ?1 AND EXISTS (SELECT 1 FROM gift_redemptions WHERE id = ?2)`", "grants-edges"],
+    ["GE17 a new gift code is answered with the note as sent, not as stored (the bug the sweep found)", "src/grants.js", "return { code: display, plan, days, maxRedemptions, redeemedCount: 0, note, expiresAt, createdAt: at };", "return { code: display, plan, days, maxRedemptions, redeemedCount: 0, note: input.note || null, expiresAt, createdAt: at };", "grants-edges"],
+    ["HK1 email send deadline cut to 10 ms at the call site, so every real send is aborted and email sign-in answers 502", "src/email.js", "signal: AbortSignal.timeout(deadlineMs(options, EMAIL_SEND_TIMEOUT_MS))", "signal: AbortSignal.timeout(deadlineMs(options, EMAIL_SEND_TIMEOUT_MS / 1000))", "housekeeping-edges"],
+    ["HK2 Google key-fetch deadline cut to 5 ms at the call site, so a cold-isolate Google sign-in is refused as jwks_unavailable", "src/google.js", "signal: AbortSignal.timeout(deadlineMs(opts, GOOGLE_JWKS_TIMEOUT_MS))", "signal: AbortSignal.timeout(deadlineMs(opts, GOOGLE_JWKS_TIMEOUT_MS / 1000))", "housekeeping-edges"],
+    ["HK3 sweep deletes sessions by created_at, signing everybody out a day after they sign in", "src/db.js", "[\"sessions\", \"expires_at < ?1\", at - 86400]", "[\"sessions\", \"created_at < ?1\", at - 86400]", "housekeeping-edges"],
+    ["HK4 closed reports aged from created_at instead of updated_at, so a bug fixed after four months is deleted two months later", "src/db.js", "AND updated_at < ?1\", at - CLOSED_REPORT_RETENTION_SECONDS]", "AND created_at < ?1\", at - CLOSED_REPORT_RETENTION_SECONDS]", "housekeeping-edges"],
+    ["HK5 schema version compared as text, so older code lowers a stored '10' to '6'", "src/db.js", "WHERE CAST(schema_meta.value AS INTEGER) < CAST(?1 AS INTEGER)", "WHERE schema_meta.value < ?1", "housekeeping-edges"],
+    ["HK6 one sweep chunk per table, so the daily run deletes 5,000 events and falls behind the 10,000-a-day intake", "src/db.js", "export const SWEEP_MAX_CHUNKS = 3;", "export const SWEEP_MAX_CHUNKS = 1;", "housekeeping-edges"],
+    ["HK7 login-code cutoff an hour ahead of now, deleting every unused code so the right code answers 401 no_code", "src/db.js", "[\"login_codes\", \"expires_at < ?1 OR consumed_at IS NOT NULL\", at - 3600]", "[\"login_codes\", \"expires_at < ?1 OR consumed_at IS NOT NULL\", at + 3600]", "housekeeping-edges"],
+    ["HK8 rate-limit cutoff at now, deleting every current bucket so a used-up allowance is handed back after a sweep", "src/db.js", "[\"rate_limits\", \"window_start < ?1\", at - 86400]", "[\"rate_limits\", \"window_start < ?1\", at]", "housekeeping-edges"],
+    ["HK9 exposures age index led by cid, so each sweep chunk scans the whole table instead of a range", "src/schema.js", "idx_exposures_first ON exposures (first_at)", "idx_exposures_first ON exposures (cid, first_at)", "housekeeping-edges"],
+    ["HK10 'duplicate' dropped from the closed statuses, so duplicate reports are kept for ever", "src/db.js", "status IN ('fixed', 'wontfix', 'duplicate') AND updated_at", "status IN ('fixed', 'wontfix') AND updated_at", "housekeeping-edges"],
+    ["HK11 email send deadline raised to 60 s at the call site, so a hung provider holds Send code a minute", "src/email.js", "signal: AbortSignal.timeout(deadlineMs(options, EMAIL_SEND_TIMEOUT_MS))", "signal: AbortSignal.timeout(deadlineMs(options, EMAIL_SEND_TIMEOUT_MS * 6))", "housekeeping-edges"],
+    ["HK12 Google key-fetch deadline hard-coded to 60 s at the call site, so a hung key server holds sign-in a minute", "src/google.js", "signal: AbortSignal.timeout(deadlineMs(opts, GOOGLE_JWKS_TIMEOUT_MS))", "signal: AbortSignal.timeout(deadlineMs(opts, 60000))", "housekeeping-edges"],
+    ["HK13 session cutoff a day ahead of expiry instead of behind, ending sessions up to 24 hours early", "src/db.js", "[\"sessions\", \"expires_at < ?1\", at - 86400]", "[\"sessions\", \"expires_at < ?1\", at + 86400]", "housekeeping-edges"],
+    ["HK14 ensureSchema skips the memo when the schema is already current, one extra D1 read on every request", "src/db.js", "  if (await schemaIsCurrent(db)) {\n    schemaReady.add(db);\n    return;", "  if (await schemaIsCurrent(db)) {\n    return;", "housekeeping-edges"],
+    ["HK15 a chunk counts as the last only when empty: an extra DELETE per table and a false 'unfinished' on a short last chunk", "src/db.js", "    if (n < SWEEP_CHUNK_ROWS) {\n      return { deleted, done: true };", "    if (n === 0) {\n      return { deleted, done: true };", "housekeeping-edges"],
+    ["HK16 seven sweep chunks per table: 57 queries in a backlogged cron run and 35,000 events (105,000 rows written) in one run", "src/db.js", "export const SWEEP_MAX_CHUNKS = 3;", "export const SWEEP_MAX_CHUNKS = 7;", "housekeeping-edges"],
+    ["HK17 email send deadline hard-coded to 15 s at the call site, inside the old range check but not the module's default", "src/email.js", "signal: AbortSignal.timeout(deadlineMs(options, EMAIL_SEND_TIMEOUT_MS))", "signal: AbortSignal.timeout(deadlineMs(options, 15000))", "housekeeping-edges"],
+    ["HK18 Google key-fetch deadline doubled at the call site, so a hung key server holds sign-in ten seconds", "src/google.js", "signal: AbortSignal.timeout(deadlineMs(opts, GOOGLE_JWKS_TIMEOUT_MS))", "signal: AbortSignal.timeout(deadlineMs(opts, GOOGLE_JWKS_TIMEOUT_MS * 2))", "housekeeping-edges"],
+    ["HK19 session cutoff an hour ahead of expiry, signing people out an hour early", "src/db.js", "[\"sessions\", \"expires_at < ?1\", at - 86400]", "[\"sessions\", \"expires_at < ?1\", at + 3600]", "housekeeping-edges"],
+    ["HK20 login-code cutoff ten minutes ahead of now, deleting codes asked 5 to 15 minutes before a sweep that are still valid", "src/db.js", "[\"login_codes\", \"expires_at < ?1 OR consumed_at IS NOT NULL\", at - 3600]", "[\"login_codes\", \"expires_at < ?1 OR consumed_at IS NOT NULL\", at + 600]", "housekeeping-edges"],
+    ["HK21 rate-limit cutoff an hour back, so the 09:17 cron deletes the events route's daily cap bucket and the day's intake doubles", "src/db.js", "[\"rate_limits\", \"window_start < ?1\", at - 86400]", "[\"rate_limits\", \"window_start < ?1\", at - 3600]", "housekeeping-edges"],
+    ["HK22 rate-limit cutoff twelve hours back, so a late-day sweep deletes the events route's daily cap bucket", "src/db.js", "[\"rate_limits\", \"window_start < ?1\", at - 86400]", "[\"rate_limits\", \"window_start < ?1\", at - 43200]", "housekeeping-edges"],
+    ["HK23 closed reports kept 130 days instead of 180, breaking the privacy.html promise", "src/db.js", "AND updated_at < ?1\", at - CLOSED_REPORT_RETENTION_SECONDS]", "AND updated_at < ?1\", at - CLOSED_REPORT_RETENTION_SECONDS + 86400 * 50]", "housekeeping-edges"],
+    ["HK24 two sweep chunks per table, so a run clears exactly one day's cap and never catches up after a missed cron", "src/db.js", "export const SWEEP_MAX_CHUNKS = 3;", "export const SWEEP_MAX_CHUNKS = 2;", "housekeeping-edges"],
+    ["HK25 five sweep chunks per table: 25,000 events (75,000 rows) plus a day of capped intake is 105,000 rows, over D1's free daily writes", "src/db.js", "export const SWEEP_MAX_CHUNKS = 3;", "export const SWEEP_MAX_CHUNKS = 5;", "housekeeping-edges"],
+    ["HK26 six sweep chunks per table: the admin's backlogged sweep needs 51 queries and 120,000 rows are written with the day's intake", "src/db.js", "export const SWEEP_MAX_CHUNKS = 3;", "export const SWEEP_MAX_CHUNKS = 6;", "housekeeping-edges"],
+    ["HK27 10,000-row sweep chunks: 30,000 events (90,000 rows) plus a day of capped intake is 120,000 rows in one UTC day", "src/db.js", "export const SWEEP_CHUNK_ROWS = 5000;", "export const SWEEP_CHUNK_ROWS = 10000;", "housekeeping-edges"],
+    ["HK28 reports status index led by created_at, so the closed-report sweep reads every report instead of searching by status", "src/schema.js", "idx_reports_status ON reports (status, created_at)", "idx_reports_status ON reports (created_at, status)", "housekeeping-edges"],
+    ["SI1 the session is opened before the answer is built, so a read that fails while building it leaves an orphan session and a spent code", "src/api.js", "  const payload = await buildMePayload(env, account, at);\n  const session = await startSessionWithCode(env.DB, checked.codeId, account.id, at);", "  const session = await startSessionWithCode(env.DB, checked.codeId, account.id, at);\n  const payload = await buildMePayload(env, account, at);", "sign-in-edges"],
+    ["SI2 the losing tab of a double submit reads a null session and answers 500 instead of 401 no_code", "src/api.js", "if (!session) {", "if (session === undefined) {", "sign-in-edges"],
+    ["SI3 a wrong or missing code still creates the account and records an email sign-in method", "src/api.js", "  const checked = await checkLoginCode(env.DB, email, parsed.body.code, at);\n  if (!checked.ok) {\n    return json({ ok: false, reason: checked.reason }, 401, cors);\n  }\n\n  // Everything that can fail and is safe to repeat comes before the code is\n  // spent: the account and identity writes are idempotent and the payload is\n  // reads. The code is spent in the same transaction that opens the session,\n  // so a failure anywhere leaves the person a code that still works.\n  const { account } = await ensureAccount(\n    env.DB,\n    email,\n    { locale: parsed.body.locale, adminEmails: adminEmails(env) },\n    at\n  );\n  if (isDisabled(account)) {\n    // Before the code is spent and before any session or licence exists: a\n    // switched-off account gets nothing to hold on to (red team AUTHN-2).\n    return json({ ok: false, reason: \"disabled\" }, 403, cors);\n  }\n  await recordIdentity(env.DB, account.id, \"email\", email, at);\n", "  // Everything that can fail and is safe to repeat comes before the code is\n  // spent: the account and identity writes are idempotent and the payload is\n  // reads. The code is spent in the same transaction that opens the session,\n  // so a failure anywhere leaves the person a code that still works.\n  const { account } = await ensureAccount(\n    env.DB,\n    email,\n    { locale: parsed.body.locale, adminEmails: adminEmails(env) },\n    at\n  );\n  if (isDisabled(account)) {\n    // Before the code is spent and before any session or licence exists: a\n    // switched-off account gets nothing to hold on to (red team AUTHN-2).\n    return json({ ok: false, reason: \"disabled\" }, 403, cors);\n  }\n  await recordIdentity(env.DB, account.id, \"email\", email, at);\n\n  const checked = await checkLoginCode(env.DB, email, parsed.body.code, at);\n  if (!checked.ok) {\n    return json({ ok: false, reason: checked.reason }, 401, cors);\n  }\n", "sign-in-edges"],
+    ["SI4 a wrong or missing code still creates the account (an admin one included)", "src/api.js", "  const checked = await checkLoginCode(env.DB, email, parsed.body.code, at);\n  if (!checked.ok) {\n    return json({ ok: false, reason: checked.reason }, 401, cors);\n  }\n\n  // Everything that can fail and is safe to repeat comes before the code is\n  // spent: the account and identity writes are idempotent and the payload is\n  // reads. The code is spent in the same transaction that opens the session,\n  // so a failure anywhere leaves the person a code that still works.\n  const { account } = await ensureAccount(\n    env.DB,\n    email,\n    { locale: parsed.body.locale, adminEmails: adminEmails(env) },\n    at\n  );\n  if (isDisabled(account)) {\n    // Before the code is spent and before any session or licence exists: a\n    // switched-off account gets nothing to hold on to (red team AUTHN-2).\n    return json({ ok: false, reason: \"disabled\" }, 403, cors);\n  }\n  await recordIdentity(env.DB, account.id, \"email\", email, at);\n", "  const { account } = await ensureAccount(\n    env.DB,\n    email,\n    { locale: parsed.body.locale, adminEmails: adminEmails(env) },\n    at\n  );\n  if (isDisabled(account)) {\n    // Before the code is spent and before any session or licence exists: a\n    // switched-off account gets nothing to hold on to (red team AUTHN-2).\n    return json({ ok: false, reason: \"disabled\" }, 403, cors);\n  }\n\n  const checked = await checkLoginCode(env.DB, email, parsed.body.code, at);\n  if (!checked.ok) {\n    return json({ ok: false, reason: checked.reason }, 401, cors);\n  }\n\n  // Everything that can fail and is safe to repeat comes before the code is\n  // spent: the account and identity writes are idempotent and the payload is\n  // reads. The code is spent in the same transaction that opens the session,\n  // so a failure anywhere leaves the person a code that still works.\n  await recordIdentity(env.DB, account.id, \"email\", email, at);\n", "sign-in-edges"],
+    ["SI5 the verify answer names the moment of sign-in as the session's end, so the browser drops the session on reload", "src/accounts.js", "    return null;\n  }\n  return { token: session.token, sessionId: session.sessionId, expiresAt: session.expiresAt };", "    return null;\n  }\n  return { token: session.token, sessionId: session.sessionId, expiresAt: session.at };", "sign-in-edges"],
+    ["SI6 sessions last a thousand times ninety days, so a leaked token never ages out", "src/accounts.js", "expiresAt: at + SESSION_TTL_SECONDS", "expiresAt: at + SESSION_TTL_SECONDS * 1000", "sign-in-edges"],
+    ["SI7 the right code on the fifth try is refused and the code burned", "src/accounts.js", "EXISTS (SELECT 1 FROM login_codes WHERE id = ?6 AND consumed_at IS NULL)", "EXISTS (SELECT 1 FROM login_codes WHERE id = ?6 AND consumed_at IS NULL AND attempts < 5)", "sign-in-edges"],
+    ["SI8 an admin sweep with a failed table answers 200 ok", "src/api.js", "if (report.failed.length) {", "if (false) {", "sign-in-edges"],
+    ["SI9 an admin sweep with a failed table answers 200 with ok false, which the admin page shows as done", "src/api.js", "return json({ ok: false, reason: \"sweep_failed\", ...report }, 500, cors);", "return json({ ok: false, reason: \"sweep_failed\", ...report }, 200, cors);", "sign-in-edges"],
+    ["SI10 the admin sweep judges unfinished tables as failed and failed ones as fine", "src/api.js", "if (report.failed.length) {", "if (report.unfinished.length) {", "sign-in-edges"],
+    ["SI11 each new code re-stamps every unswept older code, so rows written grow with every code asked for", "src/accounts.js", "UPDATE login_codes SET consumed_at = ?2 WHERE email_normalized = ?1 AND consumed_at IS NULL", "UPDATE login_codes SET consumed_at = ?2 WHERE email_normalized = ?1", "sign-in-edges"],
+    ["SI12 a read error while the answer is built is swallowed, so the sign-in answers 200 with a session but no account or entitlement, and spends the code", "src/api.js", "  const payload = await buildMePayload(env, account, at);\n  const session = await startSessionWithCode(env.DB, checked.codeId, account.id, at);", "  const payload = await buildMePayload(env, account, at).catch(() => ({ ok: true }));\n  const session = await startSessionWithCode(env.DB, checked.codeId, account.id, at);", "sign-in-edges"],
+    ["SI13 a backlog excuses a failed table, so an admin sweep that failed a table during a backlog answers 200 and the admin page shows done", "src/api.js", "if (report.failed.length) {", "if (report.failed.length && !report.unfinished.length) {", "sign-in-edges"],
+    ["LB1 the ledger's clock runs in milliseconds against TTLs in seconds (a 30-day marker lasts 43 minutes)", "src/ledger.js", ": Math.floor(Date.now() / 1000);", ": Date.now();", "ledger-boundaries"],
+    ["LB2 writes are sent between validation chunks, so a stale attempt's writes land before a later chunk fails", "src/ledger.js", "    for (const [key, write] of writes) {\n      statements.push(", "    for (const [key, write] of writes) {\n      statements.splice(1, 0,", "ledger-boundaries"],
+    ["LB3 the commit row is inserted by the last chunk, so changes in the first chunk are never seen", "src/ledger.js", "const sql = index === 0", "const sql = index === chunks.length - 1", "ledger-boundaries"],
+    ["LB4 the last key of every validation chunk is left out", "src/ledger.js", "reads.slice(i, i + LEDGER_VALIDATE_CHUNK)", "reads.slice(i, i + LEDGER_VALIDATE_CHUNK - 1)", "ledger-boundaries"],
+    ["LB5 a validation chunk binds more than D1's 100 parameters", "src/ledger.js", "export const LEDGER_VALIDATE_CHUNK = 40;", "export const LEDGER_VALIDATE_CHUNK = 50;", "ledger-boundaries"],
+    ["LB6 a tombstone is read with no version, so a transaction that reads it conflicts for ever", "src/ledger.js", "version: String(row.version) };", "version: row.value === null || row.value === undefined ? null : String(row.version) };", "ledger-boundaries"],
+    ["LB7 validation ignores expiry, so an expired unswept row conflicts for ever", "src/ledger.js", "AND (k.expires_at IS NULL OR k.expires_at > ?2)", "AND (k.expires_at IS NULL OR k.expires_at > ?2 OR ?2 = ?2)", "ledger-boundaries"],
+    ["LB8 an expired row is read with its stored version, so rewriting it conflicts for ever", "src/ledger.js", "    return { value: null, version: null };\n  }\n  return { value: row.value", "    return { value: null, version: String(row.version) };\n  }\n  return { value: row.value", "ledger-boundaries"],
+    ["LB9 validation and reads disagree on the second a key expires", "src/ledger.js", "AND (k.expires_at IS NULL OR k.expires_at > ?2)", "AND (k.expires_at IS NULL OR k.expires_at >= ?2)", "ledger-boundaries"],
+    ["LB10 a key written again keeps its first expiry", "src/ledger.js", "expires_at = excluded.expires_at, updated_at = excluded.updated_at", "updated_at = excluded.updated_at", "ledger-boundaries"],
+    ["LB11 a tombstone expires, and the sweep brings KV's copy back", "src/ledger.js", "this.writes.set(key, { value: null, expiresAt: null });", "this.writes.set(key, { value: null, expiresAt: this.at + 1 });", "ledger-boundaries"],
+    ["LB12 an expired ledger row falls back to KV's older copy", "src/ledger.js", "const missing = keys.filter((key) => !rows.has(key));", "const missing = keys.filter((key) => !rows.has(key) || !isLive(rows.get(key), at));\n  missing.forEach((key) => rows.delete(key));", "ledger-boundaries"],
+    ["LB13 a put through the read-only view is silently dropped", "src/ledger.js", "    async put() {\n      throw new Error(\"ledger writes go through runLedgerTransaction\");\n    },", "    async put() {},", "ledger-boundaries"],
+    ["LB14 a delete through the read-only view is silently dropped", "src/ledger.js", "    async delete() {\n      throw new Error(\"ledger writes go through runLedgerTransaction\");\n    }", "    async delete() {}", "ledger-boundaries"],
+    ["LB15 the backoff is not awaited, so retries run in step", "src/ledger.js", "await backoff(attempt, opts);", "backoff(attempt, opts);", "ledger-boundaries"],
+    ["LB16 the jitter collapses to no wait at all", "src/ledger.js", "const ms = Math.floor(random() * ceiling);", "const ms = Math.floor(random()) * ceiling;", "ledger-boundaries"],
+    ["LB17 the backoff cap becomes a floor", "src/ledger.js", "Math.min(LEDGER_BACKOFF_CAP_MS, LEDGER_BACKOFF_BASE_MS * 2 ** attempt)", "Math.max(LEDGER_BACKOFF_CAP_MS, LEDGER_BACKOFF_BASE_MS * 2 ** attempt)", "ledger-boundaries"],
+    ["LB18 a wait follows the last attempt too", "src/ledger.js", "if (attempt < attempts) {", "if (attempt <= attempts) {", "ledger-boundaries"],
+    ["LB19 an injected sleep is ignored", "src/ledger.js", "if (typeof options.sleep === \"function\") {", "if (false) {", "ledger-boundaries"],
+    ["LB20 one attempt cannot be asked for", "src/ledger.js", "opts.maxAttempts >= 1", "opts.maxAttempts > 1", "ledger-boundaries"],
+    ["LB21 a key written blind is read and validated, so a change to it is a false conflict", "src/ledger.js", "familyOf(key).filter((k) => !this.reads.has(k) && !this.writes.has(k));", "familyOf(key).filter((k) => !this.reads.has(k));", "ledger-boundaries"],
+    ["LB22 a license's charged: key is fetched in a second query", "src/ledger.js", "const LICENSE_FAMILY = [\"lic:\", \"paid:\", \"ended:\", \"reversed:\", \"charged:\"];", "const LICENSE_FAMILY = [\"lic:\", \"paid:\", \"ended:\", \"reversed:\"];", "ledger-boundaries"]
+  ].map(([name, file, from, to, test]) => ({
+    name,
+    file: `workers/entitlements/${file}`,
+    from,
+    to: to.replace("SEQ", SEQUENTIAL),
+    cmd: node([`workers/entitlements/test/${test}.test.mjs`])
+  })),
+  // Red team, Nov 2026 (browser injection and framing). CXSS-1: three fields of the synced progress document reached
+  // innerHTML raw, and a stored <meta http-equiv="refresh"> moved every device on the account off the site under the
+  // shipped CSP; the worker stored any object. Each mutant puts one defect back and names the test written for it: a
+  // path under workers/ is a Node test file, anything else a browser spec under the real CSP, with a title filter.
+  inject: [
+    ["IJ1 the catalogue card's session count is drawn as stored: markup in the synced count becomes elements", "js/app.js", "    const n = Number(row?.completedCount);\n    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return row?.completedCount || 0;", "tests/synced-doc-injection.spec.js", "IJ1 "],
+    ["IJ2 the hold pills draw each stored entry's seconds as they are, markup and all", "js/app.js", "      .map(holdSeconds)\n      .filter((s) => s !== null)\n", "      .map((l) => l.seconds)\n", "tests/synced-doc-injection.spec.js", "IJ2 "],
+    ["IJ3 the 12-week plan's HUD puts the stored focus into its HTML unescaped", "js/practice-modes.js", "<span data-week-head>${escText(model.head)}</span>", "<span data-week-head>${model.head}</span>", "tests/synced-doc-injection.spec.js", "IJ3 "],
+    ["IJ4 the hold pills are raw again, judged by the sweep of every synced field with Pro's panels drawn", "js/app.js", "      .map(holdSeconds)\n      .filter((s) => s !== null)\n", "      .map((l) => l.seconds)\n", "tests/synced-doc-injection.spec.js", "IJ4 "],
+    // IJ5 is the end-to-end case: since js/sync.js normalises the account's copy (the syncing set), markup in the
+    // count no longer reaches the sink by sign-in sync, so the test can only go red with both layers gone at once.
+    ["IJ5 the catalogue count is raw again and the merge keeps a stored count as it is, judged end to end: the worker's copy arrives by sign-in sync and its meta refresh navigates", "js/app.js", "    const n = Number(row?.completedCount);\n    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return row?.completedCount || 0;", "tests/synced-doc-injection.spec.js", "IJ5 ", [{ file: "js/sync.js", from: "      completedCount: Math.max(whole(r.completedCount), history.length),", to: "      completedCount: r.completedCount," }]],
+    ["IJ6 the worker takes any number-shaped field: markup as a session count or a hold's seconds is stored", "workers/entitlements/src/progress.js", "  return value === undefined || (typeof value === \"number\" && Number.isFinite(value) && value >= 0);", "  return true;", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ7 the worker takes a history or a log that is not a list", "workers/entitlements/src/progress.js", "  return value === undefined || Array.isArray(value);", "  return true;", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ8 the worker no longer looks inside the exercise rows", "workers/entitlements/src/progress.js", "  return Object.values(doc.progress || {}).every(rowIsSound) && (doc.holdLogs || []).every(holdIsSound);", "  return (doc.holdLogs || []).every(holdIsSound);", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ9 the worker no longer looks inside the hold log", "workers/entitlements/src/progress.js", "  return Object.values(doc.progress || {}).every(rowIsSound) && (doc.holdLogs || []).every(holdIsSound);", "  return Object.values(doc.progress || {}).every(rowIsSound);", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ10 over-strict: a document that leaves a list out is refused, though the client may send one so", "workers/entitlements/src/progress.js", "  return value === undefined || Array.isArray(value);", "  return Array.isArray(value);", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ11 over-strict: a week plan of null, what a browser with no plan sends, is refused", "workers/entitlements/src/progress.js", "  return value === undefined || value === null || isRecord(value);", "  return value === undefined || isRecord(value);", "workers/entitlements/test/progress.test.mjs"],
+    ["IJ12 the worker takes a list as the whole document", "workers/entitlements/src/progress.js", "  return value !== null && typeof value === \"object\" && !Array.isArray(value);", "  return value !== null && typeof value === \"object\";", "workers/entitlements/test/progress.test.mjs"],
+    // CXSS-2: GitHub Pages cannot send frame-ancestors, so the first script of each page refuses a frame.
+    ["IJ13 index.html renders in another origin's frame: boot-head.js no longer hides it", "js/boot-head.js", "  if (framed()) {\n", "  if (false) {\n", "tests/frame-guard.spec.js", "IJ13 "],
+    ["IJ14 admin.html renders in another origin's frame: its guard no longer runs", "js/frame-guard.js", "  if (!framed()) return;\n", "  return;\n", "tests/frame-guard.spec.js", "IJ13 "],
+    ["IJ15 framed by its own origin, neither page asks to be the top window", ["js/boot-head.js", "js/frame-guard.js"], "window.top.location.replace(window.location.href);", "void 0;", "tests/frame-guard.spec.js", "IJ14 "],
+    ["IJ16 over-blocking: admin.html takes itself for framed when it is the top window, and never shows", "js/frame-guard.js", "      return window.top !== window.self;", "      return true;", "tests/frame-guard.spec.js", "IJ15 "],
+    // CXSS-3: a report's contact, typed by anyone, became the admin's reply link as it was (mailto header fields).
+    ["IJ17 the reply link is the contact as typed: ?bcc=, &body= and a second recipient reach the admin's mail client", "js/admin.js", "    const href = replyHref(contact);", "    const href = `mailto:${contact}`;", "tests/admin-reply-link.spec.js"],
+    ["IJ18 any character but @ passes as the local part: a comma writes to a second recipient", "js/admin.js", "  const PLAIN_LOCAL = /^[A-Za-z0-9.!#$'*+^_`{|}~-]{1,64}$/;", "  const PLAIN_LOCAL = /^[^@\\s]{1,64}$/;", "tests/admin-reply-link.spec.js"],
+    ["IJ19 any text passes as the domain: the header fields after it are kept", "js/admin.js", "  const PLAIN_DOMAIN = /^(?=.{1,253}$)", "  const PLAIN_DOMAIN = /^(?=.*$)|^(?=.{1,253}$)", "tests/admin-reply-link.spec.js"],
+    ["IJ20 the local part is not percent-encoded: a # in it starts a fragment and the mail goes to the part before it", "js/admin.js", "    return `mailto:${encodeURIComponent(local)}@${domain}`;", "    return `mailto:${local}@${domain}`;", "tests/admin-reply-link.spec.js"],
+    // CXSS-4: the spec that stood for this wrote #ex-steps with its own escapeHtml and passed on this mutant.
+    ["IJ21 the exercise's steps are put into #ex-steps unescaped", "js/app.js", "      .map((s) => `<li>${escapeHtml(s)}</li>`)", "      .map((s) => `<li>${s}</li>`)", "tests/redteam-client.spec.js", "IJ21 "],
+    ["IJ22 a stored count of \"1e400\" is drawn as Infinity sessions (coerced, but not checked finite)", "js/app.js", "    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;", "    return Math.max(0, Math.floor(n || 0));", "tests/synced-doc-injection.spec.js", "IJ1 "]
+  ].map(([name, file, from, to, spec, grep, also]) => ({
+    name,
+    file,
+    from,
+    to,
+    ...(also ? { also } : {}),
+    cmd: spec.startsWith("workers/")
+      ? node([spec])
+      : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
+  })),
+  // Red team, Nov 2026 (sign-in). AUTHN-1: Google sign-in found the account by the token's email and ignored `sub`, so
+  // a second Google account with the same address entered the first one's account (admin included) and a Google
+  // account whose address changed got an empty one. AUTHN-2: a switched-off account still got a session and a licence
+  // from both sign-in routes. AUTHN-7: no response said nosniff. The last two mutants take the client's messages for
+  // the new refusals away, which made both read "Algo falló — inténtalo de nuevo".
+  authwall: [
+    ["AW1 Google sign-in looks the account up by email only: a renamed Google account gets an empty account", "workers/entitlements/src/api.js", "  let account = await getAccountByIdentity(env.DB, \"google\", identity.subject);", "  let account = null;", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW2 a second Google account with a taken address walks into the first one's account", "workers/entitlements/src/api.js", "    if (known.length && !known.includes(identity.subject)) {", "    if (false) {", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW3 over-strict: an account no Google account owns yet can never be joined by Google", "workers/entitlements/src/api.js", "    if (known.length && !known.includes(identity.subject)) {", "    if (!known.includes(identity.subject)) {", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW4 Google sign-in hands a switched-off account a session and a licence", "workers/entitlements/src/api.js", "  if (isDisabled(account)) {\n    return { ok: false, status: 403, reason: \"disabled\" };", "  if (false) {\n    return { ok: false, status: 403, reason: \"disabled\" };", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW5 an emailed code hands a switched-off account a session and a licence", "workers/entitlements/src/api.js", "  if (isDisabled(account)) {\n    // Before the code is spent", "  if (false) {\n    // Before the code is spent", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW6 a Google account's sub is never recorded, so its next sign-in after an address change starts over", "workers/entitlements/src/api.js", "  await recordIdentity(env.DB, account.id, \"google\", identity.subject, at);\n  return { ok: true, account };", "  return { ok: true, account };", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW7 over-strict: an account that was never switched off reads as switched off", "workers/entitlements/src/accounts.js", "  return Boolean(account) && account.disabled_at !== null && account.disabled_at !== undefined;", "  return Boolean(account) && account.disabled_at !== undefined;", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW8 JSON answers lose nosniff", "workers/entitlements/src/index.js", "      \"x-content-type-options\": \"nosniff\",\n      ...(headers || {})", "      ...(headers || {})", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW9 the preflight loses nosniff", "workers/entitlements/src/index.js", "headers: { ...cors, \"x-content-type-options\": \"nosniff\" } });", "headers: cors });", "workers/entitlements/test/sign-in-identity.test.mjs"],
+    ["AW10 a switched-off account is told \"something went wrong\" and retries", "js/app.js", "    disabled: \"auth.err.disabled\",\n", "", "tests/redteam-accounts-profiles.spec.js", "switched-off account is told so"],
+    ["AW11 a Google account refused for a taken address is not told to use the emailed code", "js/app.js", "    identity_conflict: \"auth.err.identityConflict\"\n", "", "tests/redteam-accounts-profiles.spec.js", "address another Google account holds"],
+    ["AW12 with no emailed code on offer, an identity conflict still sends the person to one", "js/app.js", "    if (reason === \"identity_conflict\" && !accountSignIn().canEmail) return", "    if (false) return", "tests/redteam-accounts-profiles.spec.js", "address another Google account holds"],
+    ["AW13 an identity conflict always names a report, though an emailed code is on offer", "js/app.js", "    if (reason === \"identity_conflict\" && !accountSignIn().canEmail) return", "    if (reason === \"identity_conflict\") return", "tests/redteam-accounts-profiles.spec.js", "address another Google account holds"]
+  ].map(([name, file, from, to, spec, grep]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: spec.startsWith("workers/")
+      ? node([spec])
+      : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
   }))
 };
 
-export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets"];
+export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger"];
 
 /** What the last failing command printed, so a red baseline in CI says which test failed. */
 let lastFailure = "";
@@ -1036,20 +1461,35 @@ function runTests([cmd, ...args], root) {
   }
 }
 
+/** Every edit a mutant makes: its from/to in each of its files, then each of its `also` edits, in order. */
+function mutantEdits(m, root) {
+  const own = [].concat(m.file).map((f) => ({ file: path.join(root, f), from: m.from, to: m.to }));
+  return own.concat((m.also || []).map((e) => ({ file: path.join(root, e.file), from: e.from, to: e.to })));
+}
+
 /**
  * A mutant changes one file, or the same text in every file of a list (a defect
  * made on all four pages at once, which a "the pages agree" check cannot see).
+ * `also` adds further edits made together with it: a defect that only shows
+ * when two layers of one defence are both gone (an end-to-end test behind a
+ * sink escape and a normalisation upstream of it). Every anchor must occur
+ * exactly once in the text it is applied to, or the result is ANCHOR.
  * @returns {"KILLED"|"SURVIVED"|"ANCHOR"}
  */
 export function tryMutant(m, root = process.cwd()) {
-  const files = [].concat(m.file).map((f) => path.join(root, f));
-  const sources = files.map((f) => readFileSync(f, "utf8"));
-  if (sources.some((src) => src.split(m.from).length !== 2)) return "ANCHOR";
-  files.forEach((f, i) => writeFileSync(f, sources[i].replace(m.from, m.to)));
+  const edits = mutantEdits(m, root);
+  const originals = new Map(edits.map((e) => [e.file, readFileSync(e.file, "utf8")]));
+  const mutated = new Map(originals);
+  for (const e of edits) {
+    const src = mutated.get(e.file);
+    if (src.split(e.from).length !== 2) return "ANCHOR";
+    mutated.set(e.file, src.replace(e.from, e.to));
+  }
+  mutated.forEach((src, f) => writeFileSync(f, src));
   try {
     return runTests(m.cmd, root) ? "SURVIVED" : "KILLED";
   } finally {
-    files.forEach((f, i) => writeFileSync(f, sources[i]));
+    originals.forEach((src, f) => writeFileSync(f, src));
   }
 }
 

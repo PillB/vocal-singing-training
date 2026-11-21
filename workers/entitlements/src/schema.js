@@ -15,10 +15,12 @@
 "use strict";
 
 /**
- * Bump when a statement is added. Stored in `schema_meta` so `ensureSchema`
- * can skip the whole batch on the overwhelming majority of requests.
+ * Bump when a statement is added. Stored in `schema_meta` for people reading
+ * the database; `ensureSchema` decides whether to run the batch by a hash of
+ * the statements themselves (db.js `schemaFingerprint`), so a forgotten bump
+ * or two branches choosing the same number cannot skip a table.
  */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /**
  * Table and index definitions, in dependency order.
@@ -182,6 +184,9 @@ export const SCHEMA_STATEMENTS = [
    )`,
   `CREATE INDEX IF NOT EXISTS idx_exposures_arm ON exposures (experiment, variant, first_at)`,
   `CREATE INDEX IF NOT EXISTS idx_exposures_cid ON exposures (cid)`,
+  // The daily sweep deletes by age; without this each of its chunks read the
+  // whole table to find rows past 180 days.
+  `CREATE INDEX IF NOT EXISTS idx_exposures_first ON exposures (first_at)`,
 
   // Version 3: how the event route is doing, per UTC day — what arrived and
   // why anything was turned away (events.js INGEST_REASONS). A day, a reason
@@ -254,5 +259,34 @@ export const SCHEMA_STATEMENTS = [
    )`,
   `CREATE INDEX IF NOT EXISTS idx_reports_status ON reports (status, created_at)`,
   `CREATE INDEX IF NOT EXISTS idx_reports_created ON reports (created_at)`,
-  `CREATE INDEX IF NOT EXISTS idx_reports_account ON reports (account_id, created_at)`
+  `CREATE INDEX IF NOT EXISTS idx_reports_account ON reports (account_id, created_at)`,
+
+  // Version 6: the payment ledger (ledger.js). The keys and values are the
+  // ones store.js has always kept in KV (its header lists the key space);
+  // what D1 adds is a transaction around each webhook, so two events for one
+  // license cannot erase each other's change and an event's marker commits
+  // with its effect or not at all.
+  //
+  // `version` is a random token written with every change, which is what a
+  // transaction compares to see whether a key it read was changed by someone
+  // else before it committed. `value` NULL is a deleted key (a tombstone), so
+  // the copy KV may still hold from before this table existed stays hidden.
+  // `expires_at` replaces KV's TTL: a row past it reads as absent and the
+  // daily sweep removes it.
+  `CREATE TABLE IF NOT EXISTS ledger_kv (
+     key TEXT PRIMARY KEY,
+     value TEXT,
+     version TEXT NOT NULL,
+     expires_at INTEGER,
+     updated_at INTEGER NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_ledger_kv_expires ON ledger_kv (expires_at) WHERE expires_at IS NOT NULL`,
+  // One row per commit in flight, inserted and deleted inside the same batch,
+  // so it is empty between transactions. It is the switch every write of a
+  // commit is conditional on: it exists only if nothing the transaction read
+  // has changed.
+  `CREATE TABLE IF NOT EXISTS ledger_tx (
+     tx_id TEXT PRIMARY KEY,
+     created_at INTEGER NOT NULL
+   )`
 ];

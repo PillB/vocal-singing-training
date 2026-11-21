@@ -13,6 +13,7 @@
 "use strict";
 
 import { base64UrlToBytes, base64UrlToString } from "./license.js";
+import { deadlineMs } from "./deadline.js";
 
 /** Where Google publishes the public keys its ID tokens are signed with. */
 export const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
@@ -26,12 +27,15 @@ export const CLOCK_SKEW_SECONDS = 300;
 /** How long a fetched key set is reused, in seconds. */
 export const JWKS_CACHE_SECONDS = 3600;
 
+/** How long the key fetch may take before the sign-in fails instead of hanging. */
+export const GOOGLE_JWKS_TIMEOUT_MS = 5000;
+
 /** Isolate-local JWKS cache: `{fetchedAt, keys}`. */
 let jwksCache = null;
 
 /**
  * Fetch (and cache) Google's signing keys.
- * @param {{fetchImpl?: function, now?: number}} [options] Injectables, for tests.
+ * @param {{fetchImpl?: function, now?: number, timeoutMs?: number}} [options] Injectables, for tests.
  * @returns {Promise<Object[]>} JWK entries.
  */
 export async function fetchGoogleJwks(options) {
@@ -41,7 +45,9 @@ export async function fetchGoogleJwks(options) {
     return jwksCache.keys;
   }
   const doFetch = opts.fetchImpl || fetch;
-  const response = await doFetch(GOOGLE_JWKS_URL, { method: "GET" });
+  // A deadline, as on every call this worker makes out: a key fetch that hung
+  // held the Google sign-in open with no answer at all.
+  const response = await doFetch(GOOGLE_JWKS_URL, { method: "GET", signal: AbortSignal.timeout(deadlineMs(opts, GOOGLE_JWKS_TIMEOUT_MS)) });
   if (!response.ok) {
     throw new Error(`google jwks fetch failed: ${response.status}`);
   }

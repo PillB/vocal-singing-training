@@ -446,6 +446,115 @@ test.describe("Coach strip: the mode and its cue on the stage", () => {
   }
 });
 
+/**
+ * A short laptop window (1280x560, the nightly sweep's "short" format). The
+ * diction ladder's picture shrank to fit beside a guide that held a step, then
+ * the stage grew 3-7 px past the window to show the picture whole. The guide
+ * gives its room up first, its steps and then its words, and keeps its button.
+ */
+function shortWindowStage() {
+  const stage = document.getElementById("highway-stage").getBoundingClientRect();
+  const wrap = document.getElementById("mode-focus-panel");
+  const panel = wrap.querySelector(".mode-panel");
+  const guide = document.getElementById("stage-guide");
+  const rail = document.getElementById("hud-bottom-rail").getBoundingClientRect();
+  const start = document.getElementById("btn-practice-start").getBoundingClientRect();
+  const hit = document.elementFromPoint(start.left + start.width / 2, start.top + start.height / 2);
+  const g = guide.getBoundingClientRect();
+  return {
+    vh: innerHeight,
+    stageBottom: stage.bottom,
+    picture: !!panel?.classList.contains("has-viz"),
+    cut: Math.max(wrap.scrollHeight - wrap.clientHeight, panel.scrollHeight - panel.clientHeight),
+    guideShown: !guide.hidden && g.height > 0,
+    guideSteps: guide.hidden || guide.classList.contains("is-bare") ? 0 : [...guide.querySelectorAll("#stage-guide-steps li")].filter((li) => !li.hidden).length,
+    guideClipped: guide.scrollHeight > guide.clientHeight + 1,
+    guideBottom: g.bottom,
+    railTop: rail.top,
+    startHit: !!hit && document.getElementById("btn-practice-start").contains(hit)
+  };
+}
+
+test.describe("A short laptop window: the picture before the guide", () => {
+  test("the diction ladder's picture is whole and the stage stays on the window; the guide gives up its steps first", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await boot(page, { clock: false });
+    for (const height of [800, 600, 560, 540]) {
+      await page.setViewportSize({ width: 1280, height });
+      await open(page, "v1-diction");
+      await page.evaluate(() => window.VTApp.fitHighwayToViewport());
+      await page.waitForTimeout(250);
+      const s = await page.evaluate(shortWindowStage);
+      const at = `1280x${height}`;
+      expect(s.picture, `${at}: the diction ladder is a picture`).toBe(true);
+      expect(s.stageBottom, `${at}: the stage ends on the window, not under its bottom edge`).toBeLessThanOrEqual(s.vh);
+      expect(s.cut, `${at}: the picture is whole`).toBeLessThanOrEqual(2);
+      expect(s.startHit, `${at}: a click on Empezar reaches it`).toBe(true);
+      expect(s.guideShown, `${at}: the guide keeps at least its button`).toBe(true);
+      expect(s.guideClipped, `${at}: no step cut mid-line`).toBe(false);
+      expect(s.guideBottom, `${at}: the guide ends above Empezar's row`).toBeLessThanOrEqual(s.railTop);
+      // Control: where there is room the guide keeps its steps, so a fix that
+      // always hid it would fail here.
+      if (height === 800) expect(s.guideSteps, `${at}: the guide keeps its steps`).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  // The same rule with a picture far past its share (min(19rem, 62%) of the box
+  // between the rails), so each half is judged on its own: the guide fitted
+  // beside the room the picture was left kept its steps and cut the picture by
+  // ~120 px, and a stage sized before the guide gave way ran ~120 px past the
+  // window.
+  test("a picture taller than its share: the guide gives way before the picture is cut or the stage outgrows the window", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await boot(page, { clock: false });
+    await open(page, "v1-diction");
+    await page.evaluate(() => window.VTApp.fitHighwayToViewport());
+    await page.waitForTimeout(250);
+    const before = await page.evaluate(shortWindowStage);
+    expect(before.guideSteps, "the guide holds its steps beside the picture first").toBeGreaterThanOrEqual(2);
+    // The picture asks for all but 60 px of the box between the rails: the guide's button still fits under it.
+    const grownBy = await page.evaluate(() => {
+      const focus = document.getElementById("mode-focus");
+      const wrap = document.getElementById("mode-focus-panel");
+      const vz = wrap.querySelector(".mode-panel.has-viz .vz");
+      const cs = getComputedStyle(focus);
+      const box = focus.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      const add = Math.round(box - 60 - wrap.scrollHeight);
+      vz.style.minHeight = `${vz.getBoundingClientRect().height + add}px`;
+      return add;
+    });
+    expect(grownBy, "the picture now needs more than its share").toBeGreaterThan(60);
+    await page.evaluate(() => window.VTApp.fitHighwayToViewport());
+    await page.waitForTimeout(250);
+    const s = await page.evaluate(shortWindowStage);
+    expect(s.stageBottom, "the stage ends on the window").toBeLessThanOrEqual(s.vh);
+    expect(s.cut, "the picture is whole").toBeLessThanOrEqual(2);
+    expect(s.guideSteps, "the guide gave its steps up").toBe(0);
+    expect(s.guideShown, "and kept its button").toBe(true);
+    expect(s.guideClipped, "its button is whole").toBe(false);
+    expect(s.guideBottom, "the guide ends above Empezar's row").toBeLessThanOrEqual(s.railTop);
+  });
+
+  // A small phone is where the stage may grow past the screen (#21): once the
+  // guide is down to its button, the picture's last rows come from the stage,
+  // not from under the button.
+  test("on a 320x640 phone the picture is whole beside the guide's button: the stage grows for the rest", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await boot(page, { clock: false });
+    for (const id of ["s4-lip-trills", "v1-diction"]) {
+      await open(page, id);
+      await page.evaluate(() => window.VTApp.fitHighwayToViewport());
+      await page.waitForTimeout(250);
+      const s = await page.evaluate(shortWindowStage);
+      expect(s.picture, `${id}: a picture`).toBe(true);
+      expect(s.cut, `${id}: the picture is whole`).toBeLessThanOrEqual(2);
+      expect(s.guideShown, `${id}: the guide keeps its button`).toBe(true);
+      expect(s.guideClipped, `${id}: its button is whole`).toBe(false);
+      expect(s.guideBottom, `${id}: the guide ends above Empezar's row`).toBeLessThanOrEqual(s.railTop);
+    }
+  });
+});
+
 test.describe("Session chrome: one line, Pausar and Terminar in words", () => {
   // A phone on its side puts the banner's buttons in the exercise header's
   // row instead (see Landscape below)

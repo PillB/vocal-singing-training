@@ -604,7 +604,7 @@
         const store = tx.objectStore(DB_STORE);
         const req = store.getAll();
         req.onsuccess = () => {
-          let rows = (req.result || []).filter((r) => recordingProfile(r) === active);
+          let rows = (req.result || []).filter((r) => shown(r, active));
           rows = rows
             .map((r) => ({
               id: r.id,
@@ -632,7 +632,7 @@
         const req = tx.objectStore(DB_STORE).get(id);
         req.onsuccess = () => {
           const r = req.result;
-          if (!r || recordingProfile(r) !== active) return resolve(null);
+          if (!shown(r, active)) return resolve(null);
           resolve(new Blob([r.data], { type: r.mimeType || "audio/webm" }));
         };
         req.onerror = () => reject(req.error);
@@ -652,7 +652,7 @@
         let removed = false;
         const req = store.get(id);
         req.onsuccess = () => {
-          if (req.result && recordingProfile(req.result) === active) {
+          if (shown(req.result, active)) {
             store.delete(id);
             removed = true;
           }
@@ -660,12 +660,81 @@
         tx.oncomplete = () => resolve(removed);
         tx.onerror = () => reject(tx.error);
       });
+    },
+
+    /**
+     * Set this browser's recorded takes aside for an account, with the rest of
+     * its practice (js/sync.js putAside): they stay here, unlisted and
+     * unplayable, until restoreRecordings() gives them back. Only takes made
+     * in [from, to) when those are given (ms); takes already aside stay with
+     * whoever they are aside for.
+     * @param {string} owner The account they are set aside for.
+     * @param {{from?: number, to?: number}} [range] When they were made.
+     * @returns {Promise<number>} How many were set aside.
+     */
+    setRecordingsAside(owner, range = {}) {
+      return changeRecordings((r) => {
+        const at = Date.parse(r.createdAt) || 0;
+        if (r.asideFor || (range.from && at < range.from) || (range.to && at >= range.to)) return null;
+        return { ...r, asideFor: owner };
+      });
+    },
+
+    /**
+     * Give back the takes set aside for an account.
+     * @param {string} owner The account signed in.
+     * @returns {Promise<number>} How many came back.
+     */
+    restoreRecordings(owner) {
+      return changeRecordings((r) => {
+        if (r.asideFor !== owner) return null;
+        const back = { ...r };
+        delete back.asideFor;
+        return back;
+      });
     }
   };
 
   /** The profile a stored take belongs to: the main one when it predates profiles. */
   function recordingProfile(record) {
     return (record && record.profileId) || "default";
+  }
+
+  /** Whether a stored take is the active profile's to list, play and delete: not one set aside. */
+  function shown(record, active) {
+    return !!record && recordingProfile(record) === active && !record.asideFor;
+  }
+
+  /**
+   * Rewrite every stored take `change` returns a new copy of, in one
+   * transaction. With site data blocked there is nothing stored to change.
+   * @param {(record: object) => object|null} change The new copy, or null to leave it.
+   * @returns {Promise<number>} How many were rewritten.
+   */
+  async function changeRecordings(change) {
+    let db;
+    try {
+      db = await Storage.openDb();
+    } catch {
+      return 0;
+    }
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(DB_STORE, "readwrite");
+      let changed = 0;
+      const req = tx.objectStore(DB_STORE).openCursor();
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (!cursor) return;
+        const next = change(cursor.value);
+        if (next) {
+          cursor.update(next);
+          changed += 1;
+        }
+        cursor.continue();
+      };
+      tx.oncomplete = () => resolve(changed);
+      tx.onerror = () => reject(tx.error);
+    });
   }
 
   global.VTStorage = Storage;

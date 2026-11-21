@@ -28,6 +28,14 @@
    * browser and is merged back when its account signs in here again.
    */
   const LS_ASIDE = "vt_sync_aside_v1";
+  /**
+   * When this browser stopped being its owner's: {owner, me, since}. Written
+   * the moment another account signs in here, and gone when that account
+   * leaves. What was done here from `since` on was done by `me`, and stays
+   * theirs whatever they answer, or if they leave without answering (RES-2).
+   * It is read only while `owner` is still the browser's owner on record.
+   */
+  const LS_HANDOVER = "vt_sync_handover_v1";
   /** Most entries kept per exercise, matching the browser's own history cap. */
   const HISTORY_CAP = 50;
   /** Attempts at the read-merge-write cycle before giving up until next time. */
@@ -66,12 +74,24 @@
   let timer = null;
   let running = null;
   let runningFor = null;
+  // The session the running cycle reads and writes as (RES-1).
+  let runningAs = null;
   let lastError = null;
   // The worker's own word for a refused write ("profile_limit"), so the panel
   // can say why instead of promising a retry that will not come.
   let refusedReason = null;
   let lastSyncedAt = null;
   let failures = 0;
+  // The owner this page recorded when storage would not keep it (see writeOwner).
+  let ownerKept = null;
+  // The last restoreAside()'s recordings coming back (see giveRecordingsBack).
+  let recordingsBack = Promise.resolve(0);
+  // The session signed in on this page a moment ago whose account has not been
+  // read yet: the panel says "fetching" rather than "never saved" (FLOW-7).
+  let fetchingFor = null;
+  // The session the account listener last saw, so a sign-in can be told apart
+  // from any other change of the account's state (a /v1/me answer, a plan).
+  let seenToken = null;
 
   // Which profiles hold changes the account has not had yet. Every synced write
   // bumps `version`; a profile is pushed up to the version that was current
@@ -240,6 +260,33 @@
     }
   }
 
+  /** The session token signed in now, or null. */
+  function sessionToken() {
+    try {
+      return global.VTAccount?.getSessionToken?.() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Whether the session a step started as is gone: signed out, or another
+   * account signed in on this browser while a request was out. Every await in
+   * a cycle is followed by this check, because what the request was for (one
+   * account's practice, read from or written to that account) is nobody's
+   * business once somebody else is signed in.
+   * @param {string|null} token The session the step started as.
+   * @returns {boolean} True when that session is no longer the one here.
+   */
+  function sessionMoved(token) {
+    return sessionToken() !== token;
+  }
+
+  /** What a step returns when its session went while it waited. */
+  function sessionGone() {
+    return { ok: false, reason: "signed_out" };
+  }
+
   /** The signed-in account's id, once /v1/me has said; null before. */
   function accountId() {
     try {
@@ -250,6 +297,7 @@
   }
 
   function readOwner() {
+    if (ownerKept) return ownerKept;
     try {
       return localStorage.getItem(LS_OWNER) || null;
     } catch {
@@ -261,9 +309,51 @@
     if (!id) return;
     try {
       localStorage.setItem(LS_OWNER, id);
+      ownerKept = null;
     } catch {
-      /* private mode: every sync then asks again, which is the safe side */
+      // Storage refused (the origin's quota is full, or site data is blocked).
+      // No owner on file reads as practice from before anyone signed in, which
+      // merges into whoever signs in next, so the next account would be handed
+      // this practice unasked. The page keeps the owner instead (RES-6). It
+      // does not outlive a reload: a sign-in after one, with storage still
+      // refusing, is not asked.
+      ownerKept = id;
     }
+  }
+
+  /** The handover on record (see LS_HANDOVER), or null. */
+  function readHandover() {
+    try {
+      const h = JSON.parse(localStorage.getItem(LS_HANDOVER) || "null");
+      return h && typeof h.owner === "string" && ms(h.since) ? h : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Record a handover, or clear it with null. Not kept in memory when storage
+   * refuses it, unlike the owner: setting practice aside needs storage too,
+   * and fails as a whole when it has none (see putAside).
+   */
+  function writeHandover(h) {
+    try {
+      if (h) localStorage.setItem(LS_HANDOVER, JSON.stringify(h));
+      else localStorage.removeItem(LS_HANDOVER);
+    } catch {
+      /* no handover on record: everything goes aside, as before RES-2 */
+    }
+  }
+
+  /**
+   * Somebody just signed in. If this browser's practice is another account's,
+   * note when it stopped being theirs: everything done here from now on is
+   * the newcomer's, even before they answer whose the rest is.
+   */
+  function noteHandover() {
+    const owner = readOwner();
+    const me = accountId();
+    writeHandover(owner && owner !== me ? { owner, me, since: new Date().toISOString() } : null);
   }
 
   /** The put-aside list, dropping anything malformed. */
@@ -353,6 +443,7 @@
     const list = readAside();
     const entry = list.find((e) => e.owner === me);
     if (!entry) return false;
+    recordingsBack = giveRecordingsBack(me);
     const left = {};
     let restored = false;
     for (const [profileId, bag] of Object.entries(entry.bags)) {
@@ -375,6 +466,40 @@
   }
 
   /**
+   * Set this browser's recorded takes aside with the rest of its practice
+   * (RES-7). They live in IndexedDB, apart from the bags; a failure leaves
+   * them listed, and says so in the console, rather than failing the answer.
+   * @param {string} owner Whose they are.
+   * @param {{from?: number, to?: number}} range When they were made (ms).
+   * @returns {Promise<number>} How many were set aside.
+   */
+  async function recordingsAside(owner, range) {
+    try {
+      return (await global.VTStorage.setRecordingsAside?.(owner, range)) || 0;
+    } catch (err) {
+      console.warn(err);
+      return 0;
+    }
+  }
+
+  /**
+   * Give back the recorded takes set aside for this account, and redraw what
+   * lists them once they are back.
+   * @param {string} me The account signed in.
+   * @returns {Promise<number>} How many came back.
+   */
+  async function giveRecordingsBack(me) {
+    try {
+      const n = (await global.VTStorage.restoreRecordings?.(me)) || 0;
+      if (n) dataChanged(global.VTStorage.getActiveProfileId());
+      return n;
+    } catch (err) {
+      console.warn(err);
+      return 0;
+    }
+  }
+
+  /**
    * Parse an ISO date into milliseconds, or 0.
    * @param {unknown} value ISO string.
    * @returns {number} Milliseconds.
@@ -384,13 +509,356 @@
     return Number.isFinite(t) ? t : 0;
   }
 
+  /*
+   * The account's copy is data from outside this browser. The worker keeps
+   * any object under 512 KB, so an old or broken client, or anybody holding a
+   * session token, can put any shape there, and whatever a merge keeps is
+   * written here and sent back to every device. A merge therefore reads both
+   * sides through the shapes below first, as js/practice-days.js and
+   * js/daily-loop.js do for their own bags (CXSS-1, RES-4): numbers are
+   * numbers, closed lists hold their own values, lists are lists, and a
+   * moment far in the future (which would stay first for ever) is not kept.
+   * Fields this build does not know are left as they are, so a newer build's
+   * data survives an older build's merge.
+   */
+
+  /**
+   * How far ahead of this device's clock an entry may be dated and still be
+   * kept. Generous on purpose: a device a day or a month off is honest and its
+   * practice must not be dropped (and pushed back without it), while one too
+   * far off to be honest cannot sync at all, because TLS refuses certificates
+   * outside their validity window (90 days for the ones the worker is served
+   * with). A hold dated 2099 is far past it.
+   */
+  const FUTURE_SLACK_MS = 400 * 86400000;
+  /**
+   * Highest week a plan is taken to be at. The plan has twelve weeks, but a
+   * review after the twelfth keeps counting (js/app.js submitWeekReview), so
+   * twelve would throw away real plans; a year of weekly reviews is the bound.
+   */
+  const MAX_PLAN_WEEK = 52;
+  /** Most sessions a weekly goal can ask for (the picker offers 3, 5 and 7). */
+  const MAX_WEEKLY_TARGET = 21;
+  const PLAN_STATUSES = ["idle", "active", "review"];
+  const VERDICTS = ["improved", "continue"];
+
+  /** A plain object, or null for anything else (an array, a number, null). */
+  function obj(value) {
+    return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+  }
+
+  /** A list, whatever was stored in its place: an object's values, or nothing. */
+  function list(value) {
+    if (Array.isArray(value)) return value;
+    return obj(value) ? Object.values(value) : [];
+  }
+
+  /** A whole number of at least zero, or `fallback`. */
+  function whole(value, fallback = 0) {
+    const n = Math.floor(Number(value));
+    return value !== null && value !== "" && Number.isFinite(n) && n >= 0 ? n : fallback;
+  }
+
+  /** A finite number, or null. */
+  function num(value) {
+    const n = Number(value);
+    return value !== null && value !== undefined && value !== "" && Number.isFinite(n) ? n : null;
+  }
+
+  /** The same moment as text when it is one a device could have written, else null. */
+  function when(value) {
+    const t = ms(value);
+    return t > 0 && t <= Date.now() + FUTURE_SLACK_MS ? String(value) : null;
+  }
+
+  /** A week element from the catalogue's closed list, or null. Without the list, any text. */
+  function element(value) {
+    if (typeof value !== "string") return null;
+    const known = global.VT_WEEK_ELEMENTS;
+    return !Array.isArray(known) || known.includes(value) ? value : null;
+  }
+
+  /** A field coerced only when the copy carries it. */
+  function present(entry, key, fix) {
+    return key in entry ? { [key]: fix(entry[key]) } : {};
+  }
+
+  /** One take, or null when it has no id or no believable time. */
+  function normalizeTake(entry) {
+    const e = obj(entry);
+    if (!e || (typeof e.id !== "string" && typeof e.id !== "number") || !when(e.at)) return null;
+    return {
+      ...e,
+      id: String(e.id),
+      at: when(e.at),
+      ...present(e, "updatedAt", when),
+      ...present(e, "score", num),
+      ...present(e, "durationSec", (x) => Math.max(0, num(x) || 0))
+    };
+  }
+
+  /**
+   * One exercise's row. The count is a whole number and never below the takes
+   * the row lists.
+   */
+  function normalizeRow(row) {
+    const r = obj(row);
+    if (!r) return null;
+    const history = list(r.history).map(normalizeTake).filter(Boolean);
+    return {
+      ...r,
+      completedCount: Math.max(whole(r.completedCount), history.length),
+      history,
+      lastScore: num(r.lastScore),
+      lastAt: when(r.lastAt)
+    };
+  }
+
+  function normalizeProgress(progress) {
+    const out = {};
+    for (const [id, row] of Object.entries(obj(progress) || {})) {
+      const r = id === "__proto__" ? null : normalizeRow(row);
+      if (r) out[id] = r;
+    }
+    return out;
+  }
+
+  /** One held note: a believable time and a number of seconds, or null. */
+  function normalizeHold(entry) {
+    const e = obj(entry);
+    const seconds = e ? num(e.seconds) : null;
+    if (!e || !when(e.at) || seconds === null || seconds < 0) return null;
+    return { ...e, at: when(e.at), seconds };
+  }
+
+  /** One week's review: its numbers and closed lists checked, its notes left as text. */
+  function normalizeReview(entry) {
+    const e = obj(entry);
+    if (!e || !when(e.at)) return null;
+    return {
+      ...e,
+      at: when(e.at),
+      ...present(e, "week", (x) => whole(x, null)),
+      ...present(e, "weekNumber", (x) => whole(x, null)),
+      ...present(e, "checkInCount", (x) => whole(x, 0)),
+      ...present(e, "element", element),
+      ...present(e, "verdict", (x) => (VERDICTS.includes(x) ? x : null))
+    };
+  }
+
+  /** The 12-week plan, or null when its week is not one a plan reaches. */
+  function normalizeWeekPlan(plan) {
+    const p = obj(plan);
+    const week = p ? whole(p.weekNumber, 0) : 0;
+    if (!p || week < 1 || week > MAX_PLAN_WEEK) return null;
+    return {
+      ...p,
+      weekNumber: week,
+      element: element(p.element),
+      status: PLAN_STATUSES.includes(p.status) ? p.status : "idle",
+      completedElements: [...new Set(list(p.completedElements).map(element).filter(Boolean))],
+      checkIns: list(p.checkIns),
+      reviews: list(p.reviews).map(normalizeReview).filter(Boolean),
+      startedAt: when(p.startedAt),
+      ...present(p, "updatedAt", when)
+    };
+  }
+
+  /** The weekly goal, or null when its target is not a number of sessions. */
+  function normalizeGoals(goals) {
+    const g = obj(goals);
+    const target = g ? whole(g.weeklySessionsTarget, 0) : 0;
+    if (!g || target < 1 || target > MAX_WEEKLY_TARGET) return null;
+    return { ...g, weeklySessionsTarget: target, ...present(g, "updatedAt", when) };
+  }
+
+  /** Achievement flags: earned or not. */
+  function normalizeFlags(flags) {
+    const out = {};
+    for (const [id, on] of Object.entries(obj(flags) || {})) if (on && id !== "__proto__") out[id] = true;
+    return out;
+  }
+
+  /**
+   * A whole bag read through the shapes above. The day ledger and the loop's
+   * memory are left to their own merges, which normalize them.
+   * @param {object} bag A sync bag, this browser's or the account's.
+   * @returns {object} The same bag, with every field it may keep in its own shape.
+   */
+  function normalizeBag(bag) {
+    const b = obj(bag) || {};
+    return {
+      progress: normalizeProgress(b.progress),
+      weekPlan: normalizeWeekPlan(b.weekPlan),
+      reviews: list(b.reviews).map(normalizeReview).filter(Boolean),
+      holdLogs: list(b.holdLogs).map(normalizeHold).filter(Boolean),
+      goals: normalizeGoals(b.goals),
+      achievements: normalizeFlags(b.achievements),
+      days: obj(b.days),
+      loop: obj(b.loop)
+    };
+  }
+
+  /** The local calendar day of a moment, as the day ledger names it, or null. */
+  function dayOf(at) {
+    const d = new Date(at);
+    if (!Number.isFinite(d.getTime())) return null;
+    const pad = (n) => String(n).padStart(2, "0");
+    return global.VTDays?.dayKey?.(d) || `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  /** One exercise's row over `history` (newest first), counted `completedCount`. */
+  function rowOf(base, history, completedCount) {
+    const sorted = history.slice().sort((x, y) => ms(y.at) - ms(x.at));
+    const scored = sorted.find((h) => h.score !== null && h.score !== undefined);
+    return {
+      ...base,
+      completedCount,
+      history: sorted,
+      lastScore: scored ? scored.score : null,
+      lastAt: sorted.length ? sorted[0].at : null
+    };
+  }
+
+  /**
+   * Every exercise's row split at `since`. The earlier row keeps the count of
+   * takes the history cap no longer lists; the later one counts its own.
+   */
+  function splitProgress(progress, since) {
+    const before = {};
+    const after = {};
+    for (const [id, row] of Object.entries(progress)) {
+      const late = row.history.filter((h) => ms(h.at) >= since);
+      if (!late.length) {
+        before[id] = row;
+        continue;
+      }
+      after[id] = rowOf({}, late, late.length);
+      const early = row.history.filter((h) => ms(h.at) < since);
+      const count = Math.max(early.length, row.completedCount - late.length);
+      if (count > 0) before[id] = rowOf(row, early, count);
+    }
+    return { before, after };
+  }
+
+  /**
+   * The day ledger of a part split off at a handover, rebuilt from its takes
+   * as the app records them (js/practice-days.js record()): one count and the
+   * take's time on the day it was sung. A held note is part of its take and
+   * adds nothing of its own. No rest bank: the ledger's merge gives the
+   * starting one, and takes the account's when it has one.
+   */
+  function daysOf(part) {
+    const days = {};
+    for (const [ex, row] of Object.entries(part.progress)) {
+      for (const h of row.history) {
+        const key = h.day || dayOf(h.at);
+        if (!key) continue;
+        const day = days[key] || (days[key] = { sec: 0, n: 0, ex: [] });
+        day.sec += Math.max(0, Number(h.durationSec) || 0);
+        day.n += 1;
+        if (h.score !== null && h.score !== undefined) day.saved = true;
+        if (!day.ex.includes(ex)) day.ex.push(ex);
+      }
+    }
+    return Object.keys(days).length ? { v: 1, days, backfilled: true } : null;
+  }
+
+  /**
+   * The day ledger with a split-off part's days taken out of it: its time and
+   * its count, and a day left with neither (and no routine) dropped.
+   */
+  function lessDays(days, minus) {
+    const all = obj(days);
+    if (!all || !minus || !obj(all.days)) return days;
+    const out = { ...all, days: { ...all.days } };
+    for (const [key, m] of Object.entries(minus.days)) {
+      const row = obj(out.days[key]);
+      if (!row) continue;
+      const left = { ...row, sec: Math.max(0, (Number(row.sec) || 0) - m.sec), n: Math.max(0, (Number(row.n) || 0) - m.n) };
+      if (left.n > 0 || left.sec > 0 || Number(left.basics) > 0) out.days[key] = left;
+      else delete out.days[key];
+    }
+    return out;
+  }
+
+  /**
+   * Split one profile's bag at a moment: what was done here before it, and
+   * what after. Takes, held notes and week reviews go by their own time, a
+   * goal by when it was set. The plan, the achievements and the daily loop
+   * grew from the earlier practice and stay with it; the plan's own reviews
+   * carry that person's notes. The day ledger goes by its takes (daysOf).
+   * @param {object} bag A sync bag.
+   * @param {number} since The moment (ms); 0 keeps everything in `before`.
+   * @returns {{before: object, after: object|null}} The two parts.
+   */
+  function splitBag(bag, since) {
+    if (!since) return { before: bag, after: null };
+    const b = { v: 1, profileId: bag && bag.profileId, ...normalizeBag(bag) };
+    const late = (e) => ms(e.at) >= since;
+    const progress = splitProgress(b.progress, since);
+    const goals = b.goals && ms(b.goals.updatedAt) >= since ? b.goals : null;
+    const after = {
+      v: 1,
+      profileId: b.profileId,
+      progress: progress.after,
+      reviews: b.reviews.filter(late),
+      holdLogs: b.holdLogs.filter(late),
+      goals
+    };
+    after.days = daysOf(after);
+    const before = {
+      ...b,
+      progress: progress.before,
+      reviews: b.reviews.filter((e) => !late(e)),
+      holdLogs: b.holdLogs.filter((e) => !late(e)),
+      goals: goals ? null : b.goals,
+      days: lessDays(b.days, after.days)
+    };
+    return { before, after };
+  }
+
+  /**
+   * Union two histories by take id, newest first. The same id can differ
+   * between devices when an automatically recorded take was rated later on
+   * one of them; the newer copy is the rated one.
+   * @param {Array} a This browser's history.
+   * @param {Array} b The account's history.
+   * @returns {Array} Every distinct take, uncapped.
+   */
+  function unionTakes(a, b) {
+    const byId = new Map();
+    for (const entry of [...list(b), ...list(a)]) {
+      if (!entry || !entry.id) continue;
+      const prev = byId.get(entry.id);
+      if (!prev || ms(entry.updatedAt || entry.at) > ms(prev.updatedAt || prev.at)) byId.set(entry.id, entry);
+    }
+    return Array.from(byId.values()).sort((x, y) => ms(y.at) - ms(x.at));
+  }
+
+  /** One exercise's row on both sides, merged. */
+  function mergeRow(a, b) {
+    const takes = unionTakes(a.history, b.history);
+    const newest = ms(a.lastAt) >= ms(b.lastAt) ? a : b;
+    return {
+      // Never fewer sessions than distinct takes: two devices that each did
+      // three since they last met hold six, and the larger count alone said
+      // three (RES-5). Counted before the cap, so it stays a lower bound.
+      completedCount: Math.max(Number(a.completedCount) || 0, Number(b.completedCount) || 0, takes.length),
+      history: takes.slice(0, HISTORY_CAP),
+      lastScore: newest.lastScore ?? null,
+      lastAt: newest.lastAt || null
+    };
+  }
+
   /**
    * Merge two exercise-progress maps.
    *
    * Histories are unioned by entry id, because the same take can legitimately
    * arrive from two devices and must not be counted twice, and a take only one
-   * device has must survive. `completedCount` takes the larger of the two: the
-   * history is capped, so it cannot be recomputed from the entries.
+   * device has must survive. `completedCount` takes the larger of the two
+   * counts and of the takes listed: the history is capped, so it cannot be
+   * recomputed from the entries alone.
    *
    * @param {object} local This browser's map.
    * @param {object} remote The account's map.
@@ -398,38 +866,12 @@
    */
   function mergeProgress(local, remote) {
     const out = {};
-    const ids = new Set([...Object.keys(local || {}), ...Object.keys(remote || {})]);
+    const ids = new Set([...Object.keys(obj(local) || {}), ...Object.keys(obj(remote) || {})]);
+    ids.delete("__proto__");
     for (const id of ids) {
-      const a = (local && local[id]) || null;
-      const b = (remote && remote[id]) || null;
-      if (!a) {
-        out[id] = b;
-        continue;
-      }
-      if (!b) {
-        out[id] = a;
-        continue;
-      }
-      const byId = new Map();
-      // The same id can differ between devices when an automatically recorded
-      // take was rated later on one of them; the newer copy is the rated one.
-      for (const entry of [...(b.history || []), ...(a.history || [])]) {
-        if (!entry || !entry.id) continue;
-        const prev = byId.get(entry.id);
-        if (!prev || ms(entry.updatedAt || entry.at) > ms(prev.updatedAt || prev.at)) {
-          byId.set(entry.id, entry);
-        }
-      }
-      const history = Array.from(byId.values())
-        .sort((x, y) => ms(y.at) - ms(x.at))
-        .slice(0, HISTORY_CAP);
-      const newest = ms(a.lastAt) >= ms(b.lastAt) ? a : b;
-      out[id] = {
-        completedCount: Math.max(Number(a.completedCount) || 0, Number(b.completedCount) || 0),
-        history,
-        lastScore: newest.lastScore ?? null,
-        lastAt: newest.lastAt || null
-      };
+      const a = obj(local && local[id]);
+      const b = obj(remote && remote[id]);
+      out[id] = a && b ? mergeRow(a, b) : a || b;
     }
     return out;
   }
@@ -461,9 +903,9 @@
     // plans saved before 23 Sep 2026 carry check-ins at all.
     const rank = (plan) => [
       Number(plan.weekNumber) || 0,
-      (plan.completedElements || []).length,
+      list(plan.completedElements).length,
       ms(plan.startedAt),
-      (plan.checkIns || []).length
+      list(plan.checkIns).length
     ];
     const [aw, ae, as, ac] = rank(local);
     const [bw, be, bs, bc] = rank(remote);
@@ -485,7 +927,7 @@
   function mergeLog(local, remote, cap) {
     const seen = new Set();
     const out = [];
-    for (const entry of [...(local || []), ...(remote || [])]) {
+    for (const entry of [...list(local), ...list(remote)]) {
       if (!entry) continue;
       // `at` plus the payload is a good enough identity for a log line: two
       // real entries that share both are indistinguishable anyway.
@@ -536,23 +978,25 @@
    */
   function mergeBag(local, remote) {
     if (!remote || typeof remote !== "object") return local;
+    // Both sides through the same shapes: the account's is from outside, and
+    // this browser's was written back from it (or by another project on the
+    // same origin), so a bad copy here is repaired by the next write too.
+    const a = normalizeBag(local);
+    const b = normalizeBag(remote);
     return {
       v: 1,
       profileId: local.profileId,
       savedAt: new Date().toISOString(),
-      progress: mergeProgress(local.progress, remote.progress),
-      weekPlan: mergeWeekPlan(local.weekPlan, remote.weekPlan),
-      reviews: mergeLog(local.reviews, remote.reviews, 40),
-      holdLogs: mergeLog(local.holdLogs, remote.holdLogs, 100),
+      progress: mergeProgress(a.progress, b.progress),
+      weekPlan: mergeWeekPlan(a.weekPlan, b.weekPlan),
+      reviews: mergeLog(a.reviews, b.reviews, 40),
+      holdLogs: mergeLog(a.holdLogs, b.holdLogs, 100),
       // Not the bag's own savedAt: that is "now" on whichever device is
       // syncing, so this device's goal always won and never came down.
-      goals: newerSetting(local.goals, remote.goals, isDefaultGoals),
-      achievements: {
-        ...(remote.achievements || {}),
-        ...(local.achievements || {})
-      },
-      days: global.VTDays?.merge ? global.VTDays.merge(local.days, remote.days) : local.days || remote.days || null,
-      loop: global.VTLoop?.merge ? global.VTLoop.merge(local.loop, remote.loop) : local.loop || remote.loop || null
+      goals: newerSetting(a.goals, b.goals, isDefaultGoals),
+      achievements: { ...b.achievements, ...a.achievements },
+      days: global.VTDays?.merge ? global.VTDays.merge(a.days, b.days) : a.days || b.days,
+      loop: global.VTLoop?.merge ? global.VTLoop.merge(a.loop, b.loop) : a.loop || b.loop
     };
   }
 
@@ -567,21 +1011,25 @@
   }
 
   /**
-   * Record the signed-in account as this browser's owner after a write it
-   * accepted. If /v1/me has not answered yet, ask it, and record the answer
-   * only if the same session is still the one signed in.
+   * Record the account a write was for as this browser's owner, once the
+   * account took it. That is the account of the session the write went out
+   * as, and only while that session is still the one here: one that left
+   * while the write was out says nothing about whoever signed in after it.
+   * If /v1/me has not answered yet, ask it, and record the answer under the
+   * same condition.
+   * @param {string|null} token The session the write went out as.
    */
-  function noteOwner() {
+  function noteOwner(token) {
+    if (sessionMoved(token)) return;
     const me = accountId();
     if (me) {
       writeOwner(me);
       return;
     }
-    const token = global.VTAccount?.getSessionToken?.();
     Promise.resolve(global.VTAccount?.refresh?.())
       .then(() => {
         const id = accountId();
-        if (id && !readOwner() && global.VTAccount?.getSessionToken?.() === token) writeOwner(id);
+        if (id && !readOwner() && !sessionMoved(token)) writeOwner(id);
       })
       .catch(() => {});
   }
@@ -630,10 +1078,11 @@
    * @param {string} profileId Whose bag.
    * @param {object} pushed The PUT's answer.
    * @param {{serverRev: number, seen: number, merged: object}} step What mergePulled() returned.
+   * @param {string|null} token The session the write went out as.
    * @returns {{ok: true, rev: number|null}} Result.
    */
-  function pushAccepted(profileId, pushed, { serverRev, seen, merged }) {
-    noteOwner();
+  function pushAccepted(profileId, pushed, { serverRev, seen, merged }, token) {
+    noteOwner(token);
     writeRev(profileId, Number(pushed.data?.rev) || serverRev + 1);
     confirmed.set(profileId, { rev: Number(pushed.data?.rev) || serverRev + 1, doc: merged });
     pushedAt.set(profileId, Math.max(pushedAt.get(profileId) || 0, seen));
@@ -672,15 +1121,109 @@
   }
 
   /**
-   * Run one read-merge-write cycle for one profile.
+   * Whose practice this is comes first: nothing of another account's is read
+   * into, merged with or sent to this one until somebody chooses.
+   * @param {string} token The session the cycle runs as.
+   * @returns {Promise<{ok: false, reason: string}|null>} What the cycle stops on, or null to go on.
+   */
+  async function ownerStop(token) {
+    let who = ownerState();
+    if (who.state === "unknown") {
+      const me = await global.VTAccount.refresh();
+      if (sessionMoved(token)) return sessionGone();
+      who = ownerState();
+      if (who.state === "unknown") {
+        lastError = me && me.reason === "offline" ? "offline" : "error";
+        return { ok: false, reason: lastError };
+      }
+    }
+    if (who.state === "other") return { ok: false, reason: "other_owner" };
+    if (who.me) {
+      writeOwner(who.me);
+      restoreAside(who.me);
+    }
+    return null;
+  }
+
+  /**
+   * Read the account's copy of one profile, as one session.
+   * @param {string} profileId Whose copy.
+   * @param {string} token The session to read as.
+   * @returns {Promise<object>} The GET's answer.
+   */
+  function readAccount(profileId, token) {
+    return global.VTAccount.request(
+      "GET",
+      `/v1/me/progress?profileId=${encodeURIComponent(profileId)}`,
+      null,
+      { timeoutMs: REQUEST_TIMEOUT_MS, token }
+    );
+  }
+
+  /**
+   * The read-merge-write cycle itself, as one session from end to end.
    *
    * The server's `409` is the whole concurrency story: it means the stored
    * revision moved while we were thinking, so we take its copy, merge, and try
    * again rather than overwriting somebody's evening.
    *
+   * Each request goes out as the session the cycle started as, and after each
+   * one the cycle stops if that session has gone. A request that took the
+   * session current when it was sent wrote one account's practice into the
+   * next account signed in on this browser, over that account's own copy when
+   * the two revisions happened to match (RES-1).
+   *
+   * @param {string} profileId Profile to sync.
+   * @param {string} token The session the cycle runs as.
+   * @returns {Promise<{ok: boolean, reason?: string, rev?: number}>} Result.
+   */
+  async function runCycle(profileId, token) {
+    const stop = await ownerStop(token);
+    if (stop) return stop;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+      const pulled = await readAccount(profileId, token);
+      if (sessionMoved(token)) return sessionGone();
+      const halt = pullStop(pulled, profileId);
+      if (halt) return halt;
+
+      const step = mergePulled(profileId, pulled);
+      const pushed = await global.VTAccount.request(
+        "PUT",
+        "/v1/me/progress",
+        { profileId, doc: step.merged, baseRev: step.serverRev },
+        { timeoutMs: REQUEST_TIMEOUT_MS, token }
+      );
+      // The write went to the account that made it; whoever is here now is not told it was theirs.
+      if (sessionMoved(token)) return sessionGone();
+      if (pushed.ok) return pushAccepted(profileId, pushed, step, token);
+      const failed = pushFailed(pushed);
+      if (failed) return failed;
+    }
+    lastError = "conflict";
+    emit();
+    return { ok: false, reason: "conflict" };
+  }
+
+  /**
+   * A cycle that threw (a merge meeting a shape it did not expect) failed like
+   * any other: the panel stops saying "saved" and the retry is armed. It used
+   * to reject past every caller, and the panel kept its last "saved" (RES-4).
+   * @param {unknown} err What was thrown.
+   * @returns {{ok: false, reason: "error"}} Result.
+   */
+  function cycleThrew(err) {
+    console.warn(err);
+    lastError = "error";
+    return { ok: false, reason: "error" };
+  }
+
+  /**
+   * Run one read-merge-write cycle for one profile.
+   *
    * The cycle reads and writes the profile it started for, by name. Following
    * the active profile instead mixed two people's practice when the learner
-   * switched profile while the request was out.
+   * switched profile while the request was out. It reads and writes as the
+   * session it started as, for the same reason (see runCycle).
    *
    * @param {string} [id] Profile to sync; the active one when omitted.
    * @returns {Promise<{ok: boolean, reason?: string, rev?: number}>} Result.
@@ -692,12 +1235,13 @@
     // was written after it read the bag. That write is not in what it pushes,
     // and this ask is the write's own timer running out (or the hidden-tab
     // flush that cancelled it), so nothing else would ask again: go round once
-    // more for it.
+    // more for it. Nor is it shared when it ran as a session that has since
+    // gone: what it did was for the account that left.
     while (running) {
       const cycle = running;
-      const same = runningFor === profileId;
-      const result = await cycle.catch(() => null);
-      if (same && !(result && result.ok && unpushed(profileId))) return cycle;
+      const sharedAs = runningFor === profileId ? runningAs : undefined;
+      const result = await cycle;
+      if (sharedAs === sessionToken() && !(result && result.ok && unpushed(profileId))) return cycle;
     }
     if (!isAvailable()) return { ok: false, reason: "signed_out" };
     // A profile deleted while this waited has nothing left to sync, and its bag
@@ -707,50 +1251,10 @@
     // Every change up to here can be in what this cycle sends; one made while
     // it is out may not be (see standingRefusal).
     const before = version;
+    const token = sessionToken();
     runningFor = profileId;
-    running = (async () => {
-      // Whose practice this is comes first: nothing of another account's is
-      // read into, merged with or sent to this one until somebody chooses.
-      let who = ownerState();
-      if (who.state === "unknown") {
-        const me = await global.VTAccount.refresh();
-        if (!isAvailable()) return { ok: false, reason: "signed_out" };
-        who = ownerState();
-        if (who.state === "unknown") {
-          lastError = me && me.reason === "offline" ? "offline" : "error";
-          return { ok: false, reason: lastError };
-        }
-      }
-      if (who.state === "other") return { ok: false, reason: "other_owner" };
-      if (who.me) {
-        writeOwner(who.me);
-        restoreAside(who.me);
-      }
-      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
-        const pulled = await global.VTAccount.request(
-          "GET",
-          `/v1/me/progress?profileId=${encodeURIComponent(profileId)}`,
-          null,
-          { timeoutMs: REQUEST_TIMEOUT_MS }
-        );
-        const stop = pullStop(pulled, profileId);
-        if (stop) return stop;
-
-        const step = mergePulled(profileId, pulled);
-        const pushed = await global.VTAccount.request(
-          "PUT",
-          "/v1/me/progress",
-          { profileId, doc: step.merged, baseRev: step.serverRev },
-          { timeoutMs: REQUEST_TIMEOUT_MS }
-        );
-        if (pushed.ok) return pushAccepted(profileId, pushed, step);
-        const failed = pushFailed(pushed);
-        if (failed) return failed;
-      }
-      lastError = "conflict";
-      emit();
-      return { ok: false, reason: "conflict" };
-    })();
+    runningAs = token;
+    running = runCycle(profileId, token).catch(cycleThrew);
 
     let result = null;
     try {
@@ -759,6 +1263,7 @@
     } finally {
       running = null;
       runningFor = null;
+      runningAs = null;
       noteRefusal(profileId, result, before);
       retryIfFailed(result);
       // The emits above run while `running` is still set, so every listener
@@ -816,6 +1321,20 @@
    * @returns {Promise<void>}
    */
   async function syncScheduled() {
+    const asked = sessionToken();
+    try {
+      await syncRound();
+    } finally {
+      // The first read after a sign-in has had its answer, whatever it was.
+      if (fetchingFor && fetchingFor === asked) {
+        fetchingFor = null;
+        emit();
+      }
+    }
+  }
+
+  /** One round of syncScheduled(): the active profile, then the others with changes. */
+  async function syncRound() {
     const active = global.VTStorage.getActiveProfileId();
     let failed = null;
     for (const id of [active, ...otherUnpushed(active)]) {
@@ -899,8 +1418,11 @@
    * Current sync status, synchronously.
    * @returns {{available: boolean, syncing: boolean, lastSyncedAt: string|null,
    *            lastError: string|null, refusedReason: string|null, rev: number,
-   *            otherOwner: boolean}} Status. `otherOwner`: this browser holds
-   *            another account's practice and the one signed in has to choose.
+   *            otherOwner: boolean, pending: boolean, fetching: boolean}} Status.
+   *            `otherOwner`: this browser holds another account's practice and
+   *            the one signed in has to choose. `pending`: something written on
+   *            this page has not reached the account yet (FLOW-6). `fetching`:
+   *            just signed in, and the account has not been read yet (FLOW-7).
    */
   function getStatus() {
     let rev = 0;
@@ -918,8 +1440,38 @@
       lastError,
       refusedReason,
       rev,
-      otherOwner: otherOwner()
+      otherOwner: otherOwner(),
+      pending: hasUnpushed(),
+      fetching: !!fetchingFor && fetchingFor === sessionToken()
     };
+  }
+
+  /** Whether any profile on this browser holds a change the account has not had. */
+  function hasUnpushed() {
+    try {
+      const active = global.VTStorage.getActiveProfileId();
+      return unpushed(active) || otherUnpushed(active).length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Forget what this page knew about the account that was signed in: its
+   * revisions and copies, why it failed, what it turned down.
+   */
+  function forgetAccount() {
+    setAsideLeaver();
+    writeHandover(null);
+    confirmed.clear();
+    // "Guardado en tu cuenta" was about the account that just left.
+    lastError = null;
+    refusedReason = null;
+    // What that account turned down says nothing about the next one's.
+    refusals.clear();
+    lastSyncedAt = null;
+    failures = 0;
+    fetchingFor = null;
   }
 
   /**
@@ -929,15 +1481,16 @@
    * @param {string} [id] Profile to pull; the active one when omitted.
    * @returns {Promise<{ok: boolean, reason?: string}>} Result.
    */
-  async function pullOverwrite(id) {
+  async function pullOverwrite(id, asToken) {
     if (!isAvailable()) return { ok: false, reason: "signed_out" };
+    // As one session, like a cycle: an answer landing after somebody else
+    // signed in is the last account's copy, and kept here with its revision it
+    // would arm the closing page's write with that account's base.
+    const token = asToken || sessionToken();
+    if (sessionMoved(token)) return sessionGone();
     const profileId = id || global.VTStorage.getActiveProfileId();
-    const pulled = await global.VTAccount.request(
-      "GET",
-      `/v1/me/progress?profileId=${encodeURIComponent(profileId)}`,
-      null,
-      { timeoutMs: REQUEST_TIMEOUT_MS }
-    );
+    const pulled = await readAccount(profileId, token);
+    if (sessionMoved(token)) return sessionGone();
     if (!pulled.ok) return { ok: false, reason: pulled.offline ? "offline" : "error" };
     if (!pulled.data?.doc) return { ok: false, reason: "empty" };
     if (deleted(profileId)) return { ok: false, reason: "deleted" };
@@ -961,6 +1514,7 @@
   async function addDeviceToAccount() {
     const me = accountId();
     if (!isAvailable() || !me) return { ok: false, reason: "signed_out" };
+    const token = sessionToken();
     writeOwner(me);
     if (lastError === "other_owner") lastError = null;
     emit();
@@ -970,8 +1524,113 @@
     for (const id of [active, ...ids.filter((x) => x !== active)]) {
       const res = await syncNow(id);
       if (!first) first = res;
+      // Whoever chose is gone: the next account is asked for itself.
+      if (sessionMoved(token)) return first.ok ? sessionGone() : first;
     }
     return first || { ok: true };
+  }
+
+  /**
+   * Store `bags` aside for `owner`, merged with whatever that owner already
+   * has aside here.
+   * @param {string} owner Whose practice it is.
+   * @param {Object<string, object>} bags Profile id to bag.
+   * @returns {boolean} Whether it was stored.
+   */
+  function addAside(owner, bags) {
+    const all = { ...bags };
+    const list = readAside();
+    const prev = list.find((e) => e.owner === owner);
+    if (prev) {
+      for (const [id, bag] of Object.entries(prev.bags)) all[id] = all[id] ? mergeBag(all[id], bag) : bag;
+    }
+    const next = list.filter((e) => e.owner !== owner).concat([{ owner, at: new Date().toISOString(), bags: all }]);
+    return writeAside(next);
+  }
+
+  /**
+   * Put this browser's practice from before the handover aside under the
+   * account that last synced it, and leave only what was done since in every
+   * profile. Nothing is cleared unless the copy put aside was stored.
+   *
+   * Everything used to go aside, and so the takes the person signed in saved
+   * while the question waited vanished from their record and their account,
+   * and reached the previous owner's account the next time it signed in here
+   * (RES-2). With no handover on record (a sign-in from before this build)
+   * everything goes aside, as it did.
+   * @param {string} owner The account the practice is put aside for.
+   * @param {string[]} ids Every profile on this browser.
+   * @param {number} since When this browser stopped being `owner`'s (ms), or 0.
+   * @returns {Object<string, object>|null} Per profile, what was kept here, or
+   *   null when nothing could be stored (and nothing was cleared).
+   */
+  function putAside(owner, ids, since) {
+    const bags = {};
+    const kept = {};
+    ids.forEach((id) => {
+      const parts = splitBag(global.VTStorage.readSyncBag(id), since);
+      if (bagHasPractice(parts.before)) bags[id] = parts.before;
+      if (bagHasPractice(parts.after)) kept[id] = parts.after;
+    });
+    if (!addAside(owner, bags)) return null;
+    ids.forEach((id) => {
+      global.VTStorage.clearProfileData(id);
+      if (!kept[id]) {
+        pushedAt.set(id, version);
+        return;
+      }
+      global.VTStorage.writeSyncBag(kept[id], id);
+      version += 1;
+      changedAt.set(id, version);
+    });
+    return kept;
+  }
+
+  /**
+   * The previous owner's part of this browser's practice goes aside for them,
+   * split at the handover when there is one on record for them.
+   * @param {string} me The account signed in.
+   * @param {string[]} ids Every profile on this browser.
+   * @returns {Promise<Object<string, object>|null>} What putAside() kept
+   *   here; {} when the practice here is nobody else's.
+   */
+  async function setAsideOwners(me, ids) {
+    const owner = readOwner();
+    if (!owner || owner === me) return {};
+    const h = readHandover();
+    const since = h && h.owner === owner ? ms(h.since) : 0;
+    const kept = putAside(owner, ids, since);
+    // The recordings go with the rest: "ves solo la práctica de tu cuenta"
+    // was said while the last owner's takes still played here (RES-7).
+    if (kept) await recordingsAside(owner, since ? { to: since } : {});
+    return kept;
+  }
+
+  /**
+   * Somebody who was asked whose this browser's practice is left without
+   * answering. What they did here since they signed in goes aside for them,
+   * and comes back when they sign in here again; the rest stays here as the
+   * previous owner's. Left in place, their takes reached the previous owner's
+   * account the next time it signed in here.
+   */
+  function setAsideLeaver() {
+    const h = readHandover();
+    if (!h || !h.me || readOwner() !== h.owner) return;
+    const theirs = {};
+    const rest = {};
+    for (const id of localProfileIds()) {
+      const parts = splitBag(global.VTStorage.readSyncBag(id), ms(h.since));
+      if (!bagHasPractice(parts.after)) continue;
+      theirs[id] = parts.after;
+      rest[id] = parts.before;
+    }
+    if (!Object.keys(theirs).length || !addAside(h.me, theirs)) return;
+    recordingsAside(h.me, { from: ms(h.since) });
+    for (const [id, bag] of Object.entries(rest)) {
+      global.VTStorage.clearProfileData(id);
+      global.VTStorage.writeSyncBag(bag, id);
+      dataChanged(id);
+    }
   }
 
   /**
@@ -985,39 +1644,50 @@
   async function useAccountOnly() {
     const me = accountId();
     if (!isAvailable() || !me) return { ok: false, reason: "signed_out" };
-    const owner = readOwner();
+    const token = sessionToken();
     const ids = localProfileIds();
-    if (owner && owner !== me) {
-      const bags = {};
-      ids.forEach((id) => {
-        const bag = global.VTStorage.readSyncBag(id);
-        if (bagHasPractice(bag)) bags[id] = bag;
-      });
-      const list = readAside();
-      const prev = list.find((e) => e.owner === owner);
-      if (prev) {
-        for (const [id, bag] of Object.entries(prev.bags)) bags[id] = bags[id] ? mergeBag(bags[id], bag) : bag;
-      }
-      const next = list.filter((e) => e.owner !== owner).concat([{ owner, at: new Date().toISOString(), bags }]);
-      if (!writeAside(next)) return { ok: false, reason: "storage" };
-      ids.forEach((id) => {
-        global.VTStorage.clearProfileData(id);
-        pushedAt.set(id, version);
-      });
-    }
+    const kept = await setAsideOwners(me, ids);
+    if (sessionMoved(token)) return sessionGone();
+    if (!kept) return { ok: false, reason: "storage" };
     writeOwner(me);
     if (lastError === "other_owner") lastError = null;
-    let result = { ok: true };
-    for (const id of ids) {
-      const res = await pullOverwrite(id);
-      if (!res.ok && res.reason !== "empty" && result.ok) result = res;
-    }
-    // After the pull, never before: a pull overwrites, and what this account
-    // left here may hold takes that never reached it. Restoring merges them
-    // into the account's copy, and they are sent without waiting for a save.
-    if (restoreAside(me)) schedule();
+    const result = await bringAccountDown(me, ids, kept, token);
+    if (sessionMoved(token)) return sessionGone();
+    await recordingsBack;
     dataChanged(global.VTStorage.getActiveProfileId());
     emit();
+    return result;
+  }
+
+  /**
+   * The account's own copies come down in place of what was set aside, in an
+   * order that loses nothing. First every profile with nothing of this
+   * account's here takes the account's copy as it is. Then what this account
+   * left here earlier comes back, merged into those copies: after the pull,
+   * never before, because a pull overwrites and what was left may hold takes
+   * that never reached the account. Last, every profile this account
+   * practised in since signing in merges with the account's copy and is sent;
+   * its cycle would restore what was left, so it may not run before a pull.
+   * @param {string} me The account signed in.
+   * @param {string[]} ids Every profile on this browser.
+   * @param {Object<string, object>} kept What putAside() kept, by profile.
+   * @param {string} token The session the answer was given in.
+   * @returns {Promise<{ok: boolean, reason?: string}>} The first failure, or ok.
+   */
+  async function bringAccountDown(me, ids, kept, token) {
+    let result = { ok: true };
+    const note = (res) => {
+      if (!res.ok && res.reason !== "empty" && result.ok) result = res;
+    };
+    for (const id of ids.filter((x) => !kept[x])) {
+      note(await pullOverwrite(id, token));
+      if (sessionMoved(token)) return sessionGone();
+    }
+    if (restoreAside(me)) schedule();
+    for (const id of ids.filter((x) => kept[x])) {
+      note(await syncNow(id));
+      if (sessionMoved(token)) return sessionGone();
+    }
     return result;
   }
 
@@ -1045,21 +1715,28 @@
     version += 1;
     changedAt.set(profileId, version);
     schedule();
+    // An open panel stops saying "saved" the moment there is something new.
+    emit();
   });
 
   if (typeof document !== "undefined" && global.VTAccount?.onChange) {
-    // Signing in on a fresh device is the moment a sync is most wanted.
+    seenToken = sessionToken();
     global.VTAccount.onChange((state) => {
-      if (state.signedIn) schedule();
-      else {
-        confirmed.clear();
-        // "Guardado en tu cuenta" was about the account that just left.
-        lastError = null;
-        refusedReason = null;
-        // What that account turned down says nothing about the next one's.
-        refusals.clear();
-        lastSyncedAt = null;
-        failures = 0;
+      const token = state.signedIn ? sessionToken() : null;
+      // Signed out, or somebody else signed in.
+      if (token !== seenToken) forgetAccount();
+      const arrived = !!token && token !== seenToken;
+      seenToken = token;
+      if (arrived) {
+        noteHandover();
+        // Signing in is the moment a sync is most wanted: read the account
+        // now. The quiet period is for batching writes, and making a sign-in
+        // wait it out showed a returning learner an empty record (FLOW-7).
+        fetchingFor = token;
+        schedule(0);
+        emit();
+      } else if (token && !timer) {
+        schedule();
       }
     });
     // The account may have answered while this file was still downloading

@@ -27,12 +27,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "0f5d1758f58f917a6edc23a78c1ca64d20ab9af35fa8a178de0d457a96aed292",
-      "complexity": 18,
-      "name": "Arrow function"
-    },
-    {
-      "file": "js/app.js",
       "sha": "428a7963c4c834a3ce8f326d65dfd9fe6648c7c45d9d2c3ac1bbade951a67ac5",
       "complexity": 16,
       "name": "Async arrow function"
@@ -72,12 +66,6 @@
       "sha": "884d50512b7850b177eff8f8300d4344243fe43b22c2380820d4cbd7df161b98",
       "complexity": 17,
       "name": "Function 'exerciseSummary'"
-    },
-    {
-      "file": "js/app.js",
-      "sha": "59f96e1f5a763986d19e0af1f7ad74d6e84f38b0134cca21a140df5a80d2047f",
-      "complexity": 18,
-      "name": "Function 'fitStageGuide'"
     },
     {
       "file": "js/app.js",
@@ -1308,12 +1296,6 @@
       "sha": "d5206da3097bcf5553b5ded129b37b267d7745e14f52d4163cfead1ab1fdb429",
       "complexity": 17,
       "name": "Method 'writeSyncBag'"
-    },
-    {
-      "file": "js/sync.js",
-      "sha": "655dd47f73170540c6d2b441517551e7fa44ab9b3a9aff769ea5e4fa626c70d5",
-      "complexity": 24,
-      "name": "Function 'mergeProgress'"
     },
     {
       "file": "js/tour.js",

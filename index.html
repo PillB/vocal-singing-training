@@ -20,8 +20,8 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
-    <script src="js/boot-head.js?v=20261113a"></script>
-    <link rel="stylesheet" href="css/styles.css?v=20261113c" />
+    <script src="js/boot-head.js?v=20261118a"></script>
+    <link rel="stylesheet" href="css/styles.css?v=20261117d" />
     <link rel="stylesheet" href="css/exercise-viz.css?v=20261002a" />
     <link rel="stylesheet" href="css/session-sets.css?v=20261112a" />
     <link rel="stylesheet" href="css/scenes/speech.css?v=20261002a" />
@@ -153,8 +153,8 @@
              a first-visit explainer, and the guided session as the quiet alternative. -->
         <section class="hero start-panel" id="start-panel" aria-labelledby="start-title">
           <div class="start-main">
-            <p class="start-kicker" id="start-kicker" data-i18n="start.kickerNew">Empieza aquí</p>
-            <h2 class="start-title" id="start-title" tabindex="-1" data-i18n="start.titleNew">Tu primera práctica, en 5 minutos</h2>
+            <p class="start-kicker" id="start-kicker" data-i18n="start.kickerNew">Canto y oratoria · gratis</p>
+            <h2 class="start-title" id="start-title" tabindex="-1" data-i18n="first.titleMarkup">Entrena tu voz 3&nbsp;minutos al día.</h2>
             <p class="start-sub" id="start-sub" data-i18n="start.subNew">
               Un estudio de voz en el navegador: elige un ejercicio, practica con el micrófono y guarda cómo te fue.
             </p>
@@ -281,6 +281,73 @@
             </button>
           </p>
         </section>
+
+        <!-- The scripts at the end of the body, asked for now and all at once.
+             Chromium looks no further ahead than the CSP meta tag (its
+             preload scanner stops there), so it found each one only once
+             the one before it had run: one round trip each, 53 in a row, and
+             the app started after 11 s on a 4G phone (3.3 s on a desktop
+             line). Asked for here they arrive together, and the app starts
+             after about 2.9 s (and 1.2 s). Here, once the header and the
+             hero have been read, not in <head>: there the parser set up all
+             53 requests before it reached the body, and the first paint came
+             0.1 s later on a 4G phone, on a first load and on a later one.
+             Same address as each script tag, ?v= included, or the browser
+             fetches it twice: npm run assets:bump rewrites both, and
+             tests/node/boot-preload.test.mjs checks the two lists match. -->
+        <link rel="preload" href="js/focus-trap.js?v=20261118a" as="script" />
+        <link rel="preload" href="js/i18n.js?v=20261118e" as="script" />
+        <link rel="preload" href="js/i18n-early.js?v=20261112a" as="script" />
+        <link rel="preload" href="js/exercises-data.js?v=20261121a" as="script" />
+        <link rel="preload" href="js/exercises-locale-es.js?v=20261121a" as="script" />
+        <link rel="preload" href="js/practice-profiles.js?v=20261112b" as="script" />
+        <link rel="preload" href="js/storage.js?v=20261118a" as="script" />
+        <link rel="preload" href="js/practice-days.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/billing-config.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/license.js?v=20261103d" as="script" />
+        <link rel="preload" href="js/billing.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/ads-config.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/ads.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/value-pulse.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/region-gate.js?v=20261112b" as="script" />
+        <link rel="preload" href="js/analytics.js?v=20261103a" as="script" />
+        <link rel="preload" href="js/experiments-config.js?v=20261112a" as="script" />
+        <link rel="preload" href="js/experiments.js?v=20261112a" as="script" />
+        <link rel="preload" href="js/privacy-switch.js?v=20261111a" as="script" />
+        <link rel="preload" href="js/reports.js?v=20261113d" as="script" />
+        <link rel="preload" href="js/reminders.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/auth-users.generated.js?v=20261006a" as="script" />
+        <link rel="preload" href="js/auth.js?v=20261006a" as="script" />
+        <link rel="preload" href="js/account.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/sync.js?v=20261118g" as="script" />
+        <link rel="preload" href="js/piano.js?v=20261112b" as="script" />
+        <link rel="preload" href="js/range-adapter.js?v=20261006a" as="script" />
+        <link rel="preload" href="js/pitch-visualizer.js?v=20261112c" as="script" />
+        <link rel="preload" href="js/pitch-game.js?v=20261002a" as="script" />
+        <link rel="preload" href="js/practice-engine.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/voice-features.js?v=20261112c" as="script" />
+        <link rel="preload" href="js/exercise-viz.js?v=20261112b" as="script" />
+        <link rel="preload" href="js/scenes/speech.js?v=20261005g" as="script" />
+        <link rel="preload" href="js/scenes/speech-shape.js?v=20261007a" as="script" />
+        <link rel="preload" href="js/scenes/volume.js?v=20261112b" as="script" />
+        <link rel="preload" href="js/scenes/guided.js?v=20261103c" as="script" />
+        <link rel="preload" href="js/scenes/voice-drill.js?v=20261111b" as="script" />
+        <link rel="preload" href="js/scenes/breath.js?v=20261002a" as="script" />
+        <link rel="preload" href="js/scenes/pitch.js?v=20261112b" as="script" />
+        <link rel="preload" href="js/scenes/dynamics.js?v=20261102a" as="script" />
+        <link rel="preload" href="js/scenes/resonance.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/practice-modes.js?v=20261118a" as="script" />
+        <link rel="preload" href="js/recorder.js?v=20261102a" as="script" />
+        <link rel="preload" href="js/metrics.js?v=20260924c" as="script" />
+        <link rel="preload" href="js/session.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/session-sets.js?v=20261121a" as="script" />
+        <link rel="preload" href="js/daily-loop.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/site-layout.js?v=20261111a" as="script" />
+        <link rel="preload" href="js/tour.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/app.js?v=20261118g" as="script" />
+        <link rel="preload" href="js/audio-recovery.js?v=20261103c" as="script" />
+        <link rel="preload" href="js/wake-lock.js?v=20261112b" as="script" />
+        <link rel="preload" href="js/boot-ready.js?v=20261117c" as="script" />
 
         <!-- Catalog: primary IA (track switch + filters + list) — high contrast, above dense studio chrome when collapsed -->
         <section class="catalog-panel" id="catalog-panel" aria-labelledby="catalog-heading">
@@ -1249,13 +1316,13 @@
       </div>
     </div>
 
-    <script src="js/focus-trap.js?v=20261113a"></script>
-    <script src="js/i18n.js?v=20261113a"></script>
+    <script src="js/focus-trap.js?v=20261118a"></script>
+    <script src="js/i18n.js?v=20261118e"></script>
     <script src="js/i18n-early.js?v=20261112a"></script>
-    <script src="js/exercises-data.js?v=20261115a"></script>
-    <script src="js/exercises-locale-es.js?v=20261115a"></script>
+    <script src="js/exercises-data.js?v=20261121a"></script>
+    <script src="js/exercises-locale-es.js?v=20261121a"></script>
     <script src="js/practice-profiles.js?v=20261112b"></script>
-    <script src="js/storage.js?v=20261113b"></script>
+    <script src="js/storage.js?v=20261118a"></script>
     <script src="js/practice-days.js?v=20261113a"></script>
     <script src="js/billing-config.js?v=20261113a"></script>
     <script src="js/license.js?v=20261103d"></script>
@@ -1278,7 +1345,7 @@
     <script src="js/auth-users.generated.js?v=20261006a"></script>
     <script src="js/auth.js?v=20261006a"></script>
     <script src="js/account.js?v=20261113a"></script>
-    <script src="js/sync.js?v=20261113c"></script>
+    <script src="js/sync.js?v=20261118g"></script>
     <script src="js/piano.js?v=20261112b"></script>
     <script src="js/range-adapter.js?v=20261006a"></script>
     <script src="js/pitch-visualizer.js?v=20261112c"></script>
@@ -1295,17 +1362,17 @@
     <script src="js/scenes/pitch.js?v=20261112b"></script>
     <script src="js/scenes/dynamics.js?v=20261102a"></script>
     <script src="js/scenes/resonance.js?v=20261113a"></script>
-    <script src="js/practice-modes.js?v=20261113a"></script>
+    <script src="js/practice-modes.js?v=20261118a"></script>
     <script src="js/recorder.js?v=20261102a"></script>
     <script src="js/metrics.js?v=20260924c"></script>
     <script src="js/session.js?v=20261113a"></script>
-    <script src="js/session-sets.js?v=20261115a"></script>
+    <script src="js/session-sets.js?v=20261121a"></script>
     <script src="js/daily-loop.js?v=20261113a"></script>
     <script src="js/site-layout.js?v=20261111a"></script>
     <script src="js/tour.js?v=20261113a"></script>
-    <script src="js/app.js?v=20261113e"></script>
+    <script src="js/app.js?v=20261118g"></script>
     <script src="js/audio-recovery.js?v=20261103c"></script>
     <script src="js/wake-lock.js?v=20261112b"></script>
-    <script src="js/boot-ready.js?v=20261113a"></script>
+    <script src="js/boot-ready.js?v=20261117c"></script>
   </body>
 </html>

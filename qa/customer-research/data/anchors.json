@@ -1,0 +1,183 @@
+{
+  "note": "Written blind to the answers and to the holdout by a separate agent on 2026-11-21, after the anchor properties in Maier et al. 2025, appendix C.1.",
+  "trial": {
+    "es": [
+      [
+        "No lo probaría.",
+        "Probablemente no lo probaría.",
+        "No sé si lo probaría.",
+        "Probablemente lo probaría.",
+        "Lo probaría con toda seguridad."
+      ],
+      [
+        "Para nada, no es lo mío.",
+        "Mmm, no creo que me anime.",
+        "Me da un poco igual, la verdad.",
+        "Sí, creo que me animaría a probarlo.",
+        "¡Claro que sí, lo probaría enseguida!"
+      ],
+      [
+        "Es muy poco probable que lo pruebe.",
+        "Es poco probable que lo pruebe.",
+        "Es igual de probable que lo pruebe o que no.",
+        "Es bastante probable que lo pruebe.",
+        "Es muy probable que lo pruebe."
+      ],
+      [
+        "No me interesa probarlo en absoluto.",
+        "Me interesa poco probarlo.",
+        "Me es indiferente probarlo o no.",
+        "Me interesa probarlo.",
+        "Tengo muchas ganas de probarlo."
+      ],
+      [
+        "Aunque tuviera la oportunidad, no lo probaría.",
+        "Solo lo probaría si alguien insistiera mucho.",
+        "Probarlo o no dependería del momento; no sabría decir.",
+        "Si tuviera un rato libre, seguramente lo probaría.",
+        "Si tuviera la oportunidad, lo probaría de inmediato."
+      ],
+      [
+        "No le voy a dar una oportunidad.",
+        "Dudo que le dé una oportunidad.",
+        "Quizás le dé una oportunidad, quizás no.",
+        "Lo más probable es que le dé una oportunidad.",
+        "Sin duda le voy a dar una oportunidad."
+      ]
+    ],
+    "en": [
+      [
+        "I would not try it.",
+        "I probably would not try it.",
+        "I might or might not try it.",
+        "I would probably try it.",
+        "I would definitely try it."
+      ],
+      [
+        "Nah, not for me, I'll skip it.",
+        "Probably not, I doubt I'd bother.",
+        "Eh, I don't really care either way.",
+        "Sure, I'd likely give it a go.",
+        "Yes, absolutely, I'd jump right in."
+      ],
+      [
+        "It is very unlikely that I would try it.",
+        "It is somewhat unlikely that I would try it.",
+        "I am undecided about trying it.",
+        "It is fairly likely that I would try it.",
+        "It is very likely that I would try it."
+      ],
+      [
+        "I have no interest in trying this.",
+        "I'm not very interested in trying this.",
+        "I feel neutral about trying this.",
+        "I'm interested in trying this.",
+        "I really want to try this."
+      ],
+      [
+        "Even if I had the chance, I wouldn't try it.",
+        "I'd only try it if someone really pushed me to.",
+        "Whether I'd try it depends; I really can't say.",
+        "If I had a spare moment, I'd likely try it.",
+        "Given the chance, I'd try it right away."
+      ],
+      [
+        "I won't be giving this a try.",
+        "I doubt I'll give this a try.",
+        "Maybe I'll give this a try, maybe not.",
+        "I'll most likely give this a try.",
+        "I'm definitely going to give this a try."
+      ]
+    ]
+  },
+  "paid": {
+    "es": [
+      [
+        "No pagaría por esto.",
+        "Probablemente no pagaría por esto.",
+        "No sé si pagaría por esto.",
+        "Probablemente pagaría por esto.",
+        "Definitivamente pagaría por esto."
+      ],
+      [
+        "Ni hablar, yo no pago por esto.",
+        "Mmm, no creo que pague.",
+        "No sé, me da un poco lo mismo pagar o no.",
+        "Sí, creo que terminaría pagando.",
+        "¡Claro que sí, pagaría sin pensarlo!"
+      ],
+      [
+        "Es muy poco probable que lo compre.",
+        "Es poco probable que lo compre.",
+        "Es igual de probable que lo compre o que no.",
+        "Es bastante probable que lo compre.",
+        "Es muy probable que lo compre."
+      ],
+      [
+        "No tengo ninguna intención de suscribirme.",
+        "Tengo pocas ganas de suscribirme.",
+        "No tengo una opinión clara sobre suscribirme.",
+        "Me inclino por suscribirme.",
+        "Tengo toda la intención de suscribirme."
+      ],
+      [
+        "Aun después de probarlo, no pagaría por esto.",
+        "Solo pagaría si se dieran circunstancias muy concretas.",
+        "Que pague o no dependería de muchas cosas; no lo sé.",
+        "Si cumpliera mis expectativas, probablemente pagaría.",
+        "Si tuviera la opción, pagaría de inmediato."
+      ],
+      [
+        "No voy a pagar por esto.",
+        "Dudo que llegue a pagar por esto.",
+        "Quizás pague, quizás no.",
+        "Lo más probable es que pague por esto.",
+        "Sin duda voy a pagar por esto."
+      ]
+    ],
+    "en": [
+      [
+        "I would not pay for it.",
+        "I probably would not pay for it.",
+        "I might or might not pay for it.",
+        "I would probably pay for it.",
+        "I would definitely pay for it."
+      ],
+      [
+        "Nope, I'm not paying for that.",
+        "Probably not, I doubt I'd pay.",
+        "Eh, I could go either way on paying.",
+        "Yeah, I'd likely pay for it.",
+        "For sure, I'd pay for it."
+      ],
+      [
+        "It is very unlikely that I would purchase it.",
+        "It is somewhat unlikely that I would purchase it.",
+        "I am undecided about purchasing it.",
+        "It is fairly likely that I would purchase it.",
+        "It is very likely that I would purchase it."
+      ],
+      [
+        "I have no intention of buying it.",
+        "I'm not really inclined to buy it.",
+        "I don't feel strongly either way about buying it.",
+        "I'm inclined to buy it.",
+        "I fully intend to buy it."
+      ],
+      [
+        "Even after trying it, I wouldn't pay for it.",
+        "I'd only pay for it under very specific circumstances.",
+        "Whether I'd pay for it would depend; I can't say.",
+        "If it lived up to my expectations, I'd likely pay for it.",
+        "Given the option, I'd pay for it right away."
+      ],
+      [
+        "I won't be subscribing to it.",
+        "I doubt I'll subscribe to it.",
+        "Maybe I'll subscribe, maybe I won't.",
+        "I'll most likely subscribe to it.",
+        "I'm definitely going to subscribe to it."
+      ]
+    ]
+  }
+}

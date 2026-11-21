@@ -148,6 +148,9 @@ test("health reports booleans and the site origin, never key material", async ()
     // holds the true case).
     creemCheckoutConfigured: false,
     creemPortalConfigured: false,
+    // No API key here, so no mode; "test" or "live" by the key's prefix
+    // otherwise, never any of the key itself (asserted below).
+    creemKeyMode: null,
     signingKeyConfigured: true,
     // The account layer reports itself here too. `createTestEnv` has no D1
     // binding and no auth configuration, which is exactly the shape a
@@ -164,6 +167,13 @@ test("health reports booleans and the site origin, never key material", async ()
   const text = JSON.stringify(body);
   assert.equal(text.includes(env.LICENSE_PRIVATE_KEY_PKCS8_B64), false);
   assert.equal(text.includes(env.STRIPE_WEBHOOK_SECRET), false);
+
+  // The mode names which Creem API a key reaches, and nothing else of it.
+  for (const [key, mode] of [["creem_test_sEcReT123", "test"], ["creem_sEcReT456", "live"]]) {
+    const withKey = await (await handleRequest(new Request(`${BASE}/v1/health`), createTestEnv({ CREEM_API_KEY: key }))).json();
+    assert.equal(withKey.creemKeyMode, mode);
+    assert.equal(JSON.stringify(withKey).includes("sEcReT"), false);
+  }
 
   const unconfigured = await handleRequest(
     new Request(`${BASE}/v1/health`),

@@ -131,6 +131,17 @@ export function creemCheckoutConfigured(env) {
 }
 
 /**
+ * "test" for a creem_test_ key, "live" for any other, null with none.
+ * @param {Object} env Worker env bindings.
+ * @returns {"test"|"live"|null}
+ */
+export function creemKeyMode(env) {
+  const key = readVar(env, "CREEM_API_KEY");
+  if (!key) return null;
+  return key.startsWith(CREEM_TEST_KEY_PREFIX) ? "test" : "live";
+}
+
+/**
  * Whether the worker can hand a Creem subscriber their billing portal.
  * @param {Object} env Worker env bindings.
  * @returns {boolean} Whether `/v1/me/billing-portal` can answer for Creem.

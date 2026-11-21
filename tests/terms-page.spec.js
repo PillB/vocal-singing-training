@@ -75,8 +75,10 @@ test.describe("terms of use", () => {
     }
     expect(body).toMatch(/S\/ 19\.90 al mes/);
     expect(body).toMatch(/S\/ 119\.90 al año/);
-    expect(body).toMatch(/\$7\.99 al mes/);
-    expect(body).toMatch(/\$49 al año/);
+    // Written US$ outside Peru: a bare "$" is the peso in Mexico, Argentina,
+    // Chile and Colombia.
+    expect(body).toMatch(/US\$ 7\.99 al mes/);
+    expect(body).toMatch(/US\$ 49 al año/);
   });
 
   test("it only claims nothing is on sale while no checkout link exists", async ({ page }) => {

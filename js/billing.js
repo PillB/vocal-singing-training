@@ -724,7 +724,35 @@
     if (rails && rails.creemCheckout === false) {
       return { ok: false, mode: "provider_unavailable", plan: planId, provider: rail };
     }
-    return { ok: true, mode: "opening", plan: planId, provider: rail, done: openWorkerCheckout(planId, rail) };
+    // One checkout at a time: a press while one is opening (the pricing panel
+    // redrawn under the busy button, a second tab of the same page) joins it
+    // rather than asking the worker for a second checkout.
+    if (!workerOpening) {
+      const done = openWorkerCheckout(planId, rail);
+      workerOpening = { plan: planId, provider: rail, done };
+      done.then((out) => {
+        // Navigating away keeps it set; anything else frees the next press.
+        if (!out || out.mode !== "redirect") workerOpening = null;
+      });
+    }
+    return { ok: true, mode: "opening", plan: workerOpening.plan, provider: workerOpening.provider, done: workerOpening.done };
+  }
+
+  /** The checkout the worker is opening for this page, if any: {plan, provider, done}. */
+  function checkoutOpening() {
+    return workerOpening;
+  }
+
+  /** The worker checkout this page is opening, so a second press cannot open another. */
+  let workerOpening = null;
+  try {
+    // Back from the checkout through the back/forward cache: the page that
+    // navigated away is not opening anything any more.
+    global.addEventListener?.("pageshow", (e) => {
+      if (e && e.persisted) workerOpening = null;
+    });
+  } catch {
+    /* ignore */
   }
 
   /** What the page does with each refusal from `/v1/me/checkout`, by its reason. */
@@ -890,6 +918,23 @@
         emit();
         return { ok: false, reason: "error" };
       });
+  }
+
+  /**
+   * Drop a checkout still waiting for its licence, on sign-out: claimed
+   * afterwards, it would be linked to whoever signs in next on this browser
+   * (js/account.js forget). The account that bought it keeps its own pending
+   * link, which only that account retries.
+   */
+  function forgetPendingClaim() {
+    const st = read();
+    if (!st || (st.status !== "pending" && st.status !== "unclaimed")) return;
+    try {
+      localStorage.removeItem(LS_KEY);
+    } catch {
+      /* ignore */
+    }
+    emit();
   }
 
   /**
@@ -1298,6 +1343,8 @@
     handleReturnFromCheckout,
     resumePendingClaim,
     hasPendingClaim,
+    forgetPendingClaim,
+    checkoutOpening,
     formatPrice,
     annualSavingPct,
     exportProgressJson,

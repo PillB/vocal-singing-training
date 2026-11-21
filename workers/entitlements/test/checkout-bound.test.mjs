@@ -394,6 +394,61 @@ test("CK12 references are swept 30 days after the checkout opened; the link they
   assert.deepEqual(left.results.map((r) => r.plan), ["pro_yearly"]);
   const links = await env.DB.prepare("SELECT COUNT(*) AS n FROM license_links").first();
   assert.equal(Number(links.n), 1, "the bound licence stays linked");
+
+  // The boundary itself: a second short of 30 days stays, a second past goes.
+  // Rows one well inside and one well outside passed with any TTL from 11 to
+  // 31 days.
+  const at = NOW + 60 * DAY;
+  await openCheckout(env, services, token, { plan: "pro_monthly" }, at - 30 * DAY + 1);
+  await openCheckout(env, services, token, { plan: "pro_yearly" }, at - 30 * DAY - 1);
+  const edge = await sweepExpired(env.DB, at);
+  const kept = await env.DB.prepare("SELECT created_at FROM checkout_refs").all();
+  assert.deepEqual(kept.results.map((r) => Number(r.created_at)), [at - 30 * DAY + 1], JSON.stringify(edge.deleted));
+});
+
+/** A subscription event as Creem sends it, for the renewal that follows a checkout. */
+function subscriptionEvent(status, periodStart, over) {
+  return {
+    id: "sub_1",
+    object: "subscription",
+    status,
+    mode: "prod",
+    product: { id: "prod_monthly", billing_period: "every-month" },
+    customer: { id: "cust_1" },
+    last_transaction_id: "tran_1",
+    current_period_start_date: new Date(periodStart * 1000).toISOString(),
+    current_period_end_date: new Date((periodStart + 30 * DAY) * 1000).toISOString(),
+    ...(over || {})
+  };
+}
+
+test("CK15 a renewal still being retried after the paid period ends is no Pro, and still a subscription the page can manage", async () => {
+  const env = freshEnv();
+  const services = fakeServices();
+  const token = await signIn(env, services, "buyer@example.test", NOW);
+  await openCheckout(env, services, token, { plan: "pro_monthly" }, NOW + 5);
+  const ref = services.calls[0].body.request_id;
+  await deliver(env, "evt_1", "checkout.completed", completedCheckout("ch_1", ref, NOW + 20), NOW + 20);
+  assert.deepEqual((await me(env, token, NOW + 30)).body.billingRails, ["creem"]);
+
+  // The renewal fails and Creem keeps retrying the card: the period is over,
+  // so no Pro, but the card is still being charged.
+  const end = NOW + 20 + 30 * DAY;
+  for (const [i, status] of ["past_due", "unpaid"].entries()) {
+    const when = end + (i + 1) * DAY;
+    await deliver(env, `evt_${status}`, "subscription.update", subscriptionEvent(status, NOW + 20), when);
+    const after = await me(env, token, when + 60);
+    assert.equal(after.body.token, null, `${status}: no Pro after the paid period`);
+    assert.deepEqual(after.body.billingRails, ["creem"], `${status}: the subscription is still there to manage`);
+  }
+
+  // Cancelled: nothing left to manage.
+  await deliver(env, "evt_cancel", "subscription.canceled", subscriptionEvent("canceled", NOW + 20, { canceled_at: new Date((end + 4 * DAY) * 1000).toISOString() }), end + 4 * DAY);
+  assert.deepEqual((await me(env, token, end + 5 * DAY)).body.billingRails, []);
+
+  // And an account with nothing linked has none.
+  const other = await signIn(env, services, "other@example.test", NOW + 40);
+  assert.deepEqual((await me(env, other, NOW + 50)).body.billingRails, []);
 });
 
 test("CK13 methods other than POST are refused on both routes", async () => {

@@ -303,9 +303,14 @@ test.describe("VG-83: a paid licence the account does not show yet is linked, no
     const failing = freshState({ landed: true, linkAnswer: [503, { ok: false, reason: "unavailable" }] });
     await install(page, failing, license, { stored: await license.sign(licenceClaims(null)) });
     await open(page, "");
-    await expect.poll(() => failing.links.length, { timeout: 5000 }).toBe(1);
+    // Asked again, not given up on: the first cut marked the licence tried
+    // before the answer, so the next refresh in the page dropped it after
+    // one 503 (red team, money-2). The in-page retry asks at 4 s.
+    await expect.poll(() => failing.links.length, { timeout: 9000 }).toBeGreaterThanOrEqual(2);
     // Wrong: dropped on a failure that says nothing about whose it is.
     await expect.poll(() => licenceNow(page)).toEqual({ pro: true, provider: "creem", accountId: null });
+    await page.evaluate(() => window.VTAccount.refresh());
+    expect(await licenceNow(page), "and a refresh after it keeps it too").toEqual({ pro: true, provider: "creem", accountId: null });
   });
 });
 

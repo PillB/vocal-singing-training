@@ -7983,7 +7983,7 @@
     const trialBtn = $("#btn-start-trial");
     if (trialBtn) paintPricingTrial(trialBtn, B, ent, cfg, prelaunch);
     paintPayNote(prelaunch, trialBtn);
-    paintCancelNote(ent);
+    paintCancelNote(ent, B, cfg);
     paintManageBilling(B, ent, cfg);
     // Ads: Pro suppresses; free may refresh home slot
     try {
@@ -8142,7 +8142,7 @@
   }
 
   /** How to cancel, for the rail this person actually paid on; no line for a trial or a gift. */
-  function paintCancelNote(ent) {
+  function paintCancelNote(ent, B, cfg) {
     // How to cancel, for the rail this person actually paid on.
     //
     // `pricing.note` used to end "Cancela cuando quieras desde el mismo sitio
@@ -8163,10 +8163,7 @@
     // cancelar suscripción", and the line says where it goes.)
     const cancelNote = $("#pricing-cancel-note");
     if (cancelNote) {
-      const rail = String(ent.provider || "").toLowerCase();
-      const key = ent.pro && ["stripe", "creem", "mercadopago"].includes(rail)
-        ? "pricing.cancel." + rail
-        : "";
+      const key = cancelNoteKey(ent, B, cfg);
       if (key) {
         cancelNote.setAttribute("data-i18n", key);
         cancelNote.textContent = tt(key);
@@ -8177,6 +8174,19 @@
         cancelNote.hidden = true;
       }
     }
+  }
+
+  /**
+   * Which cancel line to show, or "" for none. The button is named only where
+   * it is drawn: a Creem subscriber who is signed out, or on a worker that
+   * cannot open the portal, is pointed at Creem's emailed link instead of at a
+   * button that is not there.
+   */
+  function cancelNoteKey(ent, B, cfg) {
+    const rail = String(ent.provider || "").toLowerCase();
+    if (!ent.pro || !["stripe", "creem", "mercadopago"].includes(rail)) return "";
+    if (rail === "creem" && manageRoute(B, ent, cfg) !== "creem") return "pricing.cancel.creemEmail";
+    return "pricing.cancel." + rail;
   }
 
   /**
@@ -8193,14 +8203,28 @@
 
   /** Which way "Manage or cancel" goes for this entitlement, or null for none (a trial, a gift, free). */
   function manageRoute(B, ent, cfg) {
-    if (!ent?.pro || ent.source === "trial") return null;
-    const rail = String(ent.provider || "").toLowerCase();
+    const rail = billingRailFor(ent);
+    if (rail === null) return null;
     if (rail === "creem") return creemPortalOffered() ? "creem" : null;
     if (rail === "mercadopago") return "mercadopago";
     // A worker trial or a gift is a licence too, naming no paid rail
     // ("trial", "grant"): nothing to cancel. The QA demo, and a licence older
     // than the rail field, keep the Stripe portal they always had.
     return ["stripe", "demo", ""].includes(rail) && stripePortalConfigured(B, cfg) ? "stripe" : null;
+  }
+
+  /**
+   * The rail whose subscription the button manages: the one Pro is paid on;
+   * or, without Pro, one this account still has a subscription on that is
+   * not over. A renewal Creem is still retrying after the paid period ends
+   * leaves no Pro and a card still being charged, and that subscriber needs
+   * the button most.
+   * @returns {string|null} Rail id ("" for a licence older than the field), or null.
+   */
+  function billingRailFor(ent) {
+    if (ent?.pro && ent.source !== "trial") return String(ent.provider || "").toLowerCase();
+    const rails = window.VTAccount?.getState?.()?.billingRails || [];
+    return ["creem", "mercadopago"].find((r) => rails.includes(r)) || null;
   }
 
   /** A Creem portal needs somebody signed in (it is their customer the worker asks for) and a worker that has not said no. */
@@ -9234,29 +9258,48 @@
       const savingPct = B.annualSavingPct(plans, priceRegion);
       const ctx = { B, es, held, ent, prelaunch, savingPct, priceRegion };
       grid.innerHTML = plans.map((p) => planCardHtml(p, ctx)).join("");
-      $$(".plan-cta", grid).forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const planId = btn.dataset.plan;
-          if (!planId || planId === "free" || btn.getAttribute("aria-busy") === "true") return;
-          const res = B.startCheckout(planId, pricingRail);
-          if (res.mode === "opening" && res.done) {
-            // The worker is opening a checkout bound to this account (VG-83):
-            // a round trip, so the press shows it is working and cannot be
-            // pressed twice into two checkouts.
-            setPlanButtonBusy(btn, true);
-            res.done.then((out) => {
-              if (out?.mode === "redirect") return; // navigating away
-              setPlanButtonBusy(btn, false);
-              answerCheckout(out || { mode: "checkout_failed" });
-            });
-            return;
-          }
-          answerCheckout(res);
-        });
-      });
+      wirePlanButtons(grid, B);
     }
     paintMorNote(prelaunch);
     updateBillingChrome();
+  }
+
+  /**
+   * The plan buttons' presses. The worker opening a checkout bound to this
+   * account (VG-83) is a round trip, so the press shows it is working and no
+   * press opens a second checkout meanwhile, including on buttons drawn again
+   * under it: any redraw (the load's /v1/me answer, a licence change) used to
+   * replace the busy button with a fresh one that a second press got through.
+   */
+  function wirePlanButtons(grid, B) {
+    const buttons = $$(".plan-cta", grid);
+    buttons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const planId = btn.dataset.plan;
+        if (!planId || planId === "free" || B.checkoutOpening?.()) return;
+        const res = B.startCheckout(planId, pricingRail);
+        if (res.mode === "opening" && res.done) {
+          followOpening(btn, res.done, false);
+          return;
+        }
+        answerCheckout(res);
+      });
+    });
+    const opening = B.checkoutOpening?.();
+    const busy = opening && buttons.find((b) => b.dataset.plan === opening.plan);
+    // Drawn again mid-request: busy again, and quiet, because the press that
+    // started it answers once.
+    if (busy) followOpening(busy, opening.done, true);
+  }
+
+  /** Busy while the worker opens the checkout; back, and answered unless quiet, if it does not navigate away. */
+  function followOpening(btn, done, quiet) {
+    setPlanButtonBusy(btn, true);
+    done.then((out) => {
+      if (out?.mode === "redirect") return; // navigating away
+      setPlanButtonBusy(btn, false);
+      if (!quiet) answerCheckout(out || { mode: "checkout_failed" });
+    });
   }
 
   /**
@@ -9287,6 +9330,9 @@
     checkout_failed: ["pricing.toast.checkoutFailed", 6000]
   };
 
+  /** The plan a "sign in first" press was for, while the account panel it opened is up. */
+  let payAfterSignIn = null;
+
   /** Answer a checkout outcome that did not navigate away. */
   function answerCheckout(res) {
     if (res.mode === "demo") {
@@ -9297,7 +9343,10 @@
     }
     if (res.mode === "signin_required") {
       // Same handling as the trial's needs_account branch below: the press
-      // worked, and it sent them one step back rather than nowhere.
+      // worked, and it sent them one step back rather than nowhere. The plan
+      // is remembered: if this browser then turns out unable to sign in, the
+      // account panel offers to go on and pay (VG-88).
+      payAfterSignIn = { plan: res.plan, rail: res.provider || pricingRail };
       toast(tt("pricing.checkoutNeedsAccount"), { durationMs: 4600 });
       closePricing();
       openAccount();
@@ -10054,10 +10103,34 @@
     if (offline) offline.hidden = !offer.unreachable;
     const blocked = $("#account-signin-blocked");
     if (blocked) blocked.hidden = !offer.blocked;
+    paintPayAnyway(offer);
     if (unconfigured) {
       unconfigured.hidden =
         hasRealSignIn || offer.checking || offer.unreachable || offer.blocked;
     }
+  }
+
+  /**
+   * VG-88 in the real order of events: whether this browser can sign in is
+   * only learned when this panel tries Google's script, so the first press
+   * always lands here. Where it then cannot (Google refused, no emailed
+   * codes) and the plan has a link, the panel says the payment can go ahead
+   * in this browser and offers it, instead of ending at "could not load".
+   */
+  function paintPayAnyway(offer) {
+    const box = $("#account-pay-anyway");
+    if (!box) return;
+    const want = payAfterSignIn;
+    box.hidden = !(want && offer.blocked && window.VTBilling?.checkoutUrl?.(want.plan, want.rail));
+  }
+
+  /** Go on to the checkout the "sign in first" press was for. */
+  function payAnyway() {
+    const want = payAfterSignIn;
+    if (!want) return;
+    closeAccount();
+    const res = window.VTBilling?.startCheckout?.(want.plan, want.rail);
+    if (res && res.mode !== "redirect") answerCheckout(res);
   }
 
   /** The sign-in controls: the email form, the "or" divider between two methods and the retry row. */
@@ -10353,6 +10426,7 @@
   }
 
   function closeAccount() {
+    payAfterSignIn = null;
     const modal = $("#account-modal");
     if (modal) {
       modal.hidden = true;
@@ -10364,6 +10438,7 @@
   function bindAuth() {
     $("#btn-account")?.addEventListener("click", openAccount);
     $("#account-close")?.addEventListener("click", closeAccount);
+    $("#account-pay-anyway-btn")?.addEventListener("click", payAnyway);
     $("#account-modal")?.addEventListener("click", (e) => {
       if (e.target === $("#account-modal")) closeAccount();
     });

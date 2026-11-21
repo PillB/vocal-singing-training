@@ -103,7 +103,11 @@
      * Primary rails:
      * - stripe (id only): the international card rail. The seller will be a
      *   merchant of record, not Stripe — see docs/34-PERU-OPERATOR-RUNBOOK.md.
-     * - mercadopago: Peru + LATAM, in soles, with automatic monthly charging.
+     * - mercadopago: Peru, in soles, with automatic monthly charging. A
+     *   Mercado Pago seller account is per country and this one is Peruvian:
+     *   its plans charge soles and a buyer pays with a Peruvian Mercado Pago
+     *   account or card, so the rest of Latin America buys on Creem, in US
+     *   dollars, until there is a seller account in their country.
      */
     providers: {
       /**
@@ -169,8 +173,8 @@
       mercadopago: {
         id: "mercadopago",
         label: "Mercado Pago",
-        labelEs: "Mercado Pago (Perú / LATAM)",
-        regions: ["PE", "AR", "CL", "CO", "UY"],
+        labelEs: "Mercado Pago (Perú)",
+        regions: ["PE"],
         /**
          * Preference init_point or payment link from Mercado Pago.
          * Peru: create plan/subscription or checkout preference in MP dashboard.
@@ -200,7 +204,6 @@
         interval: null,
         priceUsd: 0,
         pricePen: 0,
-        priceEur: 0,
         features: [
           "all_exercises",
           "pitch_highway",
@@ -220,7 +223,10 @@
         // merchant of record cannot bill soles at all. See docs/35-PRICING.md.
         priceUsd: 7.99,
         pricePen: 19.9,
-        priceEur: 7.99,
+        // No priceEur: the Creem products are US dollars, tax-inclusive, for
+        // every market (VG-85, docs/40 step 3), so the euro markets are shown
+        // the dollars they are charged. Add priceEur back only with euro
+        // products in Creem, and change the terms' prices with it.
         popular: true,
         // Only list features actually delivered in product (trust > feature stack theater).
         // The card shows the first five: what Pro adds that a learner asked for
@@ -251,7 +257,6 @@
         interval: "year",
         priceUsd: 49,
         pricePen: 119.9,
-        priceEur: 49,
         badge: "saveAnnual",
         popular: false,
         hero: true,
@@ -277,9 +282,9 @@
       { code: "FR", name: "France", currency: "EUR", rail: "creem", priority: 2 },
       { code: "IT", name: "Italy", currency: "EUR", rail: "creem", priority: 2 },
       { code: "BR", name: "Brasil", currency: "BRL", rail: "creem", priority: 2 },
-      { code: "AR", name: "Argentina", currency: "ARS", rail: "mercadopago", priority: 2 },
-      { code: "CL", name: "Chile", currency: "CLP", rail: "mercadopago", priority: 2 },
-      { code: "CO", name: "Colombia", currency: "COP", rail: "mercadopago", priority: 2 },
+      { code: "AR", name: "Argentina", currency: "ARS", rail: "creem", priority: 2 },
+      { code: "CL", name: "Chile", currency: "CLP", rail: "creem", priority: 2 },
+      { code: "CO", name: "Colombia", currency: "COP", rail: "creem", priority: 2 },
       { code: "CA", name: "Canada", currency: "CAD", rail: "creem", priority: 2 },
       { code: "AU", name: "Australia", currency: "AUD", rail: "creem", priority: 2 },
       { code: "PH", name: "Philippines", currency: "PHP", rail: "creem", priority: 3 },

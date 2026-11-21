@@ -1175,7 +1175,7 @@ test.describe("What the split of the account panel and the Pro dialog must keep"
     const mp = page.locator('#pricing-rails [data-rail="mercadopago"]');
     await expect(page.locator('#pricing-rails [data-rail="stripe"]')).toHaveCount(0);
     await expect(card).toHaveText("Tarjeta internacional");
-    await expect(mp).toHaveText("Mercado Pago (Perú / LATAM)");
+    await expect(mp).toHaveText("Mercado Pago (Perú)");
     await page.keyboard.press("Escape");
     await expect(page.locator("#pricing-modal")).toBeHidden();
     await page.click("#btn-lang");

@@ -830,20 +830,36 @@ export async function listLinkedLicenses(db, accountId) {
  *                    periodEnd: number|null, provider: string|null, licenseId: string|null,
  *                    grantId: string|null, grants: Object[], paid: Object[]}>} Resolution.
  */
+/**
+ * The account's linked licences, read once: the ones that give Pro now, and
+ * the rails with a subscription that is not over, whether or not it gives Pro
+ * right now. A renewal being retried after the paid period still charges a
+ * card, and its subscriber still needs the page's "Manage or cancel".
+ * @param {D1Database} db D1.
+ * @param {KVNamespace|null} kv The entitlement ledger.
+ * @param {string} accountId Account.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{paid: object[], billingRails: Set<string>}>}
+ */
+async function readLinkedRecords(db, kv, accountId, at) {
+  const paid = [];
+  const billingRails = new Set();
+  for (const licenseId of await listLinkedLicenses(db, accountId)) {
+    const record = kv ? await getEntitlement(kv, licenseId) : null;
+    if (!record) continue;
+    if (isTokenIssuable(record, at)) paid.push(record);
+    if (record.provider && record.status !== "canceled") billingRails.add(record.provider);
+  }
+  return { paid, billingRails };
+}
+
 export async function resolveEntitlement(db, kv, accountId, now) {
   const at = nowSec(now);
 
   const grantRows = await listGrants(db, accountId, { includeRevoked: true, limit: 200 });
   const activeGrants = grantRows.filter((row) => grantIsActive(row, at));
 
-  const licenseIds = await listLinkedLicenses(db, accountId);
-  const paid = [];
-  for (const licenseId of licenseIds) {
-    const record = kv ? await getEntitlement(kv, licenseId) : null;
-    if (record && isTokenIssuable(record, at)) {
-      paid.push(record);
-    }
-  }
+  const { paid, billingRails } = await readLinkedRecords(db, kv, accountId, at);
 
   /** @type {{pro: boolean, plan: string|null, status: string, source: string|null,
    *          periodEnd: number|null, provider: string|null, licenseId: string|null,
@@ -901,6 +917,7 @@ export async function resolveEntitlement(db, kv, accountId, now) {
 
   return {
     ...best,
+    billingRails: [...billingRails].sort(),
     grants: grantRows.map((row) => toPublicGrant(row, at)),
     paid: paid.map((record) => ({
       licenseId: record.licenseId,

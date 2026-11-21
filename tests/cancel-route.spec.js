@@ -94,7 +94,11 @@ test.describe("How to cancel says the true thing for the rail you paid on", () =
       expect(r.pro, "the signed licence grants Pro").toBe(true);
       expect(r.provider, "and the entitlement reports the rail from its claims").toBe(rail);
       expect(r.hidden, "a paying subscriber is told how to cancel").toBe(false);
-      expect(r.key, "the line shown is the one for this rail").toBe("pricing.cancel." + rail);
+      // Signed out, a Creem subscriber has no in-app portal (it is opened for
+      // the signed-in account's own customer), so the line names Creem's
+      // emailed link rather than a button that is not drawn.
+      const key = rail === "creem" ? "pricing.cancel.creemEmail" : "pricing.cancel." + rail;
+      expect(r.key, "the line shown is the one for this rail").toBe(key);
       expect(r.text, "and it names this rail's route").toMatch(want.says);
       for (const other of want.never) {
         expect(r.text, `${rail}'s line must not send them to another rail`).not.toMatch(other);

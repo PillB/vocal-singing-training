@@ -56,8 +56,8 @@
     "sha": "9ad79df2ecf6bc06"
   },
   "js/account.js": {
-    "v": "20261121c",
-    "sha": "cf1bef9d47967e2a"
+    "v": "20261121e",
+    "sha": "26dc93a68e06534b"
   },
   "js/admin-layouts.js": {
     "v": "20261111a",
@@ -80,8 +80,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261121g",
-    "sha": "768c2aff8b18c200"
+    "v": "20261121h",
+    "sha": "db8e757c1d1dc967"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -96,12 +96,12 @@
     "sha": "dfe04ab98bbedd4b"
   },
   "js/billing-config.js": {
-    "v": "20261121b",
-    "sha": "7fb657114de01e75"
+    "v": "20261121c",
+    "sha": "87e7c9ce49b651a1"
   },
   "js/billing.js": {
-    "v": "20261121b",
-    "sha": "14f6080215933642"
+    "v": "20261121c",
+    "sha": "3563fb725c2674b5"
   },
   "js/boot-head.js": {
     "v": "20261118a",
@@ -148,8 +148,8 @@
     "sha": "4c1c38110f0a3699"
   },
   "js/i18n.js": {
-    "v": "20261121e",
-    "sha": "93572aba4423d409"
+    "v": "20261121f",
+    "sha": "91ec32deb0250ac2"
   },
   "js/license.js": {
     "v": "20261103d",

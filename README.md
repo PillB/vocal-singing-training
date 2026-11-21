@@ -16,7 +16,7 @@ Self-paced practice website for **Vocal Training** (speaking foundations) and **
 - **12-week plan** dashboard (one focus element, check-ins, improve-or-continue) 
 - **Piano chords** — mid-lower male range (C2–E4) with **Arpeggio** and **Sustain note** (3–5s hold) 
 - **Pitch visualizer** — target trail, live voice dot, moving-average deviation band (accuracy + precision) 
-- **Subscriptions (Pro)** — Mercado Pago (Perú/LATAM) and an international card rail through a merchant of record (a Peru-registered seller cannot be a Stripe merchant; see [docs/34-PERU-OPERATOR-RUNBOOK.md](docs/34-PERU-OPERATOR-RUNBOOK.md)); checkout is not public yet; opt-in 7-day trial; entitlements signed by [`workers/entitlements/`](workers/entitlements/); see [docs/10-SUBSCRIPTIONS.md](docs/10-SUBSCRIPTIONS.md)
+- **Subscriptions (Pro)** — Mercado Pago (Perú) and an international card rail through a merchant of record (a Peru-registered seller cannot be a Stripe merchant; see [docs/34-PERU-OPERATOR-RUNBOOK.md](docs/34-PERU-OPERATOR-RUNBOOK.md)); checkout is not public yet; opt-in 7-day trial; entitlements signed by [`workers/entitlements/`](workers/entitlements/); see [docs/10-SUBSCRIPTIONS.md](docs/10-SUBSCRIPTIONS.md)
 - **Internal auth** — 2 admin + 10 F&F tester accounts (hashes in repo; plaintext sheet gitignored); see [docs/11-AUTH-AND-HARDENING.md](docs/11-AUTH-AND-HARDENING.md)
 
 ## Using it

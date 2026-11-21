@@ -168,6 +168,32 @@
     },
 
     /**
+     * Does Tu camino (js/voice-path.js) help practice last, or only liven up
+     * the first weeks?
+     *
+     * control "path" — areas counted in days, logros that are only ever
+     *   earned, a way in from home and a line on the completion card.
+     * treatment "none" — the same site with none of it, and no badge grid.
+     *
+     * Primary: practice days in weeks 5-12 after exposure (days 28-84), not
+     * the first month: the effect of a game layer falls after about four
+     * weeks and only partly recovers in weeks 6-10 (Rodrigues et al. 2022,
+     * longitudinal; Koivisto & Hamari 2014 saw the same decline), and a lift
+     * that fades is not a habit. Guardrails: practice days in the first 28
+     * (it must not put anybody off early) and the share who leave a Mínimo
+     * unfinished in the first 28 (it must not push starts nobody finishes).
+     * Plan: 566 per arm (+2 days in weeks 5-12, mean 10, SD 12), at least 84
+     * days. Exposed on the first home or Historial drawn after a practice day.
+     */
+    path_2026_12: {
+      enabled: false,
+      variants: [
+        { id: "path", weight: 1 },
+        { id: "none", weight: 1 }
+      ]
+    },
+
+    /**
      * Which arrangement of the site keeps people practising?
      *
      * control "a" — Clásico: Practicar, Plan, Historial.

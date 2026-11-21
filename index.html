@@ -21,9 +21,10 @@
     <meta name="theme-color" content="#0c1118" />
     <title>Entrenamiento vocal y de canto</title>
     <script src="js/boot-head.js?v=20261118a"></script>
-    <link rel="stylesheet" href="css/styles.css?v=20261117d" />
+    <link rel="stylesheet" href="css/styles.css?v=20261121b" />
     <link rel="stylesheet" href="css/exercise-viz.css?v=20261002a" />
     <link rel="stylesheet" href="css/session-sets.css?v=20261112a" />
+    <link rel="stylesheet" href="css/voice-path.css?v=20261121f" />
     <link rel="stylesheet" href="css/scenes/speech.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/speech-shape.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/volume.css?v=20261002a" />
@@ -32,7 +33,7 @@
     <link rel="stylesheet" href="css/scenes/pitch.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/dynamics.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/resonance.css?v=20261002a" />
-    <link rel="stylesheet" href="css/site-version.css?v=20261111c" />
+    <link rel="stylesheet" href="css/site-version.css?v=20261121a" />
     <!-- In <head> and not deferred: it paints the visitor's design of the site
          before the first frame. A file, because the policy above allows no
          inline script but the one flag. -->
@@ -267,10 +268,17 @@
               </div>
               <div class="loop-goal-bar" id="loop-goal-bar" aria-hidden="true"></div>
             </div>
-            <button type="button" class="btn btn-ghost btn-sm loop-cards-btn" id="loop-cards-btn" hidden></button>
-            <button type="button" class="btn btn-ghost btn-sm loop-remind-btn" id="btn-reminder" aria-haspopup="dialog">
-              <span aria-hidden="true">🔔</span> <span id="btn-reminder-label" data-i18n="retain.open">Poner un recordatorio</span>
-            </button>
+            <!-- The strip's quiet ways onward, in one wrapping row: on a phone
+                 each one on its own row made the strip too tall to leave the
+                 catalogue in sight. -->
+            <div class="loop-actions">
+              <button type="button" class="btn btn-ghost btn-sm loop-cards-btn" id="loop-cards-btn" hidden></button>
+              <!-- Tu camino in Historial (js/voice-path.js): how many logros, or how many are new. -->
+              <button type="button" class="btn btn-ghost btn-sm loop-path-btn" id="path-home-btn" hidden></button>
+              <button type="button" class="btn btn-ghost btn-sm loop-remind-btn" id="btn-reminder" aria-haspopup="dialog">
+                <span aria-hidden="true">🔔</span> <span id="btn-reminder-label" data-i18n="retain.open">Poner un recordatorio</span>
+              </button>
+            </div>
           </aside>
 
           <!-- The classic arm has no week card above, so its way in to the
@@ -308,10 +316,10 @@
         <link rel="preload" href="js/billing.js?v=20261118a" as="script" />
         <link rel="preload" href="js/ads-config.js?v=20261113a" as="script" />
         <link rel="preload" href="js/ads.js?v=20261113a" as="script" />
-        <link rel="preload" href="js/value-pulse.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/value-pulse.js?v=20261121a" as="script" />
         <link rel="preload" href="js/region-gate.js?v=20261112b" as="script" />
         <link rel="preload" href="js/analytics.js?v=20261103a" as="script" />
-        <link rel="preload" href="js/experiments-config.js?v=20261112a" as="script" />
+        <link rel="preload" href="js/experiments-config.js?v=20261121a" as="script" />
         <link rel="preload" href="js/experiments.js?v=20261112a" as="script" />
         <link rel="preload" href="js/privacy-switch.js?v=20261111a" as="script" />
         <link rel="preload" href="js/reports.js?v=20261113d" as="script" />
@@ -340,11 +348,12 @@
         <link rel="preload" href="js/recorder.js?v=20261102a" as="script" />
         <link rel="preload" href="js/metrics.js?v=20260924c" as="script" />
         <link rel="preload" href="js/session.js?v=20261113a" as="script" />
-        <link rel="preload" href="js/session-sets.js?v=20261112a" as="script" />
-        <link rel="preload" href="js/daily-loop.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/session-sets.js?v=20261121a" as="script" />
+        <link rel="preload" href="js/voice-path.js?v=20261121f" as="script" />
+        <link rel="preload" href="js/daily-loop.js?v=20261121b" as="script" />
         <link rel="preload" href="js/site-layout.js?v=20261111a" as="script" />
         <link rel="preload" href="js/tour.js?v=20261113a" as="script" />
-        <link rel="preload" href="js/app.js?v=20261118g" as="script" />
+        <link rel="preload" href="js/app.js?v=20261121a" as="script" />
         <link rel="preload" href="js/audio-recovery.js?v=20261103c" as="script" />
         <link rel="preload" href="js/wake-lock.js?v=20261112b" as="script" />
         <link rel="preload" href="js/boot-ready.js?v=20261117c" as="script" />
@@ -756,6 +765,18 @@
         </div>
         <div class="card" id="history-list"></div>
 
+        <!-- Tu camino (js/voice-path.js): areas counted in days, and logros that
+             are only ever earned. Hidden until the first practice day, and in
+             the arm of path_2026_12 that goes without it. -->
+        <section class="card path-card" id="path-card" aria-labelledby="path-title" hidden>
+          <div class="path-head">
+            <h3 class="path-title" id="path-title" tabindex="-1">Tu camino</h3>
+            <button type="button" class="btn btn-ghost btn-xs path-toggle" id="path-toggle" hidden></button>
+          </div>
+          <p class="muted path-sub" id="path-sub"></p>
+          <div class="path-body" id="path-body"></div>
+        </section>
+
         <!-- Your progress: what practice added up to, then the one Pro offer.
              Lives in Historial (the record); Practicar keeps the daily task. -->
         <div class="value-pulse card" id="value-pulse" aria-live="polite">
@@ -771,7 +792,7 @@
           </div>
           <p class="value-insights muted" id="value-insights" hidden></p>
 
-          <!-- Pro studio: weekly goal, insights, achievements, practice map -->
+          <!-- Pro studio: weekly goal, practice map, insights (logros are in Tu camino above) -->
           <div class="pro-studio" id="pro-studio">
             <div class="pro-studio-row">
               <label class="pro-goal-field" for="sel-week-goal">
@@ -783,10 +804,6 @@
                 </select>
               </label>
               <span class="pro-goal-progress muted" id="pro-goal-progress">0/3</span>
-            </div>
-            <div class="pro-achievements" id="pro-achievements">
-              <strong class="pro-ach-title" data-i18n="pro.achievements">Logros</strong>
-              <div class="pro-ach-grid" id="pro-ach-grid"></div>
             </div>
             <!-- Year-style practice heatmap (habit apps / GitHub contribution vibe) -->
             <div class="practice-heatmap-wrap" id="practice-heatmap-wrap">
@@ -1048,6 +1065,7 @@
         <h3 id="set-done-title"></h3>
         <ol class="set-done-steps" id="set-done-steps"></ol>
         <p class="set-done-line" id="set-done-line"></p>
+        <div class="set-done-path" id="set-done-path" hidden></div>
         <p class="set-done-tip muted" id="set-done-tip" hidden></p>
         <div class="modal-actions">
           <button type="button" class="btn btn-primary" id="set-done-close"></button>
@@ -1329,7 +1347,7 @@
     <script src="js/billing.js?v=20261118a"></script>
     <script src="js/ads-config.js?v=20261113a"></script>
     <script src="js/ads.js?v=20261113a"></script>
-    <script src="js/value-pulse.js?v=20261113a"></script>
+    <script src="js/value-pulse.js?v=20261121a"></script>
     <!-- The page declares that the region gate belongs on it, so that if
          js/region-gate.js ever 404s or fails to parse, js/analytics.js and
          js/experiments.js keep nothing and send nothing rather than reading an
@@ -1337,7 +1355,7 @@
     <script>window.VT_REGION_REQUIRED = true;</script>
     <script src="js/region-gate.js?v=20261112b"></script>
     <script src="js/analytics.js?v=20261103a"></script>
-    <script src="js/experiments-config.js?v=20261112a"></script>
+    <script src="js/experiments-config.js?v=20261121a"></script>
     <script src="js/experiments.js?v=20261112a"></script>
     <script src="js/privacy-switch.js?v=20261111a"></script>
     <script src="js/reports.js?v=20261113d"></script>
@@ -1366,11 +1384,12 @@
     <script src="js/recorder.js?v=20261102a"></script>
     <script src="js/metrics.js?v=20260924c"></script>
     <script src="js/session.js?v=20261113a"></script>
-    <script src="js/session-sets.js?v=20261112a"></script>
-    <script src="js/daily-loop.js?v=20261113a"></script>
+    <script src="js/session-sets.js?v=20261121a"></script>
+    <script src="js/voice-path.js?v=20261121f"></script>
+    <script src="js/daily-loop.js?v=20261121b"></script>
     <script src="js/site-layout.js?v=20261111a"></script>
     <script src="js/tour.js?v=20261113a"></script>
-    <script src="js/app.js?v=20261118g"></script>
+    <script src="js/app.js?v=20261121a"></script>
     <script src="js/audio-recovery.js?v=20261103c"></script>
     <script src="js/wake-lock.js?v=20261112b"></script>
     <script src="js/boot-ready.js?v=20261117c"></script>

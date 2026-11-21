@@ -648,6 +648,14 @@
       .join("");
   }
 
+  /** What finishing the set brought on Tu camino (js/voice-path.js), if anything. */
+  function pathLines() {
+    const box = $("#set-done-path");
+    if (!box) return;
+    box.innerHTML = global.VTPath ? global.VTPath.doneHtml() : "";
+    box.hidden = !box.innerHTML;
+  }
+
   function showDone(set) {
     const modal = $("#set-done");
     if (!modal) return;
@@ -663,6 +671,7 @@
     // What happened, in numbers the learner can check; no score and no verdict.
     $("#set-done-line").textContent =
       n > 0 ? tt("sets.done.line", { n: String(n), total: String(set.order.length) }) : tt("sets.done.none");
+    pathLines();
     const tip = $("#set-done-tip");
     tip.textContent = set.tip || "";
     tip.hidden = !set.tip;
@@ -701,6 +710,8 @@
     if (!set) return false;
     const n = practisedCount(set.order);
     track("set_complete", { set: set.id, track: set.track, practiced: n, steps: set.order.length });
+    // Sets keep no record of their own; Tu camino keeps the one that a set was finished.
+    if (global.VTPath) global.VTPath.noteSet(set.id, n, set.order.length);
     hooks.refresh?.();
     if (quiet()) return true;
     showDone(set);

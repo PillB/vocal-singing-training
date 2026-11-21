@@ -473,7 +473,14 @@ test.describe("every arm sends what its experiment is judged on", () => {
     return out;
   }
 
-  const keys = ["aa_2026_10", "tour_shape_2026_10", "loop_home_2026_10", "loop_surprise_2026_10", "loop_minimo_len_2026_10"];
+  const keys = [
+    "aa_2026_10",
+    "tour_shape_2026_10",
+    "loop_home_2026_10",
+    "loop_surprise_2026_10",
+    "loop_minimo_len_2026_10",
+    "path_2026_12"
+  ];
   for (const key of keys) {
     test(key, async ({ browser }) => {
       test.setTimeout(120000);

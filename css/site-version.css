@@ -137,11 +137,13 @@ html[data-site-version="b"] #btn-history {
 
 /* Historial, split in three. Each tab shows its own part and nothing else. */
 html[data-site-version="b"] #view-history[data-progress-tab="history"] > #value-pulse,
+html[data-site-version="b"] #view-history[data-progress-tab="history"] > #path-card,
 html[data-site-version="b"] #view-history[data-progress-tab="history"] > #history-profiles,
 html[data-site-version="b"] #view-history[data-progress-tab="stats"] > #history-list,
 html[data-site-version="b"] #view-history[data-progress-tab="stats"] > #history-profiles,
 html[data-site-version="b"] #view-history[data-progress-tab="profiles"] > #history-list,
 html[data-site-version="b"] #view-history[data-progress-tab="profiles"] > #value-pulse,
+html[data-site-version="b"] #view-history[data-progress-tab="profiles"] > #path-card,
 html[data-site-version="b"] #view-history[data-progress-tab="profiles"] > .value-banner,
 html[data-site-version="b"] #view-history[data-progress-tab="profiles"] > .ad-slot {
   display: none;

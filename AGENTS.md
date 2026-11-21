@@ -242,6 +242,8 @@ ends (QA-28); `VTStorage.createProfile` defaults to the Pro cap (QA-30).
   entry is a build error); `MUTATE_WIDE=1 node qa/mutate.mjs a11y` (or
   `--wide`) judges it by all six specs at once and runs nightly, so a spec
   that stopped killing its mutant while another still does shows up there.
+  Tu camino (docs/48) has a Node set, `path`, among the defaults, and a
+  browser set, `pathui`, in the matrix.
 - `npx playwright test --project=chromium` — the **PR gate**: headless,
   deterministic, one generated test per exercise where a suite walks the
   catalog, so shards balance and a failure names the exercise. No retries

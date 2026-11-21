@@ -6,9 +6,9 @@
  * suite that stays green on a mutant is not testing that behaviour, however
  * high its coverage. Ported from the QA thread's mutate.py (2026-11-01).
  *
- *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets, ledger)
+ *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets, ledger, path)
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage a11y flows regress boot billing scoring controls audit toast designs splits  # browser sets: need Playwright's Chromium
+ *   node qa/mutate.mjs stage a11y flows regress boot billing scoring controls audit toast designs splits pathui  # browser sets: need Playwright's Chromium
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -135,6 +135,58 @@ export const MUTANTS = {
     ["GS12 every routine's banner takes a set's name", "js/session-sets.js", 'if (!session || session.path !== "set") return null;', "if (!session) return null;"],
     ["GS13 the English name of a set is its Spanish one", "js/session-sets.js", 'name: "After a lot of talking",', 'name: "Después de hablar mucho",']
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/session-sets.test.mjs"]) })),
+  // Tu camino (js/voice-path.js, docs/48): the rules that keep a game layer on the side of the habit.
+  // Node only, so it runs with the default sets in the contracts job.
+  path: [
+    ["VP1 an area counts every exercise of a day, not the day", "js/voice-path.js", "const hit = new Set(ex.map((id) => AREA_OF.get(id)).filter(Boolean));", "const hit = ex.map((id) => AREA_OF.get(id)).filter(Boolean);"],
+    ["VP2 a week in range is judged on the goal's high end", "js/voice-path.js", 'const lo = Number(g.split("-")[0]);', 'const lo = Number(g.split("-")[1]);'],
+    ["VP3 a week below the goal takes the weeks before it away", "js/voice-path.js", "      if (c >= lo) n += 1;\n", "      n = c >= lo ? n + 1 : 0;\n"],
+    ["VP4 a gap the rest days covered counts as a comeback", "js/voice-path.js", "if (diff(lg.keys[i - 1], b) >= 2 && !rest.has(add(b, -1))) n += 1;", "if (diff(lg.keys[i - 1], b) >= 2) n += 1;"],
+    ["VP5 a first run announces months of history as news", "js/voice-path.js", "if (!flags[INIT] || hidden()) return true;", "if (hidden()) return true;"],
+    ["VP6 hidden, it still saves up news for later", "js/voice-path.js", "if (!flags[INIT] || hidden()) return true;", "if (!flags[INIT]) return true;"],
+    ["VP7 news on a day with no practice (a sync's days announced)", "js/voice-path.js", "    if (!D().summary?.().todayDone) return true;\n", ""],
+    ["VP8 no limit on how much is news at once", "js/voice-path.js", "    return count > NEWS_MAX;", "    return false;"],
+    ["VP9 a jump past a stage is announced as if it were the exact count", "js/voice-path.js", "flags[stageKey(a.id, t)] = quiet || n !== t || t === STAGES[0];", "flags[stageKey(a.id, t)] = quiet || t === STAGES[0];"],
+    ["VP10 the first day in an area is news", "js/voice-path.js", "flags[stageKey(a.id, t)] = quiet || n !== t || t === STAGES[0];", "flags[stageKey(a.id, t)] = quiet || n !== t;"],
+    ["VP11 an earned logro is taken back once its rule stops holding", "js/voice-path.js", "    return LOGRO_IDS.filter((id) => !!flags[earnedKey(id)]);", "    const c = context(flags);\n    return LOGROS.filter((l) => !!flags[earnedKey(l.id)] && safeTest(l, c)).map((l) => l.id);"],
+    ["VP12 the completion card does not mark what it showed, and repeats it", "js/voice-path.js", "    markSeen({ logros: shown.filter((x) => x.logro).map((x) => x.logro), stages: shown.filter((x) => x.stage).map((x) => x.stage) });\n", ""],
+    ["VP13 the completion card lists everything at once", "js/voice-path.js", "const DONE_MAX = 2;", "const DONE_MAX = 20;"],
+    ["VP14 the completion card ignores how full it already is", "js/voice-path.js", "Math.max(1, Math.min(DONE_MAX, Number(opts.max) || DONE_MAX))", "DONE_MAX"],
+    ["VP15 a logro the card already says is said twice", "js/voice-path.js", "const skip = (opts.skip || []).filter((id) => u.logros.includes(id));", "const skip = [];"],
+    ["VP16 one step of three is enough for a set to count", "js/voice-path.js", "Math.max(1, Math.ceil((Number(steps) || 0) / 2))", "1"],
+    ["VP17 the arm without Tu camino still stores logros", "js/voice-path.js", "if (!served() || !D()) return { fresh: [] };", "if (!D()) return { fresh: [] };"],
+    ["VP18 a week with no practice yet is shared as \"0 days\"", "js/voice-path.js", "const week = n ? `${pick(C.shareWeek, n)}", "const week = n >= 0 ? `${pick(C.shareWeek, n)}"],
+    ["VP19 one day is written in the plural", "js/voice-path.js", "fill(pair[t][k === 1 ? 0 : 1], { n: k })", "fill(pair[t][1], { n: k })"],
+    ["VP20 a caption promises prevention", "js/voice-path.js", "que proteja de lesiones no está probado", "y así previene lesiones"],
+    ["VP21 a song warmed up after it counts as warmed up first", "js/voice-path.js", "ex.slice(0, song).some((id) => WARM_AREAS.includes(AREA_OF.get(id)))", "ex.some((id) => WARM_AREAS.includes(AREA_OF.get(id)))"],
+    ["VP22 three of the same weekday make a fixed day", "js/voice-path.js", " && set.has(add(k, -21))", ""],
+    ["VP23 the hide switch syncs as whichever device merges last", "js/daily-loop.js", "const pathFrom = chosenAt(A.pathOffAt) > chosenAt(B.pathOffAt) ? A : B;", "const pathFrom = A;"]
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/voice-path.test.mjs"]) })),
+  // Tu camino in the page: where the card shows, when news counts as seen, the cards that end a
+  // routine. Each mutant runs the one test written for it in tests/voice-path.spec.js.
+  pathui: [
+    ["VU1 news counts as seen when the card is drawn, not when it is on screen", "js/voice-path.js", "const IO = global.IntersectionObserver;", "const IO = null;", "not on screen"],
+    ["VU2 the Nuevo label vanishes when Historial draws the card a second time", "js/voice-path.js", "const fresh = new Set([...unseen(flags).logros, ...lingeringLogros()]);", "const fresh = new Set(unseen(flags).logros);", "news once"],
+    ["VU3 home still counts as new what the completion card just showed", "js/voice-path.js", "    // Home is already drawn under the card, still counting these as new.\n    renderHomeButton();\n", "", "completion card"],
+    ["VU4 the loop's card says welcome back and so does Tu camino", "js/daily-loop.js", 'skip: o.comeback ? ["back"] : []', "skip: []", "completion card"],
+    ["VU5 design b shows the card on Historial's own tab", "css/site-version.css", 'html[data-site-version="b"] #view-history[data-progress-tab="history"] > #path-card,\n', "", "not on screen"],
+    ["VU6 the home button opens Historial's own tab in design b", "js/app.js", 'window.VTSiteLayout.openProgress("stats")', 'window.VTSiteLayout.openProgress("history")', "design b"],
+    ["VU7 a finished goal set is not kept", "js/session-sets.js", "    if (global.VTPath) global.VTPath.noteSet(set.id, n, set.order.length);\n", "", "half its steps"],
+    ["VU8 the hide switch is not kept", "js/daily-loop.js", "    L.pathOff = L.pathOff === true;", "    L.pathOff = false;", "Ocultar"],
+    ["VU9 the small capitals drop under 12 px", "css/voice-path.css", ".path-logro .path-logro-k {\n  display: block;\n  font-size: 0.78rem;", ".path-logro .path-logro-k {\n  display: block;\n  font-size: 0.72rem;", "phone in English"],
+    ["VU10 the hide switch is a small target", "css/voice-path.css", ".path-card .path-toggle {\n  flex: none;\n  min-height: var(--min-tap);", ".path-card .path-toggle {\n  flex: none;\n  min-height: 32px;", "Ocultar"],
+    ["VU11 a folded logro is a small target", "css/voice-path.css", "  padding-right: 1.6rem;\n  min-height: var(--min-tap);", "  padding-right: 1.6rem;\n  min-height: 0;", "phone in English"],
+    ["VU12 the arm without Tu camino is never counted as exposed", "js/voice-path.js", "  function expose() {\n    try {", "  function expose() {\n    if (!served()) return;\n    try {", "arm without it"],
+    ["VU13 the share sentence has no fallback when the clipboard refuses", "js/voice-path.js", "      say(`${copy().shareFail} ${text}`);", "      say(copy().shareFail);", "clipboard refuses"],
+    ["VU14 step lengths go back to the clock style that reads as a time of day", "js/daily-loop.js", "return s ? `${m}\\u00a0min ${s}\\u00a0s` : `${m}\\u00a0min`;", 'return `${m}:${String(s).padStart(2, "0")}`;', "chooser switches the routine", "tests/home-design.spec.js"],
+    ["VU15 the home button scrolls before Historial's calendar is drawn, and lands short", "js/voice-path.js", "        hooks.showHistory?.();\n      });", "        hooks.showHistory?.();\n        focusIfWanted($(\"#path-card\"));\n      });", "200% zoom"]
+  ].map(([name, file, from, to, grep, spec]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: [...PIANO_SPEC.slice(0, 3), spec || "tests/voice-path.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", grep]
+  })),
   audio: [
     ["M6 +150c (adjacent semitone) accepted as in tune", "js/practice-modes.js", "const hi = this.profile.centsHi == null ? 50 : this.profile.centsHi;", "const hi = this.profile.centsHi == null ? 150 : this.profile.centsHi;"],
     ["M7 -140c accepted as in tune", "js/practice-modes.js", "const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;", "const lo = this.profile.centsLo == null ? -140 : this.profile.centsLo;"],
@@ -1497,7 +1549,7 @@ export const MUTANTS = {
   }))
 };
 
-export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger"];
+export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger", "path"];
 
 /** What the last failing command printed, so a red baseline in CI says which test failed. */
 let lastFailure = "";

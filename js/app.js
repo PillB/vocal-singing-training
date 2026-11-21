@@ -8418,18 +8418,26 @@
     }
   }
 
-  /** The achievement badges, each with its label, earned or not. */
-  function renderProAchievements(pulse) {
-    const grid = $("#pro-ach-grid");
-    if (grid && VTValuePulse?.achievements) {
-      const ach = VTValuePulse.achievements(pulse);
-      grid.innerHTML = ach
-        .map((a) => {
-          const title = tt("pro.ach." + a.id);
-          return `<span class="pro-ach-badge${a.unlocked ? " is-on" : ""}" title="${escapeHtml(title)}">${a.unlocked ? "★" : "☆"} <small>${escapeHtml(title)}</small></span>`;
-        })
-        .join("");
-    }
+  /**
+   * Tu camino (js/voice-path.js) in Historial: areas counted in days and the
+   * logros earned. It replaced the badge grid, whose streak and weekly badges
+   * went dark again and whose locked ones were a list of what was missing.
+   */
+  function renderPathCard() {
+    if (window.VTPath) window.VTPath.renderCard();
+  }
+
+  /** The card's buttons, and the home button that opens Historial on it. */
+  function bindPath() {
+    if (!window.VTPath) return;
+    window.VTPath.bind({
+      getTab: () => state.tab,
+      // Design "b" keeps the card on the Estadísticas tab; "a" has one Historial.
+      showHistory: () => {
+        if (window.VTSiteLayout) window.VTSiteLayout.openProgress("stats");
+        else $("#btn-history").click();
+      }
+    });
   }
 
   /** Days practised over 26 weeks, once they go back further than Historial's calendar. */
@@ -8474,8 +8482,8 @@
     renderProSpark(pulse, isProUser);
     renderProHoldTrend(pulse, isProUser);
 
-    // Achievements (earn free; labels always)
-    renderProAchievements(pulse);
+    // Tu camino: a card of its own, beside this one
+    renderPathCard();
 
     // Practice heatmap (26 weeks)
     renderPracticeHeatmap();
@@ -11240,6 +11248,7 @@
       },
       focusReminders: () => openReminders()
     });
+    bindPath();
     // Goal sets (js/session-sets.js) start through the same guided engine.
     window.VTSets?.bind({
       getTab: () => state.tab,

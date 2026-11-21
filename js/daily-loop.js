@@ -132,7 +132,9 @@
   /** Short names for teasers and card text ("mañana: sirenas y agudos"). */
   const SHORT = {
     "s4-lip-trills": ["trinos", "lip trills"],
-    "s27-lip-trill-solfege": ["solfeo en trino", "trill solfège"],
+    // Not "solfeo en trino" / "trill solfège": readers knew trills and
+    // do-re-mi, not the pair's name (think-aloud with nine personas, 2026-11).
+    "s27-lip-trill-solfege": ["do-re-mi en trino", "do-re-mi on a trill"],
     "s18-costal-breath": ["respiración", "breathing"],
     "s17-jaw-neck-release": ["soltar mandíbula", "jaw release"],
     "s15-sh-air-ladder": ["escalera de aire", "air ladder"],
@@ -417,6 +419,8 @@
     if (!Array.isArray(L.comebacks)) L.comebacks = [];
     L.since = Math.max(0, Number(L.since) || 0);
     L.completions = Math.max(0, Number(L.completions) || 0);
+    // Tu camino (js/voice-path.js) hidden by the singer: a choice, kept with when it was made.
+    L.pathOff = L.pathOff === true;
     L.v = 1;
     return L;
   }
@@ -475,6 +479,8 @@
     const B = normalize(JSON.parse(JSON.stringify(b)));
     const tierFrom = chosenAt(A.tierAt) > chosenAt(B.tierAt) ? A : B;
     const goalFrom = goalSide(A, B);
+    // Hiding Tu camino follows the latest choice; with no time on either side it stays shown.
+    const pathFrom = chosenAt(A.pathOffAt) > chosenAt(B.pathOffAt) ? A : B;
     const cards = { ...B.cards };
     Object.keys(A.cards).forEach((id) => {
       if (!cards[id] || A.cards[id] < cards[id]) cards[id] = A.cards[id];
@@ -495,7 +501,9 @@
       surprises: [...byDay.values()].sort((x, y) => (x.day < y.day ? -1 : 1)).slice(-60),
       since: Math.min(A.since, B.since),
       comebacks: [...new Set([...A.comebacks, ...B.comebacks])].sort().slice(-120),
-      completions: Math.max(A.completions, B.completions)
+      completions: Math.max(A.completions, B.completions),
+      pathOff: pathFrom.pathOff,
+      pathOffAt: pathFrom.pathOffAt || null
     };
   }
 
@@ -681,6 +689,14 @@
     L.goalAt = new Date().toISOString();
     writeLoop(L);
     track("loop_goal_set", { goal });
+  }
+
+  /** Hide or show Tu camino (js/voice-path.js) for this profile, as a dated choice that syncs. */
+  function setPathOff(off) {
+    const L = readLoop();
+    L.pathOff = !!off;
+    L.pathOffAt = new Date().toISOString();
+    writeLoop(L);
   }
 
   function goalRange(goal) {
@@ -1109,7 +1125,6 @@
       b.setAttribute("aria-pressed", String(b.dataset.track === trackId));
     });
     const min = Math.max(1, Math.round(r.totalSec / 60));
-    const clock = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
     // "Trinos" alone is jargon to someone who has never sung an exercise.
     const name = (id) => (id === "s4-lip-trills" ? tt("first.trills") : short(id));
     const kicker = $("#start-kicker");
@@ -1121,7 +1136,7 @@
     const label = $("#next-step-label");
     if (label) label.textContent = tt("first.label", { min });
     const cardTitle = $("#next-step-title");
-    if (cardTitle) cardTitle.textContent = capitalize(r.order.map((id) => `${name(id)} ${clock(r.sec[id] || 0)}`).join(" → "));
+    if (cardTitle) cardTitle.textContent = capitalize(r.order.map((id) => `${name(id)} ${stepLen(r.sec[id] || 0)}`).join(" → "));
     // Vocal's Mínimo ends on diction, which reads a page aloud: say so now
     // rather than promise that nothing is needed.
     const why = $("#next-step-why");
@@ -1233,10 +1248,9 @@
     const what = list(r.order.slice(0, 2).map(short));
     // A short routine lists each step with its time; the headline already
     // names the steps, so the card says how long each one runs.
-    const clock = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
     const stepsTxt =
       r.order.length <= 3
-        ? r.order.map((id) => `${short(id)} ${clock(r.sec[id] || 0)}`).join(" → ")
+        ? r.order.map((id) => `${short(id)} ${stepLen(r.sec[id] || 0)}`).join(" → ")
         : tt("loop.stepsN", { n: r.order.length, what: r.order.slice(0, 3).map(short).join(", ") });
     const tierName = tt("loop.tier." + tier);
     const minKey = tier === "min" ? "loop.titleMin" : tier === "ess" ? "loop.titleEss" : "loop.titleClass";
@@ -1285,11 +1299,24 @@
     }
     const L = readLoop();
     renderAside(sum, L);
+    pathButton();
     if (guidedOpen()) {
       if (tiers) tiers.hidden = true;
       return false;
     }
     return renderNextStep(D, sum, sub);
+  }
+
+  /**
+   * A step's length as people say it, "1 min 15 s". The clock style "1:15"
+   * was read as a time of day by a third of the people in a think-aloud.
+   * The space before each unit does not break.
+   */
+  function stepLen(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    if (!m) return `${s}\u00a0s`;
+    return s ? `${m}\u00a0min ${s}\u00a0s` : `${m}\u00a0min`;
   }
 
   function capitalize(s) {
@@ -1319,7 +1346,23 @@
     closeOpen.cards?.();
   }
 
-  /** The completion card's extra lines: a comeback, a milestone, today's surprise. */
+  /** Tu camino's way in, beside the fact cards (js/voice-path.js). */
+  function pathButton() {
+    if (global.VTPath) global.VTPath.renderHomeButton();
+  }
+
+  /**
+   * What today brought on Tu camino (js/voice-path.js), after the card's own
+   * lines: one when the card already carries two, and never a second
+   * "welcome back" when the comeback line says it.
+   */
+  function pathExtras(o, extra) {
+    if (!global.VTPath) return;
+    const html = global.VTPath.doneHtml({ max: extra.length >= 2 ? 1 : 2, skip: o.comeback ? ["back"] : [] });
+    if (html) extra.push(html);
+  }
+
+  /** The completion card's extra lines: a comeback, a milestone, today's surprise, then Tu camino. */
   function doneExtras(o, sum, L) {
     const extra = [];
     if (o.comeback) {
@@ -1352,6 +1395,7 @@
         </div>`);
       }
     }
+    pathExtras(o, extra);
     return extra;
   }
 
@@ -1552,6 +1596,7 @@
     merge,
     setTier,
     setGoal,
+    setPathOff,
     // Track-aware copy ("días cantados" / "días de práctica") for other pages.
     tl
   };

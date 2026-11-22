@@ -16,6 +16,10 @@ describeLive("Live Pages validation", () => {
   test.use({ baseURL: LIVE });
 
   async function bootLive(page) {
+    page.on("console", (message) => {
+      if (["error", "warning"].includes(message.type())) console.log("LIVE_CONSOLE", message.type(), message.text());
+    });
+    page.on("pageerror", (error) => console.log("LIVE_PAGE_ERROR", error.message));
     await page.context().grantPermissions(["microphone"]).catch(() => {});
     await page.addInitScript(() => {
       try {
@@ -105,11 +109,23 @@ describeLive("Live Pages validation", () => {
     expect(opened).toBe(true);
     await expect(page.locator("#view-exercise")).toHaveClass(/active/, { timeout: 10000 });
     await page.locator("#btn-practice-start").click();
-    await page.waitForFunction(
-      () => !document.querySelector("#btn-practice-stop")?.hidden,
-      null,
-      { timeout: 20000 }
-    );
+    try {
+      await page.waitForFunction(
+        () => !document.querySelector("#btn-practice-stop")?.hidden,
+        null,
+        { timeout: 20000 }
+      );
+    } catch (error) {
+      console.log("LIVE_START_DIAG", JSON.stringify(await page.evaluate(() => ({
+        practiceLive: window.VTApp?.getState?.().practiceLive,
+        practiceStarting: window.VTApp?.getState?.().practiceStarting,
+        piano: window.VTPiano?.ctx?.state,
+        shared: window.VTSharedAudioCtx?.state,
+        stopHidden: document.querySelector("#btn-practice-stop")?.hidden,
+        status: [...document.querySelectorAll('[role="status"], .toast')].map((el) => el.textContent)
+      }))));
+      throw error;
+    }
     await page.waitForTimeout(900);
     const silent = parseFloat(await page.locator("[data-h]").first().textContent());
     expect(silent).toBe(0);

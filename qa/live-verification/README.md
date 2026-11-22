@@ -36,3 +36,8 @@ and prototype fixture from tests/helpers/e2e.js and cross-browser-audio.spec.js.
 The original failures remain in the first run's traces; no app file changes.
 Wrangler is signed out and there are no repository Actions secrets, so a real
 worker deployment needs an authenticated Cloudflare session.
+
+Second run 44980588595: 23/24 cases pass; WebKit's Start case is now green with
+the shared graph. Firefox still times out. Add console/start-state diagnostics
+before attributing it to production code. Published files and all three viewport
+journeys pass again; the old worker remains the audit's confirmed failure.

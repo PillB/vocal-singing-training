@@ -226,6 +226,7 @@
     if (state.context) { const ctx = state.context; state.context = null; ctx.onstatechange = null; ctx.close().catch(() => {}); }
     state.mic = "off";
     $("flow-mic").textContent = "Usar micrófono (opcional)";
+    $("flow-mic").disabled = false;
     micStatus("Micrófono apagado. Puedes continuar sin audio.");
     $("flow-audio-candidate").textContent = "";
   }

@@ -20,7 +20,7 @@
     },
     {
       title: "3 · Boca, lengua y salida de aire",
-      caption: "Para /sss/: dientes cercanos sin apretar, labios sueltos, lengua cerca de la zona detrás de los dientes superiores, dejando un canal estrecho para aire. No saques la lengua ni tenses la mandíbula.",
+      caption: "Para /sss/: dientes cercanos sin apretar, labios sueltos y un canal estrecho de aire junto a los alvéolos. La punta de la lengua puede variar según el acento; no fuerces una única colocación.",
       svg: "Vista lateral de boca: la lengua se aproxima detrás de los dientes superiores; las flechas representan flujo de aire, no un chorro medido."
     },
     {
@@ -87,10 +87,10 @@
     state.sound = kind;
     const lesson = LESSONS[2];
     lesson.caption = kind === "hiss"
-      ? "Para /sss/: dientes cercanos sin morder, labios flojos, lengua cerca de la zona detrás de dientes superiores. La salida de aire se mantiene cómoda, no máxima."
+      ? "Para /sss/: dientes cercanos sin morder, lengua creando un canal de aire cerca de la encía superior. Según tu acento, la punta puede estar más baja; no la fuerces."
       : "Para /a/: labios y mandíbula se abren sin rigidez; la lengua descansa cómoda en la boca. Vocaliza suave y sin forzar el aire.";
     lesson.svg = kind === "hiss"
-      ? "Lengua cercana detrás de dientes superiores, canal estrecho de aire, mandíbula libre."
+      ? "Variante orientativa de /s/: canal cerca de la encía superior, mandíbula libre; la punta cambia entre hablantes."
       : "Mandíbula ligeramente abierta y lengua baja y libre, sin morder.";
     stopSound();
     render();

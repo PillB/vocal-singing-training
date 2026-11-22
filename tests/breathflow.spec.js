@@ -48,7 +48,7 @@ test("first-use lesson teaches body and mouth before enabling Start", async ({ p
   await expect(page.locator("#coach-svg-desc")).toContainText("encía");
   expect(await page.locator(".mouth-lower-vowel").evaluate((e) => getComputedStyle(e).display)).toBe("none");
   await page.locator("#coach-next").click();
-  await expect(page.locator("#coach-stage")).toContainText("frase");
+  await expect(page.locator("#coach-caption")).toContainText("frase");
   await expect(page.locator("#coach-checks")).toBeVisible();
   await expect(page.locator("#coach-finish")).toBeDisabled();
   await page.locator("#coach-check-shoulders").check();

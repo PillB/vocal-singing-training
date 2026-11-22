@@ -76,6 +76,17 @@ test("teaching stage does not save any day, ask for a microphone or invent measu
   expect(await page.evaluate(() => JSON.stringify(window.VTDays.read().days))).toBe(initial);
   expect(await page.evaluate(() => window.VTBreathFlow.state().mic)).toBe("off");
 });
+test("instructional sound abstains while a microphone is active or pending", async ({ page }) => {
+  await open(page, { teach: true });
+  await page.locator("#coach-next").click();
+  await page.locator("#coach-next").click();
+  await page.evaluate(() => { window.VTBreathFlow.state = () => ({ mic: "live" }); });
+  await page.locator("#coach-play").click();
+  await expect(page.locator("#coach-audio-status")).toContainText("Apaga o cancela primero el micrófono");
+  await page.evaluate(() => { window.VTBreathFlow.state = () => ({ mic: "requesting" }); });
+  await page.locator("#coach-play").click();
+  await expect(page.locator("#coach-audio-status")).toContainText("Apaga o cancela primero el micrófono");
+});
 test("reduced-motion and small landscape never hide tutorial controls or impose paced breathing", async ({ page }) => {
   await page.setViewportSize({ width: 844, height: 390 });
   await page.emulateMedia({ reducedMotion: "reduce" });

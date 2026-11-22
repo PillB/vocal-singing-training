@@ -18,7 +18,7 @@
     idx: 0, start: 0, owner: "", saved: false,
     mic: "off", epoch: 0, stream: null, context: null, source: null, analyser: null,
     samples: null, bands: null, raf: 0, floor: 0.008, calibration: [],
-    heardVoiceAt: 0, breathTicks: 0, candidateLatch: false, candidates: 0
+    heardVoiceAt: 0, breathTicks: 0, candidateLatch: false, candidates: 0, lastHintAt: 0
   };
 
   function note(text, isError = true) {
@@ -258,7 +258,7 @@
     state.calibration.push(rms);
     const sorted = state.calibration.slice().sort((a, b) => a - b);
     state.floor = Math.max(0.006, sorted[Math.floor(sorted.length / 2)] || 0.006);
-    micStatus("Calibrando sonido ambiente… " + Math.min(100, Math.round(state.calibration.length * 100 / 45)) + "%");
+    if (state.calibration.length % 9 === 0) micStatus("Calibrando sonido ambiente… " + Math.min(100, Math.round(state.calibration.length * 100 / 45)) + "%");
   }
 
   /** A candidate is only a cue; no inference of actual inhalation is made. */
@@ -275,6 +275,9 @@
   }
 
   function renderAudioHint(possibleAir, voiced) {
+    const now = performance.now();
+    if (now - state.lastHintAt < 400) return;
+    state.lastHintAt = now;
     micStatus(voiced ? "Se oye voz; el volumen no se califica." : possibleAir ? "Posible aire o ruido; confírmalo tú." : "Pausa o sonido suave. Una pausa no demuestra una inhalación.");
     $("flow-audio-candidate").textContent = state.phase === "active"
       ? "Indicaciones acústicas no verificadas: " + state.candidates + ". No se usan para decidir tus resultados."
@@ -329,6 +332,7 @@
       state.samples = new Uint8Array(state.analyser.fftSize);
       state.bands = new Uint8Array(state.analyser.frequencyBinCount);
       state.calibration = [];
+      state.lastHintAt = 0;
       state.floor = 0.008;
       state.heardVoiceAt = 0;
       state.breathTicks = 0;

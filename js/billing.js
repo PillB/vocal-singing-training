@@ -761,6 +761,9 @@
     session_expired: "signin_required",
     invalid_session: "signin_required",
     rate_limited: "rate_limited",
+    // An open subscription (paid, or a renewal being retried): a second
+    // checkout would charge twice, so the page sends them to Manage instead.
+    subscription_open: "subscription_open",
     checkout_unconfigured: "provider_unavailable",
     plan_unavailable: "provider_unavailable",
     accounts_not_configured: "provider_unavailable"
@@ -786,7 +789,10 @@
           return { ok: true, mode: "redirect", url: target.url, plan: planId, provider: rail };
         }
         const mode = WORKER_CHECKOUT_REFUSALS[res && res.reason] || "checkout_failed";
-        return { ok: false, mode, plan: planId, provider: rail, reason: (res && res.reason) || "error" };
+        const out = { ok: false, mode, plan: planId, provider: rail, reason: (res && res.reason) || "error" };
+        if (res && res.provider) out.openProvider = res.provider;
+        if (res && res.retryAfter) out.retryAfter = res.retryAfter;
+        return out;
       })
       .catch(() => ({ ok: false, mode: "checkout_failed", plan: planId, provider: rail, reason: "error" }));
   }

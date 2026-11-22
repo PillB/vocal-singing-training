@@ -56,8 +56,8 @@
     "sha": "98dbdc26303ebce0"
   },
   "js/account.js": {
-    "v": "20261121g",
-    "sha": "6de7eb2b71208240"
+    "v": "20261122a",
+    "sha": "f943aaa80b35a847"
   },
   "js/admin-layouts.js": {
     "v": "20261111a",
@@ -100,8 +100,8 @@
     "sha": "87e7c9ce49b651a1"
   },
   "js/billing.js": {
-    "v": "20261121d",
-    "sha": "ece7f09f17ad270f"
+    "v": "20261122a",
+    "sha": "5139928799b1b740"
   },
   "js/boot-head.js": {
     "v": "20261118a",

@@ -1002,7 +1002,20 @@
     const res = await request("POST", "/v1/me/checkout", checkoutBody(input), { timeoutMs: 20000 });
     if (res.ok && res.data?.url) return { ok: true, url: String(res.data.url) };
     if (res.status === 401) return lostSession();
-    return { ok: false, status: res.status, reason: res.data?.reason || (res.status === 0 ? "offline" : "error") };
+    return refusalOf(res);
+  }
+
+  /**
+   * A refusal from the worker, with what the page needs to answer it: the
+   * reason, the rail an open subscription is on (`subscription_open`), and how
+   * many seconds a rate limit has left (`rate_limited`), when the worker said.
+   */
+  function refusalOf(res) {
+    const out = { ok: false, status: res.status, reason: res.data?.reason || (res.status === 0 ? "offline" : "error") };
+    if (typeof res.data?.provider === "string") out.provider = res.data.provider;
+    const wait = Number(res.data?.retryAfter);
+    if (Number.isFinite(wait) && wait > 0) out.retryAfter = wait;
+    return out;
   }
 
   /** The `/v1/me/checkout` body for what the page asked to buy. */

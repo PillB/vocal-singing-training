@@ -111,6 +111,10 @@
     "v": "20261117c",
     "sha": "3cb392b8987ff544"
   },
+  "js/breathflow.js": {
+    "v": "20261122a",
+    "sha": "e86ab79865cb930c"
+  },
   "js/daily-loop.js": {
     "v": "20261113a",
     "sha": "f2f5e0c0a1e01020"

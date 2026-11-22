@@ -692,6 +692,15 @@ get it wrong:
   entitles, deliberately: refusing an unknown one would mean a production value
   Creem renames stops every real payment, silently, which is the worse way to
   be wrong.
+- **Live mode is a second setup, not a switch.** Products, webhook
+  registrations and their signing secrets made in Creem's test mode do not
+  exist in live mode. Going live means creating the products again, registering
+  `/v1/webhooks/creem` again in the live dashboard, and putting in **that**
+  registration's `CREEM_WEBHOOK_SECRET` with the live `CREEM_API_KEY`. The
+  worker holds one secret, so a test secret left in refuses every live event:
+  the buyer is charged and no licence is written. `creemKeyMode` in
+  `/v1/health` reads only the key and cannot see this, so the proof is one
+  real purchase that shows Pro arriving, refunded at once (gate step 4).
 
 The payment identity on this rail is the **transaction id** (`tran_…`). Creem
 names it on the paying events and names the same one again when the money goes

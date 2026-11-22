@@ -132,8 +132,9 @@ terms made a promise the product could not keep (VG-86).
 7. **What the first red-team round fixed** (25 findings, two serious, none
    critical):
    - A pending purchase link is kept per account and per sign-in, so it is
-     never sent for whoever signs in next on a shared computer, and signing
-     out forgets it.
+     never sent for whoever signs in next on a shared computer. Signing out
+     keeps it under its own account, and only that account retries it when
+     it signs in again.
    - Every attempt is bounded (15 s), and a licence is cleared only on a
      final answer from the worker, never on a timeout or a 503.
    - One checkout at a time: a second press, or a press on a button drawn
@@ -304,9 +305,14 @@ in his name.
    yourself, once with a Peruvian address and test card to see that the total
    is the price shown. The in-app checkout can only be walked on the live
    site, so this commit is also the one that puts Pro on sale.
-9. **Refund every test purchase, then swap to the live key** and live product
-   ids, set the flag back to `"false"`, redeploy, and check that
-   `/v1/health` says `"creemKeyMode": "live"`.
+9. **Refund every test purchase, then swap to live.** Test mode and live
+   mode share nothing in Creem, so in the live dashboard create the two
+   products again and register the worker's webhook again. Put in the live
+   `CREEM_API_KEY`, the live products' ids, and the **live** registration's
+   `CREEM_WEBHOOK_SECRET`. Set the flag back to `"false"` and redeploy.
+   `/v1/health` must say `"creemKeyMode": "live"`, but that reads only the
+   key. The proof is one real monthly purchase by you that shows Pro
+   arriving, refunded at once.
 10. **Apply to Paddle** in parallel, and ask for its custom pricing under $10.
 
 `docs/40-GO-LIVE-GATE.md` has each step with its cost, its proof and its undo.

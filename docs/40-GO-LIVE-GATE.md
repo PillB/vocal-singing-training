@@ -263,12 +263,30 @@ So steps 4 and 5 are one sitting, in this order:
    anyone who finds the site can take Pro with a test card. A refund ends Pro
    at once (a cancel keeps it to the end of the month paid for), and it only
    reaches the worker while test events are still accepted.
-5. Swap to live, and redeploy:
-   `wrangler secret put CREEM_API_KEY` with the **live** key, the live
-   product ids in `wrangler.toml`, `CREEM_ALLOW_TEST_MODE = "false"`.
-6. **What proves it:** `/v1/health` says `"creemKeyMode": "live"`. A worker
-   left on the test key opens checkouts that take test cards from real
-   buyers, and nothing else on the page would show it.
+5. Swap to live, and redeploy. Creem keeps test mode and live mode apart:
+   products, webhooks and their signing secrets made in one do not exist in
+   the other, so every one of these is needed:
+   - In Creem's dashboard with test mode **off**, create the two live
+     products the same way as in step 3 (tax-inclusive US$, `tax_mode`
+     `"inclusive"`, cancel at the end of the period), and put their ids in
+     `wrangler.toml`.
+   - In the same live dashboard, register
+     `https://<your-worker>/v1/webhooks/creem` with the same events as in
+     step 3, then `wrangler secret put CREEM_WEBHOOK_SECRET` with **that
+     registration's** signing secret. Creem gives each registration its own
+     secret, so the test one refuses every live event.
+   - `wrangler secret put CREEM_API_KEY` with the **live** key, and
+     `CREEM_ALLOW_TEST_MODE = "false"`.
+6. **What proves it:** one real purchase of the monthly plan, made by you on
+   the live site, that shows Pro arriving, then refunded at once in Creem's
+   live dashboard, and Pro ending. `/v1/health` saying
+   `"creemKeyMode": "live"` is necessary but not enough. It reads the API key
+   only, and it cannot see a webhook that was never registered live or a
+   secret left on the test value. Either one means every real buyer is
+   charged and never gets Pro. The refund gives the money back, but Creem
+   may keep its own fee on it, so this proof can cost under a dollar. A
+   worker left on the test key fails the other way: its checkouts take test
+   cards from real buyers.
 
 If you would rather not open that window, the alternative is a second,
 staging worker (an `[env.staging]` section in `wrangler.toml`, with its own

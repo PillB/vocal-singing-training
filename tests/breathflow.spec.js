@@ -42,7 +42,7 @@ test("first-use lesson teaches body and mouth before enabling Start", async ({ p
   await expect(page.locator("#coach-vowel")).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#coach-caption")).toContainText("mandíbula");
   await page.locator("#coach-hiss").click();
-  await expect(page.locator("#coach-svg-desc")).toContainText("dientes");
+  await expect(page.locator("#coach-svg-desc")).toContainText("encía");
   await page.locator("#coach-next").click();
   await expect(page.locator("#coach-stage")).toContainText("frase");
   await expect(page.locator("#coach-checks")).toBeVisible();
@@ -127,6 +127,45 @@ test("one manual round updates the same day, week and month ledger used by main"
     const d = window.VTDays; return !!d && d.read().days[d.dayKey()]?.ex.includes("bf-breathflow");
   });
   expect(inMain).toBe(true);
+});
+test("day/week/month and every main navigation view share a single calendar authority", async ({ page }) => {
+  await open(page);
+  await finish(page);
+  await page.locator("#flow-comfort").selectOption("easy");
+  await page.evaluate(() => {
+    const button = document.getElementById("flow-save");
+    button.click();
+    button.click(); // adversarial rapid duplicate, within the same event-loop turn
+  });
+  await expect(page.locator("#flow-done")).toBeVisible();
+  const baseline = await page.evaluate(() => {
+    const D = window.VTDays, key = D.dayKey(), row = D.read().days[key];
+    return { key, n: row.n, ex: row.ex.slice(), week: D.countDays(D.weekStart(key), key) };
+  });
+  expect(baseline.n).toBe(1);
+  for (const period of ["day", "week", "month"]) {
+    await page.locator("#flow-tab-" + period).click();
+    await expect(page.locator("#flow-" + period)).toBeVisible();
+    const actual = await page.evaluate(() => {
+      const D = window.VTDays, k = D.dayKey(), row = D.read().days[k];
+      return { n: row.n, ex: row.ex.slice() };
+    });
+    expect(actual).toEqual({ n: baseline.n, ex: baseline.ex });
+  }
+  await page.goto(BASE + "/index.html");
+  for (const btn of ["btn-history", "btn-plan", "btn-nav-home"]) {
+    await page.locator("#" + btn).click();
+    expect(await page.evaluate(() => {
+      const D = window.VTDays, k = D.dayKey(), row = D.read().days[k];
+      return { n: row.n, ex: row.ex.slice() };
+    })).toEqual({ n: baseline.n, ex: baseline.ex });
+  }
+  await page.goto(BASE + "/breathflow.html");
+  await expect(page.locator("#flow-day")).toContainText("ya tienes un día");
+  await page.locator("#flow-tab-week").click();
+  await expect(page.locator("#flow-week")).toContainText("1 día");
+  await page.locator("#flow-tab-month").click();
+  await expect(page.locator("#flow-month")).toContainText("1 día");
 });
 test("validation stops one phrase or overlong text from entering active state", async ({ page }) => {
   await open(page);

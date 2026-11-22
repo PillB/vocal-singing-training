@@ -230,46 +230,76 @@
     $("flow-audio-candidate").textContent = "";
   }
 
-  function micFrame() {
-    if (state.mic !== "live" || !state.analyser || document.hidden) return;
-    const a = state.analyser;
-    a.getByteTimeDomainData(state.samples);
+  /** Observed amplitude, not calibrated voice intensity or airflow. */
+  function amplitude(analyser) {
+    analyser.getByteTimeDomainData(state.samples);
     let power = 0;
-    for (let i = 0; i < state.samples.length; i++) {
-      const x = (state.samples[i] - 128) / 128;
+    for (const sample of state.samples) {
+      const x = (sample - 128) / 128;
       power += x * x;
     }
-    const rms = Math.sqrt(power / state.samples.length);
-    const now = performance.now();
-    if (state.calibration.length < 45) {
-      state.calibration.push(rms);
-      const sort = state.calibration.slice().sort((a, b) => a - b);
-      state.floor = Math.max(0.006, sort[Math.floor(sort.length / 2)] || 0.006);
-      micStatus("Calibrando sonido ambiente… " + Math.min(100, Math.round(state.calibration.length * 100 / 45)) + "%");
-    } else {
-      const voiced = rms > Math.max(0.025, state.floor * 4);
-      if (voiced) state.heardVoiceAt = now;
-      a.getByteFrequencyData(state.bands);
-      const split = Math.round(state.bands.length * 0.13);
-      const highEnd = Math.round(state.bands.length * 0.38);
-      let lo = 0, hi = 0;
-      for (let i = 2; i < split; i++) lo += state.bands[i];
-      for (let i = split; i < highEnd; i++) hi += state.bands[i];
-      const ratio = (hi / Math.max(1, highEnd - split)) / Math.max(1, lo / Math.max(1, split - 2));
-      const maybeAir = !voiced && now - state.heardVoiceAt < 2200 &&
-        rms > Math.max(0.010, state.floor * 1.6) && ratio > 0.7;
-      state.breathTicks = maybeAir ? state.breathTicks + 1 : 0;
-      if (voiced) state.candidateLatch = false;
-      if (state.breathTicks >= 4 && !state.candidateLatch) {
-        state.candidateLatch = true;
-        if (state.phase === "active") state.candidates++;
-      }
-      micStatus(voiced ? "Se oye voz; el volumen no se califica." : maybeAir ? "Posible aire o ruido; confírmalo tú." : "Pausa o sonido suave. Una pausa no demuestra una inhalación.");
-      $("flow-audio-candidate").textContent = state.phase === "active"
-        ? "Indicaciones acústicas no verificadas: " + state.candidates + ". No se usan para decidir tus resultados."
-        : "Calibrado. Habla a tu volumen habitual.";
+    return Math.sqrt(power / state.samples.length);
+  }
+
+  /** Coarse upper/lower spectrum ratio. Neither band verifies respiration. */
+  function spectralRatio(analyser) {
+    analyser.getByteFrequencyData(state.bands);
+    const split = Math.round(state.bands.length * 0.13);
+    const highEnd = Math.round(state.bands.length * 0.38);
+    let low = 0;
+    let high = 0;
+    for (let i = 2; i < split; i++) low += state.bands[i];
+    for (let i = split; i < highEnd; i++) high += state.bands[i];
+    return (high / Math.max(1, highEnd - split)) / Math.max(1, low / Math.max(1, split - 2));
+  }
+
+  function calibrate(rms) {
+    state.calibration.push(rms);
+    const sorted = state.calibration.slice().sort((a, b) => a - b);
+    state.floor = Math.max(0.006, sorted[Math.floor(sorted.length / 2)] || 0.006);
+    micStatus("Calibrando sonido ambiente… " + Math.min(100, Math.round(state.calibration.length * 100 / 45)) + "%");
+  }
+
+  /** A candidate is only a cue; no inference of actual inhalation is made. */
+  function candidateAt(rms, now, ratio, voiced) {
+    const possibleAir = !voiced && now - state.heardVoiceAt < 2200 &&
+      rms > Math.max(0.010, state.floor * 1.6) && ratio > 0.7;
+    state.breathTicks = possibleAir ? state.breathTicks + 1 : 0;
+    if (voiced) state.candidateLatch = false;
+    if (state.breathTicks >= 4 && !state.candidateLatch) {
+      state.candidateLatch = true;
+      if (state.phase === "active") state.candidates++;
     }
+    return possibleAir;
+  }
+
+  function renderAudioHint(possibleAir, voiced) {
+    micStatus(voiced ? "Se oye voz; el volumen no se califica." : possibleAir ? "Posible aire o ruido; confírmalo tú." : "Pausa o sonido suave. Una pausa no demuestra una inhalación.");
+    $("flow-audio-candidate").textContent = state.phase === "active"
+      ? "Indicaciones acústicas no verificadas: " + state.candidates + ". No se usan para decidir tus resultados."
+      : "Calibrado. Habla a tu volumen habitual.";
+  }
+
+  function analyseFrame(rms) {
+    const now = performance.now();
+    const voiced = rms > Math.max(0.025, state.floor * 4);
+    if (voiced) state.heardVoiceAt = now;
+    const ratio = spectralRatio(state.analyser);
+    renderAudioHint(candidateAt(rms, now, ratio, voiced), voiced);
+  }
+
+  function micFrame() {
+    if (state.mic !== "live" || !state.analyser || document.hidden) return;
+    const rms = amplitude(state.analyser);
+    if (state.calibration.length < 45) calibrate(rms);
+    else analyseFrame(rms);
     state.raf = requestAnimationFrame(micFrame);
+  }
+
+  /** Reject permission responses from a cancelled or no-longer-active round. */
+  function micRequestValid(token, ctx) {
+    return token === state.epoch && ["setup", "active"].includes(state.phase) &&
+      (!ctx || ctx.state === "running");
   }
 
   async function enableMic() {
@@ -287,7 +317,7 @@
     let stream = null;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false });
-      if (token !== state.epoch || !["setup", "active"].includes(state.phase)) { releaseStream(stream); return; }
+      if (!micRequestValid(token)) { releaseStream(stream); return; }
       const ctx = new AudioContext();
       state.stream = stream;
       state.context = ctx;
@@ -316,7 +346,7 @@
         track.onunmute = () => { if (state.stream === stream) micStatus("Volvió el micrófono. Confirma tus respiraciones manualmente."); };
       });
       if (ctx.state !== "running") await ctx.resume();
-      if (token !== state.epoch || ctx.state !== "running") { stopMic(); return; }
+      if (!micRequestValid(token, ctx)) { stopMic(); return; }
       state.mic = "live";
       $("flow-mic").textContent = "Apagar micrófono";
       micStatus("Micrófono activo. Calibrando ambiente…");
@@ -327,8 +357,7 @@
         micStatus(err?.name === "NotAllowedError" ? "Permiso denegado. Sigue sin micrófono." : "No se pudo abrir el micrófono. Sigue sin micrófono.");
       } else releaseStream(stream);
     } finally {
-      if (token === state.epoch) $("flow-mic").disabled = false;
-      else $("flow-mic").disabled = false;
+      $("flow-mic").disabled = false;
     }
   }
 

@@ -93,6 +93,22 @@ test("microphone denied still permits all manual controls", async ({ page }) => 
   await finish(page);
   await expect(page.locator("#flow-review")).toBeVisible();
 });
+test("late microphone permission after cancel never starts audio or leaks a stream", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => {
+    window.__micStopped = false;
+    navigator.mediaDevices.getUserMedia = () => new Promise((resolve) => { window.__resolvePermission = resolve; });
+  });
+  await page.locator("#flow-mic").click();
+  await expect(page.locator("#flow-mic-status")).toContainText("Esperando permiso");
+  await page.locator("#flow-mic-cancel").click();
+  await page.evaluate(() => {
+    window.__resolvePermission({ getTracks: () => [{ stop: () => { window.__micStopped = true; } }] });
+  });
+  await expect.poll(() => page.evaluate(() => window.__micStopped)).toBe(true);
+  expect(await page.evaluate(() => window.VTBreathFlow.state().mic)).toBe("off");
+  await expect(page.locator("#flow-start")).toBeEnabled();
+});
 test("HTML typed as a phrase stays text, never an element", async ({ page }) => {
   await open(page);
   await page.locator("#flow-lines").fill("<img src=x onerror=alert(1)>\nOtra frase.");

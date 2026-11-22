@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; media-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <title>BreathFlow · Respirar entre frases | Vocal Studio</title>
+  <meta name="description" content="Practica dónde respirar entre frases, con un micrófono opcional y sin competir por aguantar más aire.">
+  <style>
+    :root{font:16px/1.52 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#12283b;background:#f3f7fb}
+    *{box-sizing:border-box}body{margin:0;padding:0 0 env(safe-area-inset-bottom)}main,header,footer{max-width:870px;margin:auto;padding:16px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}a{color:#124e80}
+    h1{font-size:clamp(1.65rem,5vw,2.5rem);line-height:1.2;margin:.2em 0}h2{font-size:1.25rem;margin:.25em 0 .5em}
+    p{margin:.5em 0 1em}small,.muted{color:#475b6b}.eyebrow{font-size:.8rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#24628b}
+    .panel{background:#fff;border:1px solid #d2dfeb;border-radius:19px;margin:14px 0;padding:clamp(16px,3vw,25px);box-shadow:0 3px 14px #12305010}
+    .intro{background:#103c62;color:#fff}.intro .muted{color:#e0ecf5}.intro strong{color:#a9f0cf}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:12px}
+    .tile{padding:14px;border:1px solid #d2dfeb;border-radius:12px;background:#f8fbfe}
+    .metric{font-size:1.85rem;font-weight:800;font-variant-numeric:tabular-nums}
+    button,select,textarea{font:inherit}button,select{min-height:44px;padding:9px 14px;border-radius:11px;border:1px solid #aebfd0;background:#fff;color:#123853}
+    button{cursor:pointer;font-weight:650}button.primary{background:#126c9b;color:#fff;border-color:#126c9b}button:disabled{opacity:.5;cursor:not-allowed}
+    button:focus-visible,a:focus-visible,textarea:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #ef9f35;outline-offset:3px}
+    .buttons{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0} .buttons >button{flex:1 1 180px}
+    label{display:block;font-weight:650;margin:14px 0 7px}textarea,select{width:100%;padding:10px;border:1px solid #aebfd0;border-radius:10px}
+    textarea{min-height:132px;resize:vertical}.check{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid #e7eef4;font-weight:400}
+    input[type=checkbox]{width:21px;height:21px;flex:0 0 21px;accent-color:#126c9b;margin:3px 0}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap}.tabs button[aria-selected=true]{background:#153d5f;color:white;border-color:#153d5f}
+    .phrase{font-size:clamp(1.4rem,4vw,2rem);line-height:1.45;font-weight:700;padding:30px 12px;margin:14px 0;border:2px solid #7dbfce;border-radius:15px;text-align:center;background:#f4fcff;min-height:130px;display:grid;place-items:center;overflow-wrap:anywhere}
+    .notice{border-left:4px solid #ca8c29;padding:9px 12px;background:#fff8e9;color:#4b361c;margin:12px 0;border-radius:6px}
+    .status{min-height:1.5em} [hidden]{display:none!important} ul{padding-left:21px}
+    footer{font-size:.88rem;color:#52667a;padding-bottom:35px}
+    @media(max-width:420px){main,header,footer{padding:11px}.panel{padding:15px;border-radius:14px}.buttons>button{flex-basis:100%}.metric{font-size:1.6rem}}
+    @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+  </style>
+</head>
+<body>
+  <header>
+    <a href="./index.html" aria-label="Volver a Vocal Studio">← Volver a Vocal Studio</a>
+    <strong>BreathFlow <span aria-hidden="true">◦</span> Beta</strong>
+  </header>
+  <main>
+    <section class="panel intro">
+      <span class="eyebrow" style="color:#b8e5f5">RESPIRACIÓN · FRASEO · INTENCIÓN</span>
+      <h1>Respira entre frases, no entre palabras.</h1>
+      <p>Planifica dónde tomar aire, cuenta tu historia y observa si mantuviste la <strong>comodidad y la intención</strong>. No se premia aguantar más segundos ni respirar menos.</p>
+      <p class="muted">Exercise in Spanish · Optional microphone · Personal practice, not a clinical assessment.</p>
+    </section>
+    <section class="panel" aria-label="Menús de progreso">
+      <h2>Tu práctica: hoy, semana y mes</h2>
+      <div class="tabs" role="tablist" aria-label="Periodo del progreso">
+        <button type="button" role="tab" id="flow-tab-day" aria-controls="flow-day" aria-selected="true">Hoy</button>
+        <button type="button" role="tab" id="flow-tab-week" aria-controls="flow-week" aria-selected="false">Semana</button>
+        <button type="button" role="tab" id="flow-tab-month" aria-controls="flow-month" aria-selected="false">Mes</button>
+      </div>
+      <div id="flow-day" role="tabpanel" aria-labelledby="flow-tab-day" class="tile" style="margin-top:12px"></div>
+      <div id="flow-week" role="tabpanel" aria-labelledby="flow-tab-week" class="tile" style="margin-top:12px" hidden></div>
+      <div id="flow-month" role="tabpanel" aria-labelledby="flow-tab-month" class="tile" style="margin-top:12px" hidden></div>
+      <p class="muted">Los tres periodos usan los mismos días que Inicio, Historial y el plan de Vocal Studio. Una práctica guardada cuenta una sola vez por día.</p>
+    </section>
+    <section class="panel" id="flow-setup">
+      <h2>1 · Elige las frases</h2>
+      <label for="flow-level">Duración y dificultad</label>
+      <select id="flow-level">
+        <option value="starter">Iniciación · 3 frases cortas</option>
+        <option value="story">Narración · 4 frases largas</option>
+        <option value="song">Transferencia · tu propia canción o texto</option>
+      </select>
+      <label for="flow-lines">Una frase por línea. En la canción, escribe solo tus propias palabras o material que puedas usar.</label>
+      <textarea id="flow-lines" maxlength="1000" aria-describedby="flow-lines-hint"></textarea>
+      <p id="flow-lines-hint" class="muted">De 2 a 6 frases. Puedes modificar el texto, sin guardar la letra en el servidor.</p>
+      <h2>2 · Marca dónde planeas respirar</h2>
+      <p>Prueba primero entre frases. Marca solo las pausas que necesites; puedes cambiar tu plan antes de comenzar.</p>
+      <div id="flow-plan"></div>
+      <h2>3 · Activa el micrófono, si quieres</h2>
+      <p>El sonido ayuda a localizar posibles pausas, pero <strong>no puede confirmar una inhalación</strong>. Tú marcas cada respiración. No se graba ni envía audio.</p>
+      <div class="buttons"><button type="button" id="flow-mic">Usar micrófono (opcional)</button></div>
+      <p id="flow-mic-status" class="status muted" role="status">Puedes practicar sin dar permiso.</p>
+      <p id="flow-audio-candidate" class="muted"></p>
+      <div class="buttons"><button type="button" id="flow-start" class="primary">Empezar recorrido →</button></div>
+    </section>
+    <section class="panel" id="flow-run" hidden>
+      <h2>Cuenta la frase con comodidad</h2>
+      <p id="flow-counter" class="eyebrow"></p>
+      <div id="flow-phrase" class="phrase" tabindex="-1"></div>
+      <p class="muted">Habla o canta de forma natural. Si necesitas aire, tómalo; registra dónde ocurrió sin castigarte por ello.</p>
+      <div class="buttons">
+        <button type="button" id="flow-breath">✓ Tomé aire antes de esta frase</button>
+        <button type="button" id="flow-mid">↶ Necesité aire dentro de la frase</button>
+        <button type="button" class="primary" id="flow-next">Siguiente frase →</button>
+      </div>
+      <p id="flow-run-status" class="status" role="status"></p>
+      <button type="button" id="flow-abort">Cancelar recorrido sin registrar</button>
+    </section>
+    <section class="panel" id="flow-review" hidden>
+      <h2>4 · Revisa sin juzgar</h2>
+      <p id="flow-review-text"></p>
+      <label for="flow-comfort">¿Qué tan cómodo te resultó respirar y mantener la intención?</label>
+      <select id="flow-comfort" required>
+        <option value="">Selecciona una observación</option>
+        <option value="easy">Cómodo · mantuve mi intención</option>
+        <option value="mixed">Variable · hubo frases difíciles</option>
+        <option value="strain">Incómodo · necesito simplificar</option>
+      </select>
+      <p class="muted">Si te mareas, duele o sientes tensión, detén la práctica; no intentes compensar aguantando el aire.</p>
+      <div class="buttons">
+        <button type="button" id="flow-save" class="primary">Guardar práctica de hoy</button>
+        <button type="button" id="flow-restart">Repetir sin guardar</button>
+      </div>
+    </section>
+    <section class="panel" id="flow-done" hidden>
+      <h2>Práctica guardada</h2>
+      <p id="flow-done-text" role="status"></p>
+      <div class="buttons"><button type="button" id="flow-again" class="primary">Otra ronda</button><a href="./index.html#history" style="align-self:center">Ver progreso en Vocal Studio</a></div>
+    </section>
+    <p id="flow-notice" class="notice" role="alert" hidden></p>
+  </main>
+  <footer>BreathFlow beta · La detección de pausas es orientativa, no un detector clínico de respiraciones. Tus registros de práctica comparten el calendario de Vocal Studio; las frases no se sincronizan.</footer>
+  <script src="js/storage.js?v=20261118a"></script>
+  <script src="js/practice-days.js?v=20261113a"></script>
+  <script src="js/breathflow.js?v=20261122a"></script>
+</body>
+</html>

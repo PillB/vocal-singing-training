@@ -4,6 +4,7 @@
  * Run: npx playwright test tests/breathflow.spec.js --project=chromium
  */
 const { test, expect } = require("@playwright/test");
+const { boot, openExercise } = require("./helpers/e2e");
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 test.use({ timezoneId: "America/Lima", locale: "es-PE" });
 
@@ -166,6 +167,22 @@ test("day/week/month and every main navigation view share a single calendar auth
   await expect(page.locator("#flow-week")).toContainText("1 día");
   await page.locator("#flow-tab-month").click();
   await expect(page.locator("#flow-month")).toContainText("1 día");
+});
+test("every exercise can open the real animated guide without ending its own stage", async ({ page, context }) => {
+  await boot(page, { lang: "es", tourDone: true, mic: "silent" });
+  await openExercise(page, "s18-costal-breath");
+  await page.locator("#btn-toggle-guide").click();
+  const guideLink = page.locator('#guide-body a[href="breathflow.html#flow-coach"]');
+  await expect(guideLink).toBeVisible();
+  const popupPromise = context.waitForEvent("page");
+  await guideLink.click();
+  const popup = await popupPromise;
+  await popup.waitForLoadState("domcontentloaded");
+  await expect(popup.locator("#coach-stage")).toContainText("Hombros");
+  await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+  await expect(page.locator("#btn-practice-start")).toBeVisible();
+  await popup.close();
+  await expect(page.locator("#btn-practice-start")).toBeVisible();
 });
 test("validation stops one phrase or overlong text from entering active state", async ({ page }) => {
   await open(page);

@@ -36,7 +36,6 @@ describeLive("Live Pages validation", () => {
           let ctx = window.VTPiano?.ctx || window.VTSharedAudioCtx;
           if (!ctx || ctx.state === "closed") ctx = new AC();
           window.VTSharedAudioCtx = ctx;
-          if (ctx.state === "suspended" || ctx.state === "interrupted") await ctx.resume();
           const dest = ctx.createMediaStreamDestination();
           const osc = ctx.createOscillator();
           const g = ctx.createGain();

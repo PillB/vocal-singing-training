@@ -41,3 +41,17 @@ Second run 44980588595: 23/24 cases pass; WebKit's Start case is now green with
 the shared graph. Firefox still times out. Add console/start-state diagnostics
 before attributing it to production code. Published files and all three viewport
 journeys pass again; the old worker remains the audit's confirmed failure.
+
+Third run 44981062764 retains 23/24 passes. Firefox diagnostics show
+practiceStarting true and the shared/piano graph suspended, with no JS error.
+The fixture itself awaits resume before returning a stream, unlike the existing
+tests/helpers/e2e.js fixture: this can wait indefinitely before production's
+bounded graph setup even receives the microphone. Remove that fixture-owned
+await and let the production engine perform its normal resume/timeout handling.
+Expected: Start becomes live, silence remains zero and Space counts; suspended
+or failed production startup must still fail the unchanged assertions. Do not
+relax autoplay preferences or claim speaker/microphone hardware verification.
+Evidence: https://www.w3.org/TR/webaudio/#dom-audiocontext-resume specifies
+pending promises for a context not yet allowed to start; MDN's autoplay guide
+explains that browser policies vary. The shared-graph hypothesis corrected
+WebKit but did not resolve Firefox; preserve all prior failing traces.

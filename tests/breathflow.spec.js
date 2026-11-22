@@ -7,10 +7,15 @@ const { test, expect } = require("@playwright/test");
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 test.use({ timezoneId: "America/Lima", locale: "es-PE" });
 
-async function open(page) {
+async function open(page, { teach = false } = {}) {
   await page.clock.install({ time: new Date("2026-11-22T10:00:00-05:00") });
   await page.goto(BASE + "/breathflow.html");
-  await expect(page.locator("#flow-start")).toBeEnabled();
+  await expect(page.locator("#coach-stage")).toContainText("Hombros");
+  await expect(page.locator("#flow-start")).toBeDisabled();
+  if (!teach) {
+    await page.locator("#coach-skip").click();
+    await expect(page.locator("#flow-start")).toBeEnabled();
+  }
 }
 async function finish(page) {
   await page.locator("#flow-start").click();
@@ -23,6 +28,68 @@ async function finish(page) {
   await page.locator("#flow-next").click();
   await expect(page.locator("#flow-review")).toBeVisible();
 }
+test("first-use lesson teaches body and mouth before enabling Start", async ({ page }) => {
+  await open(page, { teach: true });
+  await expect(page.locator("#coach-demo")).toBeVisible();
+  await expect(page.locator("#coach-finish")).toBeDisabled();
+  await page.locator("#coach-next").click();
+  await expect(page.locator("#coach-stage")).toContainText("costillas");
+  await expect(page.locator("#coach-svg-desc")).toContainText("costillas");
+  await page.locator("#coach-toggle").click();
+  await expect(page.locator("#flow-coach")).toHaveAttribute("data-paused", "true");
+  await page.locator("#coach-next").click();
+  await page.locator("#coach-vowel").click();
+  await expect(page.locator("#coach-vowel")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#coach-caption")).toContainText("mandíbula");
+  await page.locator("#coach-hiss").click();
+  await expect(page.locator("#coach-svg-desc")).toContainText("dientes");
+  await page.locator("#coach-next").click();
+  await expect(page.locator("#coach-stage")).toContainText("frase");
+  await expect(page.locator("#coach-checks")).toBeVisible();
+  await expect(page.locator("#coach-finish")).toBeDisabled();
+  await page.locator("#coach-check-shoulders").check();
+  await page.locator("#coach-check-ribs").check();
+  await expect(page.locator("#coach-finish")).toBeDisabled();
+  await page.locator("#coach-check-jaw").check();
+  await expect(page.locator("#coach-finish")).toBeEnabled();
+  await page.locator("#coach-finish").click();
+  await expect(page.locator("#flow-start")).toBeEnabled();
+  expect(await page.evaluate(() => window.VTBreathTeach.isReady())).toBe(true);
+  await page.locator("#flow-start").click();
+  await expect(page.locator("#flow-run-teach-hint")).toBeVisible();
+  await page.locator("#flow-run-teach").click();
+  await expect(page.locator("#coach-stage")).toContainText("frase");
+});
+test("teaching stage does not save any day, ask for a microphone or invent measured checkpoints", async ({ page }) => {
+  await open(page, { teach: true });
+  const initial = await page.evaluate(() => JSON.stringify(window.VTDays.read().days));
+  await page.locator("#coach-next").click();
+  await page.locator("#coach-next").click();
+  await page.locator("#coach-play").click();
+  await expect(page.locator("#coach-audio-status")).toContainText("sintética");
+  await page.locator("#coach-prev").click();
+  await expect(page.locator("#coach-stage")).toContainText("costillas");
+  expect(await page.evaluate(() => JSON.stringify(window.VTDays.read().days))).toBe(initial);
+  expect(await page.evaluate(() => window.VTBreathFlow.state().mic)).toBe("off");
+});
+test("reduced-motion and small landscape never hide tutorial controls or impose paced breathing", async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await open(page, { teach: true });
+  const data = await page.evaluate(() => {
+    const tutorial = document.querySelector("#flow-coach");
+    const a = document.querySelector("#coach-demo svg");
+    const btn = document.querySelector("#coach-next").getBoundingClientRect();
+    return { paused: tutorial.dataset.paused, overflow: document.documentElement.scrollWidth > innerWidth,
+      diagramWidth: a.getBoundingClientRect().width, buttonHeight: btn.height };
+  });
+  expect(data.paused).toBe("true");
+  expect(data.overflow).toBe(false);
+  expect(data.diagramWidth).toBeGreaterThan(200);
+  expect(data.buttonHeight).toBeGreaterThanOrEqual(44);
+  await page.locator("#coach-next").click();
+  await expect(page.locator("#coach-svg-desc")).toContainText("costillas");
+});
 test("one manual round updates the same day, week and month ledger used by main", async ({ page }) => {
   await open(page);
   const initial = await page.evaluate(() => {
@@ -34,7 +101,15 @@ test("one manual round updates the same day, week and month ledger used by main"
   await expect(page.locator("#flow-review-text")).toContainText("respiraciones entre frases que marcaste: 2");
   await expect(page.locator("#flow-review-text")).toContainText("dentro de frase: 1");
   await page.locator("#flow-comfort").selectOption("mixed");
-  await page.locator("#flow-save").dblclick();
+  await page.locator("#flow-save").click();
+  const diag = await page.evaluate(() => ({
+    phase: window.VTBreathFlow.state().phase,
+    notice: document.querySelector("#flow-notice")?.textContent || "",
+    unsaved: window.VTStorage.isUnsaved(),
+    day: window.VTDays.dayKey(),
+    stored: !!window.VTStorage.getDays()?.days[window.VTDays.dayKey()]
+  }));
+  expect(diag.phase, JSON.stringify(diag)).toBe("done");
   await expect(page.locator("#flow-done")).toBeVisible();
   const after = await page.evaluate(() => {
     const d = window.VTDays;

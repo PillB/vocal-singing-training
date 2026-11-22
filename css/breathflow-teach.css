@@ -33,8 +33,8 @@
 #flow-coach[data-stage="2"][data-sound="hiss"] .coach-figure .tongue-vowel,
 #flow-coach[data-stage="2"][data-sound="hiss"] .coach-figure .vowel-air{display:none}
 #flow-coach[data-stage="3"] .coach-figure .coach-timeline{animation:coach-timeline 5s ease-in-out infinite}
-#flow-coach[data-paused="true"] .coach-figure *,
-#flow-coach[data-motion="reduce"] .coach-figure *{animation-play-state:paused!important;animation:none!important}
+#flow-coach[data-paused="true"] .coach-figure *{animation-play-state:paused!important}
+#flow-coach[data-motion="reduce"] .coach-figure *{animation:none!important}
 @keyframes coach-release{0%,100%{transform:translateY(-5px)}45%,80%{transform:translateY(4px)}}
 @keyframes coach-rib{0%,100%{transform:scaleX(1)}50%{transform:scaleX(1.09)}}
 @keyframes coach-arrow{0%,100%{opacity:.24;transform:translateX(0)}50%{opacity:1;transform:translateX(8px)}}

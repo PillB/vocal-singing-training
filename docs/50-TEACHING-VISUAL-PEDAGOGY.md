@@ -138,5 +138,6 @@ No interviews or observational user study were conducted for this change. App St
 | TCH-08 | Real iPhone Safari, screen-reader and cross-device account sync | **BLOCKED** until tested |
 | TCH-09 | Full 52-exercise didactic visuals | **NOT IMPLEMENTED**; only the new BreathFlow path taught |
 | TCH-10 | Full browser menu × steps × daily/weekly/monthly permutations | **NOT EXHAUSTIVELY VERIFIED**, partial smoke tests present |
+| TCH-11 | Playing a teaching sound while breath microphone is listening can award spurious acoustic hints | Reject speaker exemplar while mic is requesting/live; explicit instruction to shut microphone off; targeted test |
 
 **Release conditions:** (1) `npm run test:core`, (2) new fast teaching test workflow and full browser shards all green on same SHA; (3) mobile layout/keyboard, consent and audio off/denied/stale tests; (4) main app account, plan and history parity; (5) real physical iOS Safari session and actual coach audio/visual comprehension review before declaring fully production ready. The branch is a *draft PR* while these gates remain open.

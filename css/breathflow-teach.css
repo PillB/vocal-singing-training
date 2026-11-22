@@ -26,6 +26,8 @@
 #flow-coach[data-stage="1"] .coach-figure .rib-expand{transform-origin:230px 163px;animation:coach-rib 3.5s ease-in-out infinite}
 #flow-coach[data-stage="1"] .coach-figure .rib-arrow{animation:coach-arrow 3.5s ease-in-out infinite}
 #flow-coach[data-stage="2"] .coach-figure .air-dash{animation:coach-air 1.1s linear infinite}
+#flow-coach[data-stage="2"][data-sound="hiss"] .coach-figure .mouth-lower-vowel{display:none}
+#flow-coach[data-stage="2"][data-sound="vowel"] .coach-figure .mouth-lower-hiss{display:none}
 #flow-coach[data-stage="2"][data-sound="vowel"] .coach-figure .tongue-hiss,
 #flow-coach[data-stage="2"][data-sound="vowel"] .coach-figure .hiss-air{display:none}
 #flow-coach[data-stage="2"][data-sound="hiss"] .coach-figure .tongue-vowel,

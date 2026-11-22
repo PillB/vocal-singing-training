@@ -55,7 +55,7 @@
       $("flow-start").disabled = true;
       return;
     }
-    $("flow-start").disabled = false;
+    $("flow-start").disabled = !global.VTBreathTeach?.isReady?.();
     const choices = state.plan.slice();
     state.plan = lines.map((_, i) => i !== 0 && (choices[i] ?? true));
     lines.forEach((line, i) => {
@@ -119,10 +119,16 @@
     $("flow-breath").textContent = state.actual[state.idx] ? "✓ Aire registrado antes de esta frase" : "✓ Tomé aire antes de esta frase";
     $("flow-next").textContent = state.idx === state.lines.length - 1 ? "Terminar y revisar →" : "Siguiente frase →";
     $("flow-run-status").textContent = state.plan[state.idx] ? "Aquí habías planeado una pausa para respirar." : "Aquí no habías marcado una pausa obligatoria; respira cuando lo necesites.";
+    $("flow-run-teach-hint").textContent = state.plan[state.idx] ? "Suelta los hombros · toma aire sin elevarlos · vuelve a la frase." : "Mandíbula cómoda · administra el aire con naturalidad · adapta si hace falta.";
   }
 
   function start() {
     if (state.phase !== "setup") return;
+    if (!global.VTBreathTeach?.isReady?.()) {
+      note("Antes de empezar, completa la demostración o indica que ya conoces la técnica.");
+      $("flow-coach")?.scrollIntoView?.({ block: "start", behavior: "instant" });
+      return;
+    }
     const lines = readLines();
     if (!lines) { note("Revisa las frases antes de comenzar."); return; }
     note("");
@@ -384,6 +390,7 @@
       $("flow-run-status").textContent = "Respiración dentro de la frase registrada (" + state.mid[state.idx] + "). Está bien adaptar la frase.";
     });
     $("flow-next").addEventListener("click", next);
+    $("flow-run-teach").addEventListener("click", () => { $("flow-coach")?.scrollIntoView?.({ block: "start", behavior: "instant" }); });
     $("flow-abort").addEventListener("click", reset);
     $("flow-restart").addEventListener("click", reset);
     $("flow-save").addEventListener("click", save);
@@ -418,5 +425,8 @@
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, { once: true });
   else bind();
-  global.VTBreathFlow = { state: () => ({ phase: state.phase, mic: state.mic, index: state.idx, candidates: state.candidates }) };
+  global.VTBreathFlow = {
+    state: () => ({ phase: state.phase, mic: state.mic, index: state.idx, candidates: state.candidates }),
+    refreshReadiness: planView
+  };
 })(window);

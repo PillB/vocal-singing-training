@@ -2983,6 +2983,7 @@
     stopHold();
     stopPitchViz();
     state.recorder.clear();
+    clearPostSessionAd();
     VTPiano.stopAll();
     resetSessionPractice();
     renderExerciseAfresh();
@@ -4512,6 +4513,19 @@
    * used to carry over, so the second take was never recorded and leaving
    * it did not ask.
    */
+  /**
+   * The end-of-task card belongs to the task that just ended. A new take, a new exercise or a routine takes it
+   * away, so it never rides into practice ("nunca durante la práctica", terms.html). It used to stay in the
+   * rating card through the next take, and visible between a later routine's steps (docs/48 section 11).
+   */
+  function clearPostSessionAd() {
+    try {
+      window.VTAds?.clearSlot?.(document.getElementById("ad-slot-post-session"));
+    } catch {
+      /* ignore */
+    }
+  }
+
   function startNewTakeAfterSave() {
     if (state.sessionPractice.saved) {
       resetSessionPractice();
@@ -4536,6 +4550,7 @@
       if (startsElsewhere(ex, profile)) return;
 
       startNewTakeAfterSave();
+      clearPostSessionAd();
       state.practiceStarting = true;
       setPracticeUI(false); // hides/disables Start while bootstrapping
       trackPracticeStart(ex, profile);

@@ -141,3 +141,26 @@ No interviews or observational user study were conducted for this change. App St
 | TCH-11 | Playing a teaching sound while breath microphone is listening can award spurious acoustic hints | Reject speaker exemplar while mic is requesting/live; explicit instruction to shut microphone off; targeted test |
 
 **Release conditions:** (1) `npm run test:core`, (2) new fast teaching test workflow and full browser shards all green on same SHA; (3) mobile layout/keyboard, consent and audio off/denied/stale tests; (4) main app account, plan and history parity; (5) real physical iOS Safari session and actual coach audio/visual comprehension review before declaring fully production ready. The branch is a *draft PR* while these gates remain open.
+
+## Teaching transfer and future drift update (2026-11-22, PR #51 follow-up)
+
+A learner checking their own shoulder/rib/jaw boxes had **not** proved they
+understood the goal. The fourth animation now contains a short teach-back
+decision with two plausible actions: hold a phrase through tension, or pause
+and divide it. Choosing the unsafe option gives corrective explanation and
+does not unlock the round; the safe option explains why it preserves the
+voice and meaning. This is knowledge-transfer feedback, **not** an objective
+judgment of the learner's larynx. Experienced users retain explicit Skip.
+The negative case is part of the Playwright walkthrough and mutation suite.
+
+A new two-tab browser test attempts to save in tab A while tab B shows
+today/week/month; the *visible* B values must update without reload, and
+the underlying `VTDays` count must remain exactly one. A second test
+advances the same browser from Sunday Nov 22 to Monday Nov 23 and then
+December 1; week/month must rebucket without losing or duplicating Nov 22.
+This tests time and storage semantics rather than asserting the presence of
+a listener. These checks and their explicit failure oracles run in
+`.github/workflows/breathflow-qa.yml`; `qa/mutate-breathflow.mjs` plants
+independent actual defects in the shipped modules and verifies red tests.
+Any failed/blocked gate remains in the release ledger; CI WebKit is not a
+physical iPhone or a pedagogy study.

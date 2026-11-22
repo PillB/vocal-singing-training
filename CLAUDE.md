@@ -21,3 +21,16 @@ The rules you will be held to, in short (AGENTS.md has the detail and code):
   others solved it before trying again.
 - Five red-team passes and four aesthetic passes per round; a blocked test
   is unverified, never passed.
+
+## Explicit agent.md routing and round execution
+
+**Read [`agent.md`](./agent.md), path
+`vocal-singing-training/agent.md`, and then the canonical
+[`AGENTS.md`](./AGENTS.md), path `vocal-singing-training/AGENTS.md`.**
+Those paths exist; do not synthesize a second independent instruction file.
+
+Before each patch: examine current branch head, all open PRs, same-SHA CI,
+state-machine owners and source drift. For every iteration record an actual
+negative-control test, run `npm run lint && npm run test:core`, and for
+BreathFlow run `node qa/mutate-breathflow.mjs`. No merged or released state
+without passing behavioral tests and observed hardware/novice evidence.

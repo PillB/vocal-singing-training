@@ -29,7 +29,7 @@
       svg: "Una pausa para tomar aire aparece antes de una barra de frase; una marca recorre la línea sin imponer un tiempo de respiración."
     }
   ];
-  const state = { stage: 0, sound: "hiss", paused: false, ready: false, soundEpoch: 0, context: null };
+  const state = { stage: 0, sound: "hiss", paused: false, ready: false, decision: "", soundEpoch: 0, context: null };
 
   function stopSound() {
     state.soundEpoch++;
@@ -64,6 +64,7 @@
     el("coach-sound-switch").hidden = n !== 2;
     el("coach-play").hidden = n < 2;
     el("coach-checks").hidden = n !== 3;
+    el("coach-decision").hidden = n !== 3;
     el("coach-hiss").setAttribute("aria-pressed", String(state.sound === "hiss"));
     el("coach-vowel").setAttribute("aria-pressed", String(state.sound === "vowel"));
     el("coach-toggle").setAttribute("aria-pressed", String(state.paused));
@@ -97,7 +98,7 @@
   }
 
   function finish() {
-    if (state.ready || state.stage !== 3 || !checksComplete()) return;
+    if (state.ready || state.stage !== 3 || !checksComplete() || state.decision !== "adapt") return;
     complete();
   }
 
@@ -115,7 +116,19 @@
   }
 
   function updateChecks() {
-    el("coach-finish").disabled = !(state.stage === 3 && checksComplete());
+    el("coach-finish").disabled = !(state.stage === 3 && checksComplete() && state.decision === "adapt");
+  }
+
+  function chooseResponse(choice) {
+    if (!["force", "adapt"].includes(choice) || state.ready) return;
+    state.decision = choice;
+    const safe = choice === "adapt";
+    el("coach-choice-force").setAttribute("aria-pressed", String(!safe));
+    el("coach-choice-adapt").setAttribute("aria-pressed", String(safe));
+    el("coach-choice-feedback").textContent = safe
+      ? "Bien: detén la frase si pierdes comodidad, recupera aire suave y retoma tu intención. No importa cuántos segundos dure."
+      : "Aguantar con tensión no es el objetivo. Prueba la otra opción: hacer una pausa y dividir la idea es una habilidad expresiva.";
+    updateChecks();
   }
 
   /** Approximate hiss to illustrate the presence of continuous airflow: not a human reference recording. */
@@ -190,6 +203,8 @@
     el("coach-hiss").addEventListener("click", () => setSound("hiss"));
     el("coach-vowel").addEventListener("click", () => setSound("vowel"));
     el("coach-finish").addEventListener("click", finish);
+    el("coach-choice-force").addEventListener("click", () => chooseResponse("force"));
+    el("coach-choice-adapt").addEventListener("click", () => chooseResponse("adapt"));
     el("coach-skip").addEventListener("click", complete);
     ["shoulders", "ribs", "jaw"].forEach((key) => {
       el("coach-check-" + key).addEventListener("change", updateChecks);
@@ -201,7 +216,7 @@
 
   global.VTBreathTeach = {
     isReady: () => state.ready,
-    state: () => ({ stage: state.stage, sound: state.sound, paused: state.paused, ready: state.ready }),
+    state: () => ({ stage: state.stage, sound: state.sound, paused: state.paused, ready: state.ready, decision: state.decision }),
     stopSound
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, { once: true });

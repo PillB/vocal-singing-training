@@ -308,3 +308,81 @@ trade-off of the fix to the user.
 
 See `docs/40-PRODUCTION-AUDIT-2026-11-01.md` for the current evidence, debt,
 trade-offs, and explicit outstanding release gates.
+
+## Pre-execution decision record, scientific teaching, and future source drift
+
+Before changing an exercise, perform a **pre-execution comparison** of at least
+two feasible approaches (including "leave the current behavior alone"). For
+each, record the learner's task, observable success criterion, contrary
+evidence, expert rejection argument, accessibility/privacy cost, and the
+cheapest plausible *counterexample* that would make the design wrong. Choose
+the evidence-backed approach, **not** the approach with the fewest lines.
+Do not claim to have performed a human study, physical-device test, or
+four red-team rounds when there is only a table of hypothetical attacks.
+
+**Teach before you test.** A first-time learner needs a perceivable example
+(sound, drawing/animation, or licensed human demonstration as appropriate),
+a prompt to reproduce it safely, the body or acoustic landmark to notice,
+what a plausible error looks/sounds like, feedback that explains how to
+adjust, and an opportunity to transfer into a phrase or song. Exercise
+completion, unverified microphone hints, and self-checked boxes are **not**
+proof of correct jaw/tongue/rib movement or skill acquisition.
+Use active recall/teach-back with a corrective explanation, never punitive
+ratings for an uncalibrated sensor; retain a deliberate fast path for
+experienced learners. Annotate dialect-dependent articulation (/s/, vowels),
+contraindications and evidence uncertainty. Abandon a fixed pose, breath
+duration or mouth shape if clinical or phonetic evidence does not support it.
+
+**Source drift and incompatible parallel work.** At the start of each task
+read the live repository tree, open PR heads/checks and active workflow runs;
+inspect `AGENTS.md`, `agent.md`, `CLAUDE.md`, CI contracts and the
+authoritative owner of each state. Pin exact file paths and Git SHAs in the
+ledger. A test "green" on SHA X does not certify SHA Y. For changed
+selectors, CSS states, audio lifecycle, storage keys, response schemas,
+worker routes, OAuth/billing contracts, or third-party APIs, inject a
+plausible incompatible variant and require the integration test to fail with
+the **specific observable wrong outcome**. Re-run the normal positive
+fixture after restoring. Missing anchors or tests are an error, not success.
+Each affected change must have an idempotent retry/reload path and explicit
+failure message; do not add retries that can duplicate irreversible effects.
+
+**Per task AND every red-team round, execute (or mark as blocked):**
+
+```sh
+npm run lint
+npm run test:core
+node qa/mutate-breathflow.mjs    # when BreathFlow teaching/save contracts changed
+npx playwright test tests/breathflow.spec.js --project=chromium
+```
+
+The real CI `chore(lint)` gate runs parser-backed ESLint modified
+cyclomatic complexity <=15 on every new/edited function, verifies that
+`qa/complexity-baseline.json` cannot expand, enforces versioned assets and
+detects swallowed Playwright waits. The new
+`qa/mutate-breathflow.mjs` runner temporarily introduces realistic defects
+(readiness bypass, wrong mouth visualization, speaker-vs-mic interference,
+profile crossover, duplicate save, unsafe teaching answer) and **must**
+observe the named behavioral test turning red. It restores every original
+source in a `finally` block. A lint rule alone cannot prove tests detect
+bugs; a test that asserts a string or mock echoes itself is tautological.
+
+**Integration simulation matrix:** first use and returning user, no mic and
+denied mic, early/late permission/interrupt, daily repeat, simultaneous
+tabs, week/month rollover, profile/account change, offline/expired auth,
+and reload on every Home/Practice/Plan/History page. After every UI step,
+inspect the *authoritative ledger* and rendered value on every relevant
+screen, not just the route URL or a button's text. Every mismatch gets a
+timestamped issue ID, minimal reproducer, suspected owner and a rerun on the
+same source SHA. Inspect contract changes in independent agent/Claude PRs,
+but do not equate a historical branch with a running worker or merge merely
+because the current branch's tests are green.
+
+**Release gate:** compare app bundle SHA against deployed SHA; verify
+Cloudflare Worker/D1 migrations and entitlements separately; obtain real
+iPhone Safari mic and VoiceOver evidence, plus at least one observed
+novice's ability to reproduce the taught cue, before claiming the
+pedagogy or the deployment is fully production-ready. Cross-browser
+headless simulations, synthetic audio and annotated diagrams cannot stand
+in for those observations. Never force-merge a draft or skip required checks.
+See `docs/49-BREATHFLOW-AND-STATE-MACHINES.md` and
+`docs/50-TEACHING-VISUAL-PEDAGOGY.md` for the topology/state diagrams.

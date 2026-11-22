@@ -55,6 +55,12 @@ test("first-use lesson teaches body and mouth before enabling Start", async ({ p
   await page.locator("#coach-check-ribs").check();
   await expect(page.locator("#coach-finish")).toBeDisabled();
   await page.locator("#coach-check-jaw").check();
+  await expect(page.locator("#coach-finish")).toBeDisabled();
+  await page.locator("#coach-choice-force").click();
+  await expect(page.locator("#coach-choice-feedback")).toContainText("Aguantar con tensión no es el objetivo");
+  await expect(page.locator("#coach-finish")).toBeDisabled();
+  await page.locator("#coach-choice-adapt").click();
+  await expect(page.locator("#coach-choice-feedback")).toContainText("recupera aire suave");
   await expect(page.locator("#coach-finish")).toBeEnabled();
   await page.locator("#coach-finish").click();
   await expect(page.locator("#flow-start")).toBeEnabled();
@@ -197,6 +203,49 @@ test("every exercise can open the real animated guide without ending its own sta
   await expect(page.locator("#btn-practice-start")).toBeVisible();
   await popup.close();
   await expect(page.locator("#btn-practice-start")).toBeVisible();
+});
+
+test("two open tabs synchronize the actual saved day without a reload", async ({ page, context }) => {
+  await open(page);
+  const second = await context.newPage();
+  await second.clock.install({ time: new Date("2026-11-22T10:00:00-05:00") });
+  await second.goto(BASE + "/breathflow.html");
+  await expect(second.locator("#flow-day")).toContainText("Hoy aún no has registrado");
+  await finish(page);
+  await page.locator("#flow-comfort").selectOption("easy");
+  await page.locator("#flow-save").click();
+  await expect(page.locator("#flow-done")).toBeVisible();
+  await expect(second.locator("#flow-day")).toContainText("Hoy ya tienes un día");
+  await second.locator("#flow-tab-week").click();
+  await expect(second.locator("#flow-week")).toContainText("1 día");
+  await second.locator("#flow-tab-month").click();
+  await expect(second.locator("#flow-month")).toContainText("1 día");
+  const n = await second.evaluate(() => {
+    const d = window.VTDays;
+    return d.read().days[d.dayKey()]?.n;
+  });
+  expect(n).toBe(1);
+  await second.close();
+});
+test("Sunday-to-Monday and November-to-December rollovers never fabricate completed days", async ({ page }) => {
+  await open(page);
+  await finish(page);
+  await page.locator("#flow-comfort").selectOption("easy");
+  await page.locator("#flow-save").click();
+  await expect(page.locator("#flow-done")).toBeVisible();
+  await page.clock.setSystemTime(new Date("2026-11-23T10:00:00-05:00"));
+  await page.reload();
+  await expect(page.locator("#flow-day")).toContainText("Hoy aún no has registrado");
+  await page.locator("#flow-tab-week").click();
+  await expect(page.locator("#flow-week")).toContainText("Esta semana: 0 días");
+  await page.locator("#flow-tab-month").click();
+  await expect(page.locator("#flow-month")).toContainText("Este mes: 1 día");
+  await page.clock.setSystemTime(new Date("2026-12-01T10:00:00-05:00"));
+  await page.reload();
+  await page.locator("#flow-tab-month").click();
+  await expect(page.locator("#flow-month")).toContainText("Este mes: 0 días");
+  const saved = await page.evaluate(() => window.VTDays.read().days["2026-11-22"]?.n);
+  expect(saved).toBe(1);
 });
 test("validation stops one phrase or overlong text from entering active state", async ({ page }) => {
   await open(page);

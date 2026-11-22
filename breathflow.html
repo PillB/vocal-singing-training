@@ -142,6 +142,15 @@
         <label class="check"><input type="checkbox" id="coach-check-ribs"><span>Sentí un movimiento suave en costillas bajas o abdomen, sin endurecerlo. Puedo usar mis manos para notarlo.</span></label>
         <label class="check"><input type="checkbox" id="coach-check-jaw"><span>Mi mandíbula y mi lengua permanecen libres. El sonido sale sin empujar.</span></label>
       </fieldset>
+      <fieldset class="coach-checks" id="coach-decision" hidden>
+        <legend>Practica una decisión real</legend>
+        <p>Si te falta aire antes de terminar una frase y pierdes comodidad, ¿qué harías?</p>
+        <div class="coach-actions" role="group" aria-label="Elige cómo adaptar la frase">
+          <button type="button" id="coach-choice-force" aria-pressed="false">Aguantar hasta terminar, aunque tenga tensión</button>
+          <button type="button" id="coach-choice-adapt" aria-pressed="false">Pausar, tomar aire sin forzar y dividir la frase</button>
+        </div>
+        <p id="coach-choice-feedback" class="coach-note" role="status">Piensa qué opción conserva tu voz cómoda y la intención.</p>
+      </fieldset>
       <div class="coach-actions">
         <button type="button" id="coach-finish" class="primary" disabled>Entendido: pasar a mis frases</button>
         <button type="button" id="coach-skip">Ya conozco la técnica · ir a practicar</button>

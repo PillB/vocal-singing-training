@@ -337,6 +337,7 @@
     $("flow-lines").addEventListener("input", () => { state.plan = []; planView(); });
     $("flow-start").addEventListener("click", start);
     $("flow-mic").addEventListener("click", enableMic);
+    $("flow-mic-off").addEventListener("click", stopMic);
     $("flow-breath").addEventListener("click", () => {
       if (state.phase !== "active") return;
       state.actual[state.idx] = !state.actual[state.idx];

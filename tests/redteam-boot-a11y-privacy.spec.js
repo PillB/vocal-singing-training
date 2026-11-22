@@ -489,7 +489,9 @@ test.describe("cross-12: the first seconds", () => {
     // i18n.js is asked for and never answered; everything after it waits
     await page.route("**/js/i18n.js*", () => {});
     await page.goto(BASE + "/", { waitUntil: "commit" });
-    await page.waitForSelector("html", { state: "attached" });
+    // The body, not only <html>: on a loaded machine the head's scripts can still be on their way at 1.2 s, and
+    // getComputedStyle(null) throws (the full suite with three workers, 2026-11-21). The hold lasts 8 s from here.
+    await page.waitForSelector("body", { state: "attached" });
     await page.waitForTimeout(1200);
     const early = await page.evaluate(() => ({ vis: getComputedStyle(document.body).visibility, cls: document.documentElement.className }));
     expect(early.cls, "held while it could still arrive").toContain("vt-i18n-pending");
@@ -1863,19 +1865,20 @@ test.describe("privacy.html in English", () => {
       const langOf = (el) => (el.closest("[lang]") || document.documentElement).getAttribute("lang");
       const h = document.getElementById("en");
       const sec = h.closest("section[lang]");
-      const back = [...document.querySelectorAll("main a")].filter((a) => a.getAttribute("href") === "./");
+      const back = [...document.querySelectorAll("main a")].filter((a) => /^\.\/(?:\?|$)/.test(a.getAttribute("href")));
       return {
         h: langOf(h),
         spanishFirst: langOf(document.querySelector("main h1")),
         sectionLast: sec ? sec.lastElementChild.querySelector("a")?.textContent.trim() : null,
-        back: back.map((a) => ({ text: a.textContent.trim(), lang: langOf(a) }))
+        back: back.map((a) => ({ text: a.textContent.trim(), lang: langOf(a), href: a.getAttribute("href") }))
       };
     });
     expect(r.h).toBe("en");
     expect(r.spanishFirst).toBe("es");
     expect(r.sectionLast).toMatch(/Back to the app/);
-    expect(r.back.some((b) => /Back to the app/.test(b.text) && b.lang === "en")).toBe(true);
-    expect(r.back.some((b) => /Volver a la app/.test(b.text) && b.lang === "es")).toBe(true);
+    // Each way back leads to its own half's language (index.html's hreflang addresses)
+    expect(r.back.some((b) => /Back to the app/.test(b.text) && b.lang === "en" && b.href === "./?lang=en")).toBe(true);
+    expect(r.back.some((b) => /Volver a la app/.test(b.text) && b.lang === "es" && b.href === "./?lang=es")).toBe(true);
     await ctx.close();
   });
 });
@@ -1894,7 +1897,8 @@ test.describe("B10: the last small targets on a phone", () => {
 
     const pr = await open(browser, { vp: PHONE });
     await pr.page.goto(BASE + "/privacy.html");
-    const backs = await pr.page.evaluate(() => [...document.querySelectorAll("main a")].filter((a) => a.getAttribute("href") === "./").map((a) => Math.round(a.getBoundingClientRect().height * 10) / 10));
+    // Each half's way back, to its language's address (./?lang=es, ./?lang=en)
+    const backs = await pr.page.evaluate(() => [...document.querySelectorAll("main .privacy-back a")].filter((a) => /^\.\/(?:\?|$)/.test(a.getAttribute("href"))).map((a) => Math.round(a.getBoundingClientRect().height * 10) / 10));
     expect(backs.length).toBeGreaterThanOrEqual(2);
     for (const h of backs) expect(h).toBeGreaterThanOrEqual(43.5);
     await pr.ctx.close();

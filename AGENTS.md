@@ -252,6 +252,19 @@ ends (QA-28); `VTStorage.createProfile` defaults to the Pro cap (QA-30).
   and the two auth tests that need a generated secrets file). Do not write
   `if (!API) test.skip()` for a page API the test drives: assert it
   (`expect(api).toBeTruthy()`), so the test fails by name when it goes missing.
+- **The test browser speaks Spanish.** The app opens in the browser's
+  language when the visitor has chosen none (`js/boot-head.js`,
+  `window.VTLangPref`), and Playwright's own default is en-US, so
+  `playwright.config.js` sets `locale: "es-US"` for every spec: Spanish, and
+  nothing else a spec checks moves (`js/billing.js` prices es-US like en-US,
+  es-PE is Peru, in soles; the reminder clock stays 12-hour, 6:00 p.m.). A
+  spec that means another visitor names its locale;
+  `tests/browser-language.spec.js` holds the English path, the address
+  (`?lang=`) and the tab that keeps it, the stored choice, the footer's
+  language links and the learner carry-over (mutation set `lang`),
+  `tests/node/hreflang.test.mjs` the hreflang set and the links' addresses,
+  and `tests/node/language-disclosure.test.mjs` what the privacy page says
+  about it, against what the code keeps and the worker reads.
 - `npm run test:sweep` (`--project=sweep`) — headed watch sweeps with a real
   pointer, slowMo, screenshots and reports. Nightly and on manual dispatch,
   never on the PR gate. `tests/node/playwright-projects.test.mjs` fails if a

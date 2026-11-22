@@ -44,6 +44,20 @@ module.exports = {
   // A failure keeps its trace instead, so it can be diagnosed from one run.
   retries: 0,
   use: {
+    // The app opens in the browser's language when the visitor has chosen none
+    // (js/boot-head.js, window.VTLangPref), and Playwright's own default is
+    // en-US, so every spec that means a Spanish-speaking visitor and stores no
+    // vt_lang would see English. es-US, not es-PE, because it moves the
+    // language and as little else as it can: js/billing.js prices an en-US and
+    // an es-US browser alike (region US: USD on Creem; es-PE is Peru, in soles
+    // on Mercado Pago), and js/region-gate.js reads neither as European. One
+    // thing does move: the reminder clock (js/app.js clockTime) formats in the
+    // browser's own locale, 6:00 PM in en-US and 6:00 p.m. in es-US, both the
+    // 12-hour clock its specs accept. A spec that means someone else sets its
+    // own locale (tests/browser-language.spec.js: en-US, en-GB, es-PE, pt-BR,
+    // ...), and a context it makes with browser.newContext() gets this one
+    // unless it names another.
+    locale: "es-US",
     headless: !headed,
     baseURL: process.env.BASE_URL || `http://127.0.0.1:${testPort}`,
     launchOptions: {

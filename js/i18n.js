@@ -1,6 +1,9 @@
 /**
- * Localization: Spanish (LatAm / Perú, clear international) default + English toggle.
- * Best practices: native language names, no flags, localStorage persistence, full UI parity.
+ * Localization: Spanish (LatAm / Perú, clear international) + English, with a toggle.
+ * Opens in the language js/boot-head.js decides before the first paint
+ * (window.VTLangPref.resolve, and the numbered rule written there).
+ * Best practices: native language names, no flags, localStorage persistence of
+ * the visitor's own choice only, full UI parity.
  */
 (function (global) {
   "use strict";
@@ -2367,6 +2370,7 @@
       }
       return v == null ? "" : v;
     },
+    /** The visitor's choice: kept, then shown. */
     setLang(lang) {
       this.lang = lang === "en" ? "en" : "es";
       try {
@@ -2374,18 +2378,49 @@
       } catch {
         /* ignore */
       }
+      this.showLang(this.lang);
+    },
+    /** Shows a language without keeping it as a choice (setLang keeps it; a page back from the cache does not). */
+    showLang(lang) {
+      this.lang = lang === "en" ? "en" : "es";
       document.documentElement.lang = this.lang === "es" ? "es" : "en";
+      this.keepAddress();
       this.applyDom();
       if (typeof this.onChange === "function") this.onChange(this.lang);
     },
-    init() {
-      let saved = "es";
+    /**
+     * A page opened at an address that names its language (?lang=en, the URL
+     * index.html's hreflang links give each version) names the one now shown
+     * after a switch: that address outranks the stored choice, so left as it
+     * was a reload, or the link copied from it, would show the other one. An
+     * address that names none is left alone.
+     */
+    keepAddress() {
       try {
-        saved = localStorage.getItem("vt_lang") || "es";
+        const url = new URL(location.href);
+        if (!url.searchParams.has("lang")) return;
+        url.searchParams.set("lang", this.lang);
+        history.replaceState(history.state, "", url.href);
       } catch {
-        /* ignore */
+        /* the address stays as it was */
       }
-      this.lang = saved === "en" ? "en" : "es";
+    },
+    /**
+     * The language to open in. js/boot-head.js decides it, before the first
+     * paint (VTLangPref.resolve; its numbered rule). Without it (the file
+     * failed to load) only a choice counts, as before: no hold was put on the
+     * page, so switching it to English now would flash the Spanish first.
+     */
+    startLang() {
+      try {
+        if (global.VTLangPref && typeof global.VTLangPref.resolve === "function") return global.VTLangPref.resolve();
+        return localStorage.getItem("vt_lang");
+      } catch {
+        return "es";
+      }
+    },
+    init() {
+      this.lang = this.startLang() === "en" ? "en" : "es";
       document.documentElement.lang = this.lang === "es" ? "es" : "en";
       this.applyDom();
     },
@@ -2423,11 +2458,32 @@
       if (title) document.title = title;
       const meta = document.querySelector('meta[name="description"]');
       if (meta) meta.setAttribute("content", this.t("meta.desc"));
+      // The way out for a visitor shown the language they do not read: named in
+      // its own language and marked as that language (WCAG 3.1.2), and named
+      // by those words alone, so "click Español" reaches it (2.5.3). It used to
+      // carry the aria-label "Cambiar idioma", which hid its one useful word.
       const langBtn = document.getElementById("btn-lang");
-      if (langBtn) langBtn.textContent = this.t("nav.lang");
+      if (langBtn) {
+        langBtn.textContent = this.t("nav.lang");
+        langBtn.lang = this.lang === "es" ? "en" : "es";
+      }
     }
   };
 
   global.VTI18n = I18n;
   global.t = (k, v) => I18n.t(k, v);
+
+  // A page brought back from the back/forward cache keeps the language it was
+  // left in, while what decides it may have moved meanwhile: the tab now
+  // remembers another language's address (/ to /?lang=en, then Back), or
+  // another tab made a choice. Shown, not kept: what the browser asked for
+  // never turns into a choice. A page drawn anew decided at its own start.
+  // (The catalog check and the copy tests read these strings in a bare VM,
+  // with no events.)
+  if (typeof global.addEventListener !== "function") return;
+  global.addEventListener("pageshow", (e) => {
+    if (!e.persisted) return;
+    const want = I18n.startLang() === "en" ? "en" : "es";
+    if (want !== I18n.lang) I18n.showLang(want);
+  });
 })(window);

@@ -16,8 +16,12 @@
 import { chromium } from '@playwright/test';
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:8765';
 const b = await chromium.launch();
+// The app opens in the browser's language (js/boot-head.js), and a bare Chromium
+// is en-US: the labels it was written for are the Spanish ones. LOCALE=en-US
+// checks the English header, whose labels are not the same widths.
+const locale = process.env.LOCALE || 'es-US';
 for (const [w, h] of [[320,740],[360,740],[390,844],[844,390],[768,1024]]) {
-  const p = await b.newPage({ viewport: { width: w, height: h } });
+  const p = await b.newPage({ viewport: { width: w, height: h }, locale });
   await p.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await p.waitForTimeout(500);
   const r = await p.evaluate(() => {

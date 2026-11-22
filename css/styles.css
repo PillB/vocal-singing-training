@@ -4584,6 +4584,18 @@ footer a {
   color: var(--text-muted);
 }
 
+/* The footer's two language links stay together, and the language on screen
+   reads as the current one, as guide, privacy and terms show theirs (strong).
+   It stays a link, so each version links both addresses for a crawler. */
+footer.app-footer .footer-langs {
+  white-space: nowrap;
+}
+footer.app-footer a[data-lang-link][aria-current="true"] {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
 .two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -1729,6 +1729,17 @@
   }
 
   /**
+   * Whether a click on a footer language link is the language button's choice:
+   * a plain press of the main button, with the strings there to switch to. A
+   * click for a new tab or window (Ctrl or Cmd, Shift, Alt to download, any
+   * other button) is the browser's.
+   */
+  function switchesInPlace(e) {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
+    return typeof window.VTI18n?.setLang === "function";
+  }
+
+  /**
    * On an exercise the header's guide opens beside it, as the exercise's own
    * guide link does: leaving the tab mid-take dropped the take and its
    * rating without the app's own question.
@@ -2030,10 +2041,19 @@
       const anchor = a.getAttribute("data-guide-anchor");
       a.href = anchor ? window.VTTour?.guideHref?.(anchor) || `guide.html#${anchor}` : clean;
     });
-    // privacy.html holds both languages in one file as well: an English reader
-    // opens the English half, and switching back takes the anchor off again.
-    $$('a[href^="privacy.html"]').forEach((a) => {
-      a.setAttribute("href", window.VTI18n?.lang === "en" ? "privacy.html#en" : "privacy.html");
+    // privacy.html and terms.html hold both languages in one file as well: an
+    // English reader opens the English half, and switching back takes the
+    // anchor off again.
+    const english = window.VTI18n?.lang === "en";
+    for (const page of ["privacy.html", "terms.html"]) {
+      $$(`a[href^="${page}"]`).forEach((a) => a.setAttribute("href", english ? `${page}#en` : page));
+    }
+    // The footer's two language links: the one for the language on screen is
+    // marked as the current one. Pressing it changes nothing on screen; it
+    // keeps that language as the visitor's choice, as the button would.
+    $$("a[data-lang-link]").forEach((a) => {
+      if (a.getAttribute("hreflang") === window.VTI18n?.lang) a.setAttribute("aria-current", "true");
+      else a.removeAttribute("aria-current");
     });
   }
 
@@ -11262,6 +11282,18 @@
     $("#btn-lang")?.addEventListener("click", () => {
       const next = (window.VTI18n?.lang || "es") === "es" ? "en" : "es";
       VTI18n.setLang(next);
+    });
+    // The footer's language links are real links (./?lang=en): a crawler
+    // finds each language's address, a new tab or a copied address opens in
+    // that language, and without js/i18n.js the link still loads the address
+    // (js/boot-head.js reads it). With the app running, a plain click is the
+    // language button's choice, kept like it, without a reload.
+    $$("a[data-lang-link]").forEach((a) => {
+      a.addEventListener("click", (e) => {
+        if (!switchesInPlace(e)) return;
+        e.preventDefault();
+        window.VTI18n.setLang(a.getAttribute("hreflang"));
+      });
     });
 
     const s = VTSession.get();

@@ -378,13 +378,38 @@ before it was acted on. "Fixed" means a change in this branch with a test.
 | The new words fit a 360 px phone | The spec measures the kicker and the choices only; the clock wraps alone onto a line | Screens | The non-breaking space and "1 min 15 s" are the gamification thread's (it owns the routine line) |
 | The re-run shows what the pass fixed | It also created three confusions and left the most frequent first-screen labels | Tallies | Reported in section 8; "Plan", "Tus básicos" and the trial button next |
 
+### Second round: the promise tests themselves
+
+Codex's review of this branch, and then a second independent red team (one
+agent per promise and one on flakiness, each survivor re-applied and judged by
+another agent), tried to break `tests/marketing-claims.spec.js` rather than the
+copy: each way a promise could be broken while the spec stayed green was
+planted in the code and run, and the ones that stayed green are below. The spec was rewritten twice. The defects
+named in the last column are planted in `qa/mutate.mjs` and each turns it red;
+the other ways are covered by the visitors and controls described there.
+
+| Promise | How the spec could be fooled | Outcome |
+|---|---|---|
+| No time limit | A cap that spares the first day (Codex); a cap above the one hour tested, a weekly one, one that starts on a launch date after the spec's fixed clock or fourteen days after a first visit, one read from the take history instead of the day ledger; a take cut short, which the spec hid by shortening every take to 50 s; English only, weekends, the catalog or a routine as the way in; the runner's time zone moving "today" | Three visitors: a first day past an hour; ten years on, a Sunday night at a month's end, in English, 40 days of 8 h and 10 h and 300 takes today in both records, on the third page load, from the catalog and from a routine; and one who first came 45 days ago. Every take keeps its full length, is still live 5 s before its end, and is counted; the time zone is pinned and the app's own day key checked. MK22, MK28, MK34–MK37, MK44, MK46 |
+| Voice stays on the device | Small text pieces in beacons and WebSocket frames (Codex); a send put off by a timer, on leaving the page, or to the next visit; the analytics queue, which the spec's automation mark had silenced; headers the page may set (`accept`, a cookie); a file fetched again with the take in its query; WebRTC in a frame made with no address; a worker; a take too large for a beacon, so a beacon upload failed by itself | Counted for a visitor the app treats as a person (its analytics on, checked first), from Start through Save, a minute, the page hidden and left, and the next visit with a minute of it; bytes, requests and repeat fetches are each budgeted; the take is stopped at about 24 KB; nine controls each send the saved take and are caught. MK20, MK26, MK27, MK38–MK41 |
+| No account needed | Only the latest take kept, the rating dropped, a guest history that expires, a store lost on restart | Two takes, one rated, read in a new tab a minute later and after a restart (a new browser from what is kept on disk, session cookies dropped) a month on, where Start still starts. MK21, MK42, MK43, MK45 |
+| No ad during practice | An AdSense unit or another container, unseen by a check for one class (Codex); an ad drawn and cleared between two checks; one mode or one entry point checked at a time, where refreshAllSafe cleared what another had drawn; checks that could never fail (refreshAllSafe outside the home page; the native mode, which has no card for the home slot) | A MutationObserver over the whole routine sees every ad node added; all four modes; each entry point checked by itself while a take starts, while it is live and at every moment of a routine, and each with a control that draws an ad the same way once practice is over; the pairs that could never draw are left out and named. MK3, MK19, MK29–MK33 |
+
+It also found three ways the product broke the promise, now fixed:
+
+| Found | Fix |
+|---|---|
+| The end-of-task card stayed in the rating card through "↻ Otra vez" and the whole next take | `clearPostSessionAd()` as a take starts (`js/app.js`); MK30 |
+| A card from a single exercise rode into the first step of a routine started next | The same, as an exercise opens; MK31 |
+| Mid-routine, Historial and the home page drew their ads (the routine was checked only at the end-of-task card) | `routineUnderWay()` in the ad gate (`js/ads.js`): a routine under way counts as practice. Trade-off: a routine left running keeps those ads away until it is finished, ended or paused; MK32. The older guard after the rating (MK19) is kept as a second layer; with this check in place it cannot be seen alone, so MK19 now removes both |
+
 ## 12. Tests and mutants
 
 | Guard | What it catches | Mutants |
 |---|---|---|
 | `tests/node/marketing-copy.test.mjs` | Banned words in any selling string, every inflection of an age label included; an English twin missing or in Spanish; jargon that confused the personas, the catalog describing a track differently from the first visit, a bare "no account" line, the "das la nota" idiom; a lesson comparison without the city its price is from, or one that does not hold; a trial end that implies progress is lost; the guide's hoarseness advice without its age warning or with different weeks per language; the line in the code, terms or privacy page behind each claim (a drift guard) | MK1, MK2, MK4–MK18, MK23–MK25 (`node qa/mutate.mjs claims`) |
-| `tests/marketing-claims.spec.js` | By what the product does: after an hour today Start still starts; a recorded take sends no audio anywhere (the detector is shown to catch one); a take rated without an account is there in a new tab; with ads on, no ad while the take is live or between a routine's steps, and one after a single exercise | MK3, MK19–MK22 (`node qa/mutate.mjs promises`, in CI's mutation matrix) |
-| `tests/marketing-copy.spec.js` | On a real page at 360 and 390 px, both languages: the kicker stays one line, no choice is cut or over three lines, no sideways scroll, the layout control fits one row; the tab title and description follow the language; Open Graph stays Spanish | DS20–DS22 |
+| `tests/marketing-claims.spec.js` | By what the product does (section 11, second round): full-length takes start, run out and are counted with no Pro or account window for three visitors (a first day past an hour; ten years on, a Sunday at a month's end, in English, heavy in both records, from the catalog and a routine; one who first came 45 days ago); a take recorded, saved, left and come back to sends nothing the size of it by any request, header, cookie, WebSocket, worker or WebRTC connection, for a visitor whose analytics are on, with nine controls; two takes and a rating survive a new tab and a restart a month on; with ads on, no ad of any form at any moment of a routine in any of four modes, nor while a take starts or is live, each check with its own control, and the end-of-task card goes as a take or a routine starts | MK3, MK19–MK22, MK26–MK46 (`node qa/mutate.mjs promises`, in CI's mutation matrix) |
+| `tests/marketing-copy.spec.js` | On a real page at 360 and 390 px, both languages: the kicker stays one line, no choice is cut or over three lines, no sideways scroll, the layout control fits one row; the tab title and description follow the language; Open Graph stays Spanish | DS20–DS23 (DS23: the kicker set larger on phones). CI's runner has no Inter and draws in DejaVu Sans, which is wider, so the kicker's tracking is 0.06em under 400 px; reproduce with a fontconfig that maps Inter to DejaVu |
 | `qa/customer-research/test_rules.py` | Answers matched to the wrong round's batch; split-half reported for three cards, or unbounded for four; reliability that comes from the bad offer alone; "not worse" judged on the point estimate; a verdict on a question that failed its checks; "better" while any gate failed | 7 rule mutants plus 6 scoring mutants in `mutate_ssr.py`, all killed |
 
 ## 13. Handed to other threads, and decisions for the owner
@@ -441,3 +466,10 @@ halves, and settle the asset-stamp conflicts with `npm run assets:bump`.
 | MR-20 | Med | `start.step3sub` | "No necesitas cuenta" beside "Entrar" raised a sign-up-wall suspicion (7 of 9) | Reassurance that contradicts a visible control | Fixed; MK25 |
 | MR-21 | Med | `meta.desc` | "si das la nota" is also an idiom for making a scene | Untested pun in the most widely shown line | Fixed; MK24 |
 | MR-22 | Low | `tab.*` | The catalog's switch described the tracks differently from the picker | Two strings for one thing | Fixed; MK23 |
+| MR-23 | Test | `marketing-claims.spec.js` | A time cap that spares the first day passed (Codex) | Only a first-day visitor was tested | Fixed: returning and heavy visitors; MK28 |
+| MR-24 | Test | `marketing-claims.spec.js` | Audio in small text payloads or WebSocket frames passed (Codex) | Only large or audio-typed requests counted | Fixed: every byte, request and frame counted; MK26, MK27 |
+| MR-25 | Test | `marketing-claims.spec.js` | An AdSense unit or another container passed (Codex) | One class looked for in one slot | Fixed: every ad form in every slot; MK29 |
+| MR-26 | High | `js/app.js` | The end-of-task card stayed through the next take and into a routine started next | Nothing cleared it until the next ad decision | Fixed: cleared as a take starts and an exercise opens; MK30, MK31 |
+| MR-27 | High | `js/ads.js` | Mid-routine, Historial and the home page drew ads | The gate looked at the live take only | Fixed: a routine under way counts as practice; MK32 |
+| MR-28 | Test | `marketing-claims.spec.js` | The second red team's ways round the spec (section 11, second round) | Fixed visitors, a shortened take, automation marks that silence analytics, point checks | Fixed: spec rewritten; MK33–MK46 |
+| MR-29 | Low | `css/styles.css` | The line over the title wrapped onto two lines at 360 px in CI | CI draws in DejaVu Sans, wider than Inter | Fixed: tracking 0.06em under 400 px; DS23 |

@@ -62,7 +62,7 @@ test("first-use lesson teaches body and mouth before enabling Start", async ({ p
   await page.locator("#flow-start").click();
   await expect(page.locator("#flow-run-teach-hint")).toBeVisible();
   await page.locator("#flow-run-teach").click();
-  await expect(page.locator("#coach-stage")).toContainText("frase");
+  await expect(page.locator("#coach-caption")).toContainText("frase");
 });
 test("teaching stage does not save any day, ask for a microphone or invent measured checkpoints", async ({ page }) => {
   await open(page, { teach: true });

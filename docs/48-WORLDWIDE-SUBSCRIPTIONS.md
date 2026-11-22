@@ -275,12 +275,20 @@ Each item gives what would show it and what we would do.
 None of this is code. Each item is a sign-up, a payment or a legal statement
 in his name.
 
-1. **Buy a domain** and point GitHub Pages at it. Then change `SITE_ORIGIN` in
-   `workers/entitlements/wrangler.toml` and the Google sign-in origins, and
-   redeploy. They must match exactly, or every token fails its audience check.
-   Creem needs it, and so does security: on `pillb.github.io` every page of
-   the account's Pages sites shares the app's origin and can read its
-   sign-in session.
+1. **Buy a domain and move the site to Cloudflare Pages on it,** before
+   anything below. A domain pointed at GitHub Pages is not enough: Creem's
+   review refuses free hosting subdomains (`*.github.io`, `*.pages.dev`), and
+   GitHub's Pages limits say Pages may not be used to run an online business,
+   an e-commerce site or commercial software as a service. Then change
+   `SITE_ORIGIN` in `workers/entitlements/wrangler.toml` and the Google
+   sign-in origins, and redeploy. They must match exactly, or every token
+   fails its audience check, and the worker builds Creem's return address
+   from `SITE_ORIGIN`. Create no Creem product or webhook until the move is
+   done, so every address Creem holds is the new one. Security needs the move
+   too: on `pillb.github.io` every page of the account's Pages sites shares
+   the app's origin and can read its sign-in session. How saved practice
+   follows to the new origin is the deploy-readiness thread's design (a
+   bridge page on the old origin).
 2. **Create a support mailbox on that domain** (for example `soporte@`) and
    answer it within 3 business days.
 3. **Fill in the three placeholders in `terms.html`:** the seller's legal

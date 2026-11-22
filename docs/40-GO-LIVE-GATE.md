@@ -126,10 +126,21 @@ a country Stripe will take as a seller.
 **Before you apply, because a Creem rejection is final** (the full case is
 `docs/48-WORLDWIDE-SUBSCRIPTIONS.md`):
 
-1. **Your own domain.** Creem's review refuses `*.github.io` sites. Point a
-   domain at GitHub Pages, then change `SITE_ORIGIN` in `wrangler.toml` and
-   the Google sign-in origins to match, and redeploy. They must match
-   exactly, or every token fails its audience check.
+1. **Your own domain, on a host that allows selling.** Creem's review
+   refuses free hosting subdomains (`*.github.io`, `*.vercel.app`,
+   `*.netlify.app`, and so `*.pages.dev` too). A domain pointed at GitHub
+   Pages does not settle it: GitHub's Pages limits say Pages is not to be
+   used to run an online business, an e-commerce site or commercial software
+   as a service. So move the site to Cloudflare Pages on the domain you own.
+   A custom domain on this repository would also 301 every old
+   `/vocal-singing-training/` path, to `http://` until HTTPS is enforced,
+   which leaves no old page to carry saved practice across. Then change
+   `SITE_ORIGIN` in `wrangler.toml` and the Google sign-in origins to match,
+   and redeploy. They must match exactly, or every token fails its audience
+   check, and the worker builds Creem's return address from `SITE_ORIGIN`
+   (`workers/entitlements/src/checkout.js`). Create the Creem products and
+   the webhook only after the move, so no address Creem holds is the old
+   one.
    There is a second reason, a security one. Every GitHub Pages site of the
    account is served from the one origin `https://pillb.github.io`, the
    user-site repository's page included, and an origin is the browser's only
@@ -139,8 +150,12 @@ a country Stripe will take as a seller.
    review found that page loading a third-party script with no integrity
    check and no Content Security Policy. A domain of its own gives the app
    an origin nobody else's page shares.
-   Progress saved in this browser stays with the old origin; how it moves to
-   the new one is being worked out in the deploy-readiness thread.
+   Progress saved in this browser stays with the old origin. The
+   deploy-readiness thread has a tested design for carrying it across (a
+   bridge page on the old origin, opened as a popup, that hands an
+   allow-listed copy to the new one; credentials never travel). At the
+   cutover the worker also revokes every session made before it, and the
+   old origin comes off Google's authorized origins.
 2. **A support address on that domain**, and step 2's three values filled in.
 3. **A RUC, or the contador's word that you need none.** Creem's Merchant
    Terms 3.4.9 require being registered as a business or as self-employed.

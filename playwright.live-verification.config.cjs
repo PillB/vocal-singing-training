@@ -1,0 +1,2 @@
+const base=require('./playwright.config.js');
+module.exports={...base,webServer:undefined,retries:0,workers:2,testMatch:/live-pages\.spec\.js$/,projects:['chromium','firefox','webkit'].map(browserName=>({name:browserName,use:{browserName,viewport:{width:1280,height:800}}})),use:{...base.use,screenshot:'only-on-failure',trace:'retain-on-failure'},reporter:[['line'],['./qa/no-skips-reporter.cjs'],['json',{outputFile:'test-results/live-suite.json'}]]};

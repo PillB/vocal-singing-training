@@ -1,0 +1,42 @@
+name: Focused live deployment verification
+on:
+  push:
+    branches: ['qa/live-verification-*']
+permissions:
+  contents: read
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      LIVE_PAGES: '1'
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - name: Existing live Playwright suite in three browser engines
+        id: suite
+        continue-on-error: true
+        run: npx playwright test --config=playwright.live-verification.config.cjs --output=test-results/live-suite
+      - name: Verify deployed content, public APIs and desktop/mobile navigation
+        id: audit
+        if: always()
+        continue-on-error: true
+        run: node qa/live-verification/audit.mjs
+      - name: Save live verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-verification
+          path: test-results/
+      - name: Require both checks to pass
+        if: always()
+        env:
+          SUITE: ${{ steps.suite.outcome }}
+          AUDIT: ${{ steps.audit.outcome }}
+        run: test "$SUITE" = success && test "$AUDIT" = success

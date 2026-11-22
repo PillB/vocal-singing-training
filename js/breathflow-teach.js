@@ -165,6 +165,12 @@
   }
 
   function play() {
+    // The microphone classifier hears loudspeakers too. Never let an
+    // instructional exemplar contaminate its candidate count.
+    if (global.VTBreathFlow?.state?.()?.mic !== "off") {
+      soundLabel("Apaga o cancela primero el micrófono: el sonido del altavoz podría confundirse con tu respiración.");
+      return;
+    }
     stopSound();
     try {
       if (state.stage === 2 && state.sound === "hiss") playHiss();

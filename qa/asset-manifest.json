@@ -112,8 +112,8 @@
     "sha": "3cb392b8987ff544"
   },
   "js/breathflow.js": {
-    "v": "20261122d",
-    "sha": "856fdb603e1c5059"
+    "v": "20261122e",
+    "sha": "ceae7100dfc32b96"
   },
   "js/daily-loop.js": {
     "v": "20261113a",
@@ -298,5 +298,13 @@
   "qa/qa.js": {
     "v": "20261102a",
     "sha": "ef27b5dff6b85163"
+  },
+  "css/breathflow-teach.css": {
+    "v": "20261122a",
+    "sha": "d44f2a092f12c076"
+  },
+  "js/breathflow-teach.js": {
+    "v": "20261122a",
+    "sha": "7a4f0403a36f7338"
   }
 }

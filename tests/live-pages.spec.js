@@ -27,8 +27,12 @@ describeLive("Live Pages validation", () => {
       }
       const AC = window.AudioContext || window.webkitAudioContext;
       if (navigator.mediaDevices && AC) {
-        navigator.mediaDevices.getUserMedia = async () => {
-          const ctx = new AC();
+        // Share the production graph, as the cross-browser audio fixture does.
+        const syntheticMic = async () => {
+          let ctx = window.VTPiano?.ctx || window.VTSharedAudioCtx;
+          if (!ctx || ctx.state === "closed") ctx = new AC();
+          window.VTSharedAudioCtx = ctx;
+          if (ctx.state === "suspended" || ctx.state === "interrupted") await ctx.resume();
           const dest = ctx.createMediaStreamDestination();
           const osc = ctx.createOscillator();
           const g = ctx.createGain();
@@ -38,6 +42,8 @@ describeLive("Live Pages validation", () => {
           osc.start();
           return dest.stream;
         };
+        navigator.mediaDevices.getUserMedia = syntheticMic;
+        if (typeof MediaDevices !== "undefined") MediaDevices.prototype.getUserMedia = syntheticMic;
       }
     });
     await page.goto(LIVE, { waitUntil: "domcontentloaded", timeout: 60000 });

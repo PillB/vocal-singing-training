@@ -26,3 +26,13 @@ Three engines and three viewport journeys cost extra CI time but test the actual
 public deployment; saved screenshots/JSON/traces support diagnosis. A failing
 suite or audit fails the final job even though both evidence steps are allowed
 to finish. Results are evidence for this commit and timestamp only.
+
+First live run 44980101678: all six HTML files and 74 assets match main;
+1280x800, 390x844 and 844x390 real-pointer navigation passed, no page errors.
+The worker is demonstrably old: no probe/db/kv result and trialDays 30.
+22/24 live cases passed; Firefox/WebKit Start timed out with the Chromium-only
+microphone fixture. Retry with the already established shared-audio-context
+and prototype fixture from tests/helpers/e2e.js and cross-browser-audio.spec.js.
+The original failures remain in the first run's traces; no app file changes.
+Wrangler is signed out and there are no repository Actions secrets, so a real
+worker deployment needs an authenticated Cloudflare session.

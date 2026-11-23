@@ -1110,7 +1110,17 @@ test.describe("Admin page", () => {
         (seen[m[1]] = seen[m[1]] || {})[name] = stamp[1];
       }
     }
-    expect(Object.keys(seen["css/styles.css"]).sort()).toEqual([...pages].sort());
+    // The BreathFlow tutorial is a deliberately self-contained landing page
+    // (its teaching stylesheet is only loaded there). Shared CSS is still
+    // required on every original app/admin/guide/legal page. An additional
+    // page may be standalone, but every asset it DOES load must be stamped.
+    const commonPages = pages.filter((name) => name !== "breathflow.html");
+    expect(Object.keys(seen["css/styles.css"]).sort()).toEqual(commonPages.sort());
+    if (pages.includes("breathflow.html")) {
+      expect(seen["css/breathflow-teach.css"]?.["breathflow.html"]).toBeTruthy();
+      expect(seen["js/breathflow-teach.js"]?.["breathflow.html"]).toBeTruthy();
+      expect(seen["js/breathflow.js"]?.["breathflow.html"]).toBeTruthy();
+    }
     for (const [file, byPage] of Object.entries(seen)) {
       expect(new Set(Object.values(byPage)).size, `${file}: ${JSON.stringify(byPage)}`).toBe(1);
     }

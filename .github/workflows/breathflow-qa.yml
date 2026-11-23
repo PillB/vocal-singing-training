@@ -1,0 +1,79 @@
+name: BreathFlow teaching acceptance
+on:
+  pull_request:
+    paths:
+      - 'breathflow.html'
+      - 'js/breathflow*.js'
+      - 'css/breathflow*.css'
+      - 'tests/breathflow.spec.js'
+      - 'tests/admin.spec.js'
+      - 'qa/asset-manifest.json'
+      - 'qa/mutate-breathflow.mjs'
+      - 'qa/breathflow-oracle.mjs'
+      - 'tests/node/breathflow-mutation-oracle.test.mjs'
+      - 'playwright.config.js'
+      - 'tests/node/playwright-projects.test.mjs'
+      - 'AGENTS.md'
+      - 'agent.md'
+      - 'CLAUDE.md'
+      - 'docs/50-TEACHING-VISUAL-PEDAGOGY.md'
+      - 'docs/51-VOICE-SKILLS-PROGRESSION.md'
+      - '.github/workflows/breathflow-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: breathflow-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  teaching-flows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Teaching, body checkpoints, saving, denied/late mic, mobile
+        run: npx playwright test tests/breathflow.spec.js --project=chromium --workers=2 --reporter=line
+        env:
+          CI: '1'
+      - name: "Source-drift contract: WebKit must actually select BreathFlow tests"
+        run: node --test tests/node/playwright-projects.test.mjs tests/node/breathflow-mutation-oracle.test.mjs
+      - name: Mutant falsifiability gate — each planted defect must turn its own test red
+        run: node qa/mutate-breathflow.mjs
+        env:
+          CI: '1'
+      - name: Preserve failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: breathflow-focused-failures
+          path: test-results/
+          if-no-files-found: ignore
+
+  webkit-learning:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps webkit
+      - name: Desktop WebKit and emulated iPhone learning / sync regressions
+        run: xvfb-run -a npx playwright test tests/breathflow.spec.js --project=webkit --project=mobile-safari --workers=2 --reporter=line -g "first-use lesson|returning learner|two open tabs|Sunday-to-Monday|refused browser storage|reduced-motion|phrase contrast fits"
+        env:
+          CI: '1'
+      - name: Preserve WebKit teaching failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: breathflow-webkit-failures
+          path: test-results/
+          if-no-files-found: ignore

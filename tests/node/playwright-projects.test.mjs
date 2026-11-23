@@ -65,3 +65,17 @@ test("BASE_URL, VT_BASE and VT_TEST_PORT agree, so every spec tests the same ser
   assert.deepEqual(bases({ VT_BASE: "https://staging.example" }), ["https://staging.example", "https://staging.example"]);
   assert.deepEqual(bases({ BASE_URL: "https://a.example", VT_BASE: "https://b.example" }), ["https://a.example", "https://b.example"], "both given: neither is overwritten");
 });
+
+test("WebKit and emulated iPhone execute the BreathFlow lesson, without unlocking heavyweight sweeps", () => {
+  const path = "/work/tests/breathflow.spec.js";
+  for (const name of ["webkit", "mobile-safari"]) {
+    const selected = project(name);
+    assert.ok(selected, name + ": project is configured");
+    assert.equal(selected.testMatch.test(path), true,
+      name + " must run BreathFlow learning and two-tab storage tests, not report 'No tests found'");
+    assert.equal(selected.testMatch.test("/work/tests/fullscreen-all-clicks.spec.js"), false,
+      name + " must not collect expensive headed visual sweeps");
+  }
+  assert.equal(project("firefox").testMatch.test(path), false,
+    "desktop Firefox matrix stays unchanged until specifically equipped to run this UI contract");
+});

@@ -9,6 +9,8 @@ on:
       - 'tests/admin.spec.js'
       - 'qa/asset-manifest.json'
       - 'qa/mutate-breathflow.mjs'
+      - 'qa/breathflow-oracle.mjs'
+      - 'tests/node/breathflow-mutation-oracle.test.mjs'
       - 'playwright.config.js'
       - 'tests/node/playwright-projects.test.mjs'
       - 'AGENTS.md'
@@ -38,7 +40,7 @@ jobs:
         env:
           CI: '1'
       - name: "Source-drift contract: WebKit must actually select BreathFlow tests"
-        run: node --test tests/node/playwright-projects.test.mjs
+        run: node --test tests/node/playwright-projects.test.mjs tests/node/breathflow-mutation-oracle.test.mjs
       - name: Mutant falsifiability gate — each planted defect must turn its own test red
         run: node qa/mutate-breathflow.mjs
         env:

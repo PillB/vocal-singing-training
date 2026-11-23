@@ -530,7 +530,7 @@ test("the exercise's guide link opens the guide at its practice section, in eith
   // Every other guide link is rewritten to the language's start; this one
   // names its section, so it keeps it (#practica, #practica-en).
   await boot(page, { lang: "es" });
-  const link = page.locator(".guide-site-link a");
+  const link = page.locator('.guide-site-link a[data-guide-anchor="practica"]');
   await expect(link).toHaveAttribute("href", "guide.html#practica");
   await page.evaluate(() => VTI18n.setLang("en"));
   await expect(link).toHaveAttribute("href", "guide.html#practica-en");

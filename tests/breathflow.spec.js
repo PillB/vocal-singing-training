@@ -543,5 +543,5 @@ test("retry merges newer practice from another tab", async ({ page }) => {
   });
   await page.locator("#flow-save").click();
   await expect(page.locator("#flow-done")).toBeVisible();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("vt_days_v1")).days["2026-11-01"].sec)).toBe(70);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("vt_days_v1")).days["2026-11-01"]?.sec)).toBe(70);
 });

@@ -16,6 +16,15 @@ import { behaviorDetected } from "./breathflow-oracle.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cases = [
   {
+    id: "BF-M18 layout refit overrides a reader",
+    path: "js/app.js",
+    anchor: 'const top = stageRestTop(stage, vh);',
+    broken: 'document.getElementById("ex-title").scrollIntoView({ block: "start", behavior: "instant" });\n      const top = stageRestTop(stage, vh);',
+    spec: 'tests/redteam-exercise-language.spec.js',
+    name: 'stage refit respects a learner reading below the stage'
+  },
+
+  {
     id: "BF-M16 cached retry erases a newer tab",
     path: "js/storage.js",
     anchor: 'const bag = global.VTDays.merge(JSON.parse(unsaved.get(key)), persisted);',
@@ -150,7 +159,7 @@ function replaceOnlyOnce(original, anchor, broken, id) {
 function runMutant(item) {
   const command = item.node ? process.execPath : "npx";
   const args = item.node ? ["--test", "tests/node/playwright-projects.test.mjs"] : [
-    "--no-install", "playwright", "test", "tests/breathflow.spec.js",
+    "--no-install", "playwright", "test", item.spec || "tests/breathflow.spec.js",
     "--project=chromium", "--workers=1", "--reporter=line", "-g", item.name
   ];
   const result = spawnSync(command, args, { cwd: root, encoding: "utf8",

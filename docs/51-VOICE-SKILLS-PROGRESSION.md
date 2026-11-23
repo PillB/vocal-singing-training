@@ -114,3 +114,11 @@ Retry merges the latest persisted day bag via VTDays.merge before flushing,
 so a newer tab’s distinct days/exercise IDs are retained. This inherits the
 existing same-day max(n,sec) union policy; it does not add concurrent counts
 and cannot promise exact take totals across simultaneous offline devices.
+
+Hosted reconciliation: pin supported Ubuntu24.04 after an Ubuntu26 Microsoft
+apt403; scope the guide-link test to its actual practice-anchor link alongside
+the new teaching link. A stale-retry mutant must fail an assertion on a missing
+day rather than crash with TypeError, so the oracle now reads that day safely.
+The language/scroll trace revealed a shared stage-refit title-navigation bug;
+remove that navigation and retain explicit exercise-entry scrolling, with
+speaking/singing and phone/desktop regressions plus a restored-jump mutant.

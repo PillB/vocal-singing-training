@@ -825,3 +825,32 @@ test.describe("the microphone notice", () => {
     expect((await noticeOpen(page)).text).toBe(es.text);
   });
 });
+
+
+for (const size of [LAPTOP, PHONE]) {
+  for (const id of ["s9-pitch-match", "v1-diction"]) {
+    test(`stage refit respects a learner reading below the stage: ${id} at ${size.width}px`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await seed(page, { lang: "es" });
+      await openEx(page, id);
+      await page.locator("#btn-toggle-guide").click();
+      await page.locator("#btn-toggle-metrics").click();
+      if (size.width < 500 && id === "s9-pitch-match") {
+        await page.locator("#btn-toggle-piano").click();
+        await expect(page.locator("#piano-block")).toHaveClass(/is-settled/);
+      }
+      await expect(page.locator("#btn-toggle-guide")).toHaveAttribute("aria-expanded", "true");
+      await page.evaluate(() => scrollTo({ top: 700, behavior: "instant" }));
+      const before = await page.evaluate(() => scrollY);
+      expect(before, "control: the learner reached content below the stage").toBeGreaterThan(300);
+      await page.evaluate(() => {
+        window.VTApp.fitHighwayToViewport();
+        window.VTApp.fitHighwayToViewport();
+      });
+      await settle(page, 150);
+      expect((await page.locator("#highway-stage").boundingBox()).height).toBeGreaterThanOrEqual(120);
+      const after = await page.evaluate(() => scrollY);
+      expect(Math.abs(after - before), `refit moved reading position ${before} -> ${after}`).toBeLessThanOrEqual(2);
+    });
+  }
+}

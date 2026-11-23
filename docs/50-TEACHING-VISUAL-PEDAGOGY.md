@@ -169,7 +169,7 @@ physical iPhone or a pedagogy study.
 
 The old guide forced repeat/Skip on **every reload**, a failure in daily use,
 even for someone who had already demonstrated the concept. BreathFlow now
-remembers the outcome **per local profile** (`vt_breathflow_lesson_v1_<profile>`,
+remembers the outcome **per local profile** (`vt_breathflow_lesson_v2_<profile>`,
 value `verified` or `skipped`), folds the tutorial for that profile and
 shows an explicit "Repasar técnica" control. A direct guide link
 (`#flow-coach`) opens it even for returning learners. A different profile
@@ -269,3 +269,19 @@ epoch in isolation; each must produce a specific, explainable failing
 observable rather than an unrelated runner crash. Keep competing PR heads,
 their CI SHAs, and the production GitHub Pages commit separate in the release
 ledger.
+
+
+## 2026-11-22 — Didactic migration after adding phrase-boundary teach-back
+
+The phrase-boundary comparison is a substantive new learning outcome, not merely
+a visual restyling. To avoid treating a prior completion as evidence that the
+learner saw the updated explanation, completion markers now use
+`vt_breathflow_lesson_v2_<profile>`. An earlier
+`vt_breathflow_lesson_v1_<profile>` marker does **not** unlock the new lesson
+automatically. Returning experienced users can still choose the explicit
+`Ya conozco la técnica` fast path. This introduces one extra review/skip
+after upgrading, rather than misrepresenting historical progress.
+`legacy v1 completion does not bypass new phrase-boundary teaching` is
+the observable browser test; BF-M14 deliberately downgrades the key and
+must make that test fail. A verified v2 decision shows understanding of the
+choice, **not** verified anatomical or muscular technique.

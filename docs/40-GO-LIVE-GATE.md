@@ -429,6 +429,19 @@ Then the preapproval link into `js/billing-config.js`, exactly as step 5.
 > as the terms say, and the browser keeps the licence (402), so Pro comes back
 > when a charge goes through. So:
 >
+> - **Put the two `MP_*` secrets only on a worker deployed from this branch
+>   or later (step 1).** A worker from before VG-84 that held them stored
+>   Mercado Pago licences with no `paid` field, and the first subscription
+>   notice after the upgrade marks such a licence unpaid (202) until the
+>   next approved charge. Its stored data cannot tell an approved charge
+>   from an instalment Mercado Pago gave up on (it read an invoice's
+>   "processed", "collected or exceeded retries", as paid), so no automatic
+>   repair is safe. If the secrets were ever set on an older worker, first
+>   list the `lic:` records with `provider` "mercadopago" and no `paid`, in
+>   the `ENTITLEMENTS` KV and in the D1 ledger, and confirm each against
+>   Mercado Pago's authorized payments for its subscription before opening
+>   the rail (PR #54 review, 2026-11-23). Today none exist: `/v1/health`
+>   says `mercadopagoConfigured: false`.
 > - **Subscribe the webhook to "Planes y suscripciones"** (topics
 >   `subscription_preapproval` and `subscription_authorized_payment`), and to
 >   **"Pagos"** (`payment`) as well. The authorized-payment topic is the one

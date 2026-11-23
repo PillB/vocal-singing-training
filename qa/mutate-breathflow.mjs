@@ -100,6 +100,13 @@ const cases = [
     name: "phrase contrast fits narrow mobile and enlarged type without clipping"
   },
   {
+    id: "BF-M14 old tutorial completion bypasses new phrasing skill",
+    path: "js/breathflow-teach.js",
+    anchor: '  const KEY_PREFIX = "vt_breathflow_lesson_v2_";',
+    broken: '  const KEY_PREFIX = "vt_breathflow_lesson_v1_";',
+    name: "legacy v1 completion does not bypass new phrase-boundary teaching"
+  },
+  {
     id: "BF-M9 WebKit selector silently drops teaching tests",
     path: "playwright.config.js",
     anchor: '      name: "webkit",\n      use: { browserName: "webkit" },\n      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call|breathflow)\\.spec\\.js/',
@@ -151,4 +158,4 @@ function evaluateMutant(item) {
 }
 
 for (const item of cases) evaluateMutant(item);
-process.stdout.write("PASS: all thirteen BreathFlow behavioral mutants killed and restored\n");
+process.stdout.write("PASS: all fourteen BreathFlow behavioral mutants killed and restored\n");

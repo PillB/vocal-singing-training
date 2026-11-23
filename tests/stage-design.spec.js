@@ -135,6 +135,14 @@ function floorAudit() {
   return { small, tiny, overflow: document.documentElement.scrollWidth > innerWidth };
 }
 
+/** True when the page holds still for 300 ms: a scroll the app started (smooth or a frame late) has ended. */
+function holdsStill() {
+  return new Promise((done) => {
+    const y = scrollY;
+    setTimeout(() => done(scrollY === y), 300);
+  });
+}
+
 /** How many lines a box's text takes (its line boxes' distinct tops). */
 function lineCount(id) {
   const range = document.createRange();
@@ -664,7 +672,16 @@ test.describe("Landscape: a phone on its side", () => {
       if (phase === "scrolled") await page.evaluate(() => window.scrollBy({ top: 300, behavior: "instant" }));
       if (phase === "paused") {
         await page.locator("#btn-practice-stop").click();
+        // Stop scrolls to the rating card itself (revealRating: on the next
+        // frame, then a smooth scroll). A scroll to the top sent before that
+        // frame was undone by it: the page went down under the measurement
+        // (nightly 44914917075: scrollY 43, the stage under the header). Let
+        // that scroll start and end first; a later scroll aborts any smooth
+        // one still running (CSSOM View, "perform a scroll").
+        await expect.poll(() => page.evaluate(holdsStill), { timeout: 5000 }).toBe(true);
         await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+        await expect.poll(() => page.evaluate(holdsStill), { timeout: 5000 }).toBe(true);
+        expect(await page.evaluate(() => scrollY), "paused: nothing carried the page off the top before Pausar").toBe(0);
         await page.locator("#btn-session-pause").click();
         await expect(page.locator("#structured-progress")).toHaveText("Ejercicio 1 de 2 · En pausa");
         // Reanudar is wider than Pausar: the header makes room for it once its

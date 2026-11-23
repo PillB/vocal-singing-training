@@ -6,6 +6,16 @@ export function behaviorDetected(item, result, log) {
     log.includes("AssertionError [ERR_ASSERTION]") &&
     log.includes("webkit must run BreathFlow learning and two-tab storage tests") &&
     log.includes("tests/node/playwright-projects.test.mjs");
-  return log.includes(item.name) && log.includes("Error: expect(") &&
+  // Playwright prints "Error: expect(locator)..." for matcher failures.
+  // A custom assertion message (such as the BF-M13 layout dimensions)
+  // instead prints "Error: {...}" then the "expect(received)" matcher.
+  // Admit only this named, observable overflow regression, not any
+  // arbitrary failed process or an unrelated assertion.
+  const namedMatcher = log.includes("Error: expect(");
+  const layoutAssertion = item.id === "BF-M13 phrase comparison ignores narrow viewports" &&
+    log.includes("expect(received).toBe(expected)") &&
+    log.includes('"overflow":true') &&
+    log.includes("Error: {");
+  return log.includes(item.name) && (namedMatcher || layoutAssertion) &&
     !log.includes("No tests found");
 }

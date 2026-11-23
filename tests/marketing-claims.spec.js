@@ -9,7 +9,8 @@
  *    on the third page load, from the catalog and a routine; and one who first came 45 days ago. Single
  *    exercises, Start again after a rating, a pitch exercise, the catalog and a routine are each a way in.
  *    Third round: the longest exercise (20 minutes), a drill with no microphone, "+30 s" and Next in a routine,
- *    the daily class, and a visitor on a phone in Madrid whose trial has ended and whose basics are done. Every
+ *    the daily class (started by its size chip and Start since the fifth round), and a visitor on a phone in Madrid
+ *    whose trial has ended and whose basics are done. Every
  *    take played to its end, and the takes "+30 s" and Start right after Stop begin, check at their start and
  *    five seconds before their end that the microphone listens and its frames reach the take (the level meter
  *    moves), and that the piano sounds where its box is ticked; the take stopped half a minute in checks at its
@@ -22,8 +23,8 @@
  *    its end and saved (a second save), three minutes on, and two more visits.
  *  - "No necesitas cuenta" / "no account needed": takes on both tracks, a rating, a saved recording, a routine
  *    half done and a take made in a second tab open all along are there in both tabs a minute later, and after
- *    the browser is restarted 31 and 32 days on, where Historial shows the day and the recording and a new take
- *    is kept.
+ *    the browser is restarted 31 and 32 days on, where Historial shows the day and the recording, the recording
+ *    plays, and a new take is kept, with no sign-in asked at the save or the play.
  *  - "nunca durante la práctica" (terms.html): with ads switched on, no ad of any kind (studio tip, preview or
  *    AdSense unit) is drawn at any moment of a guided routine, in any of the four ad modes, whatever is called
  *    and wherever the visitor goes in between, nor while a take starts or is live; the end-of-task card goes as
@@ -31,13 +32,18 @@
  *    continued, or paused with its step taken anyway, is practice again. Each check has a control that draws an
  *    ad in the same way when practice is over, so none of them passes because nothing could be drawn.
  *
- * Each has planted defects in qa/mutate.mjs (the "promises", "promises-voice" and "promises-account-ads" sets:
- * MK3, MK19 to MK22, MK26 to MK46, MK49 to MK78) that turn it red. MK26 to MK29 are what Codex's review showed the
- * first version let through; MK30 to MK46 are what the second red team showed the second version let through;
- * MK49 to MK70 are the third red team's, on paths the third version walks now; MK71 to MK75 the review of that
- * round's: silent takes and a send on an interval's later tick; MK76 to MK78 the review of those fixes: a cap
- * after the level meter, a piano booked but not heard, and a loop silent after its first pass (docs/48 section 11). What no scenario can walk is held
- * in the code itself by tests/node/promise-guards.test.mjs ("guards" set).
+ * Each has planted defects in qa/mutate.mjs that turn it red (MK3, MK19 to MK22, MK26 to MK46, MK49 to MK86), in
+ * four browser sets: "promises" and "promises-time-2" (the time limit's, in two halves), "promises-voice" and
+ * "promises-account-ads". MK26 to MK29 are what Codex's review showed the first version let through; MK30 to MK46
+ * are what the second red team showed the second version let through; MK49 to MK70 are the third red team's, on
+ * paths the third version walks now; MK71 to MK75 the review of that round's: silent takes and a send on an
+ * interval's later tick; MK76 to MK78 the review of those fixes: a cap after the level meter, a piano booked but not
+ * heard, and a loop silent after its first pass; MK79 to MK81 the fourth red team's: a reference that stops
+ * looping, a mode handed silence and a highway fed nothing; MK82 to MK86 the fifth's: a mode handed a copy with its
+ * sound gate shut, a loop whose next pass is cancelled, a highway stopped for the take, the class chip turned back
+ * into Esencial where the start panel picks the size, and a guest asked to sign in before a saved take plays
+ * (docs/48 section 11). What no scenario can walk is held in the code itself by tests/node/promise-guards.test.mjs
+ * ("guards" set).
  */
 const { test, expect } = require("@playwright/test");
 const fs = require("fs");
@@ -209,6 +215,8 @@ const MIC_FREE = new Set(["s17-jaw-neck-release", "s18-costal-breath"]);
 const LOOPS = new Set(["s4-lip-trills", "s3-song-stanzas"]);
 /** The exercises whose loop was checked, so a visit can show its checks ran. */
 const loopsChecked = new Set();
+/** The looping exercises whose take outlasted the pass sounding at its start and was held to another, likewise. */
+const passesChecked = new Set();
 
 /** What a live take is doing for the visitor: is the microphone open, and does the reference piano sound. */
 const heard = (page) =>
@@ -224,17 +232,74 @@ const heard = (page) =>
 const secondsLeft = (page) => page.evaluate(() => (window.VTApp.getState().timer.endAt - performance.now()) / 1000);
 
 /**
+ * In the page: from now on, count the frames the exercise's mode is handed that are the engine's own frame (the
+ * object the microphone's engine handed the take, not a copy of it) with its sound gate open and a raw pitch, the
+ * fields the modes decide on (a trill's tracker and the voice detector read `sounding`, a siren `rawFreq`; the
+ * no-microphone ticker's frames are marked noMic). Not its exact pitch: an octave error or a speech drill may read
+ * the tone another way, and that is not what this asks. Mark the time, so the highway's points drawn from now on
+ * are told from older ones, and set the level meter to zero.
+ */
+function watchFrames() {
+  const st = window.VTApp.getState();
+  const el = document.querySelector("#level-fill");
+  const mode = st.modeInstance;
+  const engine = st.practice;
+  window.__vtModeFrames = 0;
+  // Each take wires the engine afresh, so its hand-off is watched again whenever it is a new one.
+  if (engine?.onFrame && !engine.onFrame.__vtSeen) {
+    const handOn = engine.onFrame;
+    engine.onFrame = function (frame) {
+      window.__vtEngineFrame = frame;
+      return handOn.apply(this, arguments);
+    };
+    engine.onFrame.__vtSeen = true;
+  }
+  if (mode && !mode.__vtCounted) {
+    const onFrame = mode.onFrame;
+    mode.onFrame = function (frame) {
+      const open = !!frame && frame === window.__vtEngineFrame && !frame.noMic && !!frame.sounding && frame.rawFreq > 0;
+      if (open) window.__vtModeFrames++;
+      return onFrame.apply(this, arguments);
+    };
+    mode.__vtCounted = true;
+  }
+  window.__vtPitchMark = performance.now();
+  const showPitch = !!window.VTApp.getProfile(st.exercise)?.showPitch;
+  const shown = !!el?.getClientRects().length;
+  if (shown) el.style.width = "0%";
+  return { shown, mode: !!mode, highway: !showPitch || !!window.VTGetPitchViz?.(), showPitch };
+}
+
+/**
+ * In the page: what the watched half second did. `drawn` counts the points with a voice the highway kept since the
+ * mark (what it draws), not the calls made to it: a stopped highway is called and keeps nothing.
+ */
+function readFrames() {
+  const viz = window.VTGetPitchViz?.();
+  const mark = window.__vtPitchMark;
+  return {
+    width: parseFloat(document.querySelector("#level-fill")?.style.width) || 0,
+    frames: window.__vtModeFrames,
+    drawn: (viz?.history || []).filter((h) => h && h.t > mark && h.voiceMidi != null).length,
+    highwayRuns: !!viz?.running,
+    paused: !!window.VTApp.getState().practice?._analysisPaused
+  };
+}
+
+/**
  * The live take hears and plays: the microphone is open and its frames reach the take (the level meter, set to
- * zero here, moves again within half a second; the exercise's own mode is handed frames that carry the voice in
- * that time; a pitch exercise's highway is handed the voice's pitch; and the analysis is not paused), and the
- * reference piano plays where its box is ticked (see pianoPlays). The third red team showed a take could be live
- * and counted while it heard nothing and played nothing; the review of that round showed that an open microphone
- * alone (`running`) stays true while every frame is dropped, that a piano checked only at the start could fall
- * silent after it; the review of the fix, that the meter is only the first thing a frame feeds (a cap after it
- * would drop the rest), and that a piano's books are not its sound; the fourth red team, that a count of the
- * mode's calls passes a mode handed silence (MK80) and leaves the pitch line unwatched (MK81), and that a
- * reference ringing from the take's start passes one that no longer loops (MK79). `end` marks the check five
- * seconds before a take's end.
+ * zero here, moves again within half a second; the exercise's own mode is handed the engine's frames with their
+ * sound gate open in that time; a pitch exercise's highway runs and keeps new points of the voice; and the
+ * analysis is not paused), and the reference piano plays where its box is ticked (see pianoPlays). The third red
+ * team showed a take could be live and counted while it heard nothing and played nothing; the review of that round
+ * showed that an open microphone alone (`running`) stays true while every frame is dropped, that a piano checked
+ * only at the start could fall silent after it; the review of the fix, that the meter is only the first thing a
+ * frame feeds (a cap after it would drop the rest), and that a piano's books are not its sound; the fourth red
+ * team, that a count of the mode's calls passes a mode handed silence (MK80) and leaves the pitch line unwatched
+ * (MK81), and that a reference ringing from the take's start passes one that no longer loops (MK79); the fifth,
+ * that a mode handed a copy with only its gate shut passes a check of level and pitch (MK82), and that a highway
+ * stopped for the take passes a count of the calls made to it (MK84). `end` marks the check five seconds before a
+ * take's end.
  */
 async function hears(page, label, { mic = true, end = false } = {}) {
   const now = await heard(page);
@@ -242,55 +307,21 @@ async function hears(page, label, { mic = true, end = false } = {}) {
     expect(now.loop, `${label}: the reference progression loops, as it does for the whole take`).toBe(true);
     loopsChecked.add(now.id);
   }
-  if (now.pianoOn) await pianoPlays(page, label, { booked: now.piano, end });
+  if (now.pianoOn) await pianoPlays(page, label, { booked: now.piano, end, id: now.id });
   if (!mic) return;
   expect(now.mic, `${label}: the microphone is listening`).toBe(true);
-  const meter = await page.evaluate(() => {
-    const el = document.querySelector("#level-fill");
-    const mode = window.VTApp.getState().modeInstance;
-    // Count the frames the exercise's mode is handed that carry the fake microphone's voice: a level and a pitch
-    // (the no-microphone ticker's are marked noMic). Not its exact pitch: an octave error or a speech drill may
-    // read the tone another way, and that is not what this asks.
-    window.__vtModeFrames = 0;
-    if (mode && !mode.__vtCounted) {
-      const onFrame = mode.onFrame;
-      mode.onFrame = function (frame) {
-        if (!frame?.noMic && frame?.rms > 0.01 && frame?.voiceFreq > 0) window.__vtModeFrames++;
-        return onFrame.apply(this, arguments);
-      };
-      mode.__vtCounted = true;
-    }
-    // And the pitches drawn on the highway, for an exercise that shows one.
-    window.__vtPitchFrames = 0;
-    const viz = window.VTGetPitchViz?.();
-    if (viz && !viz.__vtCounted) {
-      const pushFrame = viz.pushFrame;
-      viz.pushFrame = function (voiceFreq) {
-        if (voiceFreq > 0) window.__vtPitchFrames++;
-        return pushFrame.apply(this, arguments);
-      };
-      viz.__vtCounted = true;
-    }
-    const showPitch = !!window.VTApp.getProfile(window.VTApp.getState().exercise)?.showPitch;
-    if (!el?.getClientRects().length) return { shown: false, mode: !!mode, highway: !showPitch || !!viz, showPitch };
-    el.style.width = "0%";
-    return { shown: true, mode: !!mode, highway: !showPitch || !!viz, showPitch };
-  });
+  const meter = await page.evaluate(watchFrames);
   await page.clock.runFor(500);
-  const after = await page.evaluate(() => ({
-    width: parseFloat(document.querySelector("#level-fill")?.style.width) || 0,
-    frames: window.__vtModeFrames,
-    pitches: window.__vtPitchFrames,
-    paused: !!window.VTApp.getState().practice?._analysisPaused
-  }));
+  const after = await page.evaluate(readFrames);
   expect(after.paused, `${label}: the microphone's analysis is not paused`).toBe(false);
   expect(
     { shown: meter.shown, mode: meter.mode, highway: meter.highway },
     `control: ${label}: the level meter is on screen, a mode takes the frames, and a pitch exercise has its highway, so frames that stop would show`
   ).toEqual({ shown: true, mode: true, highway: true });
   expect(after.width, `${label}: the microphone's frames reach the take (the level meter moves)`).toBeGreaterThan(0);
-  expect(after.frames, `${label}: the voice reaches the exercise itself (its mode is handed frames with a level and a pitch)`).toBeGreaterThan(0);
-  if (meter.showPitch) expect(after.pitches, `${label}: the voice is drawn on the pitch highway`).toBeGreaterThan(0);
+  expect(after.frames, `${label}: the voice reaches the exercise itself (its mode is handed the engine's frames, sound gate open)`).toBeGreaterThan(0);
+  if (!meter.showPitch) return;
+  expect({ runs: after.highwayRuns, drawn: after.drawn > 0 }, `${label}: the pitch highway runs and draws the voice`).toEqual({ runs: true, drawn: true });
 }
 
 /**
@@ -309,14 +340,20 @@ async function hears(page, label, { mic = true, end = false } = {}) {
  * A piano that cues (an exercise whose mode sounds each target once, for about a second and a half, when the
  * target changes) need not sound near the end: it sounds again only when the singer moves the mode on, which the
  * fake microphone's one tone does not. Any cue it did schedule must still be wired.
+ *
+ * And a looping reference whose take outlasts the pass that was sounding at its start (with three seconds to
+ * spare) must have scheduled another pass by the end: the fifth red team kept the loop flagged on and cancelled its
+ * next pass (MK83), so the take went silent after about 48 seconds while every note counted (none) was wired. A
+ * short take inside one pass ("+30 s") is not held to it.
  */
-async function pianoPlays(page, label, { booked, end }) {
+async function pianoPlays(page, label, { booked, end, id }) {
   expect(booked, `${label}: the reference piano's notes are booked, as its tick says`).toBe(true);
   const loops = await page.evaluate(() => !!window.VTPiano.loopActive);
   if (end) {
-    const notes = await page.evaluate(() => window.__vtPianoNotes);
+    const notes = await page.evaluate(() => window.__vtPianoNotes && { ...window.__vtPianoNotes, pass: window.__vtPass });
     expect(notes, `control: ${label}: the piano's notes were counted since the take's start`).toBeTruthy();
     expect(notes.wired, `${label}: every note the piano scheduled since the start reaches its master bus`).toBe(notes.made);
+    loopGoesOn(label, id, notes);
     if (!loops) return;
   }
   let stepped = 0;
@@ -334,14 +371,25 @@ async function pianoPlays(page, label, { booked, end }) {
   if (!end) await countPianoNotes(page);
 }
 
+/** A looping reference whose take outlasts the pass sounding at its start scheduled another (see pianoPlays). */
+function loopGoesOn(label, id, { made, pass }) {
+  if (!LOOPS.has(id) || !(pass?.total > pass.left + 3)) return;
+  expect(made, `${label}: the reference loop scheduled another pass, as the take outlasts the one sounding at its start`).toBeGreaterThan(0);
+  passesChecked.add(id);
+}
+
 /**
  * From now on, count each note the piano schedules and whether its gain is wired to the piano's master bus. A
- * count only: the notes are made and wired by the piano's own code, as before.
+ * count only: the notes are made and wired by the piano's own code, as before. Keep how long the pass sounding now
+ * has left (in the audio's time) and how long the take has left (on its clock's end, not its length: a '+30 s'
+ * keeps the step's length).
  */
 function countPianoNotes(page) {
   return page.evaluate(() => {
     window.__vtPianoNotes = { made: 0, wired: 0 };
     const P = window.VTPiano;
+    const endAt = window.VTApp.getState().timer.endAt;
+    window.__vtPass = { left: Math.max(0, (P.soundingUntil || 0) - (P.ctx?.currentTime || 0)), total: (endAt - performance.now()) / 1000 };
     if (P.__vtCounted) return;
     P.__vtCounted = true;
     const connect = AudioNode.prototype.connect;
@@ -411,6 +459,7 @@ test("no time limit: a first-day visitor past an hour today takes five full take
 }) => {
   test.setTimeout(150000);
   loopsChecked.clear();
+  passesChecked.clear();
   const today = dayOf(NOW);
   await boot(page, { person: true, days: { [today]: { sec: 3720, n: 24, ex: ["s4-lip-trills"] } } });
   await todayIs(page, today);
@@ -432,6 +481,7 @@ test("no time limit: a first-day visitor past an hour today takes five full take
   await openSingle(page, "s17-jaw-neck-release");
   await fullTake(page, "a drill with no microphone", 120);
   expect([...loopsChecked].sort(), "control: both looping references had their loop checked").toEqual([...LOOPS].sort());
+  expect([...passesChecked].sort(), "control: both looping references' takes outlasted a pass and were held to the next").toEqual([...LOOPS].sort());
 });
 
 /** The routine under way: its path, state, the step open now and that step's planned length (its own, or the class's). */
@@ -500,8 +550,27 @@ test("no time limit: a heavy visitor ten years on, on a Sunday night at the mont
   await ready(page);
   await page.locator("#btn-nav-home").click();
   await page.clock.runFor(300);
-  await page.locator("#btn-next-step").click();
+
+  // Another routine than the basics: the daily class, started as a visitor starts it, by its size chip and then
+  // Start. The chip only selects; the start panel then offers the size picked (offeredTier), and Start hands it to
+  // the loop's startTier and on to the page's startDaily (the hand-off a cap could wrap: the fourth red team's
+  // proOnly(startDaily) in init). The fifth red team turned the class back into Esencial past an hour where the panel
+  // picks the size (MK85), which a call to startTier went round; so it is walked, before the basics, since the chips
+  // are hidden while a routine is open.
+  expect(await page.evaluate(() => !!window.VTLoop.routine(window.VTApp.getState().tab === "vocal" ? "vocal" : "singing", "class")?.daily), "control: the class size is the daily class").toBe(true);
+  await pickAndStart(page, "class");
+  const daily = await stepNow(page);
+  expect(daily.path, "the daily class starts from its chip and Start: it is under way").toBe("daily");
+  expect(await page.evaluate(() => window.VTApp.getState().exercise?.id), "the daily class starts: its first step is open").toBe(daily.id);
+  expect(PLANNED.daily[daily.id], `control: ${daily.id} is the class's first step as planned`).toBeDefined();
+  await fullTake(page, "the daily class's first step", PLANNED.daily[daily.id]);
+
+  // The class is ended from its bar (on its first step it ends without asking), and the basics are picked and
+  // started the same way.
+  await page.locator("#btn-session-end").click();
   await page.clock.runFor(400);
+  expect(await stepNow(page), "control: the class was ended").toEqual({ path: undefined, status: undefined, id: undefined, sec: null });
+  await pickAndStart(page, "min");
   const step = await stepNow(page);
   expect(step.status, "control: a routine is under way").toBe("active");
   expect(PLANNED.basics[step.id], `control: ${step.id} is a step of the basics as planned`).toBeDefined();
@@ -518,24 +587,18 @@ test("no time limit: a heavy visitor ten years on, on a Sunday night at the mont
   expect(await page.evaluate(() => window.VTApp.getState().exercise?.id), "Next opens the routine's second step").toBe(second.id);
   expect(PLANNED.basics[second.id], `control: ${second.id} is a step of the basics as planned`).toBeDefined();
   await fullTake(page, "the routine's second step", PLANNED.basics[second.id]);
-
-  // Another routine than the basics: the daily class, as its size chip and Start start it, through the loop's
-  // startTier, which hands it to the page's startDaily (the hand-off a cap could wrap: the fourth red team's
-  // proOnly(startDaily) in init). The chips are hidden while the basics are open, so it is called, not clicked.
-  // Leaving the basics' last take asks first whether to rate it; the answer is to go on without (it still counts).
-  expect(await page.evaluate(() => !!window.VTLoop.routine(window.VTApp.getState().tab === "vocal" ? "vocal" : "singing", "class")?.daily), "control: the class size is the daily class").toBe(true);
-  await page.evaluate(() => window.VTLoop.startTier("class"));
-  await page.clock.runFor(400);
-  // Not a control: a cap that refused the class would show no question at all.
-  await expect(page.locator("#leave-modal"), "the daily class starts: first it asks whether to leave the basics' last take").toBeVisible();
-  await page.locator("#leave-discard").click();
-  await page.clock.runFor(400);
-  const daily = await stepNow(page);
-  expect(daily.path, "the daily class starts: it is under way").toBe("daily");
-  expect(await page.evaluate(() => window.VTApp.getState().exercise?.id), "the daily class starts: its first step is open").toBe(daily.id);
-  expect(PLANNED.daily[daily.id], `control: ${daily.id} is the class's first step as planned`).toBeDefined();
-  await fullTake(page, "the daily class's first step", PLANNED.daily[daily.id]);
 });
+
+/** On the home's start panel: press a routine size's chip, which the panel must then offer, and Start. */
+async function pickAndStart(page, tier) {
+  const chip = page.locator(`#loop-tiers [data-tier="${tier}"]`);
+  await expect(chip, `control: the ${tier} chip is on the start panel`).toBeVisible();
+  await chip.click();
+  await page.clock.runFor(300);
+  await expect(chip, `the ${tier} chip, pressed, is the size the panel offers`).toHaveAttribute("aria-pressed", "true");
+  await page.locator("#btn-next-step").click();
+  await page.clock.runFor(400);
+}
 
 test("no time limit: a visitor who first came 45 days ago, past an hour today, takes four takes of one exercise, the last started again right after Stop", async ({
   page
@@ -1011,7 +1074,11 @@ test("no account needed: takes of two tracks, a rating, a saved recording, a rou
   await runOut(page);
   await expect(page.locator("#btn-save-rec"), "control: a recording to save").toBeVisible();
   await page.locator("#btn-save-rec").click();
-  await expect(page.locator("#btn-save-rec"), "control: saved").toBeDisabled();
+  await page.clock.runFor(300);
+  // A promise, not a control: the fifth red team asked a guest to sign in (the app's second sign-in, VTAuth) in
+  // place of saving, which the scanner's account words did not cover.
+  await expect(page.locator("#btn-save-rec"), "the recording is saved").toBeDisabled();
+  await nothingInTheWay(page, "saving a recording");
   await rate(page);
 
   // Today's basics, one step of two done.
@@ -1061,6 +1128,12 @@ test("no account needed: takes of two tracks, a rating, a saved recording, a rou
     await nothingInTheWay(third, "Historial a month on");
     await expect(third.locator("#hist-days-count strong"), "the days practised, in Historial's calendar").toHaveText("1");
     await expect(third.locator("[data-play]"), "the recording, to play").toHaveCount(1);
+    // And it plays for a guest a month on, with no sign-in in its way (the fifth red team's play gate, MK86).
+    await third.locator("[data-play]").click();
+    await third.clock.runFor(300);
+    await expect(third.locator("#history-player audio"), "the saved recording plays a month on").toHaveCount(1);
+    expect(await third.locator("#history-player audio").getAttribute("src"), "control: from the recording kept on the device").toMatch(/^blob:/);
+    await nothingInTheWay(third, "playing the recording a month on");
     await third.locator('#history-list [data-open-ex="s4-lip-trills"]').first().click();
     await third.clock.runFor(300);
     await runOut(third);

@@ -83,15 +83,38 @@ export const VOICE_SOURCES = new Set([
 const VOICE_LITERALS = new Set(["vt_recordings_db", "recordings"]);
 /** What reads the plan or opens the sale. */
 export const BILLING_NAMES = new Set(["VTBilling", "openPricing", "openAccount", "isPro", "trialActive", "trialStartedAt", "trialDaysLeft", "getEntitlement"]);
+/** An element's id as a selector and as getElementById's argument: "#btn-pricing" and "btn-pricing". */
+const byId = (...ids) => ids.flatMap((id) => [id, "#" + id]);
 /**
- * The plan's handles that are not names: the header's Pro button (`$("#btn-pricing").click()` opens the plans with
- * no name above in sight) and the plan's own keys in storage, which read it with no call into billing.
+ * The plan's handles that are not names:
+ * - every element bound to a listener that opens the plans (`$("#btn-value-pro").click()` opens them with no name
+ *   above in sight). tests/node/promise-guards.test.mjs derives these from the code (openerHandles) and fails when
+ *   a new one is missing here.
+ * - the marks the header's Pro button carries (`data-plan`, its plan-* classes), which read the plan off the page.
+ * - the plan's own keys in storage, which read it with no call into billing.
+ * A dialog of the sale shown by its own id is counted too ("#pricing-modal:open"; see dialogShown).
  */
-export const BILLING_LITERALS = new Set(["btn-pricing", "#btn-pricing", "vt_billing_v1", "vt_billing_trial_started_v1"]);
-/** What asks whether the visitor is signed in. */
-export const ACCOUNT_NAMES = new Set(["VTAccount", "VTSync", "signedIn", "getSessionToken", "openAccount", "signInWithGoogle", "startEmailSignIn", "renderGoogleButton"]);
-/** The account's handles that are not names: the header's account button, and the session and plan it keeps. */
-export const ACCOUNT_LITERALS = new Set(["btn-account", "#btn-account", "vt_account_session_v1", "vt_account_plan_v1"]);
+export const BILLING_LITERALS = new Set([
+  ...byId("btn-pricing", "btn-value-pro", "value-banner-cta", "btn-account-pricing", "btn-profile-add", "sel-week-goal", "rem-time-2"),
+  "[data-ad-cta]",
+  "[data-plan]",
+  "data-plan",
+  "plan-trial",
+  "plan-gift",
+  "plan-paid",
+  "plan-ending",
+  "vt_billing_v1",
+  "vt_billing_trial_started_v1"
+]);
+/** What asks whether the visitor is signed in: the account and its sync, and the older sign-in (VTAuth) that app.js also trusts. */
+export const ACCOUNT_NAMES = new Set(["VTAccount", "VTSync", "VTAuth", "signedIn", "getSessionToken", "openAccount", "signInWithGoogle", "startEmailSignIn", "renderGoogleButton"]);
+/** The account's handles that are not names: every element bound to open the sign-in (derived and checked as the plan's are), and the sessions and plan it keeps. */
+export const ACCOUNT_LITERALS = new Set([
+  ...byId("btn-account", "account-email-form", "account-code-form", "account-code-resend"),
+  "vt_account_session_v1",
+  "vt_account_plan_v1",
+  "vt_auth_session_v1"
+]);
 /** What `VTAccount.getState()` says about the visitor: `.account` is who is signed in, `.entitlement` what they bought. */
 const ACCOUNT_STATE = new Set(["account", "entitlement"]);
 
@@ -115,37 +138,52 @@ function keyOf(parent) {
   return parent.type === "Property" || CLASS_MEMBERS.has(parent.type) ? nameOf(parent.key) : "";
 }
 
+/** A selector written as a string, or as a template by its fixed text (`#tabs [data-tab="${name}"]` gives `#tabs [data-tab="${}"]`). */
+function literalSelector(arg) {
+  if (arg?.type === "Literal" && typeof arg.value === "string") return arg.value;
+  return arg?.type === "TemplateLiteral" ? arg.quasis.map((q) => q.value.cooked ?? q.value.raw).join("${}") : "";
+}
+
 /** The selector of the element a listener is added to: `$("#wb-last")?.addEventListener(...)` gives "#wb-last". */
 function selectorOf(expr) {
   if (expr?.type === "ChainExpression") return selectorOf(expr.expression);
   if (expr?.type === "MemberExpression") return selectorOf(expr.object);
   if (expr?.type !== "CallExpression") return "";
-  const arg = expr.arguments[0];
-  return arg?.type === "Literal" && typeof arg.value === "string" ? arg.value : selectorOf(expr.callee);
+  return literalSelector(expr.arguments[0]) || selectorOf(expr.callee);
 }
+
+/** An argument as text, for naming an element found by a call: a name, a literal, or "…". */
+const argText = (a) => (a.type === "Identifier" ? a.name : a.type === "Literal" ? String(a.value) : "…");
 
 /**
  * The element a listener is added to when no selector is in the call: a variable that was given one
- * (`const again = $("#wb-again")` names it "#wb-again"), or else the variable, `this` or the property it is
- * held in ("again", "document", "ui.close", "els[]"). "" for anything else.
+ * (`const again = $("#wb-again")` names it "#wb-again"), or else the variable, `this`, the property it is held in,
+ * or the call that found it ("again", "document", "ui.close", "els[]", "document.getElementById(id)"). "" for
+ * anything else.
  */
 function receiverText(expr, held) {
   if (expr.type === "ChainExpression") return receiverText(expr.expression, held);
   if (expr.type === "Identifier") return held.get(expr.name) || expr.name;
   if (expr.type === "ThisExpression") return "this";
+  if (expr.type === "CallExpression") {
+    const callee = receiverText(expr.callee, held);
+    return callee && `${callee}(${expr.arguments.map(argText).join(", ")})`;
+  }
   if (expr.type !== "MemberExpression") return "";
   const [object, prop] = [receiverText(expr.object, held), propName(expr)];
   return object && object + (prop ? "." + prop : "[]");
 }
 
-/** The variables of a script that hold an element found by one selector, and that selector. */
+/** The variables of a script that hold an element found by one selector, and that selector. A name also used for a parameter is left out: it is another element there. */
 function heldSelectors(ast) {
   const seen = new Map();
+  const params = new Set();
   walkNode(ast, (n) => {
+    if (isFunction(n)) n.params.forEach((p) => params.add(nameOf(p.type === "AssignmentPattern" ? p.left : p)));
     const sel = n.type === "VariableDeclarator" && n.id.type === "Identifier" && n.init ? selectorOf(n.init) : "";
     if (sel) seen.set(n.id.name, new Set([...(seen.get(n.id.name) || []), sel]));
   });
-  return new Map([...seen].filter(([, sels]) => sels.size === 1).map(([name, sels]) => [name, [...sels][0]]));
+  return new Map([...seen].filter(([name, sels]) => sels.size === 1 && !params.has(name)).map(([name, sels]) => [name, [...sels][0]]));
 }
 
 /**
@@ -197,20 +235,28 @@ function parseScript(source) {
 }
 
 /**
- * Walk a script, calling `fn(node, parent, owner, outer, up)` for every node. `owner` is the nearest named
- * function around it ("(top)" outside any): a sink in an unnamed callback is filed under the function that made
- * it. `outer` is set on the node where a named function opens, to the function it opens in. `up` is the chain
- * of nodes above, nearest last.
+ * Walk a script, calling `fn(node, parent, owner, outer, up, elementOf)` for every node. `owner` is the nearest
+ * named function around it ("(top)" outside any): a sink in an unnamed callback is filed under the function that
+ * made it. `outer` is set on the node where a named function opens, to the function it opens in. `up` is the
+ * chain of nodes above, nearest last. `elementOf(expr)` is the selector the element `expr` was found by, or "".
  */
 function walk(source, fn) {
   const up = [];
   const ast = parseScript(source);
   const held = heldSelectors(ast);
+  const local = new Map();
+  // The selector an element was found by: in the expression, or a variable given one in this function (or, held
+  // by one selector only, anywhere in the file). `const modal = $("#pricing-modal"); modal.hidden = false`.
+  const elementOf = (expr, owner) => {
+    const e = expr?.type === "ChainExpression" ? expr.expression : expr;
+    return selectorOf(e) || (e?.type === "Identifier" ? local.get(owner + " " + e.name) || held.get(e.name) || "" : "");
+  };
   const visit = (node, owner) => {
     if (!node || typeof node.type !== "string") return;
     const parent = up.at(-1) || null;
     const here = isFunction(node) ? functionName(node, parent, owner, held) || owner : fieldName(node) || owner;
-    fn(node, parent, here, here !== owner ? owner : null, up);
+    if (node.type === "VariableDeclarator" && node.id.type === "Identifier" && selectorOf(node.init)) local.set(here + " " + node.id.name, selectorOf(node.init));
+    fn(node, parent, here, here !== owner ? owner : null, up, (expr) => elementOf(expr, here));
     up.push(node);
     for (const v of Object.values(node)) {
       if (Array.isArray(v)) v.forEach((c) => visit(c, here));
@@ -422,34 +468,90 @@ function accountState(node) {
   return c?.type === "MemberExpression" && propName(c) === "getState" && objName(c) === "VTAccount" ? "getState()." + propName(node) : "";
 }
 
-/** What a node uses that asks whether the visitor is signed in. */
-const accountUsed = (node, parent) => nameUsed(node, parent, ACCOUNT_NAMES, ACCOUNT_LITERALS) || accountState(node);
+/** `el.dataset.plan`: the plan read off the header's Pro button, which carries it. */
+const planMark = (node) => (node.type === "MemberExpression" && propName(node) === "plan" && node.object.type === "MemberExpression" && propName(node.object) === "dataset" ? "dataset.plan" : "");
+
+/** The dialogs of the sale and the sign-in, by id, and the bag their showing is counted in. */
+const DIALOGS = new Map([
+  ["pricing-modal", "billing"],
+  ["account-modal", "account"]
+]);
+const isLiteral = (n, v) => n?.type === "Literal" && n.value === v;
+
+/** The element an assignment puts on screen: `el.hidden = x` (x not true), `el.inert = x` the same, `el.open = x` (x not false), `el.style.display = x` (x not "none"). */
+function shownBySetting(n) {
+  const l = n.left;
+  const prop = l.type === "MemberExpression" ? propName(l) : "";
+  if (prop === "hidden" || prop === "inert") return isLiteral(n.right, true) ? null : l.object;
+  if (prop === "open") return isLiteral(n.right, false) ? null : l.object;
+  const style = prop === "display" && l.object.type === "MemberExpression" && propName(l.object) === "style";
+  return style && !isLiteral(n.right, "none") ? l.object.object : null;
+}
+
+/** The calls that put an element on screen, by method, and whether these arguments do. */
+const SHOWN_BY_CALL = new Map([
+  ["show", () => true],
+  ["showModal", () => true],
+  ["removeAttribute", ([a]) => isLiteral(a, "hidden") || isLiteral(a, "inert")],
+  ["setAttribute", ([a]) => isLiteral(a, "open")],
+  ["toggleAttribute", ([a, b]) => isLiteral(a, "hidden") && !isLiteral(b, true)]
+]);
+
+/** The element a call puts on screen: `show()`, `showModal()`, `removeAttribute("hidden")`, `setAttribute("open", ..)`, `toggleAttribute("hidden")` (not forced on), or a class changed on it. */
+function shownByCall(n) {
+  const c = n.callee.type === "MemberExpression" ? n.callee : null;
+  const shows = c && SHOWN_BY_CALL.get(propName(c));
+  if (shows) return shows(n.arguments) ? c.object : null;
+  return c?.object.type === "MemberExpression" && propName(c.object) === "classList" ? c.object.object : null;
+}
+
+/**
+ * "#pricing-modal:open" (or "#account-modal:open") where a node puts that dialog on screen by its own id, with no
+ * opener's name in sight: `$("#pricing-modal").hidden = false`, or through a variable given it. Hiding it is not
+ * opening it, so a node that closes the dialog counts nothing.
+ */
+function dialogShown(node, elementOf, kind) {
+  const el = node.type === "AssignmentExpression" ? shownBySetting(node) : node.type === "CallExpression" ? shownByCall(node) : null;
+  const id = el ? elementOf(el).replace(/^#/, "") : "";
+  return DIALOGS.get(id) === kind ? `#${id}:open` : "";
+}
+
+/** What a node uses that reads the plan or opens the sale. */
+const billingUsed = (node, parent, elementOf) => nameUsed(node, parent, BILLING_NAMES, BILLING_LITERALS) || planMark(node) || dialogShown(node, elementOf, "billing");
+/** What a node uses that hears the voice or reads a take. */
+const voiceUsed = (node, parent) => nameUsed(node, parent, VOICE_SOURCES, VOICE_LITERALS);
+/** What a node uses that asks whether the visitor is signed in, or opens the sign-in. */
+const accountUsed = (node, parent, elementOf) => nameUsed(node, parent, ACCOUNT_NAMES, ACCOUNT_LITERALS) || accountState(node) || dialogShown(node, elementOf, "account");
 
 /** Each name from `names` the script uses, with a count. */
 function namesIn(source, used) {
   const found = {};
-  walk(source, (node, parent) => {
-    const name = used(node, parent);
+  walk(source, (node, parent, _owner, _outer, _up, elementOf) => {
+    const name = used(node, parent, elementOf);
     if (name) bump(found, name);
   });
   return found;
 }
 
 /** Where a script hears the voice or reads a take. */
-export const voiceSourcesIn = (source) => namesIn(source, (n, p) => nameUsed(n, p, VOICE_SOURCES, VOICE_LITERALS));
+export const voiceSourcesIn = (source) => namesIn(source, voiceUsed);
 /** Where a script reads the plan or opens the sale. */
-export const billingNamesIn = (source) => namesIn(source, (n, p) => nameUsed(n, p, BILLING_NAMES, BILLING_LITERALS));
+export const billingNamesIn = (source) => namesIn(source, billingUsed);
 /** Where a script asks whether the visitor is signed in. */
 export const accountNamesIn = (source) => namesIn(source, accountUsed);
 
+const BAGS = [
+  ["billing", billingUsed],
+  ["voice", voiceUsed],
+  ["account", accountUsed]
+];
+
 /** Bump what a node uses into its function's billing, voice and account bags. */
-function tally(fn, node, parent) {
-  const billing = nameUsed(node, parent, BILLING_NAMES, BILLING_LITERALS);
-  if (billing) bump(fn.billing, billing);
-  const voice = nameUsed(node, parent, VOICE_SOURCES, VOICE_LITERALS);
-  if (voice) bump(fn.voice, voice);
-  const account = accountUsed(node, parent);
-  if (account) bump(fn.account, account);
+function tally(fn, node, parent, elementOf) {
+  for (const [bag, used] of BAGS) {
+    const name = used(node, parent, elementOf);
+    if (name) bump(fn[bag], name);
+  }
 }
 
 /** Marks a method called on `this`, resolved once every function is known. */
@@ -502,32 +604,42 @@ function handedTo(node) {
 /**
  * Each named function of a script: the names it refers to (a call, a function handed on as a callback, a method
  * called on `this`, and every named function made inside it, such as a callback it sets on a property), the
- * functions handed to it (`proOnly(startDaily)` reaches startDaily), the function it is made in (`outer`), and
- * the billing names, voice sources and sign-in checks it uses. Functions that share a name are merged, and a
- * function reaches everything made inside it. What it cannot follow is a call through a computed name, a
- * function kept in a variable or another object and called from there, or another file.
+ * functions handed to it (`proOnly(startDaily)` reaches startDaily), the functions it is made in (`outers`: a
+ * name made in two functions, such as two helpers both called finish, is made in both), and the billing names,
+ * voice sources and sign-in checks it uses. Functions that share a name are merged, and a function reaches
+ * everything made inside it. What it cannot follow is a call through a computed name, a function kept in a
+ * variable or another object and called from there, or another file.
  */
 export function functionsOf(source) {
   const fns = Object.create(null);
-  const entry = (name) => (fns[name] ||= { refs: new Set(), billing: {}, voice: {}, account: {}, outer: "" });
+  const entry = (name) => (fns[name] ||= { refs: new Set(), billing: {}, voice: {}, account: {}, outers: new Set() });
   const handed = [];
-  walk(source, (node, parent, owner, outer) => {
+  walk(source, (node, parent, owner, outer, _up, elementOf) => {
     if (outer) {
       entry(owner);
       fns[outer]?.refs.add(owner);
-      if (outer !== "(top)") fns[owner].outer ||= outer;
+      if (outer !== "(top)") fns[owner].outers.add(outer);
     }
     const keyed = keyedFunction(node, parent, owner);
-    if (keyed) return void tally(entry(keyed), node, parent);
+    if (keyed) return void tally(entry(keyed), node, parent, elementOf);
     handed.push(...handedTo(node));
     if (!fns[owner]) return;
-    tally(fns[owner], node, parent);
+    tally(fns[owner], node, parent, elementOf);
     const ref = refOf(node, parent);
     if (ref) fns[owner].refs.add(ref);
   });
   for (const [g, f] of handed) if (fns[g] && g !== f) fns[g].refs.add(f);
   resolveThis(fns);
   return fns;
+}
+
+/** Each named function's own nodes, by the name functionsOf gives it (two of one name are both kept). */
+export function functionNodes(source) {
+  const out = Object.create(null);
+  walk(source, (node, _parent, owner, outer) => {
+    if (outer !== null && isFunction(node)) (out[owner] ||= []).push(node);
+  });
+  return out;
 }
 
 /**
@@ -584,6 +696,37 @@ export function usesByFunction(source, kind = "billing") {
   }
   if (bagText(top)) out["(top)"] = bagText(top);
   return out;
+}
+
+/** The element and the callback of a listener: `el.addEventListener("click", cb)` or `el.onclick = cb`; else null. */
+function listenerOf(node) {
+  const c = node.type === "CallExpression" && node.callee.type === "MemberExpression" ? node.callee : null;
+  if (c && propName(c) === "addEventListener" && node.arguments[1]) return [c.object, node.arguments[1]];
+  const l = node.type === "AssignmentExpression" && node.left.type === "MemberExpression" ? node.left : null;
+  return l && /^on/.test(propName(l)) ? [l.object, node.right] : null;
+}
+
+/** Whether a callback opens what `opens` names: it is one of those functions, or its body calls one or names one of `handles`. */
+function callbackOpens(cb, opens, handles) {
+  if (cb.type === "Identifier") return opens.test(cb.name);
+  let hit = false;
+  if (isFunction(cb)) walkNode(cb.body, (n) => (hit ||= (n.type === "Identifier" && opens.test(n.name)) || (n.type === "Literal" && handles.has(n.value))));
+  return hit;
+}
+
+/**
+ * The selectors of the elements a script binds to a listener that opens what `opens` names (the sale's opener, or
+ * the sign-in's), or that presses one of `handles`: a click on any of them opens it with no opener's name in sight.
+ * The guards hold BILLING_LITERALS and ACCOUNT_LITERALS to these, so a new Pro or sign-in button joins on its own.
+ */
+export function openerHandles(source, opens, handles = new Set()) {
+  const out = new Set();
+  walk(source, (node, _parent, _owner, _outer, _up, elementOf) => {
+    const [el, cb] = listenerOf(node) || [];
+    const sel = cb && callbackOpens(cb, opens, handles) ? elementOf(el) : "";
+    if (sel) out.add(sel);
+  });
+  return [...out].sort();
 }
 
 /** Inline script types the browser runs as code. Speculation rules are a prefetch, kept as a string so they read as a hint. */
@@ -647,17 +790,33 @@ function walkNode(node, fn) {
  * A name made from AdSense's queue: a variable (`const q = (window.adsbygoogle = window.adsbygoogle || [])`), a
  * function that returns it (`function adQueue() { return window.adsbygoogle; }`, called as `adQueue().push`), a
  * name taken out of an object (`const { adsbygoogle: q } = window`, with a default or not), a default parameter
- * (`function f(q = window.adsbygoogle)`) or a class field (`queue = window.adsbygoogle`, pushed as `this.queue`).
+ * (`function f(q = window.adsbygoogle)`), a class field (`queue = window.adsbygoogle`, pushed as `this.queue`), a
+ * property it is kept in (`this.queue = ...`, `state.queue = ...`, `{ queue: window.adsbygoogle }`), or the
+ * parameter of a function of the file it is handed to (`configure(window.adsbygoogle)` names configure's own).
  */
 const QUEUE_HOLDERS = {
   VariableDeclarator: (n, q) => (n.init && mentions(n.init, q) ? nameOf(n.id) : ""),
-  AssignmentExpression: (n, q) => (n.left.type === "Identifier" && mentions(n.right, q) ? n.left.name : ""),
-  Property: (n, q) => (mentions(n.key, q) ? nameOf(n.value.type === "AssignmentPattern" ? n.value.left : n.value) : ""),
+  AssignmentExpression: (n, q) => (mentions(n.right, q) ? (n.left.type === "MemberExpression" ? propName(n.left) : nameOf(n.left)) : ""),
+  Property: (n, q) => (mentions(n.key, q) ? nameOf(n.value.type === "AssignmentPattern" ? n.value.left : n.value) : mentions(n.value, q) ? nameOf(n.key) : ""),
   AssignmentPattern: (n, q) => (mentions(n.right, q) ? nameOf(n.left) : ""),
   PropertyDefinition: (n, q) => (n.value && mentions(n.value, q) ? nameOf(n.key) : ""),
-  ReturnStatement: (n, q, owner) => (n.argument && owner !== "(top)" && mentions(n.argument, q) ? owner : "")
+  ReturnStatement: (n, q, owner) => (n.argument && owner !== "(top)" && mentions(n.argument, q) ? owner : ""),
+  CallExpression: (n, q, _owner, params) => {
+    const callee = n.callee.type === "MemberExpression" ? propName(n.callee) : nameOf(n.callee);
+    const i = n.arguments.findIndex((a) => mentions(a, q));
+    return i >= 0 ? params.get(callee)?.[i] || "" : "";
+  }
 };
-const queueAlias = (node, queues, owner) => QUEUE_HOLDERS[node.type]?.(node, queues, owner) || "";
+const queueAlias = (node, queues, owner, params) => QUEUE_HOLDERS[node.type]?.(node, queues, owner, params) || "";
+
+/** Each named function's parameters, by the last part of its name: a function handed the queue pushes through its own. */
+function paramsByName(source) {
+  const out = new Map();
+  walk(source, (node, _parent, owner, outer) => {
+    if (outer !== null && isFunction(node)) out.set(owner.slice(owner.lastIndexOf(".") + 1), node.params.map((p) => nameOf(p.type === "AssignmentPattern" ? p.left : p)));
+  });
+  return out;
+}
 
 /**
  * Every push to AdSense's queue, by its name or by a variable or function made from it, as the number of keys in
@@ -665,13 +824,14 @@ const queueAlias = (node, queues, owner) => QUEUE_HOLDERS[node.type]?.(node, que
  */
 export function adPushes(source) {
   const queues = new Set(["adsbygoogle"]);
+  const params = paramsByName(source);
   // Until no new name turns up: a helper may be written below the push that uses it, and an alias may be made
   // from another alias, any number deep.
   let known = 0;
   while (queues.size > known) {
     known = queues.size;
     walk(source, (node, _parent, owner) => {
-      const alias = queueAlias(node, queues, owner);
+      const alias = queueAlias(node, queues, owner, params);
       if (alias) queues.add(alias);
     });
   }

@@ -31,6 +31,20 @@ test("every mutation set runs in CI: the Node sets in one step, each browser set
   assert.equal(new Set(matrix).size, matrix.length, "no set runs twice");
 });
 
+/** The browser sets the harness's own usage line names, the command a developer copies to check a change locally. */
+export function usageSets(source) {
+  const line = source.split("\n").find((l) => /^\s*\*\s+node qa\/mutate\.mjs \S.*# browser sets/.test(l)) || "";
+  return line.replace(/#.*$/, "").replace(/^\s*\*\s+node qa\/mutate\.mjs/, "").trim().split(/\s+/).filter(Boolean);
+}
+
+test("the harness's usage line names every browser set CI runs, so the documented command skips none", () => {
+  // The fifth red team found the line a round behind: copied, it skipped the time limit's second half (13 mutants).
+  const usage = usageSets(fs.readFileSync(new URL("../../qa/mutate.mjs", import.meta.url), "utf8"));
+  assert.ok(usage.includes("stage"), `control: the usage line is read (${usage.join(" ")})`);
+  assert.deepEqual([...usage].sort(), [...matrixSets(workflow)].sort());
+  assert.deepEqual(usageSets(" *   node qa/mutate.mjs a b  # browser sets: x\n"), ["a", "b"], "control: a line that names two sets reads as two");
+});
+
 test("the check finds a set left out of the matrix, and a matrix entry that names no set", () => {
   const sets = ["audio", "regress", "boot"];
   assert.deepEqual(unrun(sets, ["audio"], ["regress", "boot"]), { missing: [], unknown: [] }, "control: a matrix that is right passes");

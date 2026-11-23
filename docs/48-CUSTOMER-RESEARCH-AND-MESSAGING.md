@@ -419,9 +419,9 @@ scripts):
 |---|---|
 | Egress inventory | Every place a script can send something, in its ordinary spellings, is listed with its reason: a request (fetch called, deferred with `fetchLater`, bound, or handed on as a value), a beacon, a WebSocket or WebTransport, a message to another window, speech recognition (Chrome streams the microphone to Google for it), a form, a new window, a navigation, a cookie, an address set on an element (by property, `setAttribute(NS)` or `Object.assign`), a module import, and a DNS hint, SVG image or `@import` in HTML or CSS text. A new one fails until it is reviewed. |
 | Voice sources | Only six files may touch the microphone, the recorder, speech recognition or saved takes (by name, or by the takes' store opened by its own name), and in them no function that reads the voice reaches a network sink through the call graph, which follows callbacks set on a property and methods called on `this`. |
-| The plan on the way to practice | From 31 entry points (Start, Stop, Continue, the routines and their banner's pause, continue and end, the take's own record and stop, the welcome-back and reminder starts, the rating, Next, "+30 s", Historial) the call graph, which follows callbacks set on a property such as home's Start card or the engine's per-frame handler, reaches the plan only in nine named functions that draw Pro, each with a fixed count of reads, and never the Pro or account window. |
+| The plan on the way to practice | From 31 entry points (Start, Stop, Continue, the routines and their banner's pause, continue and end, the take's own record and stop, the welcome-back and reminder starts, the rating, Next, "+30 s", Historial) the call graph, which follows callbacks set on a property such as home's Start card or the engine's per-frame handler, reaches the plan only in ten named functions that draw Pro, each with a fixed count of reads, and never the Pro or account window. Those ten, and every function on the path that uses one's answer, are pinned by their code (fifth round). |
 | Tracking plan | Every analytics event and every key it carries is pinned, so a new event or a new prop fails, and every one is checked against the worker's own list, so an event the wire filter would drop fails in CI rather than going missing. |
-| Sign-in | On the way to practice only the header touches the account module or asks whether the visitor is signed in (`getState().account` and Google's sign-in included), and only seven files do at all. |
+| Sign-in | On the way to practice only `headerPlanState` (the header's label, the progress board's tag and Start's trial funnel, which records an event and starts nothing) and the page's way out (a signed-in visitor's progress sent as the page hides) touch the account module or ask whether the visitor is signed in (`getState().account`, Google's sign-in and the older `VTAuth` included), and only eight files do at all. |
 | Guest stores | The code that keeps a guest's progress never names the account or session storage, and its storage keys are pinned. |
 | Ads | Only `js/ads.js` and `js/ads-config.js` read the ad config, and every push to AdSense's queue, by its name or through a variable, is `{}`: the page asks for no page-level ads. Auto ads are a switch in the AdSense account that no test can see, so the go-live checklist keeps them off (docs/40 step 9c). |
 
@@ -568,10 +568,12 @@ A skeptic then went over those fixes with the same three lenses and confirmed
 A fourth red team then went over those fixes with five lenses (the scanner,
 the practice path, the events, the spec and this record) and a skeptic
 checked each finding: 17 stood, one was refuted as a limit already written
-down, and all 17 are now closed. Sixteen planted defects (PX25 to PX40) fail
-on the new guards and pass the old ones (PX25, the class field the previous
-round's record named but never planted, passes the guards before that
-round), and three (MK79 to MK81) fail on the new spec and pass the old one.
+down, and all 17 are now closed. Fifteen planted defects (PX26 to PX40) fail
+on the new guards and pass the old ones. PX25 plants the class field the
+previous round's record named but never planted, which that round had already
+closed: it fails the old guards too, and passes the guards before that round
+only without its EGRESS row. Three (MK79 to MK81) fail on the new spec and pass
+the old one. (This paragraph first said sixteen; the fifth round corrected it.)
 
 - **The voice check lost paths.** Stop's handler could keep a take in a
   variable that the page's pagehide handler, made beside it, beacons out: the
@@ -623,6 +625,80 @@ round), and three (MK79 to MK81) fail on the new spec and pass the old one.
   said more than the code did ("named by its selector", "must be on the path
   or listed", "can only add paths"). All are corrected.
 
+A fifth red team went over those fixes with the same five lenses, and a
+skeptic checked each finding: 17 stood or were partly right, three were
+refuted as limits already written down, and all 17 are now closed, with one of
+the three limits closed as well. Fourteen planted defects (PX41 to PX54) fail
+on the new guards and pass the old ones, five (MK82 to MK86) fail on the new
+spec and pass the old one, and one (L63) fails the new check of the harness's
+own usage line.
+
+- **The sale had other doors.** The plans also open from the progress board's
+  Pro button, the trial note's, the account panel's and three Pro controls,
+  from their dialog shown by its own id (`$("#pricing-modal").hidden =
+  false`), and the header's Pro button carries the plan on the page
+  (`data-plan`). A cap past an hour on the welcome-back start, on Start or in
+  the daily loop got past every guard that way (PX43 to PX46), so "every
+  function that reads the plan or opens the sale is written down" was true
+  only of the names the scanner knew. The elements bound to open the sale or
+  the sign-in are now found from the code's own listeners, and a guard fails
+  when one is not among the scanner's words (PX54); a dialog of the sale or the
+  sign-in shown by its id counts as opening it (closing it does not); and the
+  header button's plan marks count as reading the plan. 60 functions now read
+  the plan or open the sale, and 18 open the sign-in, each written down with
+  why.
+- **The second sign-in.** `VTAuth`, the older sign-in for the owner and
+  testers that `js/app.js` also trusts, was outside the account's words: a
+  guest's sixth take refused behind the account panel passed (PX47), and so
+  did a saved take that would not play for a guest (MK86, in the browser). It
+  and its session key are now account words; the account visitor now checks
+  that a take is saved and a saved take plays a month on, with no sign-in in
+  the way.
+- **A reader could gate with what it already held.** The counts pin which
+  names a function on the practice path uses, not what it does with the
+  answer: `restQuickStarts(ent.pro)` in the trial note disabled the routine's
+  Continue past an hour (PX48), and `if (headerPlanState().kind === "free")
+  return` in the routine's Continue stopped it with no new name at all (PX49).
+  The 16 functions on the path that read the plan or the account, or use one's
+  answer at any depth, are now pinned by a hash of their code (comments and
+  layout aside): a change to one, or a new one, fails until it is read again.
+- **"Only the header" was not true.** `headerPlanState` is also the progress
+  board's tag and Start's trial funnel (`trackTrialFirstPractice`, which
+  records trial_first_practice once and starts nothing). The lists, the test's
+  title and the table above now say so.
+- **The voice and ad checks lost names.** Two functions that each make a
+  `finish` gave the hearer only one function it is made in, the other one's,
+  so Stop's handler kept a take its pagehide sibling beaconed (PX41); a name
+  now keeps every function it is made in. AdSense's queue handed to a helper as
+  an argument, or kept in a property, was not followed (PX42); both are now.
+- **Events.** A relay could add props through `Object.assign(props || {},
+  ...)`, an alias or a helper (PX50 to PX52): a relay's props must now be named
+  once, in its send. A relay handed on as a default parameter was never read
+  (PX53); the skeptic found it a written limit, but it was cheap to close, so a
+  relay used as a value is now listed. The tour's event failed the guard on
+  three honest edits far from it (`end()` with nothing, another function's own
+  `end`, a `.catch((reason) => ...)`): the template's calls are now told apart
+  by scope (`eslint-scope`), and a missing argument takes its default or makes
+  no name, as `false` does.
+- **The spec read fields and calls.** A mode handed a copy of each frame with
+  only its sound gate shut passed a check of level and pitch (MK82): the mode
+  must now be handed the engine's own frame, with its gate open and a raw
+  pitch. A loop kept flagged on with its next pass cancelled passed (MK83): a
+  looping reference whose take outlasts the pass sounding at its start must
+  schedule another. A highway stopped for the take passed a count of calls
+  (MK84): it must run and keep new points of the voice. The class, started by
+  calling the loop below its chip, passed a cap where the start panel picks the
+  size (MK85): it is now started by its chip and Start, as a visitor starts it.
+- **The record**: "Sixteen planted defects ... pass the old ones" above was
+  wrong (fifteen did; corrected); the last commit's message said each of the
+  17 was closed by a planted defect, but the record finding was closed by
+  corrections to the text; the spec's header and the harness's usage line
+  still named three browser sets, so the documented command skipped the time
+  limit's second half (now held by a test, L63); and "every handler is a
+  function of its own" left out a handler on an element found by a computed
+  selector (one, in `js/site-layout.js`), which is now named by the selector's
+  fixed text, or by the call that found the element.
+
 Trade-offs:
 
 - The guards read names as they are spelled. A computed name
@@ -639,31 +715,54 @@ Trade-offs:
   called from there, one passed to another file, `this.x()` where `x` is
   named nowhere in the file, or a call made by a name it does not resolve.
   Handlers added in a loop (`forEach((btn) => btn.addEventListener(...))`)
-  share one name per binder and variable. The path is walked in `js/app.js`
+  share one name per binder and variable, and a handler on an element found by
+  a computed selector is named by its fixed text (`#tabs [data-tab="${}"]`),
+  so two such handlers in one binder share a name. The path is walked in `js/app.js`
   only; other files are held by the lists of who reads the plan or opens the
   sale or the sign-in, function by function.
 - Only callers of the core practice functions must be on the path. A function
   that calls one of those callers (a Pro profile switch that redraws the
   history, say) is not checked unless it is listed, and a listed one may not
   read the plan or the account.
-- Every function that reads the plan or opens the sale (53) or the sign-in
-  (13) is written down, so each honest new one costs a line and a reason. A
+- Every function that reads the plan or opens the sale (60) or the sign-in
+  (18) is written down, so each honest new one costs a line and a reason. A
   cap that does neither (returning early past an hour for everyone, with no
   window) is not seen by these lists; the browser visitors catch it on the
-  paths they walk.
+  paths they walk. "Reads the plan" means by a word the scanner knows: the
+  plan's names and keys, the elements bound to open the sale or the sign-in
+  (found from their listeners, so a new button joins on its own), their dialogs
+  shown by id (directly, or through a variable given the element in the same
+  function), and the header button's plan marks. The plan read from the
+  button's label text, or a dialog shown through an element kept elsewhere,
+  is not seen.
+- The 16 functions on the practice path that read the plan or the account,
+  or use one's answer, are pinned by their code, so an honest edit to one
+  (`renderExercise` and `renderPianoControls` among them) costs a re-read and a
+  new hash. "Uses the answer" means a call whose value is kept, tested or
+  returned; an answer kept in shared state and read elsewhere is not
+  followed.
+- A relay's props must be named once, in its send, so a relay that tests them
+  (`if (!props) return`) is listed as changing them; the test belongs in the
+  caller.
 - tour.js's exported `end` turns any reason another script passes into
   "dismiss", so a tour can be recorded as complete or skipped only by its own
   buttons. No script passes anything else today.
 - The looping references are written out in the spec (two today), so a new
-  visit that plays another looping exercise must add it. The mode's frames
-  count only with a level and a pitch, not the fake tone's exact pitch, since
-  an octave error or a speech drill may read it another way. The class is
-  started by calling the loop's `startTier`, because its size chips are hidden
-  while the basics are open.
+  visit that plays another looping exercise must add it. A loop must schedule
+  another pass only when the take outlasts the pass sounding at its start, by
+  three seconds, so "+30 s" inside one pass is not held to it. The mode's
+  frames count only when they are the engine's own frame, with the sound gate
+  open and a raw pitch, not the fake tone's exact pitch, since an octave error
+  or a speech drill may read it another way; a cap that changed the frame in
+  place, keeping the object, would pass. The highway check reads the
+  visualizer's own history (its points' time and voice), so a rename there must
+  update the spec. The class is now started by its chip and Start, before the
+  basics, because the chips are hidden while a routine is open.
 - An event named from a template is resolved through the calls of the
-  function it is in, in its own file. A `false` or `null` passed there makes
-  no name, on the reading that the function returns first (tour.js's
-  `end(false)` does). A template with more than one part, one whose part is
+  function it is in, in its own file, told apart by scope. A `false`, `null`
+  or missing argument passed there makes no name, on the reading that the
+  function returns first (tour.js's `end(false)` does), unless the parameter
+  has a default, which is read instead. A template with more than one part, one whose part is
   given another value in its function, one whose function is handed on,
   bound or exported, or one whose part cannot be traced, fails the check and
   must be written out.
@@ -726,8 +825,8 @@ Trade-offs:
 | Guard | What it catches | Mutants |
 |---|---|---|
 | `tests/node/marketing-copy.test.mjs` | Banned words in any selling string, every inflection of an age label included, and any promise that practice stays free for ever; an English twin missing or in Spanish; jargon that confused the personas, the catalog describing a track differently from the first visit, a bare "no account" line, the "das la nota" idiom; a lesson comparison without the city its price is from, or one that does not hold; a trial end that implies progress is lost; the guide's hoarseness advice without its age warning or with different weeks per language; the line in the code, terms or privacy page behind each claim (a drift guard) | MK1, MK2, MK4–MK18, MK23–MK25, MK47, MK48 (`node qa/mutate.mjs claims`) |
-| `tests/marketing-claims.spec.js` | By what the product does (section 11, second round): full-length takes start, run out and are counted with no Pro or account window for three visitors (a first day past an hour; ten years on, a Sunday at a month's end, in English, heavy in both records, from the catalog and a routine; one who first came 45 days ago); a take recorded, saved, left and come back to sends nothing the size of it by any request, header, cookie, WebSocket, worker or WebRTC connection, for a visitor whose analytics are on, with nine controls; two takes and a rating survive a new tab and a restart a month on; with ads on, no ad of any form at any moment of a routine in any of four modes, nor while a take starts or is live, each check with its own control, and the end-of-task card goes as a take or a routine starts. Third round: the longest exercise, a drill with no microphone, "+30 s", Next and the daily class, a phone in Madrid; a rating, a natural end, a second save, three minutes and two more visits; a second tab and restarts 31 and 32 days on; a paused routine continued or its step taken anyway. The review of that round: the microphone's frames and the piano at both ends of a take, "+30 s" and Start right after Stop heard too, three minutes in ten-second steps. The skeptic's pass: the exercise's own mode handed the microphone's frames, the piano's output carrying sound at a take's start, and every note it schedules after that wired to its output. The fourth red team: the two looping references loop, the mode's frames carry a level and a pitch, a pitch exercise's highway draws the voice, and the daily class starts through the loop's own hand-off | MK3, MK19–MK22, MK26–MK46, MK49–MK81, in four sets so that none outgrows a CI job's 30 minutes (the time limit's 23 alone took 23): `node qa/mutate.mjs promises` and `promises-time-2` (the time limit's two halves), `promises-voice` and `promises-account-ads`, each a job in CI's mutation matrix. MK41 now also removes the wire filter, since with the filter in place its event never leaves |
-| `tests/node/promise-guards.test.mjs`, `tests/node/analytics-wire.test.mjs`, `tests/node/ads-gate.test.mjs` | Section 11, third round: a new send, voice read or event prop; the plan, the sale or a sign-in question on the way to practice; a guest store that names the account or keeps anything for the tab only; the ad config read outside the ad files; an event or prop the worker would drop leaving the browser; a routine under way not counted as practice in any state. The review of that round: callbacks set on a property, methods on `this`, the banner, record and welcome-back entry points, speech recognition and the other send spellings, a take read by its store's name, the account module and Google's sign-in, an aliased AdSense push, the browser's event list against the worker's both ways, and a planned event the worker was never told of. The skeptic's pass: every caller of practice in `js/app.js` on the path or listed, inline click handlers as functions of their own, fetch held by a default parameter, class field or destructuring, a sibling's `open`, AdSense by brackets or a helper, event names made from templates resolved at their calls, and the wire list read only by its filter. The fourth red team: a hearer's enclosing functions, the take store's methods and private methods, handlers on elements kept in variables, listed exceptions that read nothing of the plan or account, a function handed a practice function, every function in every file that reads the plan or opens the sale or the sign-in written down with why, the buttons' ids and the storage keys as names, relays that change what they pass on, templates reassigned, bound or exported, analytics.js's own events, and AdSense's queue through destructuring, a default parameter or a class field | PT1–PT15, PV1–PV13, PW1–PW7, PA1–PA7, PN1–PN7, PX1–PX40 (`node qa/mutate.mjs guards`) |
+| `tests/marketing-claims.spec.js` | By what the product does (section 11, second round): full-length takes start, run out and are counted with no Pro or account window for three visitors (a first day past an hour; ten years on, a Sunday at a month's end, in English, heavy in both records, from the catalog and a routine; one who first came 45 days ago); a take recorded, saved, left and come back to sends nothing the size of it by any request, header, cookie, WebSocket, worker or WebRTC connection, for a visitor whose analytics are on, with nine controls; two takes and a rating survive a new tab and a restart a month on; with ads on, no ad of any form at any moment of a routine in any of four modes, nor while a take starts or is live, each check with its own control, and the end-of-task card goes as a take or a routine starts. Third round: the longest exercise, a drill with no microphone, "+30 s", Next and the daily class, a phone in Madrid; a rating, a natural end, a second save, three minutes and two more visits; a second tab and restarts 31 and 32 days on; a paused routine continued or its step taken anyway. The review of that round: the microphone's frames and the piano at both ends of a take, "+30 s" and Start right after Stop heard too, three minutes in ten-second steps. The skeptic's pass: the exercise's own mode handed the microphone's frames, the piano's output carrying sound at a take's start, and every note it schedules after that wired to its output. The fourth red team: the two looping references loop, the mode's frames carry a level and a pitch, a pitch exercise's highway draws the voice, and the daily class starts through the loop's own hand-off. The fifth: the mode is handed the engine's own frames with the sound gate open, a looping reference schedules its next pass, the highway runs and keeps the voice, the class is started by its chip and Start, and a saved take is saved and plays a month on with no sign-in in the way | MK3, MK19–MK22, MK26–MK46, MK49–MK86, in four sets so that none outgrows a CI job's 30 minutes (the time limit's 23 alone took 23): `node qa/mutate.mjs promises` and `promises-time-2` (the time limit's two halves), `promises-voice` and `promises-account-ads`, each a job in CI's mutation matrix. MK41 now also removes the wire filter, since with the filter in place its event never leaves |
+| `tests/node/promise-guards.test.mjs`, `tests/node/analytics-wire.test.mjs`, `tests/node/ads-gate.test.mjs` | Section 11, third round: a new send, voice read or event prop; the plan, the sale or a sign-in question on the way to practice; a guest store that names the account or keeps anything for the tab only; the ad config read outside the ad files; an event or prop the worker would drop leaving the browser; a routine under way not counted as practice in any state. The review of that round: callbacks set on a property, methods on `this`, the banner, record and welcome-back entry points, speech recognition and the other send spellings, a take read by its store's name, the account module and Google's sign-in, an aliased AdSense push, the browser's event list against the worker's both ways, and a planned event the worker was never told of. The skeptic's pass: every caller of practice in `js/app.js` on the path or listed, inline click handlers as functions of their own, fetch held by a default parameter, class field or destructuring, a sibling's `open`, AdSense by brackets or a helper, event names made from templates resolved at their calls, and the wire list read only by its filter. The fourth red team: a hearer's enclosing functions, the take store's methods and private methods, handlers on elements kept in variables, listed exceptions that read nothing of the plan or account, a function handed a practice function, every function in every file that reads the plan or opens the sale or the sign-in written down with why, the buttons' ids and the storage keys as names, relays that change what they pass on, templates reassigned, bound or exported, analytics.js's own events, and AdSense's queue through destructuring, a default parameter or a class field. The fifth: every element bound to open the sale or the sign-in (derived from the code), the dialogs shown by id, the header button's plan marks, the older sign-in (VTAuth), the functions on the path that read the plan or use its answer pinned by their code, a name made in two functions, AdSense's queue handed to a helper or kept in a property, a relay's props named once and a relay handed on, and templates told apart by scope | PT1–PT15, PV1–PV13, PW1–PW7, PA1–PA7, PN1–PN7, PX1–PX54 (`node qa/mutate.mjs guards`); L63 (`lint`: the harness's usage line names every browser set CI runs) |
 | `tests/marketing-copy.spec.js` | On a real page at 360 and 390 px, both languages: the kicker stays one line, no choice is cut or over three lines, no sideways scroll, the layout control fits one row; the tab title and description follow the language; Open Graph stays Spanish | DS20–DS23 (DS23: the kicker set larger on phones). CI's runner has no Inter and draws in DejaVu Sans, which is wider, so the kicker's tracking is 0.06em under 400 px; reproduce with a fontconfig that maps Inter to DejaVu |
 | `qa/customer-research/test_rules.py` | Answers matched to the wrong round's batch; split-half reported for three cards, or unbounded for four; reliability that comes from the bad offer alone; "not worse" judged on the point estimate; a verdict on a question that failed its checks; "better" while any gate failed | 7 rule mutants plus 6 scoring mutants in `mutate_ssr.py`, all killed |
 
@@ -806,3 +905,4 @@ halves, and settle the asset-stamp conflicts with `npm run assets:bump`.
 | MR-39 | Test | `qa/promise-scan.mjs`, guards, spec | Sixteen gaps in those fixes (a skeptic's pass): inline click handlers off the path, fetch held by a default parameter, class field or destructuring, a sibling's `open`, AdSense by brackets or a helper, templated event names passed by prefix, the wire list changed outside its literal, a cap after the level meter, a piano booked but silent, a mutant the old spec already caught | Handlers were merged into their binders; the scanner knew fewer places a value is held; the spec read the first consumer and the piano's books | Fixed; PX15–PX24, MK76–MK78, MK71 moved to the fourth tick |
 | MR-40 | Test | `marketing-claims.spec.js` | The first piano-output check failed on CI for an exercise that cues each target once, and passed a loop silent after its first pass | The take's minutes run in seconds of real time while the audio runs in real time, so the end heard the start's notes, or nothing | Fixed: sound at the start, wiring of every later note at the end, the page's clock stepped while waiting; MK78 |
 | MR-41 | Test | `qa/promise-scan.mjs`, guards, spec, `js/tour.js` | Seventeen gaps in those fixes (a fourth red team): a take kept by one handler and sent by its sibling, the take store and private methods unchecked, handlers on held elements merged, caps in listed exceptions, in a wrapper handed to the daily loop or off the path entirely, the sale opened by its button's id, relays and templates that change an event, analytics.js skipped, AdSense through more holders, a reference that stops looping, a mode or highway fed nothing, and a record that named a head whose CI had failed | Naming handlers apart cut edges; names were tallied where they were walked; the guards checked the path, not who else reads the plan; the spec counted calls | Fixed; PX25–PX40, MK79–MK81 |
+| MR-42 | Test | `qa/promise-scan.mjs`, guards, spec, `qa/mutate.mjs` | Seventeen gaps in those fixes (a fifth red team): the sale opened by other buttons, by its dialog's id or by the plan read off the page; the older sign-in unseen; a plan reader gating with an answer it held, or a new caller with none; "only the header" untrue; a name made in two functions; AdSense's queue through a helper's argument or a property; relays adding props through an alias, a helper or `props \|\| {}`, or handed on; the tour's event failing on honest edits; a mode, loop, highway and class each checked by a field or a call; a saved take not played; and a record that overcounted, named three browser sets of four, and overstated the handlers | The vocabulary was hand-written; counts pin names, not what is done with an answer; the template machinery keyed on spelling; the spec read fields and calls | Fixed; PX41–PX54, MK82–MK86, L63 |

@@ -98,21 +98,22 @@ customer's Pro for good.
 - a Mercado Pago subscription still `authorized` whose period ended when a
   charge's money went back (a refund or a chargeback): it charges again.
 
-403 for everything else that is refused: a deleted Stripe subscription, a
-cancelled Creem one, a paused or cancelled Mercado Pago one, a one-off payment
-that failed, was never paid or was refunded, a setup session, and a period
-that ran out while the subscription still reads `active`.
+- a Creem subscription that still reads `active`, not set to cancel, whose
+  period is over: its renewal has not been paid yet. A renewal that failed
+  reads `active` from its period end until Creem's daily check sends
+  `subscription.expired` ("Creem checks once a day for subscriptions whose
+  `current_period_end_date` fell on the previous day"), and every other event
+  in the retry period carries the same `active` snapshot. It used to answer
+  403 there, and a browser without an account that asked in that window
+  forgot the licence it gets Pro back with when the retry goes through
+  (found reviewing the merge, 2026-11-23).
 
-That last one has a known gap on Creem. A renewal that failed still reads
-`active` from its period end until Creem's daily check sends
-`subscription.expired` ("Creem checks once a day for subscriptions whose
-`current_period_end_date` fell on the previous day"), so for up to about a
-day it answers 403, and a browser without an account that asks in that
-window forgets its licence. A cancellation the customer scheduled looks the
-same until its `subscription.canceled` arrives, and no payment undoes that
-one, so the record alone cannot tell the two apart. Creem's
-`subscription.past_due` would close the window; this worker does not handle
-it yet.
+403 for everything else that is refused: a deleted Stripe subscription, a
+cancelled Creem one or one set to cancel (`scheduled_cancel`, or an `active`
+snapshot carrying `canceled_at`: no payment undoes it), a Creem period a
+refund or a chargeback ended, a paused or cancelled Mercado Pago one, a
+one-off payment that failed, was never paid or was refunded, a setup session,
+and a Stripe period that ran out while the subscription still reads `active`.
 
 **What a suspended customer keeps.** No new token is issued, but the site's
 client keeps the token it already holds until that token expires: at most
@@ -406,8 +407,8 @@ Consequences worth understanding before you ship:
 
 - **A missed renewal webhook ends access at `periodEnd`, by design.** We prefer
   a paying customer losing Pro over a cancelled customer keeping it forever.
-  A period that ran out answers 403, and the site's client forgets its license
-  on a 403, so this loss is brief only for a signed-in account (its next check
+  A Stripe period that ran out answers 403 (Creem and Mercado Pago answer
+  402 there, above), and the site's client forgets its license on a 403, so this loss is brief only for a signed-in account (its next check
   after the provider catches up restores it); a browser with no account keeps
   it until the customer signs in or support steps in.
 - **The providers' own retries are what keep `periodEnd` moving.** Stripe

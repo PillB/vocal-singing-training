@@ -477,6 +477,24 @@ test.describe("VG-88: a browser that cannot sign in pays by the link in the mone
       await expect.poll(() => navigations).toEqual([EUR_LINK]);
     });
 
+    test("pressed on a US$ card before the worker said € can be charged, the offer opens the dialog again on the € price instead of paying", async ({ page }) => {
+      // Found reviewing the merge with round two, 2026-11-23: the link was read when the offer was pressed, in the money
+      // the card showed by then, so a buyer who pressed "US$7.99" was sent to the €7.99 product.
+      const state = freshState({ eur: true, authMethods: GOOGLE_ONLY, healthGate: gate() });
+      const navigations = await pressSignedOut(page, state, { links: { pro_monthly: USD_LINK, pro_yearly: "" }, linksEur: { pro_monthly: EUR_LINK, pro_yearly: "" } });
+      await expect(page.locator("#account-pay-anyway")).toBeVisible({ timeout: 8000 });
+      // The precondition: the press was made on the dollar card, the worker not having answered.
+      expect(await page.evaluate(() => window.VTAccount.knownRails())).toBeNull();
+      state.healthGate.open();
+      await expect.poll(() => page.evaluate(() => window.VTAccount.knownRails()?.creemEur ?? null)).toBe(true);
+      await page.locator("#account-pay-anyway-btn").click();
+      // Wrong (before): straight to EUR_LINK, under a card that had said US$7.99.
+      await expect(page.locator("#pricing-modal")).toBeVisible();
+      await expect.poll(() => dialogReads(page).then((d) => d.monthly)).toBe("€7.99");
+      await expect(page.locator("#toast")).toContainText("different currency");
+      expect(navigations).toEqual([]);
+    });
+
     test("with only the dollar product's link, there is no offer: it would charge a price the card does not show", async ({ page }) => {
       const state = freshState({ eur: true, authMethods: GOOGLE_ONLY });
       const navigations = await pressSignedOut(page, state, { links: { pro_monthly: USD_LINK, pro_yearly: "" } });

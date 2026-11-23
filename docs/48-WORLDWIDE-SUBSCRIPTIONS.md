@@ -264,8 +264,8 @@ Each item gives what would show it and what we would do.
      27 EU states, so VAT comes out of the price rather than on top of it.
      The net after VAT varies by country, from €6.83 a month in Luxembourg
      (17%) to €6.29 in Hungary (27%); `docs/35-PRICING.md` has the table.
-   - *Still open:* the terms page still says US$ outside Peru and must
-     name the euro price before launch.
+   - *Done (2026-11-23):* the terms page names the euro price for the
+     Union in both halves, and each price stays on one line.
 10. **The billing portal trusts any licence linked to the account.** The
     worker opens the Creem portal of whichever customer a linked licence
     names, however that licence was linked. Round one's red team showed a

@@ -125,6 +125,11 @@ test("every member state is recognised by its time zone, whatever the browser's 
     ["Europe/Warsaw", "PL"], ["Europe/Lisbon", "PT"], ["Atlantic/Azores", "PT"], ["Atlantic/Madeira", "PT"],
     ["Europe/Bucharest", "RO"], ["Europe/Bratislava", "SK"], ["Europe/Ljubljana", "SI"], ["Europe/Madrid", "ES"],
     ["Atlantic/Canary", "ES"], ["Africa/Ceuta", "ES"], ["Europe/Stockholm", "SE"],
+    // France's outermost regions, part of a member state and paying in euros (TFEU arts. 349, 355(1)).
+    // Wrong (before, found reviewing the merge): read as the rest of the world and shown US$, while the
+    // Canaries, the Azores and Madeira, outermost regions too, were shown euros.
+    ["America/Cayenne", "FR"], ["America/Guadeloupe", "FR"], ["America/Martinique", "FR"],
+    ["Indian/Reunion", "FR"], ["Indian/Mayotte", "FR"], ["America/Marigot", "FR"],
     // The old link names (tzdata's backward file) a browser may still report: they name a place with no "/".
     ["Poland", "PL"], ["Portugal", "PT"], ["Eire", "IE"]
   ];
@@ -146,7 +151,10 @@ test("Europe outside the Union stays in US dollars, whatever the language", () =
     ["de-AT", "Europe/Vaduz", "WW"], ["sr-RS", "Europe/Belgrade", "WW"], ["en-GB", "Europe/Gibraltar", "GB"],
     ["nb-NO", "Arctic/Longyearbyen", "WW"], ["de-DE", "Europe/London", "GB"],
     // Link names outside the Union are no member state either.
-    ["en-GB", "GB-Eire", "GB"], ["is-IS", "Iceland", "WW"]
+    ["en-GB", "GB-Eire", "GB"], ["is-IS", "Iceland", "WW"],
+    // French overseas places outside the Union (overseas countries and territories), and a non-member's subtag.
+    ["fr-FR", "America/St_Barthelemy", "WW"], ["fr-FR", "America/Miquelon", "WW"], ["fr-FR", "Pacific/Noumea", "WW"],
+    ["fr-PF", "UTC", "WW"], ["fr-BL", "UTC", "WW"]
   ];
   for (const [lang, tz, region] of outside) {
     const win = load({ lang, tz });
@@ -165,6 +173,9 @@ test("the time zone outranks the language; the language's region decides only wh
     // The zone names no place (a hardened browser's UTC, "CET", none): the language's region subtag.
     ["pl-PL", "UTC", "PL"], ["de-AT", "", "AT"], ["en-IE", "Etc/UTC", "IE"], ["fr-BE", "CET", "BE"],
     ["sr-Latn-HR", "Etc/GMT-1", "HR"], ["sv_SE", "UTC", "SE"],
+    // An outermost region's own subtag is France: Réunion, Guadeloupe, Martinique, French Guiana, Mayotte, Saint-Martin.
+    ["fr-RE", "UTC", "FR"], ["fr-GP", "", "FR"], ["fr-MQ", "UTC", "FR"], ["fr-GF", "CET", "FR"], ["fr-YT", "UTC", "FR"],
+    ["fr-MF", "UTC", "FR"],
     // Controls: a zone outside the Union is not overruled by a European language, and a bare language or a
     // non-member region is no member state.
     ["pl-PL", "America/New_York", "US"], ["de-AT", "America/Lima", "PE"], ["es-ES", "America/Lima", "PE"],

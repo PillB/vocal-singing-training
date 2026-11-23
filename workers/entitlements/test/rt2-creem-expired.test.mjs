@@ -197,6 +197,69 @@ test("control: a subscription that is over answers 403, so the browser stops ask
   }
 });
 
+test("merge review: between the period end and Creem's daily expiry, a buyer without an account keeps their licence (402), not 403", async () => {
+  // Creem sends subscription.expired up to a day after the period ends; until
+  // then the record still reads "active". Wrong (before): 403 inactive in that
+  // window, js/license.js forgot the licence, and the retry's payment never
+  // reached that browser.
+  const { env, licenseId, periodEnd } = await anonymousBuyer();
+  const window = await refreshLicense(env, licenseId, periodEnd + 3600);
+  assert.equal(window.status, 402, JSON.stringify(window.body));
+  assert.equal(window.body.reason, "suspended");
+  assert.equal(window.body.token, undefined, "no Pro for a renewal not paid");
+  const paidAt = periodEnd + 2 * DAY;
+  assert.equal(await deliver(env, "evt_paid_2", "subscription.paid", retryPaid(periodEnd, paidAt), paidAt), 200);
+  const back = await refreshLicense(env, licenseId, paidAt + 60);
+  assert.equal(back.status, 200, "the same browser gets Pro back");
+});
+
+test("merge review: another event during the retry (an update still saying active) does not turn the licence into a 403", async () => {
+  // Creem: "Status remains 'active' during retry period". Wrong (before): the
+  // update put the record back to plain "active" with its period over, and
+  // the next ask answered 403.
+  const { env, licenseId, periodEnd } = await anonymousBuyer();
+  assert.equal(await deliver(env, "evt_expired", "subscription.expired", subscriptionObject("active", periodEnd), periodEnd + DAY), 200);
+  assert.equal(await deliver(env, "evt_update", "subscription.update", subscriptionObject("active", periodEnd), periodEnd + DAY + 3600), 200);
+  const after = await refreshLicense(env, licenseId, periodEnd + 2 * DAY);
+  assert.equal(after.status, 402, JSON.stringify(after.body));
+  assert.equal(after.body.reason, "suspended");
+});
+
+test("control: a subscription set to cancel answers 403 once its period is over, before Creem's own cancellation arrives", async () => {
+  // Both read "active" until subscription.canceled; only Creem's
+  // scheduled_cancel (or a canceled_at on an active snapshot) tells a
+  // cancellation from a renewal not paid yet. Wrong (402 for every active
+  // record): the browser of somebody who chose to cancel keeps asking.
+  for (const [label, snapshot] of [
+    ["scheduled_cancel", (periodEnd) => subscriptionObject("scheduled_cancel", periodEnd, { canceled_at: iso(periodEnd - 10 * DAY) })],
+    ["active with canceled_at", (periodEnd) => subscriptionObject("active", periodEnd, { canceled_at: iso(periodEnd) })]
+  ]) {
+    const { env, licenseId, periodEnd } = await anonymousBuyer();
+    assert.equal(await deliver(env, "evt_sched", "subscription.update", snapshot(periodEnd), periodEnd - 10 * DAY), 200, label);
+    const during = await refreshLicense(env, licenseId, periodEnd - DAY);
+    assert.equal(during.status, 200, `${label}: the paid month is kept`);
+    const over = await refreshLicense(env, licenseId, periodEnd + 3600);
+    assert.equal(over.status, 403, `${label}: ${JSON.stringify(over.body)}`);
+  }
+});
+
+test("control: a period ended by a refund answers 403, not 402", async () => {
+  const { env, licenseId, periodEnd } = await anonymousBuyer();
+  const at = NOW + 5 * DAY;
+  const refund = {
+    id: "ref_1",
+    object: "refund",
+    status: "succeeded",
+    refund_amount: 799,
+    transaction: { id: "tran_1", amount: 799, amount_paid: 799, status: "refunded", subscription: "sub_1" },
+    subscription: subscriptionObject("active", periodEnd),
+    created_at: at * 1000
+  };
+  assert.equal(await deliver(env, "evt_refund", "refund.created", refund, at), 200);
+  const after = await refreshLicense(env, licenseId, at + 60);
+  assert.equal(after.status, 403, JSON.stringify(after.body));
+});
+
 test("a cancellation on its own is the ending: a later-stamped payment (a manual resend gets a new created_at) does not reopen it", async () => {
   // The third test above sends an expiry after the cancellation, and an
   // expiry whose snapshot says cancelled closes the record by itself. This

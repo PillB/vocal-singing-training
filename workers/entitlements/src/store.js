@@ -1082,7 +1082,7 @@ export function isStaleUpdate(record, update) {
  *   subscriptionId, periodEnd, periodEndFromCharge, endsAt, endedAt, paid,
  *   paymentFailed, reversedAt, reversedChargeAt, reverseLatestCharge,
  *   declinedAt, terminal, claimId, paymentId, requireExisting, planSource,
- *   occurredAt.
+ *   cancelScheduled, occurredAt.
  * @param {{now?: number, generateId?: function(): string, idSecret?: string}} [options]
  *   `now` and `generateId` are injectables for tests. `idSecret` is the key
  *   license ids are derived under (see `licenseIdSecret`); without it a new
@@ -1294,6 +1294,7 @@ function applyCurrentState(record, update, existing, now) {
   const planBefore = record.plan;
   applyIfPresent(record, "plan", update.plan);
   applyIfPresent(record, "status", update.status);
+  applyIfPresent(record, "cancelScheduled", update.cancelScheduled);
   applyIfPresent(record, "planSource", update.planSource);
   applyPeriodEnd(record, update, planBefore);
   // The provider says access ended at a given time: it ended a subscription

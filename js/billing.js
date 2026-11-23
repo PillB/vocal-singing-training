@@ -89,7 +89,12 @@
 
   /**
    * Each member state's IANA time zones, with the state. The Canaries, Ceuta,
-   * Madeira, the Azores and Åland are in the Union too, so their zones are here.
+   * Madeira, the Azores and Åland are in the Union too, so their zones are here,
+   * and so are France's outermost regions (French Guiana, Guadeloupe,
+   * Martinique, Réunion, Mayotte and Saint-Martin: parts of a member state
+   * under TFEU arts. 349 and 355(1), paying in euros; js/region-gate.js lists
+   * the same zones). Left out with reason: Saint-Barthélemy, Saint-Pierre and
+   * the Pacific territories, which are overseas countries outside the Union.
    * So are the three old link names a browser may still report for a member
    * state (js/region-gate.js lists them for the same reason): "Poland",
    * "Portugal" and "Eire" name a place, and without them an "en-US" browser
@@ -105,8 +110,16 @@
     ["Europe/Warsaw", "PL"], ["Europe/Lisbon", "PT"], ["Atlantic/Azores", "PT"], ["Atlantic/Madeira", "PT"],
     ["Europe/Bucharest", "RO"], ["Europe/Bratislava", "SK"], ["Europe/Ljubljana", "SI"], ["Europe/Madrid", "ES"],
     ["Atlantic/Canary", "ES"], ["Africa/Ceuta", "ES"], ["Europe/Stockholm", "SE"],
+    ["America/Cayenne", "FR"], ["America/Guadeloupe", "FR"], ["America/Martinique", "FR"],
+    ["Indian/Reunion", "FR"], ["Indian/Mayotte", "FR"], ["America/Marigot", "FR"],
     ["Poland", "PL"], ["Portugal", "PT"], ["Eire", "IE"]
   ]);
+
+  /**
+   * The region subtags of France's outermost regions, which ISO 3166 codes
+   * apart from France: "fr-RE" is Réunion, a part of France and of the Union.
+   */
+  const EU_OUTERMOST_SUBTAGS = new Map([["GF", "FR"], ["GP", "FR"], ["MQ", "FR"], ["RE", "FR"], ["YT", "FR"], ["MF", "FR"]]);
 
   /**
    * The member state this browser is in, or "" when it is not in the Union.
@@ -126,7 +139,8 @@
   function euRegion(lang, tz) {
     if (EU_TIME_ZONES.has(tz)) return EU_TIME_ZONES.get(tz);
     if (tz.includes("/") && !tz.startsWith("Etc/")) return "";
-    const region = regionSubtag(lang);
+    const subtag = regionSubtag(lang);
+    const region = EU_OUTERMOST_SUBTAGS.get(subtag) || subtag;
     return EU_REGIONS.includes(region) ? region : "";
   }
 
@@ -1009,21 +1023,50 @@
 
   /**
    * Back to the checkout the worker last opened for this page, when it is for
-   * this plan, this rail and this sign-in, and was opened less than
-   * REOPEN_CHECKOUT_MS ago; else null, and the worker is asked. After Stop on
-   * a slow load, or back from the checkout page, the next press of the same
-   * plan asked the worker for a second Creem checkout, which spent one of the
-   * account's twelve an hour and left two open (red team money-4).
-   * @returns {Promise<Object>|null} The redirect, in startCheckout's shape.
+   * this plan, this rail, this sign-in and the money the card shows now, and
+   * was opened less than REOPEN_CHECKOUT_MS ago; else null, and the worker is
+   * asked. After Stop on a slow load, or back from the checkout page, the next
+   * press of the same plan asked the worker for a second Creem checkout, which
+   * spent one of the account's twelve an hour and left two open (red team
+   * money-4).
+   *
+   * The money: a press made before /v1/health answered opened a US$ checkout,
+   * and a card that has since turned to € is not sent back to it (VG-85, the
+   * price shown is the price charged). And the account: the worker refuses a
+   * second checkout while a subscription is open, and going back skips that
+   * question, so /v1/me is asked first; a subscription opened meanwhile (paid
+   * on another device) sends the press to the worker, which answers
+   * subscription_open. Both found reviewing the merge, 2026-11-23.
+   * @returns {Promise<Object>|null} The outcome, in startCheckout's shape.
    */
   function reopenLastCheckout(planId, rail) {
     const last = lastRedirect;
     if (!last || last.plan !== planId || last.provider !== rail) return null;
     lastRedirect = null;
     if (last.session !== sessionNow() || nowMs() - last.at >= REOPEN_CHECKOUT_MS) return null;
-    rememberCheckoutIntent(planId, rail);
+    if (last.currency !== checkoutCurrency(planId, rail)) return null;
+    return nothingOpenNow().then((clear) => (clear ? goBackTo(last) : openWorkerCheckout(planId, rail)));
+  }
+
+  /**
+   * Whether /v1/me, asked now, still lists no open subscription for this
+   * account. Any doubt (offline, an error, a sign-out meanwhile) is a no, and
+   * the worker, asked instead, decides.
+   * @returns {Promise<boolean>}
+   */
+  function nothingOpenNow() {
+    const refresh = global.VTAccount?.refresh;
+    if (typeof refresh !== "function") return Promise.resolve(false);
+    return Promise.resolve(refresh())
+      .then((res) => !!(res && res.ok) && !(accountState()?.billingRails || []).length)
+      .catch(() => false);
+  }
+
+  /** Go back to the checkout `last` names, in startCheckout's shape. */
+  function goBackTo(last) {
+    rememberCheckoutIntent(last.plan, last.provider);
     window.location.assign(last.url);
-    return Promise.resolve({ ok: true, mode: "redirect", url: last.url, plan: planId, provider: rail });
+    return { ok: true, mode: "redirect", url: last.url, plan: last.plan, provider: last.provider };
   }
 
   try {
@@ -1069,8 +1112,9 @@
       return Promise.resolve({ ok: false, mode: "provider_unavailable", plan: planId, provider: rail });
     }
     const asker = sessionNow();
-    return ask({ plan: planId, provider: rail, returnPath: returnPathHere(), currency: checkoutCurrency(planId, rail) })
-      .then((answer) => followWorkerAnswer(answerForAsker(answer, asker), planId, rail))
+    const currency = checkoutCurrency(planId, rail);
+    return ask({ plan: planId, provider: rail, returnPath: returnPathHere(), currency })
+      .then((answer) => followWorkerAnswer(answerForAsker(answer, asker), planId, rail, currency))
       .catch(() => ({ ok: false, mode: "checkout_failed", plan: planId, provider: rail, reason: "error" }));
   }
 
@@ -1090,12 +1134,14 @@
    * Go to the checkout the worker opened, or say why there is none, in
    * startCheckout's shape. The worker opens Creem checkouts only
    * (apiCheckoutEnabled), so its answer is followed only to a Creem page.
+   * `currency` is the money the worker was asked to charge, kept so that the
+   * checkout is gone back to only under a card showing the same.
    */
-  function followWorkerAnswer(res, planId, rail) {
+  function followWorkerAnswer(res, planId, rail, currency) {
     const target = res && res.ok ? validateCreemPageUrl(res.url) : null;
     if (target && target.ok) {
       rememberCheckoutIntent(planId, rail);
-      lastRedirect = { plan: planId, provider: rail, session: sessionNow(), url: target.url, at: nowMs() };
+      lastRedirect = { plan: planId, provider: rail, session: sessionNow(), currency, url: target.url, at: nowMs() };
       window.location.assign(target.url);
       return { ok: true, mode: "redirect", url: target.url, plan: planId, provider: rail };
     }
@@ -1748,6 +1794,7 @@
     clearEntitlement,
     startCheckout,
     checkoutUrl,
+    checkoutCurrency,
     validateCheckoutUrl,
     validateCreemPageUrl,
     linksConfigured,

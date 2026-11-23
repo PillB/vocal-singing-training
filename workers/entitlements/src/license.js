@@ -490,20 +490,25 @@ export function isManagedSubscription(entitlement) {
  *     can be processed after the paid interval ends, and answered 403 then,
  *     a paying subscriber's browser forgot its license at the renewal (VG-84
  *     review).
+ *   - a Creem subscription that still reads "active" and was not set to
+ *     cancel, whose period is over: its renewal has not been paid yet. A
+ *     renewal that failed reads "active" from its period end until Creem's
+ *     daily check sends `subscription.expired` ("Creem checks once a day for
+ *     subscriptions whose `current_period_end_date` fell on the previous
+ *     day"), and any other event in the retry period carries the same
+ *     "active" snapshot ("Status remains 'active' during retry period"). It
+ *     answered 403 there, and a buyer who paid without an account, whose
+ *     browser asked in that window, lost the licence id they get Pro back
+ *     with when the retry goes through (found reviewing the merge,
+ *     2026-11-23). A cancellation the customer scheduled reads "active" too
+ *     until `subscription.canceled` arrives, and no payment undoes it, so the
+ *     record keeps `cancelScheduled` from Creem's own `scheduled_cancel` (or
+ *     an "active" snapshot carrying `canceled_at`) and that one is refused,
+ *     as is a period a refund or a chargeback ended.
  * Never a one-off payment (nothing charges it again), a deleted Stripe
- * subscription, a paused or cancelled Mercado Pago one, or a Creem or Stripe
- * period that ran out while the subscription still reads "active".
- *
- * That last case is a gap, stated: a Creem renewal that failed reads
- * "active" from its period end until Creem's daily check sends
- * `subscription.expired` ("Creem checks once a day for subscriptions whose
- * `current_period_end_date` fell on the previous day"), so for up to about a
- * day it answers 403, and a browser that asks in that window forgets the
- * licence. The same shape is a cancellation the customer scheduled whose
- * `subscription.canceled` has not arrived yet, which no payment undoes, and
- * the two cannot be told apart from the record. Creem's
- * `subscription.past_due` ("The subscription payment has failed") would
- * close the window; this worker does not handle it yet.
+ * subscription, a paused or cancelled Mercado Pago one, a Creem one set to
+ * cancel, or a Stripe period that ran out while the subscription still
+ * reads "active".
  * @param {Object} entitlement Stored entitlement record.
  * @param {number} nowSeconds Unix seconds.
  * @returns {boolean} Whether the refusal can still be undone by a payment.
@@ -519,7 +524,24 @@ export function isSuspended(entitlement, nowSeconds) {
   if (entitlement.paymentFailed === true && entitlement.paid !== true) {
     return true;
   }
-  return entitlement.provider === "mercadopago" && entitlement.status === "active";
+  return entitlement.status === "active" && chargedAgainByItself(entitlement);
+}
+
+/**
+ * Whether the provider of a subscription that still reads "active" goes on
+ * charging it by itself: a Mercado Pago one until Mercado Pago cancels it, a
+ * Creem one unless the customer set it to cancel or its period was ended by
+ * money going back (a refund or a chargeback caps the period at the
+ * reversal, `endReversedPeriod`; nothing says Creem charges that card again).
+ * @param {Object} entitlement Stored entitlement record.
+ * @returns {boolean}
+ */
+function chargedAgainByItself(entitlement) {
+  if (entitlement.provider === "mercadopago") {
+    return true;
+  }
+  const endedByReversal = Number.isFinite(entitlement.reversedAt) && entitlement.periodEnd <= entitlement.reversedAt;
+  return entitlement.provider === "creem" && entitlement.cancelScheduled !== true && !endedByReversal;
 }
 
 /**

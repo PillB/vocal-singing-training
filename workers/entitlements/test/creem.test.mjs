@@ -44,6 +44,16 @@ import {
 import { getEntitlement, getLicenseIdForClaim } from "../src/store.js";
 import { createFakeKv, createTestEnv } from "./fixtures.mjs";
 
+/**
+ * What a Creem subscription that renews answers once its paid period is over
+ * and no renewal has been paid yet: no Pro, and 402 rather than 403, so the
+ * browser keeps the licence for when the renewal or a retry goes through
+ * (found reviewing the merge, 2026-11-23: a buyer without an account lost it
+ * there). 403 is for one that will not renew: set to cancel, or ended by money
+ * going back.
+ */
+const RENEWAL_DUE = 402;
+
 const DAY = 86400;
 const T = Math.floor(Date.now() / 1000);
 
@@ -337,7 +347,7 @@ test("a checkout and its paid event give Pro for the period Creem named", async 
   assert.equal(await claim(env, "ch_1", 1), 200);
   await deliver(env, "evt_2", "subscription.paid", 0, paid("sub_1", "tran_1", 31, 0));
   assert.equal(await claim(env, "ch_1", 30), 200);
-  assert.equal(await claim(env, "ch_1", 32), 403, "and it ends when the period does");
+  assert.equal(await claim(env, "ch_1", 32), RENEWAL_DUE, "and it ends when the period does");
 });
 
 test("a checkout whose subscription events never arrive sells a month, not a lifetime", async () => {
@@ -350,7 +360,7 @@ test("a checkout whose subscription events never arrive sells a month, not a lif
     subscription: "sub_2"
   });
   assert.equal(await claim(env, "ch_2", 10), 200);
-  assert.equal(await claim(env, "ch_2", 40), 403, "a month after the checkout, and no further");
+  assert.equal(await claim(env, "ch_2", 40), RENEWAL_DUE, "a month after the checkout, and no further");
 });
 
 test("a yearly product's checkout is bounded to a year, not to a month", async () => {
@@ -361,7 +371,7 @@ test("a yearly product's checkout is bounded to a year, not to a month", async (
     product: { id: "prod_yearly", billing_period: "every-year" }
   });
   assert.equal(await claim(env, "ch_3", 200), 200);
-  assert.equal(await claim(env, "ch_3", 400), 403);
+  assert.equal(await claim(env, "ch_3", 400), RENEWAL_DUE);
 });
 
 test("a paid event's period only ever lengthens, so a late renewal cannot lose a month", async () => {
@@ -394,14 +404,14 @@ test("a state event cannot shorten a month that was paid for, whatever period it
   assert.equal(await claim(env, "ch_5", 50), 200);
   await deliver(env, "evt_3", "subscription.update", 1, subscription("sub_5", "active", 40));
   assert.equal(await claim(env, "ch_5", 50), 200, "they paid through day 62");
-  assert.equal(await claim(env, "ch_5", 63), 403, "and no further than that");
+  assert.equal(await claim(env, "ch_5", 63), RENEWAL_DUE, "and no further than that");
 });
 
 test("a state event still lengthens a period, which is the whole point of listening to it", async () => {
   const env = freshEnv();
   await deliver(env, "evt_1", "checkout.completed", 0, checkout("ch_5b", "sub_5b"));
   await deliver(env, "evt_2", "subscription.paid", 0, paid("sub_5b", "tran_1", 31, 0));
-  assert.equal(await claim(env, "ch_5b", 40), 403);
+  assert.equal(await claim(env, "ch_5b", 40), RENEWAL_DUE);
   await deliver(env, "evt_3", "subscription.update", 1, subscription("sub_5b", "active", 62));
   assert.equal(await claim(env, "ch_5b", 40), 200, "the subscription now runs to day 62");
 });

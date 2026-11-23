@@ -9589,7 +9589,9 @@
       // worked, and it sent them one step back rather than nowhere. The plan
       // is remembered: if this browser then turns out unable to sign in, the
       // account panel offers to go on and pay (VG-88).
-      payAfterSignIn = { plan: res.plan, rail: res.provider || pricingRail };
+      // With the money the card showed, so the offer never pays in another.
+      const rail = res.provider || pricingRail;
+      payAfterSignIn = { plan: res.plan, rail, currency: window.VTBilling?.checkoutCurrency?.(res.plan, rail) };
       toast(tt("pricing.checkoutNeedsAccount"), { durationMs: 4600 });
       closePricing();
       openAccount();
@@ -10510,6 +10512,15 @@
     const want = payAfterSignIn;
     if (!want) return;
     closeAccount();
+    // The link is read now, in the money the card would show now. A European
+    // who pressed a US$ card before the worker said € can be charged would be
+    // sent to the euro link under a price they never saw: the dialog opens
+    // again on the price this press would charge instead (VG-85, VG-88).
+    if (want.currency && window.VTBilling?.checkoutCurrency?.(want.plan, want.rail) !== want.currency) {
+      openPricing();
+      toast(tt("pricing.toast.priceCurrencyChanged"), { durationMs: 5200 });
+      return;
+    }
     const res = window.VTBilling?.startCheckout?.(want.plan, want.rail);
     if (res && res.mode !== "redirect") answerCheckout(res);
   }

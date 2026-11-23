@@ -428,6 +428,7 @@ function mapSubscription(subscription, env, eventType) {
     plan,
     planSource,
     status: unlisted && status !== "canceled" ? "suspended" : status,
+    cancelScheduled: cancelScheduledOf(subscription),
     paid: paid && !unlisted ? true : undefined,
     paymentId: paid && !unlisted ? transactionIdOf(subscription) : null,
     periodEnd: subscriptionPeriodEnd(subscription),
@@ -531,6 +532,29 @@ function subscriptionEventStatus(subscription, eventType) {
   }
   const status = mapCreemStatus(raw);
   return eventType === "subscription.expired" && status === "active" ? "past_due" : status;
+}
+
+/**
+ * Whether the customer set this subscription to cancel at its period end:
+ * true for Creem's `scheduled_cancel`, or a subscription still `active` or
+ * `trialing` that carries a `canceled_at` (the cancellation it is waiting
+ * for); false for one that renews; undefined for anything else, which leaves
+ * the record's answer as it was. Both read "active" in our status, and only
+ * this tells a renewal that has not been paid yet (kept: 402) from a
+ * cancellation taking effect (refused: 403) once the period is over
+ * (`isSuspended`).
+ * @param {Object} subscription Creem subscription object.
+ * @returns {boolean|undefined}
+ */
+function cancelScheduledOf(subscription) {
+  const raw = subscription && subscription.status;
+  if (raw === "scheduled_cancel") {
+    return true;
+  }
+  if (raw !== "active" && raw !== "trialing") {
+    return undefined;
+  }
+  return Number.isFinite(isoSeconds(subscription.canceled_at));
 }
 
 /**

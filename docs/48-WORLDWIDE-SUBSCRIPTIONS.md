@@ -183,7 +183,13 @@ CK12b, CK12c, CK15b and CK16b) and browser mutants B118 to B206. The euro
 round (VG-85) added worker mutants CK40 to CK47 and browser mutants B280 to
 B299 (with letter suffixes for its repair round), and
 `tests/node/creem-products.test.mjs` checks that every pasted Creem link sells
-a product id `wrangler.toml` admits.
+a product id `wrangler.toml` admits. VG-84 (Mercado Pago pays before it
+entitles) added the worker set `mpPaid` and browser mutants MPB1 to MPB7.
+Red-team round two (29 findings, all fixed) added worker mutants CK17 to
+CK39d and VW1a, and browser mutants B208 to B279b; among them, a worker
+answer for the portal or a bound checkout is followed only to a Creem page
+(B273 to B278), and the terms state the Union's price in both halves (B279
+to B279b).
 
 ---
 

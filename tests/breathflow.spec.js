@@ -50,11 +50,18 @@ test("first-use lesson teaches body and mouth before enabling Start", async ({ p
   await page.locator("#coach-next").click();
   await expect(page.locator("#coach-caption")).toContainText("frase");
   await expect(page.locator("#coach-checks")).toBeVisible();
+  await expect(page.locator("#coach-pattern")).toBeVisible();
   await expect(page.locator("#coach-finish")).toBeDisabled();
   await page.locator("#coach-check-shoulders").check();
   await page.locator("#coach-check-ribs").check();
   await expect(page.locator("#coach-finish")).toBeDisabled();
   await page.locator("#coach-check-jaw").check();
+  await expect(page.locator("#coach-finish")).toBeDisabled();
+  await page.locator("#coach-pattern-word").click();
+  await expect(page.locator("#coach-pattern-feedback")).toContainText("Respirar después de cada palabra");
+  await expect(page.locator("#coach-finish")).toBeDisabled();
+  await page.locator("#coach-pattern-phrase").click();
+  await expect(page.locator("#coach-pattern-feedback")).toContainText("entre ideas");
   await expect(page.locator("#coach-finish")).toBeDisabled();
   await page.locator("#coach-choice-force").click();
   await expect(page.locator("#coach-choice-feedback")).toContainText("Aguantar con tensión no es el objetivo");
@@ -69,6 +76,21 @@ test("first-use lesson teaches body and mouth before enabling Start", async ({ p
   await expect(page.locator("#flow-run-teach-hint")).toBeVisible();
   await page.locator("#flow-run-teach").click();
   await expect(page.locator("#coach-caption")).toContainText("frase");
+});
+test("phrase-boundary teach-back blocks word-by-word breathing even after comfort checks", async ({ page }) => {
+  await open(page, { teach: true });
+  for (let n = 0; n < 3; n++) await page.locator("#coach-next").click();
+  for (const id of ["shoulders", "ribs", "jaw"]) await page.locator("#coach-check-" + id).check();
+  await page.locator("#coach-choice-adapt").click();
+  await expect(page.locator("#coach-finish")).toBeDisabled();
+  await page.locator("#coach-pattern-word").click();
+  await expect(page.locator("#coach-pattern-feedback")).toContainText("corta la intención");
+  await expect(page.locator("#coach-finish")).toBeDisabled();
+  await page.locator("#coach-pattern-phrase").click();
+  await expect(page.locator("#coach-finish")).toBeEnabled();
+  await page.locator("#coach-finish").click();
+  await expect(page.locator("#flow-start")).toBeEnabled();
+  expect(await page.evaluate(() => window.VTBreathTeach.state().pattern)).toBe("phrase");
 });
 test("teaching stage does not save any day, ask for a microphone or invent measured checkpoints", async ({ page }) => {
   await open(page, { teach: true });
@@ -278,6 +300,7 @@ test("verified lesson completion persists; a different profile must learn or exp
   for (let i = 0; i < 3; i++) await page.locator("#coach-next").click();
   for (const k of ["shoulders", "ribs", "jaw"]) await page.locator("#coach-check-" + k).check();
   await page.locator("#coach-choice-adapt").click();
+  await page.locator("#coach-pattern-phrase").click();
   await page.locator("#coach-finish").click();
   await page.reload();
   await expect(page.locator("#flow-start")).toBeEnabled();

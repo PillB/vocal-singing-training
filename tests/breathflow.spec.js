@@ -183,7 +183,7 @@ test("day/week/month and every main navigation view share a single calendar auth
   await page.locator("#element-chips .chip:visible").first().click();
   await page.locator("#btn-plan-start").click();
   await expect(page.locator("#plan-days")).toBeVisible();
-  await expect(page.locator("#plan-days")).toContainText(/\\b1\\b/);
+  await expect(page.locator("#plan-days")).toContainText(/\b1\b/);
   await page.locator("#btn-nav-home").click();
   await expect(page.locator("#view-home")).toHaveClass(/active/);
   expect(await page.evaluate(() => {

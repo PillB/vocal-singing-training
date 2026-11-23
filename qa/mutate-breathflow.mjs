@@ -71,6 +71,20 @@ const cases = [
     name: "returning learner remembers an explicit skip and can reopen the full animated guide"
   },
   {
+    id: "BF-M10 history UI drops a saved practice day",
+    path: "js/app.js",
+    anchor: '      const daysHtml = historyDaysHtml(track);',
+    broken: '      const daysHtml = "";',
+    name: "day/week/month and every main navigation view share a single calendar authority"
+  },
+  {
+    id: "BF-M11 plan UI shows zero despite saved practice",
+    path: "js/app.js",
+    anchor: '    days.textContent = idle ? "" : tt(weekOver ? "plan.daysPast" : "plan.days", { n: planWeekDays(plan) });',
+    broken: '    days.textContent = idle ? "" : tt(weekOver ? "plan.daysPast" : "plan.days", { n: 0 });',
+    name: "day/week/month and every main navigation view share a single calendar authority"
+  },
+  {
     id: "BF-M9 WebKit selector silently drops teaching tests",
     path: "playwright.config.js",
     anchor: '      name: "webkit",\n      use: { browserName: "webkit" },\n      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call|breathflow)\\.spec\\.js/',
@@ -132,4 +146,4 @@ function evaluateMutant(item) {
 }
 
 for (const item of cases) evaluateMutant(item);
-process.stdout.write("PASS: all nine BreathFlow behavioral mutants killed and restored\n");
+process.stdout.write("PASS: all eleven BreathFlow behavioral mutants killed and restored\n");

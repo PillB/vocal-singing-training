@@ -29,7 +29,7 @@
       svg: "Una pausa tranquila precede una frase completa. Debajo se comparan respiraciones tras cada palabra con pausas entre ideas, sin obligar a sostener frases incómodas."
     }
   ];
-  const KEY_PREFIX = "vt_breathflow_lesson_v1_";
+  const KEY_PREFIX = "vt_breathflow_lesson_v2_";
   const state = { stage: 0, sound: "hiss", paused: false, ready: false,
     decision: "", pattern: "", completion: null, profile: "", expanded: true, soundEpoch: 0, context: null };
 

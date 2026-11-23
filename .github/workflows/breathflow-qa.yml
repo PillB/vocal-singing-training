@@ -65,7 +65,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps webkit
       - name: Desktop WebKit and emulated iPhone learning / sync regressions
-        run: xvfb-run -a npx playwright test tests/breathflow.spec.js --project=webkit --project=mobile-safari --workers=2 --reporter=line -g "first-use lesson|returning learner|two open tabs|Sunday-to-Monday|refused browser storage|reduced-motion"
+        run: xvfb-run -a npx playwright test tests/breathflow.spec.js --project=webkit --project=mobile-safari --workers=2 --reporter=line -g "first-use lesson|returning learner|two open tabs|Sunday-to-Monday|refused browser storage|reduced-motion|phrase contrast fits"
         env:
           CI: '1'
       - name: Preserve WebKit teaching failures

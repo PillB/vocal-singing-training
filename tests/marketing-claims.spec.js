@@ -8,22 +8,31 @@
  *    with forty days of eight hours, ten hours and three hundred takes today in both of the app's records,
  *    on the third page load, from the catalog and a routine; and one who first came 45 days ago. Single
  *    exercises, Start again after a rating, a pitch exercise, the catalog and a routine are each a way in.
+ *    Third round: the longest exercise (20 minutes), a drill with no microphone, "+30 s" and Next in a routine,
+ *    the daily class, and a visitor on a phone in Madrid whose trial has ended and whose basics are done; every
+ *    take checks that the microphone listens and the piano sounds where its box is ticked.
  *  - "Tu voz se queda en tu dispositivo" / "your voice stays on your device": for a visitor the app treats as
  *    a person (so its analytics send), recording a take, saving it, a minute after, leaving the page and the
  *    next visit together send nothing the size of the take, by any request, header, cookie, WebSocket frame,
  *    worker or WebRTC connection in any frame. The same counter is shown to catch the saved take sent nine
- *    ways, and the take is still on the device on the next visit.
- *  - "No necesitas cuenta" / "no account needed": two takes, one rated, are there with the rating in a new tab,
- *    a minute later, and after the browser is restarted a month on, where Start still starts.
+ *    ways, and the take is still on the device on the next visit. Third round: a rating, a singing take run to
+ *    its end and saved (a second save), three minutes on, and two more visits.
+ *  - "No necesitas cuenta" / "no account needed": takes on both tracks, a rating, a saved recording, a routine
+ *    half done and a take made in a second tab open all along are there in both tabs a minute later, and after
+ *    the browser is restarted 31 and 32 days on, where Historial shows the day and the recording and a new take
+ *    is kept.
  *  - "nunca durante la práctica" (terms.html): with ads switched on, no ad of any kind (studio tip, preview or
  *    AdSense unit) is drawn at any moment of a guided routine, in any of the four ad modes, whatever is called
  *    and wherever the visitor goes in between, nor while a take starts or is live; the end-of-task card goes as
- *    a new take or a routine starts. Each check has a control that draws an ad in the same way when practice is
- *    over, so none of them passes because nothing could be drawn.
+ *    a new take or a routine starts, and is not drawn while a take is starting. A routine paused and then
+ *    continued, or paused with its step taken anyway, is practice again. Each check has a control that draws an
+ *    ad in the same way when practice is over, so none of them passes because nothing could be drawn.
  *
- * Each has planted defects in qa/mutate.mjs ("promises" set: MK3, MK19 to MK22, MK26 to MK46) that turn it red.
- * MK26 to MK29 are what Codex's review showed the first version let through; MK30 to MK46 are what the second
- * red team showed the second version let through (docs/48 section 11).
+ * Each has planted defects in qa/mutate.mjs (the "promises" and "promises-account-ads" sets: MK3, MK19 to MK22,
+ * MK26 to MK46, MK49 to MK67) that turn it red. MK26 to MK29 are what Codex's review showed the first version let
+ * through; MK30 to MK46 are what the second red team showed the second version let through; MK49 to MK67 are the
+ * third red team's, on paths the third version walks now (docs/48 section 11). What no scenario can walk is held
+ * in the code itself by tests/node/promise-guards.test.mjs ("guards" set).
  */
 const { test, expect } = require("@playwright/test");
 const fs = require("fs");
@@ -126,9 +135,28 @@ async function ready(page) {
 
 const live = (page) => page.evaluate(() => !!window.VTApp.getState().practiceLive);
 
-async function start(page) {
-  await page.locator("#btn-practice-start").click();
-  await expect.poll(() => live(page), { timeout: 10000 }).toBe(true);
+/**
+ * Press Start: the take goes live, with no window opened in its place. The kill-reasons pass of the third red team
+ * showed seven caps that opened the Pro window instead were reported only as "Timeout 10000ms exceeded", which
+ * reads the same as a broken fake microphone; the poll now says which of the three it saw.
+ */
+async function start(page, label = "the take") {
+  await page
+    .locator("#btn-practice-start")
+    .click({ timeout: 10000 })
+    .catch((e) => {
+      throw new Error(`${label}: Start cannot be pressed. ${e.message.split("\n").slice(0, 6).join(" ")}`);
+    });
+  await expect
+    .poll(
+      async () => ({
+        live: await live(page),
+        proWindow: await page.locator("#pricing-modal").isVisible(),
+        accountWindow: await page.locator("#account-modal").isVisible()
+      }),
+      { message: `${label}: Start makes it live, with no Pro or account window in its place`, timeout: 10000 }
+    )
+    .toEqual({ live: true, proWindow: false, accountWindow: false });
 }
 
 /** Start the open exercise and run its clock out, shortened to `sec` (where the length is not what is tested). */
@@ -162,18 +190,38 @@ async function nothingInTheWay(page, label) {
   await expect(page.locator("#account-modal"), `${label}: no account window`).toBeHidden();
 }
 
+/** Drills that never open the microphone (release and breathing), so a take of them is not expected to listen. */
+const MIC_FREE = new Set(["s17-jaw-neck-release", "s18-costal-breath"]);
+
+/** What a live take is doing for the visitor: is the microphone listening, and does the reference piano sound. */
+const heard = (page) =>
+  page.evaluate(() => ({
+    mic: !!window.VTApp.getState().practice?.running,
+    piano: !!(window.VTPiano?.loopActive || window.VTPiano?.playing?.length),
+    pianoOn: !!document.querySelector("#chk-auto-piano")?.checked
+  }));
+
 /**
  * One take of its full length, `expected` seconds as a first visitor gets it: it starts with all of it on the
- * clock, is still live five seconds before its end, ends on its own, and is counted as practice. Most of it is
- * jumped over, but not shortened, so a cap that cuts the take is seen (the first version set every take to 50 s).
+ * clock, listens (unless it is one of the MIC_FREE drills) and plays its reference wherever "piano"
+ * is ticked, is still live and still listening five seconds before its end, ends on its own, and is counted as
+ * practice. Most of it is jumped over, but not shortened, so a cap that cuts the take is seen (the first
+ * version set every take to 50 s). The third red team showed a take could be live and counted while it heard
+ * nothing and played nothing, so that is checked too.
  */
-async function fullTake(page, label, expected) {
+async function fullTake(page, label, expected, { mic = null } = {}) {
+  const id = await page.evaluate(() => window.VTApp.getState().exercise?.id);
+  if (mic === null) mic = !MIC_FREE.has(id);
   const before = await todaySec(page);
   expect(await page.evaluate(() => window.VTApp.getState().timer.total), `${label}: the take has its full length`).toBe(expected);
-  await start(page);
+  await start(page, label);
   const left = await page.evaluate(() => (window.VTApp.getState().timer.endAt - performance.now()) / 1000);
   expect(left, `${label}: all of it is on the clock`).toBeGreaterThanOrEqual(expected - 3);
+  const now = await heard(page);
+  if (mic) expect(now.mic, `${label}: the microphone is listening`).toBe(true);
+  if (now.pianoOn) expect(now.piano, `${label}: the reference piano sounds, as its tick says`).toBe(true);
   await page.clock.fastForward((expected - 5) * 1000);
+  if (mic) expect((await heard(page)).mic, `${label}: still listening five seconds before its end`).toBe(true);
   expect(await live(page), `${label}: still live five seconds before its end`).toBe(true);
   await nothingInTheWay(page, label);
   await page.clock.runFor(5600);
@@ -188,15 +236,18 @@ async function todayIs(page, day) {
 }
 
 const SINGLE_LENGTH = 300; // s4-lip-trills, s5-sirens and v1-diction, as a first visitor gets them
+const LONGEST_LENGTH = 1200; // s3-song-stanzas, the longest exercise in the catalog
 
-test("no time limit: a first-day visitor past an hour today takes three full takes, one a pitch exercise, one after Start again", async ({
+test("no time limit: a first-day visitor past an hour today takes five full takes: a pitch exercise, Start again, the longest exercise and a drill with no microphone", async ({
   page
 }) => {
+  test.setTimeout(150000);
   const today = dayOf(NOW);
   await boot(page, { person: true, days: { [today]: { sec: 3720, n: 24, ex: ["s4-lip-trills"] } } });
   await todayIs(page, today);
   expect(await todaySec(page), "control: over an hour today already").toBeGreaterThan(3600);
   await openSingle(page, "s4-lip-trills");
+  await expect(page.locator("#chk-auto-piano"), "control: this exercise plays a reference, so a silent piano would show").toBeChecked();
   await fullTake(page, "a single exercise", SINGLE_LENGTH);
   await rate(page);
   await nothingInTheWay(page, "after the rating");
@@ -204,7 +255,38 @@ test("no time limit: a first-day visitor past an hour today takes three full tak
   await openSingle(page, "s5-sirens");
   expect(await page.evaluate(() => !!window.VTApp.getProfile(window.VTApp.getState().exercise).showPitch), "control: a pitch exercise").toBe(true);
   await fullTake(page, "a pitch exercise", SINGLE_LENGTH);
+  // The longest take there is, a song that records and plays: a cap at any length up to twenty minutes shows here,
+  // which the five-minute takes above cannot show (the third red team cut every take to five minutes unseen).
+  await openSingle(page, "s3-song-stanzas");
+  await fullTake(page, "the longest exercise", LONGEST_LENGTH);
+  // A drill that never opens the microphone, so its clock starts by the other branch of a take's start-up.
+  await openSingle(page, "s17-jaw-neck-release");
+  await fullTake(page, "a drill with no microphone", 120);
 });
+
+/** The routine under way: its path, state, the step open now and that step's planned length (its own, or the class's). */
+const stepNow = (page) =>
+  page.evaluate(() => {
+    const s = window.VTSession.get();
+    const id = s?.order?.[s.index];
+    const sec = Number(s?.sec?.[id]) || (s?.path === "daily" ? Number(window.VT_DAILY_SESSION?.sec?.[id]) : 0) || null;
+    return { path: s?.path, status: s?.status, id, sec };
+  });
+
+/** '+30 s' on a finished routine step: thirty more seconds, live to their end and counted. */
+async function moreTake(page, label) {
+  const before = await todaySec(page);
+  await page.locator("#btn-step-done-more").click();
+  await expect.poll(() => live(page), { timeout: 10000, message: `${label}: it starts` }).toBe(true);
+  const left = await page.evaluate(() => (window.VTApp.getState().timer.endAt - performance.now()) / 1000);
+  expect(left, `${label}: thirty seconds on the clock`).toBeGreaterThanOrEqual(27);
+  await page.clock.fastForward(25000);
+  expect(await live(page), `${label}: still live five seconds before its end`).toBe(true);
+  await nothingInTheWay(page, label);
+  await page.clock.runFor(5600);
+  expect(await live(page), `${label}: it ends when its clock does`).toBe(false);
+  expect((await todaySec(page)) - before, `${label}: counted as practice`).toBeGreaterThanOrEqual(25);
+}
 
 /** `n` days of `sec` seconds each before `day`, and `day` itself. */
 function heavyLedger(day, n, sec, todayRow) {
@@ -217,6 +299,7 @@ function heavyLedger(day, n, sec, todayRow) {
 test("no time limit: a heavy visitor ten years on, on a Sunday night at the month's end, in English, from the catalog and a routine", async ({
   page
 }) => {
+  test.setTimeout(150000);
   const today = dayOf(LATER);
   await boot(page, { person: true, lang: "en", now: LATER, days: heavyLedger(today, 40, 8 * 3600, { sec: 10 * 3600, n: 300, ex: ["s4-lip-trills", "v1-diction"] }) });
   await todayIs(page, today);
@@ -247,15 +330,39 @@ test("no time limit: a heavy visitor ten years on, on a Sunday night at the mont
   await page.clock.runFor(300);
   await page.locator("#btn-next-step").click();
   await page.clock.runFor(400);
-  const step = await page.evaluate(() => {
-    const s = window.VTSession.get();
-    return { status: s?.status, id: s?.order?.[s.index], sec: s?.sec?.[s?.order?.[s.index]] };
-  });
+  const step = await stepNow(page);
   expect(step.status, "control: a routine is under way").toBe("active");
   await fullTake(page, "a routine's step", step.sec);
+
+  // The step's done card: thirty seconds more, then on to the routine's second step.
+  await expect(page.locator("#step-done"), "control: the step's done card").toBeVisible();
+  await moreTake(page, "'+30 s' on a finished step");
+  await expect(page.locator("#step-done"), "control: the card again after the thirty seconds").toBeVisible();
+  await page.locator("#btn-step-done-next").click();
+  await page.clock.runFor(400);
+  const second = await stepNow(page);
+  expect(second.id, "control: the routine has a second step").not.toBe(step.id);
+  expect(await page.evaluate(() => window.VTApp.getState().exercise?.id), "Next opens the routine's second step").toBe(second.id);
+  await fullTake(page, "the routine's second step", second.sec);
+
+  // Another routine than the basics: the daily class, as the home page's next-step card starts it. Leaving the
+  // basics' last take asks first whether to rate it; the answer is to go on without (the practice still counts).
+  await page.evaluate(() => window.VTApp.startDaily());
+  await page.clock.runFor(400);
+  // Not a control: a cap that refused the class would show no question at all.
+  await expect(page.locator("#leave-modal"), "the daily class starts: first it asks whether to leave the basics' last take").toBeVisible();
+  await page.locator("#leave-discard").click();
+  await page.clock.runFor(400);
+  const daily = await stepNow(page);
+  expect(daily.path, "the daily class starts: it is under way").toBe("daily");
+  expect(await page.evaluate(() => window.VTApp.getState().exercise?.id), "the daily class starts: its first step is open").toBe(daily.id);
+  await fullTake(page, "the daily class's first step", daily.sec);
 });
 
-test("no time limit: a visitor who first came 45 days ago, past an hour today, takes two full takes", async ({ page }) => {
+test("no time limit: a visitor who first came 45 days ago, past an hour today, takes four takes of one exercise, the last started again right after Stop", async ({
+  page
+}) => {
+  test.setTimeout(150000);
   const first = new Date(new Date(NOW).getTime() - 45 * DAY_MS);
   await boot(page, { person: true, now: first.toISOString() });
   await openSingle(page, "v1-diction");
@@ -274,6 +381,53 @@ test("no time limit: a visitor who first came 45 days ago, past an hour today, t
   await fullTake(page, "today", SINGLE_LENGTH);
   await rate(page);
   await fullTake(page, "today, Start again", SINGLE_LENGTH);
+  await rate(page);
+  await fullTake(page, "today, a third take of the same exercise", SINGLE_LENGTH);
+  // Stopped half a minute in and started again at once, as somebody does who fluffed the opening.
+  await rate(page);
+  await start(page, "a take stopped half a minute in");
+  await page.clock.runFor(30000);
+  await page.locator("#btn-practice-stop").click();
+  await page.clock.runFor(300);
+  expect(await live(page), "control: the take stopped").toBe(false);
+  await start(page, "Start right after Stop");
+  const rest = await page.evaluate(() => (window.VTApp.getState().timer.endAt - performance.now()) / 1000);
+  await page.clock.fastForward(Math.max(0, rest - 5) * 1000);
+  expect(await live(page), "Start right after Stop: still live five seconds before its end").toBe(true);
+  await nothingInTheWay(page, "Start right after Stop");
+  await page.clock.runFor(5600);
+  expect(await live(page), "Start right after Stop: it ends when its clock does").toBe(false);
+});
+
+test.describe("on a phone in Madrid", () => {
+  test.use({ timezoneId: "Europe/Madrid", locale: "es-ES", viewport: { width: 412, height: 839 }, hasTouch: true, isMobile: true });
+
+  test("no time limit: a visitor on a phone in Madrid, whose trial ended, with today's basics done and over an hour today, takes an advanced speaking exercise and a breathing drill", async ({
+    page
+  }) => {
+    test.setTimeout(150000);
+    const today = dayOf(NOW); // 10:00 in Lima is 17:00 the same day in Madrid
+    const trialStarted = new Date(Date.parse(NOW) - 53 * DAY_MS).toISOString();
+    await page.addInitScript((at) => {
+      if (!localStorage.getItem("vt_billing_trial_started_v1")) localStorage.setItem("vt_billing_trial_started_v1", at);
+    }, trialStarted);
+    await boot(page, { person: true, days: { [today]: { sec: 3720, n: 24, ex: ["s4-lip-trills"], basics: 1 } } });
+    await todayIs(page, today);
+    expect(
+      await page.evaluate(() => ({
+        trialEnded: !!window.VTBilling.trialStartedAt() && !window.VTBilling.trialActive(),
+        pro: !!window.VTBilling.isPro(),
+        basicsDone: !!window.VTDays.basicsDoneToday(),
+        touch: matchMedia("(pointer: coarse)").matches,
+        zone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      })),
+      "control: a free visitor past a trial, basics done, on a touch screen in Madrid"
+    ).toEqual({ trialEnded: true, pro: false, basicsDone: true, touch: true, zone: "Europe/Madrid" });
+    await openSingle(page, "v11-kill-fillers");
+    await fullTake(page, "an advanced speaking exercise", 480);
+    await openSingle(page, "s18-costal-breath");
+    await fullTake(page, "a breathing drill with no microphone", 240);
+  });
 });
 
 /* ------------------------------------------------------------------ your voice stays on your device */
@@ -458,14 +612,15 @@ async function countEgress(page) {
 const couldCarry = (sent, staticBudget) => sent.bytes >= EGRESS_BUDGET || sent.requests > REQUEST_BUDGET || sent.statics > staticBudget;
 
 /**
- * The saved take, cut into base64 pieces, sent one way. The shapes are the ones that slip under a per-request
+ * The smallest saved take of at least `min` bytes, cut into base64 pieces, sent one way. The shapes are the ones that slip under a per-request
  * size, type or address rule. `file` is a file the page loaded, for the ways that ride on an ordinary request.
  */
-const sendTake = (page, how, file) =>
+const sendTake = (page, how, file, min = 4 * EGRESS_BUDGET) =>
   page.evaluate(
-    async ({ how, file }) => {
-      const [rec] = await window.VTStorage.listRecordings();
-      const buf = new Uint8Array(await (await window.VTStorage.getRecordingBlob(rec.id)).arrayBuffer());
+    async ({ how, file, min }) => {
+      const blobs = await Promise.all((await window.VTStorage.listRecordings()).map((r) => window.VTStorage.getRecordingBlob(r.id)));
+      const take = blobs.filter((b) => b.size >= min).sort((a, b) => a.size - b.size)[0];
+      const buf = new Uint8Array(await take.arrayBuffer());
       let s = "";
       for (let i = 0; i < buf.length; i++) s += String.fromCharCode(buf[i]);
       s = btoa(s);
@@ -506,13 +661,13 @@ const sendTake = (page, how, file) =>
       await ways[how]();
       return s.length;
     },
-    { how, file }
+    { how, file, min }
   );
 
-test("your voice stays on your device: recording, saving, a minute after, leaving and the next visit send nothing the size of the take", async ({
+test("your voice stays on your device: recording, saving, rating, a second take run to its end, three minutes on, leaving and two more visits send nothing the size of the take", async ({
   page
 }) => {
-  test.setTimeout(90000);
+  test.setTimeout(150000);
   const egress = await countEgress(page); // before the page loads: Playwright routes WebSockets from a script it injects
   await boot(page, { person: true });
   const sending = await page.evaluate(() => window.VTAnalytics.remoteState());
@@ -520,17 +675,36 @@ test("your voice stays on your device: recording, saving, a minute after, leavin
   await openSingle(page, "v10-power-pause");
   await expect(page.locator("#chk-auto-record"), "control: this exercise records every take").toBeChecked();
 
-  // Recorded, saved, a minute later (a send put off with a timer or to an idle moment), and the page hidden
-  // and left (a send on the way out). The take is stopped at a size a beacon or a keepalive request can carry.
+  // Recorded, saved and rated (a send on the rating), then a singing take that runs to the end of its clock and is
+  // saved too (a send on a natural end, on the singing track, on the second save), three minutes on (a send put
+  // off with a timer), and the page hidden and left (a send on the way out). The first take is stopped at a size
+  // a beacon or a keepalive request can carry.
   egress.reset();
   await start(page);
   const target = 4 * EGRESS_BUDGET + 4096;
   await expect.poll(() => page.evaluate(() => window.__vtTake.bytes), { timeout: 20000, intervals: [100] }).toBeGreaterThanOrEqual(target);
+  await page.clock.fastForward(20000); // long enough on the clock to be rated (a take short of 15 s is not)
+  await page.clock.runFor(500);
   await page.locator("#btn-practice-stop").click();
   await expect(page.locator("#btn-save-rec"), "control: there is a recording to send").toBeVisible();
   await page.locator("#btn-save-rec").click();
   await expect(page.locator("#btn-save-rec"), "control: the save finished").toBeDisabled();
-  await page.clock.runFor(60000);
+  await rate(page);
+  await openSingle(page, "s19-soft-palate-surprise");
+  expect(await page.evaluate(() => window.VTApp.getState().exercise.track), "control: a singing exercise").toBe("singing");
+  await expect(page.locator("#chk-auto-record"), "control: it records too").toBeChecked();
+  await start(page);
+  await page.clock.runFor(1500);
+  const rest = await page.evaluate(() => (window.VTApp.getState().timer.endAt - performance.now()) / 1000);
+  await page.clock.fastForward(Math.max(0, rest - 2) * 1000);
+  await page.clock.runFor(3000);
+  expect(await live(page), "control: the singing take ran to the end of its clock").toBe(false);
+  await expect(page.locator("#btn-save-rec"), "control: and was recorded").toBeVisible();
+  await page.locator("#btn-save-rec").click();
+  await expect(page.locator("#btn-save-rec"), "control: the second save finished").toBeDisabled();
+  // Jumped rather than run frame by frame: every timer due in the three minutes still fires.
+  await page.clock.fastForward(180000);
+  await page.clock.runFor(2000);
   await page.evaluate(() => {
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
     Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
@@ -539,29 +713,35 @@ test("your voice stays on your device: recording, saving, a minute after, leavin
   });
   const during = await egress.settle();
 
-  // Left and come back: the next visit, and a minute of it, where a take kept back from the last one would go.
-  egress.reset();
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await ready(page);
-  await page.clock.runFor(60000);
-  const after = await egress.settle();
+  // Left and come back, twice: the next visit and the third, a minute of each, where a take kept back from the
+  // last one would go (the third red team sent the takes on a third visit, unseen by a test that came back once).
+  const visits = [];
+  for (let i = 0; i < 2; i++) {
+    egress.reset();
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await ready(page);
+    await page.clock.runFor(60000);
+    visits.push(await egress.settle());
+  }
 
-  const take = await page.evaluate(async () => {
-    const list = await window.VTStorage.listRecordings();
-    return { n: list.length, bytes: list[0] ? (await window.VTStorage.getRecordingBlob(list[0].id)).size : 0 };
-  });
+  const takes = await page.evaluate(async () =>
+    Promise.all((await window.VTStorage.listRecordings()).map(async (r) => (await window.VTStorage.getRecordingBlob(r.id)).size))
+  );
   const files = egress.known.size;
+  const all = [during, ...visits];
+  const sum = (k) => all.reduce((n, w) => n + w[k], 0);
   test.info().annotations.push({
     type: "egress",
-    description: `take ${take.bytes} B; during: ${during.bytes} B in ${during.requests} requests; next visit: ${after.bytes} B in ${after.requests} requests and ${after.statics} of the page's ${files} files`
+    description: `takes ${takes.join(" and ")} B; ${all.map((w, i) => `${["during", "next visit", "third visit"][i]}: ${w.bytes} B in ${w.requests} requests and ${w.statics} of the page's ${files} files`).join("; ")}`
   });
-  expect(take.n, "the take is kept on the device, on the next visit too").toBe(1);
-  expect(take.bytes, "control: the take is at least four times the budget, so sending it would show").toBeGreaterThanOrEqual(4 * EGRESS_BUDGET);
-  const both = { bytes: during.bytes + after.bytes, requests: during.requests + after.requests, statics: after.statics };
-  expect(both.bytes, `bytes sent: ${JSON.stringify([...during.items, ...after.items])}`).toBeLessThan(EGRESS_BUDGET);
-  expect(both.requests, "requests sent other than the page's own files").toBeLessThanOrEqual(REQUEST_BUDGET);
-  expect(both.statics, "the page's own files fetched again, at most twice each").toBeLessThanOrEqual(2 * files);
-  expect(after.hidden, "no WebRTC connection or worker, which the network events cannot see").toEqual({ peers: 0, workers: 0 });
+  expect(takes.length, "both takes are kept on the device, on the third visit too").toBe(2);
+  expect(Math.max(...takes), "control: the first take is at least four times the budget, so sending it would show").toBeGreaterThanOrEqual(4 * EGRESS_BUDGET);
+  expect(sum("bytes"), `bytes sent: ${JSON.stringify(all.flatMap((w) => w.items))}`).toBeLessThan(EGRESS_BUDGET);
+  expect(sum("requests"), "requests sent other than the page's own files").toBeLessThanOrEqual(REQUEST_BUDGET);
+  // Every window's repeat fetches of the page's own files, the first one's too (the first version counted only
+  // the next visit's, so a take could ride on hundreds of repeat fetches while it was being saved).
+  expect(sum("statics"), "the page's own files fetched again: once a visit, and at most once more each").toBeLessThanOrEqual((visits.length + 1) * files);
+  expect(all.at(-1).hidden, "no WebRTC connection or worker, which the network events cannot see").toEqual({ peers: 0, workers: 0 });
 
   // Controls: the same counter catches the saved take sent each way that slipped past a per-request size, type
   // or address rule, a worker, and a WebRTC connection in the page or in a frame made with no address. The
@@ -592,45 +772,122 @@ test("your voice stays on your device: recording, saving, a minute after, leavin
 
 /* ------------------------------------------------------------------ no account needed */
 
-/** The visitor's takes of one exercise, newest first: which day, and the rating. */
-const takesOf = (page, id) =>
-  page.evaluate((id) => (window.VTStorage.getProgress()?.[id]?.history || []).map((h) => ({ day: h.day, score: h.score ?? null })), id);
+/** Everything a guest has kept: every exercise's takes, the saved recordings, the days practised and the routine under way. */
+const keptBy = (page) =>
+  page.evaluate(async () => {
+    const progress = window.VTStorage.getProgress() || {};
+    const takes = Object.fromEntries(
+      Object.entries(progress)
+        .filter(([, row]) => row?.history?.length)
+        .map(([id, row]) => [id, row.history.map((h) => ({ day: h.day, score: h.score ?? null }))])
+        .sort(([a], [b]) => (a < b ? -1 : 1))
+    );
+    const s = window.VTSession.get();
+    return {
+      takes,
+      recordings: (await window.VTStorage.listRecordings()).length,
+      days: window.VTDays.summary().practiceDays,
+      routine: s ? { status: s.status, index: s.index } : null
+    };
+  });
 
-test("no account needed: two takes, one rated, are there in a new tab, a minute later, and after a restart a month on", async ({ page, browser }) => {
+/** A restart: what the browser keeps on disk, without the session's cookies and storage, opened `days` after NOW. */
+async function restart(browser, from, days) {
+  const kept = await from.context().storageState({ indexedDB: true });
+  kept.cookies = kept.cookies.filter((c) => c.expires > 0);
+  const context = await browser.newContext({ storageState: kept, timezoneId: "America/Lima", locale: "es-PE" });
+  const page = await context.newPage();
+  await boot(page, { now: new Date(new Date(NOW).getTime() + days * DAY_MS).toISOString() });
+  return { context, page };
+}
+
+test("no account needed: takes of two tracks, a rating, a saved recording, a routine half done and a second tab's take are there a minute later and after restarts a month on, where a new take is kept too", async ({
+  page,
+  browser
+}) => {
+  test.setTimeout(150000);
   await boot(page);
   await openSingle(page, "s4-lip-trills");
   await runOut(page);
   await rate(page);
   await runOut(page); // Start again: a second take, left unrated
-  const mine = await takesOf(page, "s4-lip-trills");
-  expect(mine.length, "two takes kept in this tab").toBe(2);
-  expect(mine[1].score, "the first take kept with its rating").not.toBeNull();
 
+  // A second tab, open from here on: its own take, saved later, must not write an old copy over this tab's.
+  await page.evaluate(() => sessionStorage.setItem("vt_tab_mark", "1"));
   const second = await page.context().newPage();
-  await second.clock.install({ time: new Date(NOW) });
-  await second.goto(BASE + "/", { waitUntil: "domcontentloaded" });
-  await second.waitForFunction(() => !!window.VTStorage && !!window.VTApp);
-  expect(await second.evaluate(() => sessionStorage.length), "control: the new tab shares no session storage").toBe(0);
+  await boot(second);
+  expect(await second.evaluate(() => sessionStorage.getItem("vt_tab_mark")), "control: the new tab shares no session storage").toBeNull();
+
+  // The other track, with its recording saved and the take rated.
+  await openSingle(page, "v4-articulation-pen");
+  await expect(page.locator("#chk-auto-record"), "control: this exercise records").toBeChecked();
+  await runOut(page);
+  await expect(page.locator("#btn-save-rec"), "control: a recording to save").toBeVisible();
+  await page.locator("#btn-save-rec").click();
+  await expect(page.locator("#btn-save-rec"), "control: saved").toBeDisabled();
+  await rate(page);
+
+  // Today's basics, one step of two done.
+  await page.locator("#btn-back-home").click();
+  await page.clock.runFor(400);
+  await page.locator("#btn-next-step").click();
+  await page.clock.runFor(400);
+  const step1 = (await stepNow(page)).id;
+  await runOut(page, 35);
+  await page.locator("#btn-step-done-next").click();
+  await page.clock.runFor(400);
+
+  // The second tab's take, written after all of the above.
+  await second.evaluate(() => window.VTApp.openExercise("v1-diction"));
+  await second.clock.runFor(300);
+  await runOut(second);
+  await rate(second);
+
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await ready(page);
+  const mine = await keptBy(page);
+  expect(Object.keys(mine.takes), "every exercise's takes, the routine's and the second tab's too").toEqual(
+    [...new Set(["s4-lip-trills", step1, "v1-diction", "v4-articulation-pen"])].sort()
+  );
+  expect(mine.takes["s4-lip-trills"].length, "two takes of the first exercise (and the routine's, if it is the same)").toBe(step1 === "s4-lip-trills" ? 3 : 2);
+  // Newest first: the first take, the rated one, is the last.
+  expect(mine.takes["s4-lip-trills"].at(-1).score, "the first take kept with its rating").not.toBeNull();
+  expect(mine.recordings, "the saved recording").toBe(1);
+  expect(mine.days, "the day practised").toBe(1);
+  expect(mine.routine, "the routine, on its second step").toEqual({ status: "active", index: 1 });
+
   await second.clock.runFor(65000);
-  expect(await takesOf(second, "s4-lip-trills"), "both takes and the rating, in a new tab a minute later").toEqual(mine);
+  expect(await keptBy(second), "all of it, in the other tab a minute later").toEqual(mine);
   await second.locator("#btn-history").click();
   await expect(second.locator('#history-list [data-open-ex="s4-lip-trills"]').first(), "in Historial").toBeVisible();
+  await nothingInTheWay(second, "Historial in the other tab");
 
-  // A restart: what the browser keeps on disk, without the session's cookies and storage, a month on.
-  const kept = await page.context().storageState({ indexedDB: true });
-  kept.cookies = kept.cookies.filter((c) => c.expires > 0);
-  const restarted = await browser.newContext({ storageState: kept, timezoneId: "America/Lima", locale: "es-PE" });
+  const first = await restart(browser, page, 31);
   try {
-    const third = await restarted.newPage();
-    await boot(third, { now: new Date(new Date(NOW).getTime() + 31 * DAY_MS).toISOString() });
-    expect(await takesOf(third, "s4-lip-trills"), "both takes and the rating, after a restart a month on").toEqual(mine);
+    const third = first.page;
+    await nothingInTheWay(third, "a month on, as the page opens");
+    expect(await keptBy(third), "all of it, after a restart a month on").toEqual(mine);
     await third.locator("#btn-history").click();
+    await third.clock.runFor(300);
+    await nothingInTheWay(third, "Historial a month on");
+    await expect(third.locator("#hist-days-count strong"), "the days practised, in Historial's calendar").toHaveText("1");
+    await expect(third.locator("[data-play]"), "the recording, to play").toHaveCount(1);
     await third.locator('#history-list [data-open-ex="s4-lip-trills"]').first().click();
     await third.clock.runFor(300);
-    await start(third);
-    await nothingInTheWay(third, "Start after the restart");
+    await runOut(third);
+    await nothingInTheWay(third, "a take a month on");
+    await rate(third);
+    const later = await keptBy(third);
+    expect(later.takes["s4-lip-trills"].length, "the take a month on is kept with the others").toBe(mine.takes["s4-lip-trills"].length + 1);
+
+    const again = await restart(browser, third, 32);
+    try {
+      expect((await keptBy(again.page)).takes, "and still there after another restart").toEqual(later.takes);
+    } finally {
+      await again.context.close();
+    }
   } finally {
-    await restarted.close();
+    await first.context.close();
   }
 });
 
@@ -779,6 +1036,55 @@ for (const mode of MODES) {
   });
 }
 
+test("no ad during practice: a routine paused and its step taken anyway, or paused and continued, is practice again; a paused one is not", async ({
+  page
+}) => {
+  test.setTimeout(90000);
+  await boot(page);
+  await adsOn(page, "preview");
+  await page.locator("#btn-next-step").click();
+  await page.clock.runFor(400);
+  await watchAds(page);
+  const status = () => page.evaluate(() => window.VTSession.get()?.status);
+
+  // Paused from the banner, then the step's own Start pressed anyway, run out, and Next: the third red team found
+  // the routine went on to its second step still paused, and Historial drew its ad there.
+  await page.locator("#btn-session-pause").click();
+  await page.clock.runFor(300);
+  expect(await status(), "control: paused").toBe("paused");
+  await moment(page, "a paused routine's step taken anyway");
+  await runOut(page, 35);
+  await expect(page.locator("#btn-step-done-next")).toBeVisible();
+  await page.locator("#btn-step-done-next").click();
+  await page.clock.runFor(400);
+  // The routine's state goes in the label, so a red says whether it was left paused; the promise is judged on the ads.
+  await moment(page, `Historial, on the second step (routine ${await status()})`);
+  await page.locator("#btn-history").click();
+  await page.clock.runFor(61000);
+  await adsOn(page, "preview");
+  await page.evaluate(() => window.VTAds.renderSlot("history"));
+
+  // Paused again, and continued from home's Continuar: that is the visitor taking the routine up again.
+  await page.locator("#btn-nav-home").click();
+  await page.clock.runFor(300);
+  await page.evaluate(() => window.VTSession.pause());
+  await page.locator("#btn-next-step").click();
+  await page.clock.runFor(400);
+  await moment(page, `Historial, after Continuar (routine ${await status()})`);
+  await page.locator("#btn-history").click();
+  await page.clock.runFor(61000);
+  await adsOn(page, "preview");
+  await page.evaluate(() => window.VTAds.renderSlot("history"));
+  expect(await adsSeen(page), "no ad of any form while the routine was being practised").toEqual([]);
+
+  // Control: a routine left paused is not practice, so the same Historial draws its ad.
+  await page.evaluate(() => window.VTSession.pause());
+  await moment(page, "paused, Historial");
+  await adsOn(page, "preview");
+  await page.evaluate(() => window.VTAds.renderSlot("history"));
+  expect((await adsSeen(page)).filter((s) => s.startsWith("paused, Historial")).length, "control: the ad a paused routine allows").toBeGreaterThan(0);
+});
+
 test("no ad during practice: none while a take starts or is live, from any entry point in any mode; each draws one after", async ({ page }) => {
   test.setTimeout(60000);
   await boot(page, { holdMic: true });
@@ -819,8 +1125,16 @@ test("no ad during practice: the end-of-task card goes when Start again starts a
   await runOut(page);
   await rate(page);
   expect(await adsDrawn(page), "control: the card after a single exercise").toContain("div.ad-native-card");
-  await page.evaluate(() => (window.VTApp.getState().timer.remaining = 50));
-  await start(page); // Start again
+  await page.evaluate(() => {
+    window.VTApp.getState().timer.remaining = 50;
+    window.__vtHoldMic = true;
+  });
+  // Start again, the microphone's answer held back: the card goes when Start is pressed, not when the take is live.
+  await page.locator("#btn-practice-start").click();
+  await expect.poll(() => page.evaluate(() => !!window.VTApp.getState().practiceStarting), { message: "control: the take is starting" }).toBe(true);
+  expect(await adsDrawn(page), "no card while the next take starts").toEqual([]);
+  await page.evaluate(() => window.__vtReleaseMic());
+  await expect.poll(() => live(page), { timeout: 10000 }).toBe(true);
   expect(await adsDrawn(page), "no card while the next take is live").toEqual([]);
   await page.clock.fastForward(45 * 1000);
   await page.clock.runFor(5600);

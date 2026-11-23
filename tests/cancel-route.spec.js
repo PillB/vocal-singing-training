@@ -30,7 +30,7 @@
  * would have signed, with that rail in its claims.
  */
 const { test, expect } = require("@playwright/test");
-const { mintLicense, installLicense, waitForLicenseState } = require("./helpers/billing");
+const { mintLicense, installLicense, waitForLicenseState, patchBillingConfig } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
@@ -85,6 +85,11 @@ test.describe("How to cancel says the true thing for the rail you paid on", () =
   for (const [rail, want] of Object.entries(RAILS)) {
     test(`${rail}: a subscriber on this rail is given this rail's route and no other`, async ({ page }) => {
       const license = await mintLicense({ origin: BASE, provider: rail });
+      // The Stripe line names the Manage button, so it is only shown where a
+      // portal is configured and the button is drawn (red team round two,
+      // states-7: the shipped config has none, and the line named a hidden
+      // button). tests/rt2-p2-lapsed.spec.js holds the case without one.
+      if (rail === "stripe") await patchBillingConfig(page, { customerPortalUrl: "https://billing.stripe.com/p/login/test_cancel_route" });
       await boot(page);
       await installLicense(page, license);
       await page.reload({ waitUntil: "domcontentloaded" });

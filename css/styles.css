@@ -7207,6 +7207,10 @@ body .app-header {
   color: #f3b0b5;
   border-color: rgba(224, 108, 117, 0.45);
 }
+.value-pulse-tag.is-hold {
+  color: #d4d9f5;
+  border-color: rgba(168, 176, 224, 0.5);
+}
 
 /* The pill's border is its only shape cue, and every state drew it under the
    3:1 that WCAG 1.4.11 asks of a graphical object: 2.91 paid, 2.62 trial, 2.09
@@ -7844,7 +7848,8 @@ body.view-exercise .highway-stage {
 #btn-pricing.plan-trial,
 #btn-pricing.plan-gift,
 #btn-pricing.plan-paid,
-#btn-pricing.plan-ending {
+#btn-pricing.plan-ending,
+#btn-pricing.plan-hold {
   font-weight: 700;
   opacity: 1;
 }
@@ -7867,6 +7872,15 @@ body.view-exercise .highway-stage {
   background: rgba(224, 108, 117, 0.14);
   border-color: rgba(224, 108, 117, 0.68);
   color: #f3b0b5;
+}
+/* "Pro en espera": a subscription still open while Pro is off. Its cause can
+   be a renewal being retried, a refund or a pause, so it is not the red of
+   an ending: a calm slate, text 10.4:1 on its fill and border 4.1:1 on the
+   header bar, so the box clears WCAG 1.4.11 like the others. */
+#btn-pricing.plan-hold {
+  background: rgba(168, 176, 224, 0.14);
+  border-color: rgba(168, 176, 224, 0.62);
+  color: #d4d9f5;
 }
 
 /* Signed in, the door is your initial in a circle and, where there is room,

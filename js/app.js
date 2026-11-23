@@ -7843,16 +7843,24 @@
    * trial and for a licence held without an account. One object, so the two
    * surfaces cannot disagree.
    *
-   * @returns {{kind: "free"|"trialLocal"|"trialAccount"|"gift"|"paid"|"canceled",
-   *            days: number|null, until: string, pastDue?: boolean}} What to show, and
-   *            days left where that is known. `pastDue`: a "paid" access whose
-   *            last payment did not go through.
+   * "lapsed" is a subscription still open while Pro is off: a renewal being
+   * retried after the paid period, a refunded period, or a pause. It is not
+   * "free": that person already has a subscription, so nothing here offers
+   * them a second one or a free trial, and every surface says "on hold"
+   * (Google Play's word for exactly this state, "account hold").
+   *
+   * @returns {{kind: "free"|"trialLocal"|"trialAccount"|"gift"|"paid"|"canceled"|"lapsed",
+   *            days: number|null, until: string, pastDue?: boolean, rail?: string}} What to
+   *            show, and days left where that is known. `pastDue`: a "paid" access whose
+   *            last payment did not go through. `rail`: where a lapsed subscription is open.
    */
   function headerPlanState() {
     const ent = window.VTBilling?.getEntitlement?.() || { pro: false, status: "free" };
     const acct = window.VTAccount?.getState?.() || null;
     const held = acct && acct.signedIn ? heldAccountPlan(ent, acct) : null;
-    return held ? accountPlanState(held) : browserPlanState(ent);
+    if (held) return accountPlanState(held);
+    const lapsed = ent.pro ? null : openRailAside(ent);
+    return lapsed ? { kind: "lapsed", days: null, until: "", rail: lapsed } : browserPlanState(ent);
   }
 
   /**
@@ -7955,6 +7963,11 @@
           return { text: tt("nav.planPastDue"), title: tt("nav.subscriptionTitle"), cls: "plan-ending" };
         }
         return { text: tt("nav.planPaid"), title: tt("nav.subscriptionTitle"), cls: "plan-paid" };
+      case "lapsed":
+        // A subscription is open and Pro is off. Never the offer ("Probar
+        // Pro"), which would sell a second subscription; a calm colour of its
+        // own, because the cause may be a refund or a pause, not a failure.
+        return { text: tt("nav.planLapsed"), title: tt("nav.subscriptionTitle"), cls: "plan-hold" };
       default:
         // The offer. "Probar" while a free trial is still on the table, "Ver"
         // once it has been spent, so the word never promises what is gone.
@@ -8022,7 +8035,7 @@
     btn.title = label.title;
     // The accessible name is the visible label; the title says what opens.
     btn.removeAttribute("aria-label");
-    btn.classList.remove("btn-pro", "btn-ghost", "plan-trial", "plan-gift", "plan-paid", "plan-ending");
+    btn.classList.remove("btn-pro", "btn-ghost", "plan-trial", "plan-gift", "plan-paid", "plan-ending", "plan-hold");
     btn.classList.add(label.cls);
     btn.dataset.plan = plan.kind;
   }
@@ -8063,9 +8076,11 @@
     // short of that — still asking, unreachable, no method wired up — is the
     // browser-local trial, so the button says the browser-local length.
     const accounts = accountSignIn().offered;
-    const canTrial = accounts
+    // A subscriber whose subscription is still open (Pro off: lapsed) is not a
+    // new customer: a trial would hide the open subscription, not end it.
+    const canTrial = !openRailAside(ent) && (accounts
       ? !ent.pro && !(acct.signedIn && acct.account?.trialUsed)
-      : !!B.canStartTrial?.() && !ent.pro;
+      : !!B.canStartTrial?.() && !ent.pro);
     trialBtn.hidden = !canTrial;
     placePricingTrial(trialBtn, prelaunch);
     // Once per load, not once per render: this sits in a path that re-runs on
@@ -8163,33 +8178,79 @@
     // cancelar suscripción", and the line says where it goes.)
     const cancelNote = $("#pricing-cancel-note");
     if (cancelNote) {
-      const key = cancelNoteKey(ent, B, cfg);
-      if (key) {
-        cancelNote.setAttribute("data-i18n", key);
-        cancelNote.textContent = tt(key);
-        cancelNote.hidden = false;
-      } else {
-        cancelNote.removeAttribute("data-i18n");
-        cancelNote.textContent = "";
-        cancelNote.hidden = true;
-      }
+      paintKeyedNote(cancelNote, cancelNoteKey(ent, B, cfg));
+      paintAlsoOpenNote(ent, cancelNote);
+    }
+  }
+
+  /** A line whose words are one i18n key, kept on the element so a change of language keeps them; "" hides it. */
+  function paintKeyedNote(el, key) {
+    if (key) {
+      el.setAttribute("data-i18n", key);
+      el.textContent = tt(key);
+      el.hidden = false;
+    } else {
+      el.removeAttribute("data-i18n");
+      el.textContent = "";
+      el.hidden = true;
     }
   }
 
   /**
+   * A subscription still open on a rail other than the one the Manage button
+   * manages (a Creem renewal still retried after moving to Mercado Pago, say)
+   * can still renew, so it is named, with its own route. One Manage button
+   * stays one: the line gives the route that needs no button here, Creem's
+   * emailed link or the payer's own Mercado Pago account. Drawn under the
+   * cancel line, and only once there is something to say.
+   */
+  function paintAlsoOpenNote(ent, cancelNote) {
+    // Inside the function, not a module constant: this can run at boot,
+    // before the line declaring such a constant has been reached.
+    const keys = { creem: "pricing.cancel.alsoOpenCreem", mercadopago: "pricing.cancel.alsoOpenMp" };
+    const key = keys[otherOpenRail(ent)] || "";
+    let note = $("#pricing-also-open");
+    if (!note && key) {
+      note = document.createElement("p");
+      note.id = "pricing-also-open";
+      note.className = "muted pricing-note";
+      cancelNote.after(note);
+    }
+    if (note) paintKeyedNote(note, key);
+  }
+
+  /** A rail with a subscription still open that the Manage button does not manage, or null. */
+  function otherOpenRail(ent) {
+    const managed = billingRailFor(ent);
+    const listed = window.VTAccount?.getState?.()?.billingRails || [];
+    return ["creem", "mercadopago"].find((r) => r !== managed && listed.includes(r)) || null;
+  }
+
+  /**
    * Which cancel line to show, or "" for none. The button is named only where
-   * it is drawn: a Creem subscriber who is signed out, or on a worker that
-   * cannot open the portal, is pointed at Creem's emailed link instead of at a
-   * button that is not there.
+   * it is drawn, on every rail: a Creem subscriber who is signed out, or on a
+   * worker that cannot open the portal, is pointed at Creem's emailed link
+   * instead of at a button that is not there; a Stripe payer with no portal
+   * configured gets no line, because Stripe emails no such link.
    */
   function cancelNoteKey(ent, B, cfg) {
-    // Pro is off, and a subscription is still open (a renewal being retried,
-    // or paused): the button is drawn for it, so say why it is there.
-    if (!ent.pro) return manageRoute(B, ent, cfg) ? "pricing.cancel.lapsed" : "";
-    const rail = String(ent.provider || "").toLowerCase();
-    if (!["stripe", "creem", "mercadopago"].includes(rail)) return "";
-    if (rail === "creem" && manageRoute(B, ent, cfg) !== "creem") return "pricing.cancel.creemEmail";
-    return "pricing.cancel." + rail;
+    const rail = billingRailFor(ent);
+    if (!isPaidRail(rail)) return "";
+    const drawn = manageRoute(B, ent, cfg) === rail;
+    // A subscription still open that is not what gives Pro now: Pro is off
+    // (a renewal being retried, a refunded period, a pause), or Pro comes
+    // from a gift or a trial over it.
+    if (openRailAside(ent)) return asideNoteKey(ent, rail, drawn);
+    if (drawn) return "pricing.cancel." + rail;
+    return rail === "creem" ? "pricing.cancel.creemEmail" : "";
+  }
+
+  /** The line for a subscription open beside Pro, or under no Pro: what it is, and where to manage it. */
+  function asideNoteKey(ent, rail, drawn) {
+    const key = ent.pro ? "pricing.cancel.aside" : "pricing.cancel.lapsed";
+    if (drawn) return key;
+    // No button to name: Creem's emailed link is the way, never nothing.
+    return rail === "creem" ? key + "Email" : "";
   }
 
   /**
@@ -8216,18 +8277,51 @@
     return ["stripe", "demo", ""].includes(rail) && stripePortalConfigured(B, cfg) ? "stripe" : null;
   }
 
+  /** Whether a payment is taken on this rail. Anything else a licence names (a gift, a comp, a trial, a grant, the QA demo) charges nobody. */
+  function isPaidRail(rail) {
+    return rail === "stripe" || rail === "creem" || rail === "mercadopago";
+  }
+
   /**
    * The rail whose subscription the button manages: the one Pro is paid on;
-   * or, without Pro, one this account still has a subscription on that is
-   * not over. A renewal Creem is still retrying after the paid period ends
-   * leaves no Pro and a card still being charged, and that subscriber needs
-   * the button most.
+   * else one this account still has a subscription on that is not over,
+   * whatever gives Pro meanwhile. A renewal Creem is still retrying after the
+   * paid period ends leaves no Pro and a card still being charged, and that
+   * subscriber needs the button most; so does one whose gift month covers the
+   * gap while the card fails, whose licence names the gift, not the rail.
    * @returns {string|null} Rail id ("" for a licence older than the field), or null.
    */
   function billingRailFor(ent) {
-    if (ent?.pro && ent.source !== "trial") return String(ent.provider || "").toLowerCase();
+    const own = String(ent?.provider || "").toLowerCase();
+    if (ent?.pro && isPaidRail(own)) return own;
+    const open = openSubscriptionRail();
+    if (open) return open;
+    // The QA demo and a licence older than the rail field keep the Stripe
+    // portal they always had; manageRoute turns a gift or a grant into none.
+    return ent?.pro && ent.source !== "trial" ? own : null;
+  }
+
+  /** The rail this account still has a subscription open on, as /v1/me's billingRails lists them, or null. */
+  function openSubscriptionRail() {
     const rails = window.VTAccount?.getState?.()?.billingRails || [];
     return ["creem", "mercadopago"].find((r) => rails.includes(r)) || null;
+  }
+
+  /**
+   * A subscription still open that is not what gives Pro now, or null: Pro is
+   * off (a renewal being retried, a refunded period, a pause), or Pro comes
+   * from a gift or a trial over it. That subscriber is sent to manage the
+   * subscription they have, never sold a second one: two would both charge.
+   * Pro paid on a rail is that subscription itself, and so is a licence older
+   * than the rail field: neither is "beside" one.
+   * @returns {string|null} The rail it is open on.
+   */
+  function openRailAside(ent) {
+    const open = openSubscriptionRail();
+    if (!open || !ent?.pro) return open;
+    const own = String(ent.provider || "").toLowerCase();
+    const paidHere = ent.source !== "trial" && (isPaidRail(own) || own === "");
+    return paidHere ? null : open;
   }
 
   /** A Creem portal needs somebody signed in (it is their customer the worker asks for) and a worker that has not said no. */
@@ -8288,7 +8382,9 @@
     // no way on. Say where they stand instead.
     const spent = $("#pricing-spent");
     if (spent) {
-      const show = prelaunch && !ent.pro && trialSpent();
+      // Free, not merely without Pro: a lapsed subscriber (Pro off, a
+      // subscription still open) is not told they can subscribe later.
+      const show = prelaunch && headerPlanState().kind === "free" && trialSpent();
       spent.hidden = !show;
       spent.textContent = show ? tt("pricing.trialSpent") : "";
     }
@@ -8313,6 +8409,40 @@
       weeklyTarget: 3,
       spark: []
     };
+    paintValueStats(pulse);
+
+    const B = window.VTBilling;
+    const ent = B?.getEntitlement?.() || { pro: false, status: "free" };
+    // The tag on the home card and the pill in the header are the same claim in
+    // two places, so they read the same source. Before this they did not: this
+    // one tested `ent.status === "trial"`, which is only ever the browser's own
+    // opt-in trial, so a worker-granted trial month fell through to "Pro" — the
+    // header's old mistake, still on the page a visitor sees first.
+    const plan = headerPlanState();
+    // A lapsed subscription holds no Pro: it is on hold, and its analysis stays locked.
+    const isProUser = !!(ent.pro || ent.status === "trial" || (plan.kind !== "free" && plan.kind !== "lapsed"));
+    const tag = $("#value-pulse-tag");
+    if (tag) {
+      tag.hidden = false;
+      const [text, cls] = valueTagFor(plan, B);
+      tag.textContent = text;
+      tag.className = "value-pulse-tag " + cls;
+    }
+    paintValueInsights(pulse, isProUser);
+
+    // "Pro: exportar y coach" and its price anchor are an offer. They stayed on
+    // this card for people already holding Pro: a second "Pro" button asking
+    // them to buy what the tag beside the title says they have.
+    // One offer at a time: while a moment banner speaks for Pro just above,
+    // the card's own button waits.
+    const cta = $("#value-pulse-cta");
+    if (cta) cta.hidden = plan.kind !== "free" || !$("#value-banner")?.hidden;
+
+    renderProStudio(pulse, isProUser);
+  }
+
+  /** The home card's numbers: sessions, minutes, streak, best held note and exercises touched. */
+  function paintValueStats(pulse) {
     const set = (id, v) => {
       const el = $(id);
       if (el) el.textContent = v;
@@ -8328,39 +8458,36 @@
     const holdStat = $("#vp-hold-stat");
     if (holdStat) holdStat.hidden = !(pulse.bestHoldSec >= 0.5);
     set("#vp-ex", String(pulse.exercisesTouched || 0));
+  }
 
-    const B = window.VTBilling;
-    const ent = B?.getEntitlement?.() || { pro: false, status: "free" };
-    // The tag on the home card and the pill in the header are the same claim in
-    // two places, so they read the same source. Before this they did not: this
-    // one tested `ent.status === "trial"`, which is only ever the browser's own
-    // opt-in trial, so a worker-granted trial month fell through to "Pro" — the
-    // header's old mistake, still on the page a visitor sees first.
-    const plan = headerPlanState();
-    const isProUser = !!(ent.pro || ent.status === "trial" || plan.kind !== "free");
-    const tag = $("#value-pulse-tag");
-    if (tag) {
-      tag.hidden = false;
-      if (plan.kind === "trialAccount" || plan.kind === "trialLocal") {
+  /**
+   * The home card's plan tag, in the header's words: [text, class].
+   * @param {{kind: string, days: number|null}} plan From headerPlanState().
+   * @param {object} B VTBilling.
+   * @returns {[string, string]}
+   */
+  function valueTagFor(plan, B) {
+    switch (plan.kind) {
+      case "trialAccount":
+      case "trialLocal": {
         const n = plan.days === null ? (B?.trialDaysLeft?.() ?? 0) : plan.days;
-        tag.textContent = tt("value.tagTrial", { n: String(n) });
-        tag.className = "value-pulse-tag is-trial";
-      } else if (plan.kind === "gift") {
-        tag.textContent = tt("value.tagGift");
-        tag.className = "value-pulse-tag is-gift";
-      } else if (plan.kind === "canceled") {
-        tag.textContent =
-          plan.days === null ? tt("value.tagEnding") : tt("value.tagEndingDays", { n: String(plan.days) });
-        tag.className = "value-pulse-tag is-ending";
-      } else if (plan.kind === "paid") {
-        tag.textContent = tt("value.tagPro");
-        tag.className = "value-pulse-tag is-pro";
-      } else {
-        tag.textContent = tt("value.tagFree");
-        tag.className = "value-pulse-tag is-free";
+        return [tt("value.tagTrial", { n: String(n) }), "is-trial"];
       }
+      case "gift":
+        return [tt("value.tagGift"), "is-gift"];
+      case "canceled":
+        return [plan.days === null ? tt("value.tagEnding") : tt("value.tagEndingDays", { n: String(plan.days) }), "is-ending"];
+      case "paid":
+        return [tt("value.tagPro"), "is-pro"];
+      case "lapsed":
+        return [tt("value.tagLapsed"), "is-hold"];
+      default:
+        return [tt("value.tagFree"), "is-free"];
     }
+  }
 
+  /** The home card's Pro insight line: shown to whoever holds Pro, and left to the Análisis Pro teaser otherwise. */
+  function paintValueInsights(pulse, isProUser) {
     const insights = $("#value-insights");
     if (insights && window.VTValuePulse?.narrative) {
       if (isProUser) {
@@ -8373,16 +8500,6 @@
         insights.textContent = "";
       }
     }
-
-    // "Pro: exportar y coach" and its price anchor are an offer. They stayed on
-    // this card for people already holding Pro: a second "Pro" button asking
-    // them to buy what the tag beside the title says they have.
-    // One offer at a time: while a moment banner speaks for Pro just above,
-    // the card's own button waits.
-    const cta = $("#value-pulse-cta");
-    if (cta) cta.hidden = plan.kind !== "free" || !$("#value-banner")?.hidden;
-
-    renderProStudio(pulse, isProUser);
   }
 
   /**
@@ -9180,8 +9297,12 @@
       if (!banner.hidden) putAwayValueBanner(banner);
     };
     if (!moment || VP.isDismissed(moment.id)) return nothingToSay();
-    // If already full pro (paid/demo), skip soft upsells except trial ending
-    if (ent.pro && ent.source !== "trial" && moment.id !== "trial_ending") return nothingToSay();
+    // If already full pro (paid/demo), skip soft upsells except trial ending.
+    // A subscription on hold (Pro off, one still open) is not sold Pro either:
+    // the header already says where it stands, and "Con Pro..." beside it
+    // would be the offer of a second subscription.
+    const held = (ent.pro && ent.source !== "trial") || headerPlanState().kind === "lapsed";
+    if (held && moment.id !== "trial_ending") return nothingToSay();
 
     showValueBanner(banner, text, moment);
   }
@@ -9349,6 +9470,9 @@
     const buttons = $$(".plan-cta", grid);
     buttons.forEach((btn) => {
       btn.addEventListener("click", () => {
+        // A subscription is already open: this plan goes to managing it, the
+        // same route as "Manage or cancel subscription", and opens no checkout.
+        if (btn.dataset.route === "manage") return openBillingPortal();
         const planId = btn.dataset.plan;
         if (!planId || planId === "free" || B.checkoutOpening?.()) return;
         const res = B.startCheckout(planId, pricingRail);
@@ -9435,12 +9559,17 @@
     btn.removeAttribute("aria-busy");
   }
 
-  /** What a press of a plan's button tells the person, by the outcome startCheckout gave. */
+  /**
+   * What a press of a plan's button tells the person, by the outcome
+   * startCheckout gave. A mode not listed here says nothing on purpose:
+   * "signed_out" (the session ended while the worker answered) is answered by
+   * the account panel, not by a toast. "rate_limited" and "subscription_open"
+   * have answers of their own in answerCheckout.
+   */
   const CHECKOUT_TOASTS = {
     provider_unavailable: ["pricing.toast.railUnavailable", 6000],
     verification_unavailable: ["pricing.toast.verifyUnavailable", 5200],
     unconfigured: ["pricing.toast.unconfigured", 3200],
-    rate_limited: ["pricing.toast.checkoutBusy", 5200],
     checkout_failed: ["pricing.toast.checkoutFailed", 6000]
   };
 
@@ -9466,11 +9595,59 @@
       openAccount();
       return;
     }
+    if (res.mode === "subscription_open") {
+      answerOpenSubscription(res.openProvider);
+      return;
+    }
+    if (res.mode === "rate_limited") {
+      toast(rateLimitedText(res.retryAfter), { durationMs: 5200 });
+      return;
+    }
     // provider_unavailable: the worker said it cannot honour this rail, so the
     // press stops here rather than sending them to pay for something we could
     // not then switch on. A redirect navigates away and says nothing.
     const said = CHECKOUT_TOASTS[res.mode];
     if (said) toast(tt(said[0]), { durationMs: said[1] });
+  }
+
+  /**
+   * The worker refused a checkout because this account already has a
+   * subscription open (paid, or a renewal being retried): a second one would
+   * charge twice. Say so, and take them to manage the one they have on its
+   * own rail, which is what Stripe Checkout's "one subscription per customer"
+   * setting does (it sends them to the customer portal instead). Same tab,
+   * because the answer comes after the press and a window opened then is a
+   * pop-up most browsers block.
+   * @param {string} [openProvider] The rail the worker named, else this page's own reading.
+   */
+  function answerOpenSubscription(openProvider) {
+    const ent = window.VTBilling?.getEntitlement?.();
+    const rail = String(openProvider || "").toLowerCase() || billingRailFor(ent);
+    if (rail === "creem" && creemPortalOffered()) return openCreemPortal("pricing.toast.subscriptionOpenCreem");
+    if (rail === "mercadopago") {
+      toast(tt("pricing.toast.subscriptionOpenMp"), { durationMs: 8000 });
+      window.location.assign(MP_SUBSCRIPTIONS_URL);
+      return;
+    }
+    // No route here (a worker without the portal, or a rail with none): say
+    // where to go, and learn the open subscription so the dialog's plan
+    // buttons stop offering a second one.
+    toast(tt(rail === "creem" ? "pricing.toast.subscriptionOpenEmail" : "pricing.toast.subscriptionOpen"), { durationMs: 9000 });
+    window.VTAccount?.refresh?.();
+  }
+
+  /**
+   * A refused checkout for too many tries: in minutes when the worker said
+   * how long is left (its window is a clock hour, so up to 60), rounded up so
+   * it never says to come back too soon; "an hour at most" when it did not.
+   * @param {number} [retryAfter] Seconds, from the worker's 429.
+   * @returns {string}
+   */
+  function rateLimitedText(retryAfter) {
+    const s = Number(retryAfter);
+    if (!Number.isFinite(s) || s <= 0) return tt("pricing.toast.checkoutBusy");
+    const n = Math.max(1, Math.ceil(s / 60));
+    return tt(n === 1 ? "pricing.toast.checkoutBusyOne" : "pricing.toast.checkoutBusyMin", { n: String(n) });
   }
 
   /**
@@ -9520,7 +9697,7 @@
               <div class="plan-price">${price.text}<span>${interval}</span></div>
               <ul class="plan-features">${feats}</ul>
               ${moreFeats}
-              <button type="button" class="btn ${ctaClass} btn-sm plan-cta" data-plan="${p.id}" ${cta.disabled ? 'disabled aria-disabled="true"' : ""}>
+              <button type="button" class="btn ${ctaClass} btn-sm plan-cta" data-plan="${p.id}"${cta.manage ? ' data-route="manage"' : ""} ${cta.disabled ? 'disabled aria-disabled="true"' : ""}>
                 ${cta.label}
               </button>
             </article>`;
@@ -9553,13 +9730,35 @@
     return p.popular ? `<span class="plan-badge">★</span>` : "";
   }
 
-  /** A plan card's button: what it says, whether it can be pressed, and whether that is only for now. */
+  /** A plan card's button: what it says, whether it can be pressed, whether that is only for now, and whether it goes to Manage. */
   function planCta(p, ctx) {
     const own = heldPlanCta(p, ctx.held, ctx.ent);
+    // A subscription is still open (Pro off, Pro from a gift or a trial over
+    // it, or Pro paid on it): a paid plan that would be an offer is a second
+    // subscription, which the worker refuses, and which would charge twice.
+    // Changing plan is done on the provider's own pages, so it goes there.
+    if (p.id !== "free" && !own.disabled && openSubscriptionRail()) return openSubscriptionCta(ctx);
     // A Subscribe button that can only answer with a toast is a dead end;
     // say it on the button instead, and keep it out of the Tab order.
     if (ctx.prelaunch && !own.disabled) return { label: tt("pricing.notYet"), disabled: true, notYet: true };
     return { label: own.label, disabled: own.disabled, notYet: false };
+  }
+
+  /**
+   * A paid plan's button while a subscription is still open (Pro off, Pro
+   * from a gift or a trial over it, or the other plan of the one paid for).
+   * A second checkout would charge twice, so the plan goes to the
+   * subscription they have, on its own rail: the "Manage or cancel" route,
+   * which sells nothing, so pre-launch does not hold it back. Where this page has no route there
+   * (a worker that cannot open the Creem portal), a button could only answer
+   * with a toast, so it says why it cannot be pressed, and the cancel line
+   * beside it says where Creem's link is.
+   */
+  function openSubscriptionCta(ctx) {
+    if (manageRoute(ctx.B, ctx.ent, ctx.B.cfg?.() || {})) {
+      return { label: tt("pricing.manageOpen"), disabled: false, notYet: false, manage: true };
+    }
+    return { label: tt("pricing.subscriptionOpen"), disabled: true, notYet: true };
   }
 
   /** A plan card's button as the plan held makes it, before pre-launch is considered. */
@@ -9599,6 +9798,8 @@
         return plan.until
           ? tt("pricing.statusCanceled", { date: plan.until })
           : tt("pricing.statusCanceledNoDate");
+      case "lapsed":
+        return tt("pricing.statusLapsed");
       case "paid": {
         // A renewal that failed: still Pro, but say so rather than "active".
         if (plan.pastDue) return tt("pricing.statusPastDue");
@@ -9719,7 +9920,14 @@
     // a European's cards turn from US$ to € when it says so (VG-85). For most
     // Europeans it has landed before this (prefetchRailsForPrices).
     window.VTAccount?.ensureRails?.()?.then?.(() => {
-      if (!modal.hidden) repaintPricingOnHealth();
+      if (modal.hidden) return;
+      // A subscription still open: its paid plans were drawn as "Manage my
+      // subscription" before the worker said whether it can open the portal,
+      // so they are drawn again with the line, not left pointing at a route
+      // that is not there. Everybody else keeps the plan buttons (and the
+      // focus on one) and has only the prices and the chrome painted again.
+      if (openSubscriptionRail()) renderPricingModal();
+      else repaintPricingOnHealth();
     }).catch(() => {});
     // Remember the trigger before renderPricingModal() rebuilds the card.
     const opener = document.activeElement;
@@ -10004,8 +10212,10 @@
    * @returns {string} The line.
    */
   function accountPlanLineFor(account) {
-    if (account.entitlement) return accountPlanLine(account.entitlement);
+    // Pro off with a subscription still open is not "Plan gratis": it is on hold.
     const plan = headerPlanState();
+    if (plan.kind === "lapsed") return tt("auth.planLapsed");
+    if (account.entitlement) return accountPlanLine(account.entitlement);
     if (plan.kind === "free") return accountPlanLine(null);
     const source =
       plan.kind === "trialAccount" || plan.kind === "trialLocal" ? "trial" : plan.kind === "gift" ? "gift" : "paid";
@@ -10269,6 +10479,30 @@
     // offer, and sat over the panel's first lines: gone once the offer shows.
     if (show && box.hidden) hideToast();
     box.hidden = !show;
+    // Without an account the panel's Manage button is never theirs, so the
+    // offer says, before they pay, how to cancel on the rail the link pays on.
+    // The key goes on the element, so a change of language keeps these words.
+    const said = box.querySelector("p");
+    if (show && said) {
+      const B = window.VTBilling;
+      // The rail the link pays on is the one checkoutUrl read it from: the
+      // press's own, else the region's.
+      const key = payAnywayKey(String(want.rail || B.preferredRail?.(B.detectRegion?.()) || ""));
+      said.setAttribute("data-i18n", key);
+      said.textContent = tt(key);
+    }
+  }
+
+  /**
+   * The pay-without-account offer for the rail the link pays on: with how to
+   * cancel on Creem or on Mercado Pago. By rail, not by the link's host,
+   * because a rail has more hosts than one: Mercado Pago's short links
+   * (mpago.la) and its other countries' sites are its links too.
+   */
+  function payAnywayKey(rail) {
+    if (rail === "creem") return "auth.payWithoutAccountCreem";
+    if (rail === "mercadopago") return "auth.payWithoutAccountMp";
+    return "auth.payWithoutAccount";
   }
 
   /** Go on to the checkout the "sign in first" press was for. */
@@ -10405,7 +10639,9 @@
 
   /** The panel's trial button: only for an account that has never used it, naming the length the worker will give. */
   function paintAccountTrial(account) {
-    // The trial is offered only to a signed-in account that has never used it.
+    // The trial is offered only to a signed-in account that has never used it,
+    // and never to one whose subscription is still open while Pro is off: a
+    // trial would hide that subscription, not end it.
     const trialBtn = $("#btn-account-trial");
     if (trialBtn) {
       trialBtn.hidden = !(
@@ -10413,7 +10649,8 @@
         account.signedIn &&
         account.account &&
         !account.account.trialUsed &&
-        !(account.entitlement && account.entitlement.pro)
+        !(account.entitlement && account.entitlement.pro) &&
+        headerPlanState().kind !== "lapsed"
       );
       // Name the length the press will actually give, read from the worker, the
       // same way the Pro dialog's button does. The neutral label is the fallback
@@ -11292,17 +11529,20 @@
     const B = window.VTBilling;
     if (!B) return;
     const ent = B.getEntitlement?.();
-    const route = manageRoute(B, ent, B.cfg?.() || {});
+    const cfg = B.cfg?.() || {};
+    const route = manageRoute(B, ent, cfg);
     if (route === "creem") return openCreemPortal();
     if (route === "mercadopago") {
       window.open(MP_SUBSCRIPTIONS_URL, "_blank", "noopener,noreferrer");
       return;
     }
     // A Creem payer whose button went stale (the worker has since said it
-    // cannot open the portal): Creem's emailed link, not Stripe's "billing
-    // isn't available yet", which is false for somebody already paying.
+    // cannot open the portal), or a lapsed subscriber's plan button on such a
+    // worker: Creem's emailed link, not Stripe's "billing isn't available
+    // yet", which is false for somebody already paying. The words are the
+    // cancel line's own, so the press and the line say the same.
     if (billingRailFor(ent) === "creem") {
-      toast(tt("pricing.cancel.creemEmail"), { durationMs: 6000 });
+      toast(tt(cancelNoteKey(ent, B, cfg) || "pricing.cancel.creemEmail"), { durationMs: 6000 });
       updateBillingChrome();
       return;
     }
@@ -11320,12 +11560,15 @@
    * account's own customer and the page goes there. Same tab, because the
    * answer arrives after the press and a new window opened then is a pop-up
    * most browsers block.
+   * @param {string} [saidKey] What to say while it opens, when the press was
+   *   not a Manage press (a refused checkout); "Opening your portal" else.
    */
-  function openCreemPortal() {
+  function openCreemPortal(saidKey) {
     const btn = $("#btn-manage-billing");
     if (btn?.getAttribute("aria-busy") === "true") return;
     btn?.setAttribute("aria-busy", "true");
-    toast(tt("pricing.toast.portalOpened"));
+    if (saidKey) toast(tt(saidKey), { durationMs: 8000 });
+    else toast(tt("pricing.toast.portalOpened"));
     const asker = window.VTAccount.getSessionToken?.() || null;
     window.VTAccount.openBillingPortal()
       .then((res) => {

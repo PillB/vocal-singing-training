@@ -482,11 +482,23 @@ looks like the product being broken.
 **What proves it worked:** the account panel offers an address field, and a
 code arrives. `/v1/auth/methods` is what the page reads.
 
-**And name the provider on the privacy page** in the same commit, in both
-halves: it receives every address that asks for a code, and the page's list
-of who receives what ends "Nadie más recibe nada" / "Nobody else receives
-anything". `tests/node/privacy-rails.test.mjs` checks this for payment rails
-only.
+**And name the provider on the privacy page** in the same commit: it
+receives every address that asks for a code. That is two sentences in each
+half (Spanish and English), four edits in all:
+
+1. The list of who receives what, which ends "Nadie más recibe nada" /
+   "Nobody else receives anything": add the provider (Resend, Brevo or
+   MailerSend) before that last line.
+2. The account section's sentence on who receives your email, "Solo lo
+   reciben quienes lo necesitan para darte el servicio…" / "Only those who
+   need it to provide the service receive it…": add the provider beside
+   Creem, for example "y tu correo va a Resend cada vez que pides un código"
+   / "and your email address goes to Resend each time you ask for a code".
+
+`tests/rt2-p2-privacy-recipients.spec.js` reads `EMAIL_PROVIDER` from
+`workers/entitlements/wrangler.toml` and fails while either sentence, in
+either half, does not name it. `tests/node/privacy-rails.test.mjs` checks
+the payment rails.
 
 **Undo:** clear `EMAIL_PROVIDER`, redeploy. Addresses already stored stay
 stored; the privacy page says what is kept and the nightly cron sweeps codes

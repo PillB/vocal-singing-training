@@ -105,12 +105,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "9d556165ebcf239cdcb1a493d0655a8f87f67bd549b0a29cf962225590f5d7bc",
-      "complexity": 33,
-      "name": "Function 'renderValuePulse'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "9623c1473d78f9486843c309eef081920298b3cf5bff1209558b1236962ce9ba",
       "complexity": 19,
       "name": "Function 'stopPitchViz'"

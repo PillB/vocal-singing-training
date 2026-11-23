@@ -249,7 +249,7 @@ function flat(text) {
 
 /**
  * The prices the terms state, read from both languages' "Precios" / "Prices"
- * paragraph: `{ es: { peru, elsewhere }, en: { peru, elsewhere } }`, each
+ * paragraph, by rail: `{ es: { mercadopago, creem }, en: { mercadopago, creem } }`, each
  * `{ monthly, yearly }` as written (symbol and amount), or null when the
  * sentence is not there in that shape.
  * @param {import('@playwright/test').Page} page Page.
@@ -258,10 +258,13 @@ async function termsPrices(page) {
   await page.goto(`${BASE}/terms.html`, { waitUntil: "domcontentloaded" });
   const para = async (heading) =>
     flat(await page.locator("main h2", { hasText: heading }).locator("xpath=following-sibling::p[1]").textContent());
-  const es = /En Perú: (.+?) al mes o (.+?) al año\. Fuera de Perú: (.+?) al mes o (.+?) al año/.exec(await para(/^Precios$/));
-  const en = /In Peru: (.+?) a month or (.+?) a year\. Elsewhere: (.+?) a month or (.+?) a year/.exec(await para(/^Prices$/));
+  // By rail, not by country (red team round two, truth-3): Creem sells in
+  // Peru too, in US$, and the old "En Perú: S/ … Fuera de Perú: US$ …" priced
+  // a Peruvian on the card rail in soles nobody charges.
+  const es = /Con Mercado Pago: (.+?) al mes o (.+?) al año, en soles\. Con tarjeta a través de Creem, también en Perú: (.+?) al mes o (.+?) al año/.exec(await para(/^Precios$/));
+  const en = /With Mercado Pago: (.+?) a month or (.+?) a year, in soles\. By card through Creem, in Peru too: (.+?) a month or (.+?) a year/.exec(await para(/^Prices$/));
   const pair = (m, i) => (m ? { monthly: m[i], yearly: m[i + 1] } : null);
-  return { es: { peru: pair(es, 1), elsewhere: pair(es, 3) }, en: { peru: pair(en, 1), elsewhere: pair(en, 3) } };
+  return { es: { mercadopago: pair(es, 1), creem: pair(es, 3) }, en: { mercadopago: pair(en, 1), creem: pair(en, 3) } };
 }
 
 // truth-3: the three Latin American markets that used to name Mercado Pago;
@@ -272,9 +275,9 @@ for (const market of [
   { label: "Argentina", code: "AR", name: "Argentina", locale: "es-AR", timezoneId: "America/Argentina/Buenos_Aires" },
   { label: "Chile", code: "CL", name: "Chile", locale: "es-CL", timezoneId: "America/Santiago" },
   { label: "Colombia", code: "CO", name: "Colombia", locale: "es-CO", timezoneId: "America/Bogota" },
-  // No market of their own: the worldwide market, by the name the config
-  // gives it in Spanish (its `nameEs`, where it has one), read rather than
-  // written here so this case does not hold its English name in place.
+  // No market of their own: the worldwide market, by the name the page gives
+  // it in Spanish (its translated "resto del mundo", VG-85's region line),
+  // read rather than written here so this case does not hold a wording in place.
   { label: "Uruguay", name: null, locale: "es-UY", timezoneId: "America/Montevideo" },
   { label: "Ecuador", name: null, locale: "es-EC", timezoneId: "America/Guayaquil" }
 ]) {
@@ -293,10 +296,7 @@ for (const market of [
       // named Mercado Pago, so the dialog chose it first under a dollar
       // price; money-6, its button stayed one press away for every market,
       // and Uruguay and Ecuador were told "Tu región: Perú" in soles, on it.
-      const name = market.name || (await page.evaluate(() => {
-        const ww = window.VTBilling.marketFor("WW");
-        return ww.nameEs || ww.name;
-      }));
+      const name = market.name || (await page.evaluate(() => window.t("pricing.regionElsewhere")));
       expect(await page.evaluate(() => window.VTBilling.detectRegion()), "the market the locale puts the page in").toBe(market.name ? market.code : "WW");
       await expect.poll(() => dialogReads(page)).toEqual({
         region: `Tu región: ${name} · ${DOLLARS_ES}`,
@@ -375,14 +375,14 @@ test.describe("truth-3 control: Peru buys on Mercado Pago, in soles", () => {
     expect(state.checkouts, "and no Creem checkout was opened").toEqual([]);
   });
 
-  test("the terms' Peru price is the price the Peruvian dialog shows", async ({ page }) => {
+  test("the terms' Mercado Pago price is the price the Peruvian dialog shows on Mercado Pago", async ({ page }) => {
     await install(page, freshState(), { config: BOTH_ON_SALE });
     const terms = await termsPrices(page);
-    expect(terms.es.peru).toEqual({ monthly: "S/ 19.90", yearly: "S/ 119.90" });
-    expect(terms.en.peru, "the English half states the same").toEqual(terms.es.peru);
+    expect(terms.es.mercadopago).toEqual({ monthly: "S/ 19.90", yearly: "S/ 119.90" });
+    expect(terms.en.mercadopago, "the English half states the same").toEqual(terms.es.mercadopago);
     await open(page);
     await openPricing(page);
-    await expect.poll(() => dialogReads(page).then((d) => ({ monthly: d.monthly, yearly: d.yearly }))).toEqual(terms.es.peru);
+    await expect.poll(() => dialogReads(page).then((d) => ({ monthly: d.monthly, yearly: d.yearly }))).toEqual(terms.es.mercadopago);
   });
 });
 
@@ -433,19 +433,19 @@ test.describe("truth-4 under VG-85: Spain is shown the money the worker will cha
 test.describe("truth-4: outside Peru and the Union, the terms' price is the dialog's", () => {
   test.use({ locale: "en-GB", timezoneId: "Europe/London" });
 
-  test("the terms' price outside Peru is the price the dialog shows in the United Kingdom", async ({ page }) => {
+  test("the terms' Creem price is the price the dialog shows in the United Kingdom", async ({ page }) => {
     // Euros were decided for the Union only, so the United Kingdom, in Europe
     // and outside it, is where the terms' dollar price is checked now.
     await install(page, freshState({ eur: true }), { config: CREEM_ON_SALE });
     const terms = await termsPrices(page);
     // Wrong (before): "$7.99", a bare dollar sign, which is the peso in
     // Mexico, Argentina, Chile and Colombia.
-    expect(terms.es.elsewhere).toEqual({ monthly: "US$ 7.99", yearly: "US$ 49" });
-    expect(terms.en.elsewhere, "the English half states the same").toEqual(terms.es.elsewhere);
+    expect(terms.es.creem).toEqual({ monthly: "US$ 7.99", yearly: "US$ 49" });
+    expect(terms.en.creem, "the English half states the same").toEqual(terms.es.creem);
     await open(page);
     await openPricing(page);
     await expect.poll(() => dialogReads(page).then((d) => d.region)).toBe(`Tu región: Reino Unido · ${DOLLARS_ES}`);
-    await expect.poll(() => dialogReads(page).then((d) => ({ monthly: d.monthly, yearly: d.yearly }))).toEqual(terms.es.elsewhere);
+    await expect.poll(() => dialogReads(page).then((d) => ({ monthly: d.monthly, yearly: d.yearly }))).toEqual(terms.es.creem);
   });
 });
 
@@ -465,13 +465,15 @@ const RATE_LIMITED = [429, { ok: false, reason: "rate_limited", retryAfter: 3556
 test.describe("truth-6: a checkout refused for too many tries says when to come back", () => {
   test.use({ locale: "es-ES", timezoneId: "Europe/Madrid" });
 
-  test("a 429 from the worker says to try again within an hour at most, not in a few minutes", async ({ page }) => {
+  test("a 429 from the worker says how many minutes it said are left, not 'a few minutes'", async ({ page }) => {
     const { state, navigations, toast, cta } = await pressAgainst(page, RATE_LIMITED, "es");
     await expect(toast).toContainText("Demasiados intentos seguidos");
-    // Wrong (before): "Espera unos minutos", where the worker's window, aligned
-    // to the clock, can have 59 of them left.
-    await expect(toast).toContainText(/una hora/);
-    await expect(toast).not.toContainText(/minutos/);
+    // Wrong (round one): "Espera unos minutos", where the worker's window,
+    // aligned to the clock, can have 59 of them left. Wrong (round two,
+    // truth-8): the worker's retryAfter dropped for a fixed "una hora".
+    // 3556 s is 59.3 minutes, rounded up so it never says to come back early.
+    await expect(toast).toContainText("Vuelve a intentarlo en 60 minutos");
+    await expect(toast).not.toContainText(/unos minutos/);
     await expect(toast).toContainText("no se cobró nada");
     await expect(cta).toBeEnabled();
     expect(state.checkouts).toHaveLength(1);
@@ -488,11 +490,13 @@ test.describe("truth-6: a checkout refused for too many tries says when to come 
 test.describe("truth-6, in English", () => {
   test.use({ locale: "en-US", timezoneId: "America/New_York" });
 
-  test("a 429 from the worker says to try again within the hour, not in a few minutes", async ({ page }) => {
+  test("a 429 from the worker says how many minutes it said are left, as the Spanish does", async ({ page }) => {
     const { toast } = await pressAgainst(page, RATE_LIMITED, "en");
     await expect(toast).toContainText("Too many tries in a row");
-    await expect(toast).toContainText(/within the hour/);
-    await expect(toast).not.toContainText(/minutes/);
+    // Wrong (round two, truth-8): "Try again within the hour", which reads as
+    // a deadline, and drops the wait the worker sent.
+    await expect(toast).toContainText("Try again in 60 minutes");
+    await expect(toast).not.toContainText(/within the hour|a few minutes/);
     await expect(toast).toContainText("nothing was charged");
   });
 

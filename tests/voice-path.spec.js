@@ -237,13 +237,22 @@ test.describe("Tu camino", () => {
   test("at 200% zoom the home button lands on the card's title, just below the sticky header", async ({ page }) => {
     // A 1280 × 720 laptop at 200% zoom. Reduced motion makes the scroll instant, so where it lands is final.
     // Wrong ways this catches: scrolling before Historial's calendar is drawn (the calendar then pushes the
-    // card down and the title ends at the bottom of the screen), and landing under the header (the page's
-    // scroll-padding-top keeps the header's height free).
+    // card down and the title ends at the bottom of the screen), including on a draw of the card that comes
+    // from elsewhere while the recordings are still being read (an account change redraws the progress
+    // cards), and landing under the header (the page's scroll-padding-top keeps the header's height free).
     await page.setViewportSize({ width: 640, height: 360 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await boot(page, { days: FIVE_DAYS, flags: RETURNING });
+    await page.evaluate(() => {
+      const read = VTStorage.listRecordings.bind(VTStorage);
+      window.__recordingsRead = new Promise((r) => (window.__letRecordingsRead = r));
+      VTStorage.listRecordings = () => window.__recordingsRead.then(read);
+    });
     await page.locator("#path-home-btn").focus();
     await page.keyboard.press("Enter");
+    await expect(page.locator("#history-list")).toContainText(/Cargando/i);
+    await page.evaluate(() => VTPath.renderCard()); // drawn from elsewhere, before the calendar
+    await page.evaluate(() => window.__letRecordingsRead());
     await page.clock.runFor(800);
     await expect(page.locator("#history-list .hist-rec-empty")).toBeVisible();
     await expect(page.locator("#path-title")).toBeFocused();

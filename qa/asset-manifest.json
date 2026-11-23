@@ -84,8 +84,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261121a",
-    "sha": "202a0e32ca9a123b"
+    "v": "20261123a",
+    "sha": "cd8d8b30d7cd5f3e"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -288,8 +288,8 @@
     "sha": "fdb6b849b629fe36"
   },
   "js/voice-path.js": {
-    "v": "20261122a",
-    "sha": "4381293a035191be"
+    "v": "20261123a",
+    "sha": "6b63f56936679d45"
   },
   "js/wake-lock.js": {
     "v": "20261112b",

@@ -1166,7 +1166,18 @@
     }
     body.innerHTML = cardHtml(currentTrack(), flags);
     watchSeen(card, newsNow(flags));
-    focusIfWanted(card);
+  }
+
+  /**
+   * Historial has drawn its list, and the card under it (app.js
+   * renderHistory). Arrived from the home button, the card is brought into
+   * view now and not on an earlier draw: other things draw the card too (an
+   * account change redraws the progress cards), and while the recordings are
+   * still being read the calendar has not pushed it down yet.
+   */
+  function historyDrawn() {
+    const card = $("#path-card");
+    if (card && !card.hidden) focusIfWanted(card);
   }
 
   /** The quiet way in from home, beside the fact cards: how many logros, or how many are new. */
@@ -1307,10 +1318,10 @@
       b.addEventListener("click", () => {
         track("path_open", { from: "home" });
         focusWanted = Date.now();
-        // Historial draws the card again once its calendar is in (after the
-        // recordings are read), and renderCard scrolls to it then. Scrolling
-        // here would aim at where the card is before the calendar pushes it
-        // down, and land a screen short of it at 200% zoom.
+        // Historial says when its list and the card are drawn (historyDrawn),
+        // and the scroll waits for that. Scrolling here, or on any earlier
+        // draw of the card, would aim at where it is before the calendar
+        // pushes it down, and land a screen short of it at 200% zoom.
         hooks.showHistory?.();
       });
     }
@@ -1333,6 +1344,7 @@
     markSeen,
     noteSet,
     noteTake,
+    historyDrawn,
     served,
     hidden,
     setHidden,

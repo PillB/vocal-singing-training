@@ -6874,6 +6874,8 @@
       const progressCard = $("#value-pulse");
       if (progressCard) progressCard.hidden = !daysHtml && !recent.length;
       renderValuePulse();
+      // The card sits under the list now, where it stays: the home button's scroll can land.
+      window.VTPath?.historyDrawn?.();
       // Gentle trial and progress prompts live here, never during practice.
       setTimeout(() => showValueMoment(), 400);
 

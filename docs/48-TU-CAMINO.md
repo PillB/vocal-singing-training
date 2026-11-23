@@ -588,7 +588,13 @@ waits; the hidden card says it can be shown once the question is answered.
 (5) A comeback the loop's card welcomed during the wait was announced
 again by Tu camino after the answer; what a card says in its own words is
 now remembered on the page and counted as said when the wait ends.
-(6) While the question waited, every status read each profile's whole
+(6) The home button's scroll to the card fired on any draw of the card;
+another draw while the recordings were still being read (an account
+change redraws the progress cards) scrolled before the calendar pushed
+the card down, and at 200% zoom the title landed at the bottom of the
+screen. This showed as a red browser run under load. Historial now says
+when its list is drawn (`VTPath.historyDrawn`), and only then does the
+scroll land (VU18, VU19). (7) While the question waited, every status read each profile's whole
 record twice; it reads it once now, and Tu camino uses the status sync
 hands its listeners. The review also showed that five branches of the
 round-four code could break with every test still green; each has a test
@@ -612,7 +618,9 @@ time they left is unknown, and the person present keeps what she did.
   reload; sync "the handover is waited on after a reload before the
   account answers, for the sign-in it was noted for only" and "Ana signing
   out after a sign-in sync never saw…" (both against the real account
-  worker); mutants VP65 to VP75 and SY47 to SY54.
+  worker); browser "at 200% zoom the home button lands on the card's
+  title…", now with a draw of the card while the recordings are read;
+  mutants VP65 to VP75, SY47 to SY54, VU18 and VU19.
 
 Verification after round four's fixes: `npm run test:core` (lint and
 every Node test) 1,300 pass, 0 fail, 2 todo; `tests/node/voice-path.test.mjs`

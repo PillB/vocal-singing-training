@@ -73,12 +73,17 @@ test.describe("terms of use", () => {
     ]) {
       expect(config, `billing-config no longer carries the ${label} price`).toContain(amount);
     }
-    expect(body).toMatch(/S\/ 19\.90 al mes/);
-    expect(body).toMatch(/S\/ 119\.90 al año/);
+    // \s: each sign is joined to its amount by a no-break space, so a price
+    // never splits across lines (tests/node/terms-price-nowrap.test.mjs).
+    expect(body).toMatch(/S\/\s19\.90 al mes/);
+    expect(body).toMatch(/S\/\s119\.90 al año/);
     // Written US$ outside Peru: a bare "$" is the peso in Mexico, Argentina,
     // Chile and Colombia.
-    expect(body).toMatch(/US\$ 7\.99 al mes/);
-    expect(body).toMatch(/US\$ 49 al año/);
+    expect(body).toMatch(/US\$\s7\.99 al mes/);
+    expect(body).toMatch(/US\$\s49 al año/);
+    // And the Union's price, in euros, the way Spanish writes it (VG-85).
+    expect(body).toMatch(/7,99\s€ al mes/);
+    expect(body).toMatch(/49\s€ al año/);
   });
 
   test("it only claims nothing is on sale while no checkout link exists", async ({ page }) => {

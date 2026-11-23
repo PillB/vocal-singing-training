@@ -104,7 +104,9 @@ function behaviorDetected(item, result, log) {
     ? log.includes("not ok") && log.includes(item.name)
     : log.includes("Error: expect(") && log.includes(item.name);
   return result.status !== 0 && sourceOracle &&
-    !log.includes("No tests found") && !log.includes("SyntaxError");
+    // The Node contract quotes "No tests found" in its *expected* assertion.
+    // Reject that Playwright runner error only for browser-based mutants.
+    (item.node || !log.includes("No tests found")) && !log.includes("SyntaxError");
 }
 
 function evaluateMutant(item) {

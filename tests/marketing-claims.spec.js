@@ -29,8 +29,8 @@
  *    ad in the same way when practice is over, so none of them passes because nothing could be drawn.
  *
  * Each has planted defects in qa/mutate.mjs (the "promises" and "promises-account-ads" sets: MK3, MK19 to MK22,
- * MK26 to MK46, MK49 to MK67) that turn it red. MK26 to MK29 are what Codex's review showed the first version let
- * through; MK30 to MK46 are what the second red team showed the second version let through; MK49 to MK67 are the
+ * MK26 to MK46, MK49 to MK70) that turn it red. MK26 to MK29 are what Codex's review showed the first version let
+ * through; MK30 to MK46 are what the second red team showed the second version let through; MK49 to MK70 are the
  * third red team's, on paths the third version walks now (docs/48 section 11). What no scenario can walk is held
  * in the code itself by tests/node/promise-guards.test.mjs ("guards" set).
  */
@@ -65,6 +65,9 @@ function daysBefore(day, n) {
  * count of what it records, so a test knows how big a take is.
  */
 async function boot(page, { days = null, lang = "es", now = NOW, person = false, holdMic = false } = {}) {
+  // The production worker's host answers here, so no run sends to it: the stability pass of the third red team
+  // saw the "no time limit" visitors, whose analytics are on, post events to it on every run and every mutant.
+  await page.route(/^https:\/\/vocal-studio-entitlements\.vocalstudio-pe\.workers\.dev\//, (route) => route.fulfill({ status: 204, body: "" }));
   await page.clock.install({ time: new Date(now) });
   await page.addInitScript(
     ({ days, lang, person, holdMic }) => {
@@ -237,6 +240,13 @@ async function todayIs(page, day) {
 
 const SINGLE_LENGTH = 300; // s4-lip-trills, s5-sirens and v1-diction, as a first visitor gets them
 const LONGEST_LENGTH = 1200; // s3-song-stanzas, the longest exercise in the catalog
+/**
+ * The lengths a routine's steps are planned with (js/daily-loop.js ROUTINES, singing "min"; VT_DAILY_SESSION),
+ * written out: the stability pass of the third red team cut every basics step to 30 s past an hour, and a test
+ * that took the length from the session the code had built expected 30 and passed. (The five-minute Mínimo is a
+ * dormant experiment; if it wakes, these fail and say so.)
+ */
+const PLANNED = { basics: { "s4-lip-trills": 90, "s27-lip-trill-solfege": 90 }, daily: { "s17-jaw-neck-release": 105 } };
 
 test("no time limit: a first-day visitor past an hour today takes five full takes: a pitch exercise, Start again, the longest exercise and a drill with no microphone", async ({
   page
@@ -332,7 +342,8 @@ test("no time limit: a heavy visitor ten years on, on a Sunday night at the mont
   await page.clock.runFor(400);
   const step = await stepNow(page);
   expect(step.status, "control: a routine is under way").toBe("active");
-  await fullTake(page, "a routine's step", step.sec);
+  expect(PLANNED.basics[step.id], `control: ${step.id} is a step of the basics as planned`).toBeDefined();
+  await fullTake(page, "a routine's step", PLANNED.basics[step.id]);
 
   // The step's done card: thirty seconds more, then on to the routine's second step.
   await expect(page.locator("#step-done"), "control: the step's done card").toBeVisible();
@@ -343,7 +354,8 @@ test("no time limit: a heavy visitor ten years on, on a Sunday night at the mont
   const second = await stepNow(page);
   expect(second.id, "control: the routine has a second step").not.toBe(step.id);
   expect(await page.evaluate(() => window.VTApp.getState().exercise?.id), "Next opens the routine's second step").toBe(second.id);
-  await fullTake(page, "the routine's second step", second.sec);
+  expect(PLANNED.basics[second.id], `control: ${second.id} is a step of the basics as planned`).toBeDefined();
+  await fullTake(page, "the routine's second step", PLANNED.basics[second.id]);
 
   // Another routine than the basics: the daily class, as the home page's next-step card starts it. Leaving the
   // basics' last take asks first whether to rate it; the answer is to go on without (the practice still counts).
@@ -356,7 +368,8 @@ test("no time limit: a heavy visitor ten years on, on a Sunday night at the mont
   const daily = await stepNow(page);
   expect(daily.path, "the daily class starts: it is under way").toBe("daily");
   expect(await page.evaluate(() => window.VTApp.getState().exercise?.id), "the daily class starts: its first step is open").toBe(daily.id);
-  await fullTake(page, "the daily class's first step", daily.sec);
+  expect(PLANNED.daily[daily.id], `control: ${daily.id} is the class's first step as planned`).toBeDefined();
+  await fullTake(page, "the daily class's first step", PLANNED.daily[daily.id]);
 });
 
 test("no time limit: a visitor who first came 45 days ago, past an hour today, takes four takes of one exercise, the last started again right after Stop", async ({
@@ -709,8 +722,11 @@ test("your voice stays on your device: recording, saving, rating, a second take 
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
     Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
     document.dispatchEvent(new Event("visibilitychange"));
-    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false }));
   });
+  // A minute in the background before the page is left: the stability pass of the third red team sent the take
+  // five seconds after the hide, which a reload straight after it never let fire.
+  await page.clock.runFor(60000);
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })));
   const during = await egress.settle();
 
   // Left and come back, twice: the next visit and the third, a minute of each, where a take kept back from the
@@ -866,7 +882,9 @@ test("no account needed: takes of two tracks, a rating, a saved recording, a rou
   try {
     const third = first.page;
     await nothingInTheWay(third, "a month on, as the page opens");
-    expect(await keptBy(third), "all of it, after a restart a month on").toEqual(mine);
+    // Read a minute after it opens: a prune put off by a timer (the stability pass of the third red team) would be done.
+    await third.clock.runFor(60000);
+    expect(await keptBy(third), "all of it, a minute after a restart a month on").toEqual(mine);
     await third.locator("#btn-history").click();
     await third.clock.runFor(300);
     await nothingInTheWay(third, "Historial a month on");
@@ -879,10 +897,13 @@ test("no account needed: takes of two tracks, a rating, a saved recording, a rou
     await rate(third);
     const later = await keptBy(third);
     expect(later.takes["s4-lip-trills"].length, "the take a month on is kept with the others").toBe(mine.takes["s4-lip-trills"].length + 1);
+    const others = (takes) => Object.fromEntries(Object.entries(takes).filter(([id]) => id !== "s4-lip-trills"));
+    expect(others(later.takes), "the other exercises' takes, untouched").toEqual(others(mine.takes));
 
     const again = await restart(browser, third, 32);
     try {
-      expect((await keptBy(again.page)).takes, "and still there after another restart").toEqual(later.takes);
+      await again.page.clock.runFor(60000);
+      expect((await keptBy(again.page)).takes, "and still there a minute after another restart").toEqual(later.takes);
     } finally {
       await again.context.close();
     }
@@ -930,7 +951,11 @@ async function watchAds(page) {
       for (const r of records) {
         const hits = r.type === "attributes" ? [r.target] : [...r.addedNodes];
         for (const el of hits) {
-          if (seen(el)) window.__vtAdsSeen.push(window.__vtMoment + ": " + (el.id || el.className || el.tagName));
+          // Labelled by the routine's own state as well as the test's moment: the end-of-task card comes 700 ms
+          // after the last rating, and a runner that stalled that long before moment() ran would have put it in
+          // the routine (the stability pass of the third red team).
+          const over = window.VTSession?.get?.()?.status === "completed";
+          if (seen(el)) window.__vtAdsSeen.push((over ? "after the routine" : window.__vtMoment) + ": " + (el.id || el.className || el.tagName));
         }
       }
     }).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });

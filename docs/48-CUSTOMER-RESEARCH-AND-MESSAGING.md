@@ -463,6 +463,29 @@ than the promise: two died on the routine's status, not on the ad that status
 lets through; one waited out the whole test on a button it could not press; and
 one died on an assertion marked as a control. Each now dies on the promise.
 
+The stability pass ran the spec 110 times without a failure, then found three
+more ways round it and four weaknesses, all now closed:
+
+- A take uploaded five seconds after the page is hidden: the page is now left
+  hidden for a minute before it is closed (MK68; the guards see it too).
+- Guest takes pruned three seconds after the page opens: each restart is now
+  read a minute after it opens, and the other exercises are checked after the
+  new take (MK69).
+- Past an hour, the basics' steps planned at 30 seconds: the test took the
+  expected length from the session the code had built, so it expected 30. The
+  planned lengths are now written in the test (MK70).
+- The "no time limit" visitors, with analytics on, posted events to the
+  production worker on every run. The worker's host now answers inside the
+  test.
+- The end-of-task card is drawn 700 ms after the last rating, so a runner that
+  stalled that long would have counted it inside the routine. An ad is now
+  labelled by the routine's own state as well.
+- Two older specs probed the analytics with made-up event names, which the
+  wire filter now drops. They probe with an event the worker keeps.
+- Outside this spec, it traced CI's intermittent `stage-design` failure to a
+  race between the test's scroll to the top and the rating card's smooth
+  reveal one frame later. That is handed over in section 13.
+
 Trade-offs:
 
 - The guards read names as they are spelled. A computed name
@@ -494,7 +517,7 @@ Trade-offs:
 | Guard | What it catches | Mutants |
 |---|---|---|
 | `tests/node/marketing-copy.test.mjs` | Banned words in any selling string, every inflection of an age label included, and any promise that practice stays free for ever; an English twin missing or in Spanish; jargon that confused the personas, the catalog describing a track differently from the first visit, a bare "no account" line, the "das la nota" idiom; a lesson comparison without the city its price is from, or one that does not hold; a trial end that implies progress is lost; the guide's hoarseness advice without its age warning or with different weeks per language; the line in the code, terms or privacy page behind each claim (a drift guard) | MK1, MK2, MK4–MK18, MK23–MK25, MK47, MK48 (`node qa/mutate.mjs claims`) |
-| `tests/marketing-claims.spec.js` | By what the product does (section 11, second round): full-length takes start, run out and are counted with no Pro or account window for three visitors (a first day past an hour; ten years on, a Sunday at a month's end, in English, heavy in both records, from the catalog and a routine; one who first came 45 days ago); a take recorded, saved, left and come back to sends nothing the size of it by any request, header, cookie, WebSocket, worker or WebRTC connection, for a visitor whose analytics are on, with nine controls; two takes and a rating survive a new tab and a restart a month on; with ads on, no ad of any form at any moment of a routine in any of four modes, nor while a take starts or is live, each check with its own control, and the end-of-task card goes as a take or a routine starts. Third round: the longest exercise, a drill with no microphone, "+30 s", Next and the daily class, a phone in Madrid; a rating, a natural end, a second save, three minutes and two more visits; a second tab and restarts 31 and 32 days on; a paused routine continued or its step taken anyway | MK3, MK19–MK22, MK26–MK46, MK49–MK67, in two sets so that neither outgrows a CI job's 30 minutes: `node qa/mutate.mjs promises` (time limit and voice) and `promises-account-ads`, each a job in CI's mutation matrix. MK41 now also removes the wire filter, since with the filter in place its event never leaves |
+| `tests/marketing-claims.spec.js` | By what the product does (section 11, second round): full-length takes start, run out and are counted with no Pro or account window for three visitors (a first day past an hour; ten years on, a Sunday at a month's end, in English, heavy in both records, from the catalog and a routine; one who first came 45 days ago); a take recorded, saved, left and come back to sends nothing the size of it by any request, header, cookie, WebSocket, worker or WebRTC connection, for a visitor whose analytics are on, with nine controls; two takes and a rating survive a new tab and a restart a month on; with ads on, no ad of any form at any moment of a routine in any of four modes, nor while a take starts or is live, each check with its own control, and the end-of-task card goes as a take or a routine starts. Third round: the longest exercise, a drill with no microphone, "+30 s", Next and the daily class, a phone in Madrid; a rating, a natural end, a second save, three minutes and two more visits; a second tab and restarts 31 and 32 days on; a paused routine continued or its step taken anyway | MK3, MK19–MK22, MK26–MK46, MK49–MK70, in two sets so that neither outgrows a CI job's 30 minutes: `node qa/mutate.mjs promises` (time limit and voice) and `promises-account-ads`, each a job in CI's mutation matrix. MK41 now also removes the wire filter, since with the filter in place its event never leaves |
 | `tests/node/promise-guards.test.mjs`, `tests/node/analytics-wire.test.mjs`, `tests/node/ads-gate.test.mjs` | Section 11, third round: a new send, voice read or event prop; the plan, the sale or a sign-in question on the way to practice; a guest store that names the account or keeps anything for the tab only; the ad config read outside the ad files; an event or prop the worker would drop leaving the browser; a routine under way not counted as practice in any state | PT1–PT15, PV1–PV13, PW1–PW7, PA1–PA7, PN1–PN7 (`node qa/mutate.mjs guards`) |
 | `tests/marketing-copy.spec.js` | On a real page at 360 and 390 px, both languages: the kicker stays one line, no choice is cut or over three lines, no sideways scroll, the layout control fits one row; the tab title and description follow the language; Open Graph stays Spanish | DS20–DS23 (DS23: the kicker set larger on phones). CI's runner has no Inter and draws in DejaVu Sans, which is wider, so the kicker's tracking is 0.06em under 400 px; reproduce with a fontconfig that maps Inter to DejaVu |
 | `qa/customer-research/test_rules.py` | Answers matched to the wrong round's batch; split-half reported for three cards, or unbounded for four; reliability that comes from the bad offer alone; "not worse" judged on the point estimate; a verdict on a question that failed its checks; "better" while any gate failed | 7 rule mutants plus 6 scoring mutants in `mutate_ssr.py`, all killed |
@@ -518,6 +541,7 @@ Trade-offs:
 | "trill solfège", "Tus básicos", "1:15" | 3 of 3 English personas; 6 of 9; 3 of 9 | Gamification thread (owns `js/daily-loop.js`) |
 | PEN, "Gratis 0", "pagos no públicos" beside the trial button, ad-free as Pro's lead benefit | 5, 7 and 7 of 9; ads the top objection | Subscriptions thread, fixed there |
 | Hoarseness: 4 weeks (AAO-HNS) or 3 (NIDCD's consumer page) | C-older memo | The age warning is added; the weeks are the voice-science owner's (docs/44) |
+| CI's intermittent `stage-design` failure ("paused" phase, scrollY 20 to 26 against at least 43) | Traced by the stability pass: the rating card's smooth reveal (`revealRating`, one frame after Stop) races the test's scroll to the top; slowed by 40 ms locally it fails 9 of 12 | The thread that owns `tests/stage-design.spec.js`: wait for the reveal before scrolling to the top, or skip a reveal the page was scrolled away from (a guard in `revealRating`, probed: 12 of 12 with the delay) |
 | "No necesitas cuenta" on Safari | Safari can clear what a site's scripts stored after seven days of Safari use without a visit (WebKit, 2020); the app never calls `navigator.storage.persist()`, and whether that lifts the cap is undocumented (WebKit, "Updates to Storage Policy") | Owner decision: test `persist()` and a Home Screen install on a real iPhone and Mac; if neither holds, qualify the line on Safari or offer an export |
 
 Merging with the subscriptions branch (`claude/project-thread-nrj90h`): that
@@ -563,6 +587,7 @@ halves, and settle the asset-stamp conflicts with `npm run assets:bump`.
 | MR-29 | Low | `css/styles.css` | The line over the title wrapped onto two lines at 360 px in CI | CI draws in DejaVu Sans, wider than Inter | Fixed: tracking 0.06em under 400 px; DS23 |
 | MR-30 | High | `js/app.js` | A routine paused, its step taken anyway and Next pressed stayed paused, so Historial drew an ad in the middle of it | Starting a step did not resume the routine it belongs to | Fixed: `resumeRoutineOnStart`; MK55 |
 | MR-31 | High | `js/analytics.js` | A pitch contour on an analytics event left the device; the worker dropped it only after it arrived | The worker's rules ran on the server alone | Fixed: the same rules in the browser before sending, tested against the worker's own code; PW1–PW7, MK41 |
-| MR-32 | Test | promise tests | 47 of 48 changes on paths no visitor walked kept the promise tests green (section 11, third round) | Behaviour tests walk chosen paths only | Fixed: code-level guards, a wire filter and wider scenarios; PT, PV, PA and PN mutants, MK49–MK67 |
+| MR-32 | Test | promise tests | 47 of 48 changes on paths no visitor walked kept the promise tests green (section 11, third round) | Behaviour tests walk chosen paths only | Fixed: code-level guards, a wire filter and wider scenarios; PT, PV, PA and PN mutants, MK49–MK70 |
 | MR-33 | Test | `marketing-claims.spec.js` | Seven time caps were reported as a bare timeout | Start's poll carried no message and did not look for a window | Fixed: Start names what it saw |
 | MR-34 | Open | storage | Safari can clear a site's script-written storage after seven days of Safari use without a visit | Nothing asks for persistent storage, and whether asking helps is undocumented | Section 13 |
+| MR-35 | Test | `marketing-claims.spec.js` | A take sent five seconds after the page was hidden, takes pruned three seconds after it opened, and routine steps planned shorter all passed; the spec also sent analytics to the production worker | No clock ran after the hide or the restarts; the routine's expected length came from the code under test; no route for the worker's host | Fixed; MK68–MK70 |

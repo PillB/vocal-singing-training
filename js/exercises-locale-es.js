@@ -542,28 +542,28 @@
     ]
   },
   "s3-song-stanzas": {
-    "original": "Estrofas de tus canciones: técnica aplicada a repertorio real.",
-    "research": "Transferir la técnica a canciones reales es donde se consolida el aprendizaje.",
+    "original": "Aplica un solo foco a una frase corta, en una tonalidad y octava cómodas.",
+    "research": "Las canciones combinan afinación, ritmo, texto y expresión. Son tareas pedagógicas, no una medida automática de calidad artística ni un programa clínicamente validado.",
     "steps": [
-      "Elige 4–8 compases de una canción tuya (rango cómodo).",
-      "Canta a tempo lento con apoyo parejo e inicios fáciles.",
-      "Marca 1 problema técnico (aire, afinación, inicio) y repite solo ese foco.",
-      "Repite la frase 3–5 veces limpia antes de alargar el fragmento.",
-      "Graba una toma “limpia” al final de la sesión."
+        "Elige una frase corta de la biblioteca de partituras históricas de abajo o de una canción propia.",
+        "Elige una tonalidad y octava cómodas. Escucha la melodía o tócala desde la partitura antes de cantar.",
+        "Marca el pulso, canta en una vocal y luego prueba tu propio texto; trabaja un solo foco.",
+        "Elige pausas para respirar con comodidad. Acorta la frase antes de forzar su final.",
+        "Detén el acompañamiento, graba una frase y escucha tu foco; compara con un intento posterior."
     ],
     "tips": [
-      "Fragmentos cortos > canción entera al principio.",
-      "Si fallas el agudo, baja un tono o cambia de frase.",
-      "La grabación revela lo que el ensayo oculta.",
-      "Prioriza aire y cierre claros; el “bonito” llega después."
+        "Los acordes A/B son acompañamientos genéricos, no grabaciones de las melodías de la biblioteca.",
+        "El gráfico ayuda con notas sostenidas; no califica letra, ritmo ni expresión.",
+        "Una tonalidad baja no garantiza comodidad. Cualquier voz puede cambiar de tonalidad u octava.",
+        "Descansa entre intentos. Detente si hay dolor, mareo o ronquera; no aprietes para buscar un cierre."
     ],
     "mistakes": [
-      "Empujar el agudo por ego",
-      "Ignorar la respiración de la frase",
-      "Nunca grabar",
-      "Intentar la canción entera con técnica inestable"
+        "Aguantar el aire o forzar el final de una frase",
+        "Elegir tonalidad por sexo en lugar de comodidad",
+        "Confundir un gráfico de afinación con calidad artística",
+        "Reproducir una referencia en el micrófono al valorar tu toma"
     ]
-  },
+},
   "s15-sh-air-ladder": {
     "original": "Prueba un SH suave y parejo durante 5 s; los peldaños más largos son opcionales, no una competencia.",
     "research": "Un SH sin voz sirve para practicar el ritmo de salida del aire; acumular segundos no demuestra mejor apoyo al cantar. Hay que transferir la sensación a una frase cantada.",
@@ -783,17 +783,17 @@
   },
   "s12-easy-onset": {
     "original": "Empieza el tono sin golpe glotal ni “h” soplada.",
-    "research": "Un onset equilibrado (ni duro ni aspirado) es base de fonación saludable.",
+    "research": "Esta tarea explora un inicio fácil; el gráfico no diagnostica cierre de pliegues vocales ni salud de la voz.",
     "steps": [
       "Inhala en silencio y entra a /A/ como si continuarás un pensamiento.",
-      "Contrasta: 2 “uh” glotales duros vs 2 “ha” soplados vs 2 onsets fáciles.",
+      "Prueba unos inicios suaves de vocal en un tono cómodo y descansa entre intentos. No demuestres un golpe glotal forzado.",
       "Empareja una nota de piano con onset fácil; sostén 3–5 s.",
       "10 onsets fáciles en varios tonos."
     ],
     "tips": [
       "Piensa “decir la vocal”, no “atacar la nota”.",
-      "El fry puede ubicar el cierre; luego suelta al tono.",
-      "El dibujo del ataque debe asentarse rápido, sin un pico salvaje al inicio."
+      "Detente si el inicio se siente apretado, doloroso o con ronquera persistente; no aprietes para buscar un cierre.",
+      "Revisa el inicio escuchándote y valorando comodidad; el gráfico no mide cierre."
     ],
     "mistakes": [
       "Golpes glotales duros",

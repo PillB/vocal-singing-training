@@ -40,43 +40,48 @@
    * View id is #view-exercise (not view-practice). Live flag is practiceLive.
    */
   function isPracticeActive() {
+    return routineUnderWay() || appStateLive() || stopButtonShowing();
+  }
+
+  /**
+   * The app's own word that a take is live or starting. `running` and `recording` are not top-level fields of
+   * the app's state today; they are kept so that a state which grows them is still read as practice.
+   * @returns {boolean} True while practice is live or starting.
+   */
+  function appStateLive() {
+    try {
+      const st = global.VTApp?.getState?.();
+      return !!(st && (st.practiceLive || st.practiceStarting || st.running || st.recording));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * The exercise screen still shows Stop, whatever the state says.
+   * @returns {boolean} True when the live practice controls are showing.
+   */
+  function stopButtonShowing() {
     const exercise = document.getElementById("view-exercise");
-    if (exercise && exercise.classList.contains("active")) {
-      // On exercise view: block new ad renders except post-session slot after save
-      // (post-session is opt-in via onPostSession after metrics save, practice stopped)
-      if (global.VTApp?.getState) {
-        try {
-          const st = global.VTApp.getState();
-          if (st && (st.practiceLive || st.practiceStarting || st.running || st.recording)) {
-            return true;
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-      // If still live practice UI (stop button visible) treat as active
-      const stopBtn = document.getElementById("btn-practice-stop");
-      if (stopBtn && !stopBtn.hidden) return true;
+    if (!exercise || !exercise.classList.contains("active")) return false;
+    const stopBtn = document.getElementById("btn-practice-stop");
+    return !!stopBtn && !stopBtn.hidden;
+  }
+
+  /**
+   * A guided routine that is under way is practice from its first step to its last, wherever the learner is
+   * looking: History or Practicar opened in the middle of one used to draw their ads while the banner still said
+   * "Ejercicio 2 de 2 · Pausar / Terminar" (docs/48 section 11). A paused routine is not under way, and neither is
+   * a finished one, so the card after the last step still shows. A routine left running keeps ads away until it is
+   * ended: the trade-off taken for the promise.
+   * @returns {boolean} True while a routine's status is "active".
+   */
+  function routineUnderWay() {
+    try {
+      return global.VTSession?.get?.()?.status === "active";
+    } catch {
+      return false;
     }
-    if (document.body.classList.contains("view-exercise")) {
-      try {
-        const st = global.VTApp?.getState?.();
-        if (st && (st.practiceLive || st.practiceStarting)) return true;
-      } catch {
-        /* ignore */
-      }
-    }
-    if (global.VTApp?.getState) {
-      try {
-        const st = global.VTApp.getState();
-        if (st && (st.practiceLive || st.practiceStarting || st.running || st.recording)) {
-          return true;
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    return false;
   }
 
   function shouldShowAds() {

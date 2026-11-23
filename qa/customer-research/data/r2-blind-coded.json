@@ -1,0 +1,2822 @@
+{
+"note": "Round 2. Tags from coders who saw only the answers to \"what would put you off\" and \"what is it and who is it for\".",
+"coded": {
+"y001": {
+"hesitation": [
+"data_or_device",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y002": {
+"hesitation": [
+"tech_difficulty",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y003": {
+"hesitation": [
+"tech_difficulty",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y004": {
+"hesitation": [
+"tech_difficulty",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y005": {
+"hesitation": [
+"currency_or_payment",
+"trust_unknown",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y006": {
+"hesitation": [
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y007": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y008": {
+"hesitation": [
+"wrong_focus",
+"too_basic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y009": {
+"hesitation": [
+"ads",
+"data_or_device",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y010": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness",
+"pro_value",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y011": {
+"hesitation": [
+"progress_storage",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "other",
+"misreading": ""
+},
+"y012": {
+"hesitation": [
+"doubt_effectiveness",
+"trust_unknown",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y013": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"wants_human"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y014": {
+"hesitation": [
+"doubt_effectiveness",
+"hype_or_claims",
+"data_or_device",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y015": {
+"hesitation": [
+"tech_difficulty",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y016": {
+"hesitation": [
+"data_or_device",
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y017": {
+"hesitation": [
+"doubt_effectiveness",
+"self_consciousness",
+"currency_or_payment",
+"price_level"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y018": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y019": {
+"hesitation": [
+"tech_difficulty",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y020": {
+"hesitation": [
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "professionals/performers",
+"misreading": ""
+},
+"y021": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y022": {
+"hesitation": [
+"tech_difficulty",
+"age_fit",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y023": {
+"hesitation": [
+"wants_human",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y024": {
+"hesitation": [
+"wrong_focus",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"y025": {
+"hesitation": [
+"progress_storage",
+"ads",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y026": {
+"hesitation": [
+"self_consciousness",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y027": {
+"hesitation": [
+"doubt_effectiveness",
+"ads",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y028": {
+"hesitation": [
+"self_consciousness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y029": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y030": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y031": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y032": {
+"hesitation": [
+"tech_difficulty",
+"doubt_effectiveness",
+"wants_human"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"y033": {
+"hesitation": [
+"data_or_device",
+"ads",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y034": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y035": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y036": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y037": {
+"hesitation": [
+"doubt_effectiveness",
+"wants_human"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y038": {
+"hesitation": [
+"wants_human",
+"doubt_effectiveness",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y039": {
+"hesitation": [
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y040": {
+"hesitation": [
+"tech_difficulty",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y041": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y042": {
+"hesitation": [
+"ads",
+"pro_value",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"y043": {
+"hesitation": [
+"self_consciousness",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y044": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y045": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y046": {
+"hesitation": [
+"language",
+"tech_difficulty",
+"wants_human"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y047": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"subscription_terms",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y048": {
+"hesitation": [
+"doubt_effectiveness",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y049": {
+"hesitation": [
+"wrong_focus",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y050": {
+"hesitation": [
+"tech_difficulty",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y051": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"data_or_device",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y052": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y053": {
+"hesitation": [
+"wrong_focus",
+"time_or_habit",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"y054": {
+"hesitation": [
+"ads",
+"data_or_device",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y055": {
+"hesitation": [
+"wrong_focus",
+"ads",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"y056": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y057": {
+"hesitation": [
+"ads",
+"self_consciousness",
+"currency_or_payment",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"y058": {
+"hesitation": [
+"ads",
+"data_or_device",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y059": {
+"hesitation": [
+"doubt_effectiveness",
+"wants_human",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y060": {
+"hesitation": [
+"time_or_habit",
+"too_basic",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y061": {
+"hesitation": [
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y062": {
+"hesitation": [
+"tech_difficulty",
+"language",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y063": {
+"hesitation": [
+"tech_difficulty",
+"trust_unknown",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y064": {
+"hesitation": [
+"ads",
+"subscription_terms",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y065": {
+"hesitation": [
+"tech_difficulty",
+"language",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y066": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y067": {
+"hesitation": [
+"progress_storage",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y068": {
+"hesitation": [
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y069": {
+"hesitation": [
+"tech_difficulty",
+"language"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y070": {
+"hesitation": [
+"privacy_mic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y071": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y072": {
+"hesitation": [
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y073": {
+"hesitation": [
+"doubt_effectiveness",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y074": {
+"hesitation": [
+"age_fit",
+"tech_difficulty",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y075": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y076": {
+"hesitation": [
+"tech_difficulty",
+"language",
+"doubt_effectiveness",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y077": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y078": {
+"hesitation": [
+"progress_storage",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y079": {
+"hesitation": [
+"age_fit",
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y080": {
+"hesitation": [
+"subscription_terms",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y081": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y082": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y083": {
+"hesitation": [
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y084": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y085": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y086": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y087": {
+"hesitation": [
+"currency_or_payment",
+"language",
+"tech_difficulty",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y088": {
+"hesitation": [
+"data_or_device",
+"too_basic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y089": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"wrong_focus",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y090": {
+"hesitation": [
+"tech_difficulty",
+"progress_storage",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": ""
+},
+"y091": {
+"hesitation": [
+"hype_or_claims",
+"doubt_effectiveness",
+"privacy_mic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y092": {
+"hesitation": [
+"tech_difficulty",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y093": {
+"hesitation": [
+"self_consciousness",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y094": {
+"hesitation": [
+"privacy_mic",
+"data_or_device",
+"ads",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y095": {
+"hesitation": [
+"time_or_habit",
+"ads",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y096": {
+"hesitation": [
+"too_basic",
+"time_or_habit",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y097": {
+"hesitation": [
+"too_basic",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y098": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y099": {
+"hesitation": [
+"tech_difficulty",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y100": {
+"hesitation": [
+"tech_difficulty",
+"too_basic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y101": {
+"hesitation": [
+"tech_difficulty",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y102": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y103": {
+"hesitation": [
+"data_or_device",
+"ads",
+"trust_unknown",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y104": {
+"hesitation": [
+"ads",
+"data_or_device",
+"pro_value"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y105": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y106": {
+"hesitation": [
+"tech_difficulty",
+"progress_storage",
+"subscription_terms",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y107": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y108": {
+"hesitation": [
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y109": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y110": {
+"hesitation": [
+"too_basic",
+"wants_human",
+"doubt_effectiveness",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y111": {
+"hesitation": [
+"doubt_effectiveness",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y112": {
+"hesitation": [
+"data_or_device",
+"ads",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y113": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y114": {
+"hesitation": [
+"ads",
+"currency_or_payment",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y115": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y116": {
+"hesitation": [
+"tech_difficulty",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y117": {
+"hesitation": [
+"self_consciousness",
+"tech_difficulty",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y118": {
+"hesitation": [
+"ads",
+"doubt_effectiveness",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y119": {
+"hesitation": [
+"tech_difficulty",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y120": {
+"hesitation": [
+"too_basic",
+"time_or_habit",
+"ads",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y121": {
+"hesitation": [
+"tech_difficulty",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y122": {
+"hesitation": [
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y123": {
+"hesitation": [
+"doubt_effectiveness",
+"privacy_mic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y124": {
+"hesitation": [
+"self_consciousness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y125": {
+"hesitation": [
+"data_or_device",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y126": {
+"hesitation": [
+"currency_or_payment",
+"wants_human",
+"doubt_effectiveness",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y127": {
+"hesitation": [
+"doubt_effectiveness",
+"hype_or_claims",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y128": {
+"hesitation": [
+"progress_storage",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y129": {
+"hesitation": [
+"time_or_habit",
+"ads",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y130": {
+"hesitation": [
+"tech_difficulty",
+"language"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y131": {
+"hesitation": [
+"self_consciousness",
+"too_basic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y132": {
+"hesitation": [
+"wants_human",
+"doubt_effectiveness",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"y133": {
+"hesitation": [
+"wants_human",
+"doubt_effectiveness",
+"privacy_mic",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y134": {
+"hesitation": [
+"self_consciousness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y135": {
+"hesitation": [
+"currency_or_payment",
+"tech_difficulty",
+"privacy_mic",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y136": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y137": {
+"hesitation": [
+"currency_or_payment",
+"tech_difficulty",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y138": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y139": {
+"hesitation": [
+"tech_difficulty",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y140": {
+"hesitation": [
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y141": {
+"hesitation": [
+"tech_difficulty",
+"age_fit",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y142": {
+"hesitation": [
+"data_or_device",
+"ads",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y143": {
+"hesitation": [
+"wrong_focus",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y144": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y145": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y146": {
+"hesitation": [
+"ads",
+"doubt_effectiveness",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y147": {
+"hesitation": [
+"tech_difficulty",
+"data_or_device",
+"ads",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y148": {
+"hesitation": [
+"wrong_focus",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y149": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y150": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"y151": {
+"hesitation": [
+"tech_difficulty",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y152": {
+"hesitation": [
+"tech_difficulty",
+"data_or_device",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": ""
+},
+"y153": {
+"hesitation": [
+"tech_difficulty",
+"language"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y154": {
+"hesitation": [
+"tech_difficulty",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y155": {
+"hesitation": [
+"doubt_effectiveness",
+"data_or_device",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y156": {
+"hesitation": [
+"data_or_device",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y157": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y158": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y159": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"y160": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y161": {
+"hesitation": [
+"self_consciousness",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y162": {
+"hesitation": [
+"progress_storage",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y163": {
+"hesitation": [
+"language",
+"self_consciousness",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y164": {
+"hesitation": [
+"doubt_effectiveness",
+"tech_difficulty",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y165": {
+"hesitation": [
+"doubt_effectiveness",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y166": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y167": {
+"hesitation": [
+"ads",
+"data_or_device",
+"currency_or_payment",
+"price_level"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y168": {
+"hesitation": [
+"tech_difficulty",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y169": {
+"hesitation": [
+"doubt_effectiveness",
+"ads",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y170": {
+"hesitation": [
+"self_consciousness",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"y171": {
+"hesitation": [
+"data_or_device",
+"ads",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y172": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y173": {
+"hesitation": [
+"wrong_focus",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y174": {
+"hesitation": [
+"time_or_habit",
+"tech_difficulty",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y175": {
+"hesitation": [
+"wants_human",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y176": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y177": {
+"hesitation": [
+"tech_difficulty",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y178": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y179": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"y180": {
+"hesitation": [
+"data_or_device",
+"tech_difficulty",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y181": {
+"hesitation": [
+"tech_difficulty",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y182": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y183": {
+"hesitation": [
+"progress_storage",
+"ads",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y184": {
+"hesitation": [
+"too_basic",
+"wrong_focus",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"y185": {
+"hesitation": [
+"ads",
+"too_basic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"y186": {
+"hesitation": [
+"doubt_effectiveness",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y187": {
+"hesitation": [
+"data_or_device",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"y188": {
+"hesitation": [
+"wrong_focus",
+"ads",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"y189": {
+"hesitation": [
+"currency_or_payment",
+"price_level",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y190": {
+"hesitation": [
+"too_basic",
+"data_or_device",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y191": {
+"hesitation": [
+"data_or_device",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"y192": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"trust_unknown",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+}
+}
+}

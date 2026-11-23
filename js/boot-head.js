@@ -11,8 +11,9 @@
  *    works nothing is replaced.
  * 2. Until the app has started the page says it is busy (js/boot-ready.js
  *    ends it), so a screen reader does not read buttons that are not wired.
- * 3. A visitor whose language is English is shown the page in English or not
- *    at all: the markup is Spanish, and i18n.js comes at the end of the body.
+ * 3. A visitor whose language is English (their choice, or with none their
+ *    browser's: see window.VTLangPref below) is shown the page in English or
+ *    not at all: the markup is Spanish, and i18n.js comes at the end of the body.
  *    The page is held (html.vt-i18n-pending, css/styles.css) until
  *    js/i18n-early.js has translated it, and let go whatever else happens:
  *    when a script fails to load (its own tag, not the request made ahead
@@ -112,6 +113,185 @@
       /* the page keeps what it had */
     }
   });
+
+  /*
+   * Which language the app opens in. Decided here, before the first paint,
+   * because the page is held for an English visitor (below); js/i18n.js asks
+   * the same question through window.VTLangPref, so the two cannot disagree.
+   *
+   * 1. An address that names one (?lang=es, ?lang=en): the URL of one version,
+   *    which index.html's hreflang links point search engines at. It is shown,
+   *    never stored as a choice; the language button keeps the address in step.
+   * 2. A choice the visitor made: the language button writes vt_lang, and
+   *    only "es" or "en" there is a choice.
+   * 3. The language an address named earlier in this tab (vt_lang_link,
+   *    below), for the pages of the visit that come back without it.
+   * 4. Without one, the browser's own list (navigator.languages, the order
+   *    set in its settings, most wanted first), walked in order (RFC 4647
+   *    lookup on the primary subtag): the first entry in one of the site's
+   *    languages wins, so a list that puts English after Spanish (Firefox's
+   *    Spanish builds, Android in-app browsers) stays Spanish. A language whose
+   *    readers read Spanish more easily than English counts as Spanish where
+   *    it stands in the list: CLDR's close matches into Spanish (Aymara,
+   *    Basque, Catalan, Galician, Guarani, Quechua) and Portuguese.
+   * 5. A list that names only other languages: English, which more of their
+   *    readers share. Chrome lists English after most of them anyway
+   *    (de-DE, de, en-US, en), and Safari exposes the first language alone, so
+   *    without this a German on an iPhone got Spanish and on Chrome English.
+   * 6. No language named at all: Spanish, the site's own and its market's.
+   * What the browser said is read on every load and never stored, so a guess
+   * never turns into a choice. Safari, and Firefox resisting fingerprinting
+   * (en-US for everyone), expose less than the visitor set; the button and
+   * a remembered choice are what correct that.
+   */
+  var LANGS = ["es", "en"];
+  var LANG_KEY = "vt_lang";
+  // CLDR languageInfo.xml lists ay, ca, eu, gl, gn (distance 20) and qu (30) as one-way matches to es. It has
+  // no pt entry: Portuguese is this site's call, for readers far likelier to read Spanish than English
+  var READS_SPANISH = ["ay", "ca", "eu", "gl", "gn", "qu", "pt"];
+  // Step 5: what a browser that names only other languages is shown
+  var OTHER_LANGS = "en";
+  // ISO 639-2's codes that name no language: undetermined, multiple, uncoded, no linguistic content
+  var NO_LANGUAGE = ["und", "mul", "mis", "zxx"];
+
+  /** The primary language subtag of a tag, lower case ("es" for "es-PE", "en" for " EN_us"). */
+  function primaryOf(tag) {
+    return String(tag == null ? "" : tag).trim().toLowerCase().split(/[-_]/)[0];
+  }
+
+  /** The language these tags, most wanted first, ask the site for (steps 4 to 6 above). */
+  function fromBrowser(tags) {
+    var list = [].concat(tags || []);
+    var named = false;
+    for (var i = 0; i < list.length; i++) {
+      var primary = primaryOf(list[i]);
+      if (LANGS.indexOf(primary) !== -1) return primary;
+      if (READS_SPANISH.indexOf(primary) !== -1) return "es";
+      // "*", "i-default", "x-..." and "und" name no language
+      if (/^[a-z]{2,3}$/.test(primary) && NO_LANGUAGE.indexOf(primary) === -1) named = true;
+    }
+    return named ? OTHER_LANGS : LANGS[0];
+  }
+
+  /** The browser's languages, most wanted first; navigator.language alone where there is no list. */
+  function browserTags() {
+    try {
+      var nav = window.navigator;
+      if (nav.languages && nav.languages.length) return Array.prototype.slice.call(nav.languages);
+      return nav.language ? [nav.language] : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /** The language the address names (?lang=en), or null. */
+  function linked() {
+    try {
+      var v = String(new URLSearchParams(location.search).get("lang") || "").toLowerCase();
+      return LANGS.indexOf(v) !== -1 ? v : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /*
+   * The language a link opened this tab in, for the rest of the tab's life.
+   * Some links back into the app drop the address's ?lang: the "← App" in
+   * the guide's, privacy page's and terms' headers (./), a checkout's return
+   * (?billing=success). (The "back to the app" at the end of each half of
+   * those pages names its half's language.) Someone who came in through the
+   * English address, on a browser set to Spanish, would be switched to
+   * Spanish by the next page of their own visit. Below a choice: the address
+   * shows its language on the page it names (step 1), but its memory never
+   * outranks what the visitor picked, so on the visit's later pages a stored
+   * choice wins again. Kept per tab (sessionStorage), so it ends with the
+   * visit; the ePrivacy exemption for a user-interface preference kept for a
+   * session covers it (WP29 Opinion 04/2012, 3.6).
+   */
+  var LINK_KEY = "vt_lang_link";
+
+  /** The language a link opened this tab in, or null. */
+  function linkedBefore() {
+    try {
+      var v = sessionStorage.getItem(LINK_KEY);
+      return LANGS.indexOf(v) !== -1 ? v : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  try {
+    if (linked()) sessionStorage.setItem(LINK_KEY, linked());
+  } catch (e) {
+    /* storage refused: the address alone decides, on this page */
+  }
+
+  /** The visitor's own choice, or null when they never made one (or what is kept is not a language of ours). */
+  function chosen() {
+    try {
+      var v = localStorage.getItem(LANG_KEY);
+      return LANGS.indexOf(v) !== -1 ? v : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Whether this stored ledger or progress bag holds any practice: a day, or an exercise. */
+  function holdsPractice(key) {
+    try {
+      var bag = JSON.parse(localStorage.getItem(key));
+      var rows = /vt_days_v1$/.test(key) ? bag && bag.days : bag;
+      return !!rows && typeof rows === "object" && Object.keys(rows).length > 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** Practice kept in this browser, under any profile (vt_days_v1, vt_prof_<id>_vt_progress_v1, ...). */
+  function practised() {
+    for (var i = 0; i < localStorage.length; i++) {
+      var key = String(localStorage.key(i) || "");
+      if (/(?:^|_)vt_(?:days|progress)_v1$/.test(key) && holdsPractice(key)) return true;
+    }
+    return false;
+  }
+
+  /*
+   * Before this rule a missing vt_lang meant Spanish, and nothing else wrote
+   * it but the button. Someone who has been practising in Spanish on a
+   * browser set to English never pressed it, and would wake up to an English
+   * app: on the first load under this rule, their practice is taken for the
+   * choice it was, and kept. Only that once (vt_lang_seen_v1): practice made
+   * after it, an English first visit's own, or days a sync brings to a new
+   * device, says nothing about the old default. A first visit has no practice,
+   * so nothing is kept for it but the mark. Storage refused: nothing is kept.
+   */
+  var SEEN_KEY = "vt_lang_seen_v1";
+  try {
+    if (localStorage.getItem(SEEN_KEY) === null) {
+      if (chosen() === null && practised()) localStorage.setItem(LANG_KEY, "es");
+      localStorage.setItem(SEEN_KEY, "1");
+    }
+  } catch (e) {
+    /* storage refused: the rule applies as for a first visit */
+  }
+
+  var langPref = Object.freeze({
+    KEY: LANG_KEY,
+    LANGS: Object.freeze(LANGS.slice()),
+    fromBrowser: fromBrowser,
+    chosen: chosen,
+    linked: linked,
+    linkedBefore: linkedBefore,
+    resolve: function () {
+      return linked() || chosen() || linkedBefore() || fromBrowser(browserTags());
+    }
+  });
+  try {
+    window.VTLangPref = langPref;
+  } catch (e) {
+    /* a binding someone else made read-only: this page's own hold still uses its own */
+  }
 
   /**
    * Kept only by the app's own scripts (js/storage.js, js/tour.js, js/app.js),
@@ -277,17 +457,22 @@
     setTimeout(stalled, Math.min(STALL_MS - waited, CAP_MS - (now - began)));
   })();
 
-  try {
-    if (localStorage.getItem("vt_lang") !== "en") return;
-  } catch (e) {
-    return;
-  }
+  if (langPref.resolve() !== "en") return;
   html.lang = "en";
   html.classList.add("vt-i18n-pending");
+  // The tab's title is on screen while the page is held: the English one the
+  // markup keeps beside its own (<title data-en>), its own put back with the
+  // Spanish page (data-es, which js/i18n-early.js reads too)
+  var titleEl = document.querySelector("title[data-en]");
+  if (titleEl) {
+    titleEl.setAttribute("data-es", titleEl.textContent);
+    titleEl.textContent = titleEl.getAttribute("data-en");
+  }
   var letGo = function () {
     if (!html.classList.contains("vt-i18n-pending")) return;
     html.classList.remove("vt-i18n-pending");
     html.lang = "es";
+    if (titleEl) titleEl.textContent = titleEl.getAttribute("data-es");
   };
   // A script that fails to load (its own element's error: the request
   // index.html makes ahead for each script fails first, while the strings may

@@ -6,9 +6,9 @@
  * suite that stays green on a mutant is not testing that behaviour, however
  * high its coverage. Ported from the QA thread's mutate.py (2026-11-01).
  *
- *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets, ledger)
+ *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets, ledger, path)
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage a11y flows regress boot billing scoring controls audit toast designs splits  # browser sets: need Playwright's Chromium
+ *   node qa/mutate.mjs stage a11y flows regress boot billing scoring controls audit toast designs splits promises pathui  # browser sets: need Playwright's Chromium
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -141,7 +141,7 @@ export const MUTANTS = {
     ["GS15 a card names a paper nobody read (the year of another)", "js/session-sets.js", 'src: "Peng et al. 2026, ensayo aleatorizado"', 'src: "Peng et al. 2024, ensayo aleatorizado"', EVIDENCE],
     ["GS16 a card speaks for all research", "js/session-sets.js", "Esos estudios no midieron cuánto se aprende practicándolo en casa.", "Ningún estudio ha medido cuánto se aprende practicándolo en casa.", EVIDENCE],
     ["GS17 a dose comparison is counted among controlled trials", "js/session-sets.js", "En estudios pequeños, los Ejercicios de Función Vocal alargaron el tiempo que personas con la voz sana podían sostener un sonido; uno, con 35 mujeres", "En ensayos controlados pequeños, los Ejercicios de Función Vocal alargaron el tiempo que personas con la voz sana podían sostener un sonido; uno, con 35 mujeres", EVIDENCE],
-    ["GS18 a self-report study is graded moderate", "js/session-sets.js", 'id: "s-cooldown",\n      track: "singing",\n      grade: "lim",', 'id: "s-cooldown",\n      track: "singing",\n      grade: "mod",', EVIDENCE],
+    ["GS18 a self-report study is graded moderate", "js/session-sets.js", 'id: "s-cooldown",\n      focus: "recovery",\n      track: "singing",\n      grade: "lim",', 'id: "s-cooldown",\n      focus: "recovery",\n      track: "singing",\n      grade: "mod",', EVIDENCE],
     ["GS19 a drill's text gives the review another count", "js/exercises-data.js", "A review of 53 studies of adults", "A review of 63 studies of adults", EVIDENCE],
     ["GS20 the Spanish text of a drill drops a study the English names", "js/exercises-locale-es.js", "(Ruotsalainen y otros, 2007; Ramos y otros, 2025)", "(Ruotsalainen y otros, 2007)", EVIDENCE],
     ["GS21 a record loses where it was read", "qa/evidence-ledger.json", '"pmid": "42156834",\n      "doi": "10.1038/s41598-026-53079-1",', '"pmid": "",\n      "doi": "",', EVIDENCE],
@@ -150,6 +150,79 @@ export const MUTANTS = {
     ["GS24 a number stays in one language only", "js/session-sets.js", "After warming up, the 12 female singers in one study noticed", "After warming up, the female singers in one study noticed", EVIDENCE],
     ["GS25 a card's wording changes after its second reading", "js/session-sets.js", "quienes escuchaban notaron la diferencia solo en algunas.", "quienes escuchaban notaron la diferencia en todas.", READINGS]
   ].map(([name, file, from, to, test = "tests/node/session-sets.test.mjs"]) => ({ name, file, from, to, cmd: node([test]) })),
+  // Tu camino (js/voice-path.js, docs/48): the rules that keep a game layer on the side of the habit.
+  // Node only, so it runs with the default sets in the contracts job.
+  path: [
+    ["VP1 an area counts every exercise of a day, not the day", "js/voice-path.js", "const hit = new Set(ex.map((id) => AREA_OF.get(id)).filter(Boolean));", "const hit = ex.map((id) => AREA_OF.get(id)).filter(Boolean);"],
+    ["VP2 a week in range is judged on the goal's high end", "js/voice-path.js", 'const lo = Number(g.split("-")[0]);', 'const lo = Number(g.split("-")[1]);'],
+    ["VP3 a week below the goal takes the weeks before it away", "js/voice-path.js", "      if (c >= lo) n += 1;\n", "      n = c >= lo ? n + 1 : 0;\n"],
+    ["VP4 a gap the rest days covered counts as a comeback", "js/voice-path.js", "if (diff(lg.keys[i - 1], b) >= 2 && !rest.has(add(b, -1))) n += 1;", "if (diff(lg.keys[i - 1], b) >= 2) n += 1;"],
+    ["VP5 a first run announces months of history as news", "js/voice-path.js", "if (!flags[INIT] || hidden()) return true;", "if (hidden()) return true;"],
+    ["VP6 hidden, it still saves up news for later", "js/voice-path.js", "if (!flags[INIT] || hidden()) return true;", "if (!flags[INIT]) return true;"],
+    ["VP7 news on a day with no practice (a sync's days announced)", "js/voice-path.js", "    if (!D().summary?.().todayDone) return true;\n", ""],
+    ["VP8 no limit on how much is news at once", "js/voice-path.js", "    return count > NEWS_MAX;", "    return false;"],
+    ["VP9 a jump past a stage is announced as if it were the exact count", "js/voice-path.js", "if (quiet || n !== t || t === STAGES[0]) flags[stageKey(a.id, t)] = true;", "if (quiet || t === STAGES[0]) flags[stageKey(a.id, t)] = true;"],
+    ["VP10 the first day in an area is news", "js/voice-path.js", "if (quiet || n !== t || t === STAGES[0]) flags[stageKey(a.id, t)] = true;", "if (quiet || n !== t) flags[stageKey(a.id, t)] = true;"],
+    ["VP11 an earned logro is taken back once its rule stops holding", "js/voice-path.js", "    return LOGRO_IDS.filter((id) => !!flags[earnedKey(id)]);", "    const c = context(flags);\n    return LOGROS.filter((l) => !!flags[earnedKey(l.id)] && safeTest(l, c)).map((l) => l.id);"],
+    ["VP12 the completion card does not mark what it showed, and repeats it", "js/voice-path.js", "    markSeen({ logros: shown.filter((x) => x.logro).map((x) => x.logro), stages: shown.filter((x) => x.stage).map((x) => x.stage) });\n", ""],
+    ["VP13 the completion card lists everything at once", "js/voice-path.js", "const DONE_MAX = 2;", "const DONE_MAX = 20;"],
+    ["VP14 the completion card ignores how full it already is", "js/voice-path.js", "Math.max(1, Math.min(DONE_MAX, Number(opts.max) || DONE_MAX))", "DONE_MAX"],
+    ["VP15 a logro the card already says is said twice", "js/voice-path.js", "const skip = (opts.skip || []).filter((id) => u.logros.includes(id));", "const skip = [];"],
+    ["VP16 one step of three is enough for a set to count", "js/voice-path.js", "Math.max(1, Math.ceil((Number(steps) || 0) / 2))", "1"],
+    ["VP17 the arm without Tu camino still stores logros", "js/voice-path.js", "if (!served() || !D()) return { fresh: [] };", "if (!D()) return { fresh: [] };"],
+    ["VP18 a week with no practice yet is shared as \"0 days\"", "js/voice-path.js", "const week = n ? `${pick(C.shareWeek, n)}", "const week = n >= 0 ? `${pick(C.shareWeek, n)}"],
+    ["VP19 one day is written in the plural", "js/voice-path.js", "fill(pair[t][k === 1 ? 0 : 1], { n: k })", "fill(pair[t][1], { n: k })"],
+    ["VP20 a caption promises prevention", "js/voice-path.js", "que proteja de lesiones no está probado", "y así previene lesiones"],
+    ["VP21 a song warmed up after it counts as warmed up first", "js/voice-path.js", "ex.slice(0, song).some((id) => WARM_AREAS.includes(AREA_OF.get(id)))", "ex.some((id) => WARM_AREAS.includes(AREA_OF.get(id)))"],
+    ["VP22 three of the same weekday make a fixed day", "js/voice-path.js", " && set.has(add(k, -21))", ""],
+    ["VP24 pending stage is stored as false and dropped by sync", "js/voice-path.js", "flags[stageEarnedKey(a.id, t)] = true;", "flags[stageEarnedKey(a.id, t)] = false;"],
+    ["VP25 legacy pending stages never migrate", "js/voice-path.js", 'return migrateStages(f && typeof f === "object" && !Array.isArray(f) ? { ...f } : {});', 'return f && typeof f === "object" && !Array.isArray(f) ? { ...f } : {};'],
+    ["VP26 speaking days are shared as singing", "js/voice-path.js", 'singing: ["This week I practised my voice on 1 day", "This week I practised my voice on {n} days"]', 'singing: ["This week I sang on 1 day", "This week I sang on {n} days"]'],
+    ["VP27 malformed stage keys are displayed", "js/voice-path.js", "validStage(m) && flags[k]", "m && flags[k]"],
+    ["VP23 the hide switch syncs as whichever device merges last", "js/daily-loop.js", "const pathFrom = chosenAt(A.pathOffAt) > chosenAt(B.pathOffAt) ? A : B;", "const pathFrom = A;"]
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/voice-path.test.mjs"]) })),
+  // Tu camino in the page: where the card shows, when news counts as seen, the cards that end a
+  // routine. Each mutant runs the one test written for it in tests/voice-path.spec.js.
+  pathui: [
+    ["VU1 news counts as seen when the card is drawn, not when it is on screen", "js/voice-path.js", "const IO = global.IntersectionObserver;", "const IO = null;", "not on screen"],
+    ["VU2 the Nuevo label vanishes when Historial draws the card a second time", "js/voice-path.js", "const fresh = new Set([...unseen(flags).logros, ...lingeringLogros()]);", "const fresh = new Set(unseen(flags).logros);", "news once"],
+    ["VU3 home still counts as new what the completion card just showed", "js/voice-path.js", "    // Home is already drawn under the card, still counting these as new.\n    renderHomeButton();\n", "", "completion card"],
+    ["VU4 the loop's card says welcome back and so does Tu camino", "js/daily-loop.js", 'skip: o.comeback ? ["back"] : []', "skip: []", "completion card"],
+    ["VU5 design b shows the card on Historial's own tab", "css/site-version.css", 'html[data-site-version="b"] #view-history[data-progress-tab="history"] > #path-card,\n', "", "not on screen"],
+    ["VU6 the home button opens Historial's own tab in design b", "js/app.js", 'window.VTSiteLayout.openProgress("stats")', 'window.VTSiteLayout.openProgress("history")', "design b"],
+    ["VU7 a finished goal set is not kept", "js/session-sets.js", "    if (global.VTPath) global.VTPath.noteSet(set.id, n, set.order.length);\n", "", "half its steps"],
+    ["VU8 the hide switch is not kept", "js/daily-loop.js", "    L.pathOff = L.pathOff === true;", "    L.pathOff = false;", "Ocultar"],
+    ["VU9 the small capitals drop under 12 px", "css/voice-path.css", ".path-logro .path-logro-k {\n  display: block;\n  font-size: 0.78rem;", ".path-logro .path-logro-k {\n  display: block;\n  font-size: 0.72rem;", "phone in English"],
+    ["VU10 the hide switch is a small target", "css/voice-path.css", ".path-card .path-toggle {\n  flex: none;\n  min-height: var(--min-tap);", ".path-card .path-toggle {\n  flex: none;\n  min-height: 32px;", "Ocultar"],
+    ["VU11 a folded logro is a small target", "css/voice-path.css", "  padding-right: 1.6rem;\n  min-height: var(--min-tap);", "  padding-right: 1.6rem;\n  min-height: 0;", "phone in English"],
+    ["VU12 the arm without Tu camino is never counted as exposed", "js/voice-path.js", "  function expose() {\n    try {", "  function expose() {\n    if (!served()) return;\n    try {", "arm without it"],
+    ["VU13 the share sentence has no fallback when the clipboard refuses", "js/voice-path.js", "      say(`${copy().shareFail} ${text}`);", "      say(copy().shareFail);", "clipboard refuses"],
+    ["VU14 step lengths go back to the clock style that reads as a time of day", "js/daily-loop.js", "return s ? `${m}\\u00a0min ${s}\\u00a0s` : `${m}\\u00a0min`;", 'return `${m}:${String(s).padStart(2, "0")}`;', "chooser switches the routine", "tests/home-design.spec.js"],
+    ["VU15 the home button scrolls before Historial's calendar is drawn, and lands short", "js/voice-path.js", "        hooks.showHistory?.();\n      });", "        hooks.showHistory?.();\n        focusIfWanted($(\"#path-card\"));\n      });", "200% zoom"]
+  ].map(([name, file, from, to, grep, spec]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: [...PIANO_SPEC.slice(0, 3), spec || "tests/voice-path.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", grep]
+  })),
+  "safari-layout": [{
+    name: "SL1 macOS native select sizing overrides the 44px touch target",
+    file: "css/site-version.css",
+    from: ".site-version-select {\n  /* macOS WebKit's native popup can override min-height with a 22px bezel.\n     Keep the native select behaviour, but draw its closed control ourselves. */\n  -webkit-appearance: none;\n  appearance: none;\n  min-height: var(--min-tap, 44px);\n  max-width: 100%;\n  font-weight: 650;\n  padding: 0.4rem 2rem 0.4rem 0.65rem;\n  border: 1px solid var(--border);\n  border-radius: 8px;\n  background-color: var(--bg, #0c1118);\n  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);\n  background-position: calc(100% - 1rem) 50%, calc(100% - 0.7rem) 50%;\n  background-size: 0.3rem 0.3rem;\n  background-repeat: no-repeat;\n}",
+    to: ".site-version-select {\n  min-height: var(--min-tap, 44px);\n  max-width: 100%;\n  font-weight: 650;\n}",
+    cmd: [process.execPath, "node_modules/@playwright/test/cli.js", "test", "tests/site-version-devices.spec.js", "--project=webkit-layout", "--workers=1", "--reporter=line", "-g", "iPhone 12-16"]
+  }],
+  curriculum: [
+    ["CU1 skill filter silently shows every routine", "js/session-sets.js", 'sets.filter((set) => set.focus === focus)', 'sets'],
+    ["CU2 future skill tag disappears without authoring failure", "js/session-sets.js", '"id": "s-breath-phrases",\n      "track": "singing",\n      "focus": "breath",', '"id": "s-breath-phrases",\n      "track": "singing",\n      "focus": "retired-skill",'],
+    ["CU3 song transfer ends on a speech-only delayed review", "js/session-sets.js", '["s3-song-stanzas", 180]', '["v7-record-review", 180]'],
+    ["CU4 edited song text becomes executable markup", "js/song-library.js", 'esc(song[l].task)', 'song[l].task']
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/curriculum.test.mjs"]) })),
+  curriculumui: [
+    ["CU5 score library is not integrated into the exercise", "js/app.js", 'if (globalThis.VTSongLibrary) row.insertAdjacentHTML("beforeend", globalThis.VTSongLibrary.html(VTI18n.lang));', ''],
+    ["CU6 skill selection never redraws cards", "js/session-sets.js", 'picker.onchange = paint;', 'picker.onchange = null;']
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: [...PIANO_SPEC.slice(0, 3), name.startsWith("CU5") ? "tests/song-library.spec.js" : "tests/session-sets.spec.js", "--project=chromium", "--workers=1", "--reporter=dot", "-g", name.startsWith("CU5") ? "song library en at 360" : "skill picker filters"] })),
   audio: [
     ["M6 +150c (adjacent semitone) accepted as in tune", "js/practice-modes.js", "const hi = this.profile.centsHi == null ? 50 : this.profile.centsHi;", "const hi = this.profile.centsHi == null ? 150 : this.profile.centsHi;"],
     ["M7 -140c accepted as in tune", "js/practice-modes.js", "const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;", "const lo = this.profile.centsLo == null ? -140 : this.profile.centsLo;"],
@@ -867,7 +940,7 @@ export const MUTANTS = {
     // PR #42 review: the first load's hero as the app draws it, at every width, arm and way in
     ["D35 a first load with an experiment's arm forced in the address shows a hero the app then rewrites", "js/boot-head.js", "      if (name.indexOf(\"ab_\") === 0) arm = true;", "      if (false) arm = true;", "tests/redteam-boot-a11y-privacy.spec.js", "first load at \\?"],
     ["D36 a person who read the guide first is held like a returning one: the guide's statistics id taken for the app's", "js/boot-head.js", "\"vt_tour_v1\", \"vt_mic_sens\"];", "\"vt_tour_v1\", \"vt_mic_sens\", \"vt_ab_v1\"];", "tests/redteam-boot-a11y-privacy.spec.js", "straight from the guide"],
-    ["D37 the line over the first load's hero changes as the app starts", "index.html", 'data-i18n="start.kickerNew">Canto y oratoria \u00b7 gratis</p>', 'data-i18n="start.kickerNew">Empieza aqu\u00ed</p>', "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
+    ["D37 the line over the first load's hero changes as the app starts", "index.html", 'data-i18n="start.kickerNew">Para cantar y para hablar \u00b7 gratis</p>', 'data-i18n="start.kickerNew">Empieza aqu\u00ed</p>', "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
     ["D38 on a laptop the first load's title is laid out narrower and larger, and shrinks as the app starts", "css/styles.css", "  body.loop-first #start-panel .start-title,\n  html.vt-boot-hero:not(.vt-boot-ready) #start-panel .start-title {", "  body.loop-first #start-panel .start-title {", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
     ["D41 on a laptop the first load's title is laid out in the whole width, and its column narrows as the app starts", "css/styles.css", "  body.loop-first #start-panel.start-panel,\n  html.vt-boot-hero:not(.vt-boot-ready) #start-panel.start-panel {", "  body.loop-first #start-panel.start-panel {", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
     ["D42 the first load's hero is laid out and styled visible, but drawn at no opacity", "css/styles.css", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n}\n", "html.vt-boot-hero:not(.vt-i18n-pending) #start-panel {\n  visibility: visible;\n  opacity: 0;\n}\n", "tests/redteam-boot-a11y-privacy.spec.js", "the hero's words show at once"],
@@ -1115,7 +1188,12 @@ export const MUTANTS = {
     ["DS16 the design control takes focus behind the sticky header and stays there", "js/app.js", "          window.scrollBy({ top: r.top - hdr.bottom - 8, behavior: \"instant\" });\n", "", "tests/site-version.spec.js", "comes out from under it"],
     ["DS17 high-contrast mode loses the border on the current Progreso tab", "css/site-version.css", "    outline: 2px solid Highlight;\n", "", "tests/site-version.spec.js", "high-contrast"],
     ["DS18 a tapped button stays lifted and outlined on a touch screen", "css/styles.css", "@media (hover: hover) {\n  .btn:hover {", "@media all {\n  .btn:hover {", "tests/touch-hover.spec.js"],
-    ["DS19 a tapped account button keeps the accent border on a touch screen", "css/styles.css", "@media (hover: hover) {\n  .header-door:hover {", "@media all {\n  .header-door:hover {", "tests/touch-hover.spec.js"]
+    ["DS19 a tapped account button keeps the accent border on a touch screen", "css/styles.css", "@media (hover: hover) {\n  .header-door:hover {", "@media all {\n  .header-door:hover {", "tests/touch-hover.spec.js"],
+    // The marketing copy on a 360px phone (docs/48): new words that do not fit are a defect the node test cannot see.
+    ["DS20 the speaking choice's description grows into a paragraph the phone stacks", "js/i18n.js", '"first.speakSub": "presentaciones, entrevistas, dicción",', '"first.speakSub": "presentaciones, entrevistas de trabajo, reuniones, clases, exposiciones y dicción para hablar claro",', "tests/marketing-copy.spec.js", "fit a 360px phone \\(es\\)"],
+    ["DS21 the layout control's label grows and pushes the control to a second row", "js/i18n.js", '"sv.label": "Vista de la página",', '"sv.label": "Cómo quieres ordenar las cosas en esta página",', "tests/marketing-copy.spec.js", "fit a 360px phone \\(es\\)"],
+    ["DS22 the tab keeps the Spanish title after switching to English", "js/i18n.js", "      if (title) document.title = title;\n", "", "tests/marketing-copy.spec.js", "tab title"],
+    ["DS23 the line over the title is set larger on phones, so it no longer fits one line", "css/styles.css", "    letter-spacing: 0.06em;\n  }\n", "    letter-spacing: 0.06em;\n    font-size: 0.9rem;\n  }\n", "tests/marketing-copy.spec.js", "fit a 360px phone \\(es\\)"]
   ].map(([name, file, from, to, spec, grep]) => ({
     name,
     file,
@@ -1288,6 +1366,72 @@ export const MUTANTS = {
     cmd: test.endsWith(".spec.js")
       ? [...PIANO_SPEC.slice(0, 3), `tests/${test}`, "--project=chromium", "--workers=2", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
       : node([`tests/node/${test}.test.mjs`])
+  })),
+  // The marketing copy (docs/48): what search, a shared link and a first visit say, held to the research and to the
+  // code that keeps each promise true. Each mutant is a defect the copy has had or a claim the evidence rules out.
+  claims: [
+    ["MK1 the page's description is edited in the markup alone: a shared link says what the page no longer says", "index.html", '      content="Ejercicios de canto y para hablar en público, gratis y sin límite de minutos. Ves en vivo si afinas. Sin instalar nada y sin tarjeta."\n    />\n    <!--', '      content="Práctica en casa: entrenamiento vocal y de canto, grabación, métricas, piano y plan de 12 semanas."\n    />\n    <!--'],
+    ["MK2 the description sells an AI coach the product does not have", "js/i18n.js", '"Ejercicios de canto y para hablar en público, gratis y sin límite de minutos.', '"Ejercicios de canto con tu coach de IA, gratis y sin límite de minutos.'],
+    ["MK4 the free tier's every-exercise flag is turned off while the description promises no time limit (a line, not the cap: the cap is MK22)", "js/billing.js", "all_exercises: true,", "all_exercises: false,"],
+    ["MK5 the layout control shows the experiment's arm letter again", "js/i18n.js", '"sv.a": "Clásica",', '"sv.a": "A · Clásico",'],
+    ["MK6 the Pro window's English promise is left in Spanish", "js/i18n.js", '"pricing.sub": "Practice is free, always. Pro adds extras', '"pricing.sub": "Practicar es gratis, siempre. Pro adds extras'],
+    ["MK7 the English title runs past what a results page shows", "js/i18n.js", '"meta.title": "Singing and speaking practice, free in your browser",', '"meta.title": "Singing and speaking practice for every voice, free in your browser, no install",'],
+    ["MK8 the first visit says progress stays in the browser and no longer that no account is needed", "js/i18n.js", '"start.step3sub": "Tu progreso se guarda en este navegador. No necesitas cuenta para practicar.",', '"start.step3sub": "Tu progreso se queda en este navegador.",'],
+    ["MK9 the Pro window claims almost every singing app caps free practice again", "js/i18n.js", '"pricing.proof1": "Muchas apps de canto con suscripción limitan', '"pricing.proof1": "Casi todas las apps de canto limitan'],
+    ["MK10 the progress board says one private lesson costs about a year of Pro", "js/i18n.js", '"value.anchor": "Un año de Pro cuesta menos que 3 clases particulares en Lima. Practicar es gratis, siempre.",', '"value.anchor": "Una clase particular ≈ el año de Pro. Practica gratis siempre.",'],
+    ["MK11 the terms stop saying the free plan asks for no card while the first visit says no card", "terms.html", "El plan gratis no cuesta nada ni pide tarjeta, y da acceso", "El plan gratis no cuesta nada y da acceso"],
+    ["MK12 the privacy page stops promising the voice stays on the device while the first visit promises it", "privacy.html", "tu dispositivo. No enviamos tu voz a un servidor nuestro.", "tu dispositivo. Podemos enviar tu voz a nuestro servidor para mejorar el servicio."],
+    ["MK13 the first visit labels the reader with Peru's official plural, which the old word list let through", "js/i18n.js", '"first.singSub": "canciones, coro, afinación",', '"first.singSub": "canciones, coro, afinación, para personas adultas mayores",'],
+    ["MK14 the trial-ending note says progress is lost unless it is downloaded again", "js/i18n.js", '"value.moment.trial_ending_one": "Tu prueba de Pro termina en {n} día. Tu progreso se queda en este navegador y todo lo gratis sigue igual.",', '"value.moment.trial_ending_one": "Tu prueba de Pro termina en {n} día. Descarga tu progreso si quieres guardarlo.",'],
+    ["MK15 the guide's Spanish advice drops the warning not to put lasting hoarseness down to age", "guide.html", "No la atribuyas a la edad: a cualquier edad, una ronquera", "A cualquier edad, una ronquera"],
+    ["MK16 the guide's English advice moves to three weeks while the Spanish keeps four", "guide.html", "if hoarseness lasts more than\n          about 4 weeks", "if hoarseness lasts more than\n          about 3 weeks"],
+    ["MK17 the progress board compares a year of Pro with lessons everywhere, though the only lesson price is Lima's", "js/i18n.js", '"value.anchor": "Un año de Pro cuesta menos que 3 clases particulares en Lima.', '"value.anchor": "Un año de Pro cuesta menos que 3 clases particulares.'],
+    ["MK18 the yearly plan says a whole year costs less than one lesson, which the Lima price does not support", "js/i18n.js", '"pricing.feat.lesson_anchor": "Un año entero cuesta menos que 3 clases particulares en Lima",', '"pricing.feat.lesson_anchor": "Un año entero cuesta menos que una clase particular en Lima",'],
+    ["MK23 the catalog's singing switch keeps its own words one scroll below the first visit's", "js/i18n.js", '"tab.singing": "canciones, coro, afinación",', '"tab.singing": "canciones, afinación",'],
+    ["MK24 the search text says \"si das la nota\", Spain's idiom for making a scene", "js/i18n.js", "gratis y sin límite de minutos. Ves en vivo si afinas. Sin instalar nada y sin tarjeta.\",", "gratis y sin límite de minutos. Ves en vivo si das la nota. Sin instalar nada y sin tarjeta.\","],
+    ["MK25 step 3 says only \"no account needed\" beside the header's Entrar", "js/i18n.js", '"start.step3sub": "Your progress is saved in this browser. You don\'t need an account to practise.",', '"start.step3sub": "Your progress is saved in this browser. No account needed.",']
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/marketing-copy.test.mjs"]) })),
+  // The copy's promises proved by behaviour (tests/marketing-claims.spec.js), each broken in the code that keeps it
+  // true: a line can stay in a file while the behaviour changes, so these need a browser (docs/48 section 11).
+  promises: [
+    ["MK3 the ads gate stops checking for live practice while the terms promise no ads during practice", "js/ads.js", "    if (isPracticeActive()) return false;\n", "", "no ad during practice"],
+    // Two layers keep this ad away between steps: the call after the rating (js/app.js) and the routine check in
+    // the ad gate (js/ads.js). With the gate in place the first alone cannot be seen, so this takes both; MK32 takes
+    // the gate's alone.
+    ["MK19 an end-of-task ad is drawn between the steps of a guided routine again", "js/app.js", "    if (!wasSaved && !routineGoesOn) {", "    if (!wasSaved) {", "no ad during practice", [{ file: "js/ads.js", from: "    return routineUnderWay() || appStateLive() || stopButtonShowing();", to: "    return appStateLive() || stopButtonShowing();" }]],
+    ["MK20 the recording is sent to a server when the take stops", "js/practice-engine.js", "        this.recUrl = URL.createObjectURL(this.recBlob);", '        this.recUrl = URL.createObjectURL(this.recBlob);\n        fetch("/api/voice", { method: "POST", body: this.recBlob }).catch(() => {});', "your voice stays on your device"],
+    ["MK21 progress is kept for the tab only, so it is gone without an account", "js/storage.js", "      localStorage.setItem(key, raw);\n      unsaved.delete(key);", "      sessionStorage.setItem(key, raw);\n      unsaved.delete(key);", "no account needed"],
+    ["MK22 a free visitor past an hour today is sent to Pro instead of practising", "js/app.js", "      if (startsElsewhere(ex, profile)) return;\n", '      if (startsElsewhere(ex, profile)) return;\n      if (!window.VTBilling?.isPro?.() && (VTStorage.getDays()?.days?.[new Date().toLocaleDateString("en-CA")]?.sec || 0) > 3600) {\n        openPricing();\n        return;\n      }\n', "no time limit"],
+    // MK26 to MK29: the four ways Codex's review showed the first version of the spec let a broken promise through.
+    ["MK26 the take streams to the server over a WebSocket while it is recorded", "js/practice-engine.js", "        if (e.data && e.data.size) chunks.push(e.data);\n", '        if (e.data && e.data.size) chunks.push(e.data);\n        try {\n          const ws = (window.__vtVoiceWs ||= new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/api/voice"));\n          if (ws.readyState === 1 && e.data?.size) ws.send(e.data);\n        } catch {\n          /* ignore */\n        }\n', "your voice stays on your device"],
+    ["MK27 the take leaves in 3 KB text beacons, each under the size an upload rule would flag", "js/practice-engine.js", "        this.recUrl = URL.createObjectURL(this.recBlob);\n", '        this.recUrl = URL.createObjectURL(this.recBlob);\n        this.recBlob.arrayBuffer().then((buf) => {\n          const u8 = new Uint8Array(buf);\n          let s = "";\n          for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);\n          s = btoa(s);\n          for (let i = 0; i < s.length; i += 3000) navigator.sendBeacon("/api/v", new Blob([s.slice(i, i + 3000)], { type: "text/plain" }));\n        }).catch(() => {});\n', "your voice stays on your device"],
+    ["MK28 the time cap starts on a visitor's second day of practice", "js/app.js", "      if (startsElsewhere(ex, profile)) return;\n", '      if (startsElsewhere(ex, profile)) return;\n      const ledger = VTStorage.getDays()?.days || {};\n      if (!window.VTBilling?.isPro?.() && Object.keys(ledger).length > 1 && (ledger[new Date().toLocaleDateString("en-CA")]?.sec || 0) > 3600) {\n        openPricing();\n        return;\n      }\n', "no time limit"],
+    ["MK29 the AdSense path skips the practice gate, so a unit is drawn while a take is live", "js/ads.js", "    const blocked = slotBlocked(el, slotId);\n    if (blocked) return blocked;\n    const c = cfg();\n", '    const c = cfg();\n    const blocked = c.mode === "adsense" ? null : slotBlocked(el, slotId);\n    if (blocked) return blocked;\n', "no ad during practice"],
+    // MK30 to MK46: what the second red team showed the second version of the spec let through, and the three ad leaks it found in the product.
+    ["MK30 Start again leaves the end-of-task card up through the next take","js/app.js","      startNewTakeAfterSave();\n      clearPostSessionAd();\n","      startNewTakeAfterSave();\n","no ad during practice"],
+    ["MK31 opening an exercise leaves the last one's end-of-task card in place, into a routine's first step","js/app.js","    state.recorder.clear();\n    clearPostSessionAd();\n","    state.recorder.clear();\n","no ad during practice"],
+    ["MK32 a routine under way no longer counts as practice, so an ad is drawn between its steps and on the way back to it","js/ads.js","    return routineUnderWay() || appStateLive() || stopButtonShowing();","    return appStateLive() || stopButtonShowing();","no ad during practice"],
+    ["MK33 a take starting up, the microphone not yet answered, no longer counts as practice","js/ads.js","st.practiceLive || st.practiceStarting || st.running || st.recording","st.practiceLive || st.running || st.recording","no ad during practice"],
+    ["MK34 a free visitor past two hours today is sent to Pro (a cap above the hour the first version tested)","js/app.js","      if (startsElsewhere(ex, profile)) return;\n","      if (startsElsewhere(ex, profile)) return;\n      if (!window.VTBilling?.isPro?.() && (VTStorage.getDays()?.days?.[VTDays.dayKey()]?.sec || 0) > 7200) {\n        openPricing();\n        return;\n      }\n","no time limit"],
+    ["MK35 past an hour today a free visitor's take is cut to two minutes (the first version shortened every take, so could not see it)","js/app.js","    if (state.timer.remaining <= 0) state.timer.remaining = state.timer.total;\n    state.timer.running = true;\n","    if (state.timer.remaining <= 0) state.timer.remaining = state.timer.total;\n    if (!window.VTBilling?.isPro?.() && (VTStorage.getDays()?.days?.[VTDays.dayKey()]?.sec || 0) > 3600) state.timer.remaining = Math.min(state.timer.remaining, 120);\n    state.timer.running = true;\n","no time limit"],
+    ["MK36 the hour cap starts on a launch date after the first version's fixed clock","js/app.js","      if (startsElsewhere(ex, profile)) return;\n","      if (startsElsewhere(ex, profile)) return;\n      if (!window.VTBilling?.isPro?.() && Date.now() >= Date.parse(\"2027-01-01T00:00:00Z\") && (VTStorage.getDays()?.days?.[VTDays.dayKey()]?.sec || 0) > 3600) {\n        openPricing();\n        return;\n      }\n","no time limit"],
+    ["MK37 a two-hour cap read from today's takes in the history, not from the ledger","js/app.js","      if (startsElsewhere(ex, profile)) return;\n","      if (startsElsewhere(ex, profile)) return;\n      const day = VTDays.dayKey();\n      const spent = Object.values(VTStorage.getProgress()).reduce((n, row) => n + (row.history || []).filter((h) => h.day === day).reduce((s, h) => s + (h.durationSec || 0), 0), 0);\n      if (!window.VTBilling?.isPro?.() && spent > 7200) {\n        openPricing();\n        return;\n      }\n","no time limit"],
+    ["MK38 the saved take is uploaded ten seconds after Save","js/app.js","        save.textContent = tt(\"rate.takeSaved\");\n        save.disabled = true;\n","        save.textContent = tt(\"rate.takeSaved\");\n        save.disabled = true;\n        setTimeout(() => fetch(\"/api/voice\", { method: \"POST\", body: result.blob }).catch(() => {}), 10000);\n","your voice stays on your device"],
+    ["MK39 the take is sent in a beacon as the page is left","js/practice-engine.js","        this.recUrl = URL.createObjectURL(this.recBlob);\n","        this.recUrl = URL.createObjectURL(this.recBlob);\n        const leaving = this.recBlob;\n        window.addEventListener(\"pagehide\", () => navigator.sendBeacon(\"/api/voice\", leaving), { once: true });\n","your voice stays on your device"],
+    ["MK40 saved takes are uploaded on the next visit","js/app.js","  function init() {\n    ensureRangeAdapter();\n","  function init() {\n    setTimeout(async () => {\n      try {\n        for (const r of await VTStorage.listRecordings()) {\n          await fetch(\"/api/takes\", { method: \"POST\", body: await VTStorage.getRecordingBlob(r.id) });\n        }\n      } catch {\n        /* ignore */\n      }\n    }, 5000);\n    ensureRangeAdapter();\n","your voice stays on your device"],
+    ["MK41 the saved take rides in the analytics queue as an event","js/app.js","        save.textContent = tt(\"rate.takeSaved\");\n        save.disabled = true;\n","        save.textContent = tt(\"rate.takeSaved\");\n        save.disabled = true;\n        result.blob.arrayBuffer().then((buf) => {\n          const u8 = new Uint8Array(buf);\n          let s = \"\";\n          for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);\n          window.VTAnalytics?.track?.(\"take_saved\", { audio: btoa(s) });\n        });\n","your voice stays on your device"],
+    ["MK42 a visitor's takes older than thirty days are dropped","js/storage.js","    getProgress() {\n      return read(scopedKey(LS.progress), {});\n    },","    getProgress() {\n      const all = read(scopedKey(LS.progress), {});\n      const cutoff = new Date(Date.now() - 30 * 864e5).toISOString();\n      for (const row of Object.values(all)) row.history = (row.history || []).filter((h) => !h.at || h.at >= cutoff);\n      return all;\n    },","no account needed"],
+    ["MK43 only the latest take of an exercise is kept","js/storage.js","      row.history = row.history.slice(0, 50);","      row.history = row.history.slice(0, 1);","no account needed"],
+    ["MK44 a free visitor past five hours this week is sent to Pro","js/app.js","      if (startsElsewhere(ex, profile)) return;\n","      if (startsElsewhere(ex, profile)) return;\n      const ledger = VTStorage.getDays()?.days || {};\n      const day = VTDays.dayKey();\n      const week = Object.entries(ledger).filter(([k]) => k >= VTDays.weekStart(day) && k <= day).reduce((n, [, r]) => n + (r.sec || 0), 0);\n      if (!window.VTBilling?.isPro?.() && week > 5 * 3600) {\n        openPricing();\n        return;\n      }\n","no time limit"],
+    ["MK45 a take's rating is not kept","js/storage.js","      score: result.score ?? null,","      score: null,","no account needed"],
+    ["MK46 the hour cap starts fourteen days after a visitor first practised","js/app.js","      if (startsElsewhere(ex, profile)) return;\n","      if (startsElsewhere(ex, profile)) return;\n      let firstSeen = Number(localStorage.getItem(\"vt_first_seen_v1\"));\n      if (!firstSeen) localStorage.setItem(\"vt_first_seen_v1\", String((firstSeen = Date.now())));\n      if (!window.VTBilling?.isPro?.() && Date.now() - firstSeen > 14 * 864e5 && (VTStorage.getDays()?.days?.[VTDays.dayKey()]?.sec || 0) > 3600) {\n        openPricing();\n        return;\n      }\n","no time limit"]
+  ].map(([name, file, from, to, spec, also]) => ({
+    name,
+    file,
+    from,
+    to,
+    also,
+    cmd: [...PIANO_SPEC.slice(0, 3), "tests/marketing-claims.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", spec]
   })),
   ledger: [
     ["LG1 the first validation chunk always passes: a stale read commits", "src/ledger.js", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed})", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed}) OR 1", "ledger"],
@@ -1509,10 +1653,86 @@ export const MUTANTS = {
     cmd: spec.startsWith("workers/")
       ? node([spec])
       : [...PIANO_SPEC.slice(0, 3), spec, "--project=chromium", "--workers=4", "--reporter=dot", ...(grep ? ["-g", grep] : [])]
+  })),
+  // The language the app opens in (js/boot-head.js window.VTLangPref, js/i18n.js, index.html's hreflang and footer
+  // links): an address that names one, else the visitor's choice, else the language an address named earlier in the
+  // tab, else the browser's languages in order (a reader of Spanish counts as Spanish), else English for other
+  // languages and Spanish for none; a guess never stored; practice from before the rule kept in Spanish, once. Each
+  // is judged by the tests in tests/browser-language.spec.js written to catch it, or by tests/node/hreflang.test.mjs.
+  lang: [
+    ["UL1 the browser's language is not read: an English browser on a first visit gets the Spanish site (the defect)", "js/boot-head.js", "      return linked() || chosen() || linkedBefore() || fromBrowser(browserTags());", "      return linked() || chosen() || linkedBefore() || LANGS[0];", "a browser in en-US is shown English"],
+    ["UL2 the browser's language wins over the visitor's choice", "js/boot-head.js", "      return linked() || chosen() || linkedBefore() || fromBrowser(browserTags());", "      return linked() || fromBrowser(browserTags()) || chosen() || linkedBefore();", "chosen on an"],
+    ["UL3 any English in the list wins: Firefox in Spanish (es-PE, es, en-US, en) gets English", "js/boot-head.js", "    var named = false;\n", "    var named = false;\n    if (list.some(function (t) { return primaryOf(t) === \"en\"; })) return \"en\";\n", "opens in"],
+    ["UL4 only navigator.language is read: a German who listed Spanish after it gets English", "js/boot-head.js", "      if (nav.languages && nav.languages.length) return Array.prototype.slice.call(nav.languages);", "      if (nav.language) return [nav.language];", "opens in"],
+    ["UL5 tags compared case by case: EN-gb is not English", "js/boot-head.js", "return String(tag == null ? \"\" : tag).trim().toLowerCase().split(/[-_]/)[0];", "return String(tag == null ? \"\" : tag).trim().split(/[-_]/)[0];", "primary subtag"],
+    ["UL6 an underscore tag (en_US, some WebViews) is not split", "js/boot-head.js", "return String(tag == null ? \"\" : tag).trim().toLowerCase().split(/[-_]/)[0];", "return String(tag == null ? \"\" : tag).trim().toLowerCase().split(\"-\")[0];", "primary subtag"],
+    ["UL7 a prefix compare: enm (Middle English) is taken for English and wins over Spanish", "js/boot-head.js", "      if (LANGS.indexOf(primary) !== -1) return primary;", "      for (var j = 0; j < LANGS.length; j++) if (primary.indexOf(LANGS[j]) === 0) return LANGS[j];", "primary subtag"],
+    ["UL8 the guess is stored as a choice: the next load no longer follows the browser", "js/i18n.js", "      this.lang = this.startLang() === \"en\" ? \"en\" : \"es\";", "      this.lang = this.startLang() === \"en\" ? \"en\" : \"es\";\n      try {\n        localStorage.setItem(\"vt_lang\", this.lang);\n      } catch {\n        /* ignore */\n      }", "nothing is stored|follows the browser again"],
+    ["UL9 any kept value counts as a choice of Spanish, as before: vt_lang=fr gives an English browser Spanish", "js/boot-head.js", "      var v = localStorage.getItem(LANG_KEY);\n      return LANGS.indexOf(v) !== -1 ? v : null;", "      var v = localStorage.getItem(LANG_KEY);\n      return v === null ? null : v === \"en\" ? \"en\" : \"es\";", "not one of our languages"],
+    ["UL10 the hold before the first paint reads only a stored choice: an English first visit paints the Spanish page, then swaps it", "js/boot-head.js", "  if (langPref.resolve() !== \"en\") return;", "  if (langPref.chosen() !== \"en\") return;", "no frame shows the Spanish page"],
+    ["UL11 every visitor's page is held for English strings, a Spanish browser's too", "js/boot-head.js", "  if (langPref.resolve() !== \"en\") return;", "  if (false) return;", "held for the English strings"],
+    ["UL12 i18n.js reads only a stored choice: the page is held for English and then drawn in Spanish", "js/i18n.js", "        if (global.VTLangPref && typeof global.VTLangPref.resolve === \"function\") return global.VTLangPref.resolve();\n", "", "a browser in en-US is shown English"],
+    ["UL13 with site data blocked the language is read through the storage that throws, and the page opens in Spanish", "js/boot-head.js", "      Object.defineProperty(window, name, { value: memoryStore(), configurable: true });", "      void memoryStore;", "site data blocked", [{ file: "js/boot-head.js", from: "    try {\n      var v = localStorage.getItem(LANG_KEY);\n      return LANGS.indexOf(v) !== -1 ? v : null;\n    } catch (e) {\n      return null;\n    }", to: "    var v = localStorage.getItem(LANG_KEY);\n    return LANGS.indexOf(v) !== -1 ? v : null;" }]],
+    ["UL14 the address is not read: the URL the hreflang links announce as Spanish is indexed in English", "js/boot-head.js", "      var v = String(new URLSearchParams(location.search).get(\"lang\") || \"\").toLowerCase();", "      var v = \"\";", "crawler|over a stored"],
+    ["UL15 the stored choice outranks the address: a link to the English version opens in Spanish", "js/boot-head.js", "      return linked() || chosen() || linkedBefore() || fromBrowser(browserTags());", "      return chosen() || linked() || linkedBefore() || fromBrowser(browserTags());", "over a stored"],
+    ["UL16 a switch leaves ?lang= as it was: the reload shows the other language again", "js/i18n.js", "      this.keepAddress();\n", "", "names Spanish in the address"],
+    ["UL17 a switch writes ?lang= on every address: the adapting bare one is lost", "js/i18n.js", "        if (!url.searchParams.has(\"lang\")) return;\n", "", "leaves the address bare"],
+    ["UL18 a learner practising in Spanish on an English browser is flipped to English", "js/boot-head.js", "      if (chosen() === null && practised()) localStorage.setItem(LANG_KEY, \"es\");\n", "", "keeps Spanish, and is taken"],
+    ["UL19 practice looked for under the main profile only", "js/boot-head.js", "      if (/(?:^|_)vt_(?:days|progress)_v1$/.test(key) && holdsPractice(key)) return true;", "      if (/^vt_(?:days|progress)_v1$/.test(key) && holdsPractice(key)) return true;", "under another profile"],
+    ["UL20 the carry-over judged by the app's keys being there: an English speaker who opened the site once is held in Spanish", "js/boot-head.js", "      if (/(?:^|_)vt_(?:days|progress)_v1$/.test(key) && holdsPractice(key)) return true;", "      if (/^vt_/.test(key)) return true;", "left no practice"],
+    ["UL21 the carry-over run on every load: an English first visitor who then practises is moved to Spanish", "js/boot-head.js", "    if (localStorage.getItem(SEEN_KEY) === null) {", "    if (true) {", "practice made after"],
+    ["UL22 a reader of Spanish passed over for the English after it: a Quechua device or a Portuguese WebView gets English", "js/boot-head.js", "      if (READS_SPANISH.indexOf(primary) !== -1) return \"es\";\n", "", "opens in|primary subtag"],
+    ["UL23 Portuguese not taken for a reader of Spanish", "js/boot-head.js", "var READS_SPANISH = [\"ay\", \"ca\", \"eu\", \"gl\", \"gn\", \"qu\", \"pt\"];", "var READS_SPANISH = [\"ay\", \"ca\", \"eu\", \"gl\", \"gn\", \"qu\"];", "pt-BR"],
+    ["UL24 a browser naming only other languages gets Spanish: a German's iPhone and laptop disagree", "js/boot-head.js", "  var OTHER_LANGS = \"en\";", "  var OTHER_LANGS = \"es\";", "another language"],
+    ["UL25 the language button named by an aria-label: \"click Español\" finds nothing", "index.html", "id=\"btn-lang\" lang=\"en\">", "id=\"btn-lang\" lang=\"en\" aria-label=\"Change language\">", "the language button"],
+    ["UL26 the language button's word read in the page's voice: its lang not kept in step", "js/i18n.js", "        langBtn.lang = this.lang === \"es\" ? \"en\" : \"es\";\n", "", "the language button"],
+    ["UL27 the hreflang link for Spanish dropped: Google is told of no Spanish address", "index.html", "    <link rel=\"alternate\" hreflang=\"es\" href=\"https://pillb.github.io/vocal-singing-training/?lang=es\" />\n", "", "tests/node/hreflang.test.mjs"],
+    ["UL28 the hreflang links relative: Google ignores them", "index.html", "hreflang=\"en\" href=\"https://pillb.github.io/vocal-singing-training/?lang=en\"", "hreflang=\"en\" href=\"?lang=en\"", "tests/node/hreflang.test.mjs"],
+    ["UL29 the tab forgets the address's language: back from the privacy page, an English visitor on a Spanish browser gets Spanish", "js/boot-head.js", "      return linked() || chosen() || linkedBefore() || fromBrowser(browserTags());", "      return linked() || chosen() || fromBrowser(browserTags());", "back from a checkout|guide's"],
+    ["UL30 the address's language from earlier in the tab outranks the visitor's own choice", "js/boot-head.js", "      return linked() || chosen() || linkedBefore() || fromBrowser(browserTags());", "      return linked() || linkedBefore() || chosen() || fromBrowser(browserTags());", "over a stored"],
+    ["UL31 the address's language kept for good: a link someone else wrote becomes the visitor's choice", "js/boot-head.js", "      var v = sessionStorage.getItem(LINK_KEY);", "      var v = localStorage.getItem(LINK_KEY);", "new tab asks", [{"file": "js/boot-head.js", "from": "    if (linked()) sessionStorage.setItem(LINK_KEY, linked());", "to": "    if (linked()) localStorage.setItem(LINK_KEY, linked());"}]],
+    ["UL32 whatever the tab kept counts as a language", "js/boot-head.js", "      var v = sessionStorage.getItem(LINK_KEY);\n      return LANGS.indexOf(v) !== -1 ? v : null;", "      var v = sessionStorage.getItem(LINK_KEY);\n      return v;", "tests/node/hreflang.test.mjs"],
+    ["UL33 und (undetermined) taken for a language named: a browser with no locale gets English", "js/boot-head.js", "      if (/^[a-z]{2,3}$/.test(primary) && NO_LANGUAGE.indexOf(primary) === -1) named = true;", "      if (/^[a-z]{2,3}$/.test(primary)) named = true;", "tests/node/hreflang.test.mjs"],
+    ["UL34 a footer language link left to the browser: a reload at ?lang=, and no choice kept", "js/app.js", "        e.preventDefault();\n        window.VTI18n.setLang(a.getAttribute(\"hreflang\"));\n", "", "a click on Espa"],
+    ["UL35 every click on a footer language link taken over: \"open in a new tab\" switches this one", "js/app.js", "    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;\n", "", "new tab opens"],
+    ["UL36 a footer language link written ?lang=en: from index.html it leads to an address no hreflang names", "index.html", "href=\"./?lang=en\" hreflang=\"en\"", "href=\"?lang=en\" hreflang=\"en\"", "tests/node/hreflang.test.mjs"],
+    ["UL37 the footer's language on screen not marked", "js/app.js", "a.setAttribute(\"aria-current\", \"true\");", "a.removeAttribute(\"aria-current\");", "the one on screen marked|switches like the button"],
+    ["UL38 the terms link left on the Spanish half for an English reader", "js/app.js", "    for (const page of [\"privacy.html\", \"terms.html\"]) {", "    for (const page of [\"privacy.html\"]) {", "privacy and terms links"],
+    ["UL39 i18n.js cannot open without js/boot-head.js: a stored English choice lost with it", "js/i18n.js", "        if (global.VTLangPref && typeof global.VTLangPref.resolve === \"function\") return global.VTLangPref.resolve();\n        return localStorage.getItem(\"vt_lang\");", "        return global.VTLangPref.resolve();", "without js/boot-head.js"],
+    ["UL40 the hold before the first paint reads only the browser: a Spanish browser at ?lang=en paints Spanish, then swaps it", "js/boot-head.js", "  if (langPref.resolve() !== \"en\") return;", "  if (fromBrowser(browserTags()) !== \"en\") return;", "es-PE at "],
+    ["UL41 Cmd-click (a Mac's new tab) on a footer language link taken over: it switches this page", "js/app.js", "    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;", "    if (e.button !== 0 || e.ctrlKey || e.shiftKey || e.altKey) return false;", "left to the browser"],
+    ["UL42 Shift-click (a new window) on a footer language link taken over", "js/app.js", "    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;", "    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey) return false;", "left to the browser"],
+    ["UL43 Alt-click (a download) on a footer language link taken over", "js/app.js", "    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;", "    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return false;", "left to the browser"],
+    ["UL44 a click with another button on a footer language link taken over", "js/app.js", "    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;", "    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;", "left to the browser"],
+    ["UL45 a footer language link taken over with no strings to switch with: without js/i18n.js it does nothing", "js/app.js", "    return typeof window.VTI18n?.setLang === \"function\";", "    return true;", "without js/i18n.js a click"],
+    ["UL46 the guide's English half leads back to ./: the guide opened beside an exercise returns in the browser's language", "guide.html", "<a href=\"./?lang=en\" hreflang=\"en\">← Back to the app</a>", "<a href=\"./\">← Back to the app</a>", "guide beside an exercise"],
+    ["UL47 the guide's Spanish half leads back to ./", "guide.html", "<a href=\"./?lang=es\" hreflang=\"es\">← Volver a la app</a>", "<a href=\"./\">← Volver a la app</a>", "guide beside an exercise"],
+    ["UL48 the privacy page's English half leads back to ./", "privacy.html", "<a href=\"./?lang=en\" hreflang=\"en\">← Back to the app</a>", "<a href=\"./\">← Back to the app</a>", "tests/node/hreflang.test.mjs"],
+    ["UL49 the terms' English half has no way back of its own", "terms.html", "        <p style=\"margin-top: 2rem\"><a href=\"./?lang=en\" hreflang=\"en\">← Back to the app</a></p>\n", "", "tests/node/hreflang.test.mjs"],
+    ["UL50 the footer's language pair may split over two lines on a phone", "css/styles.css", "footer.app-footer .footer-langs {\n  white-space: nowrap;\n}", "footer.app-footer .footer-langs {\n}", "pair stays on one line"],
+    ["UL51 the footer's language on screen marked for screen readers only", "css/styles.css", "footer.app-footer a[data-lang-link][aria-current=\"true\"] {\n  color: var(--text);\n  font-weight: 600;\n  text-decoration: none;\n}", "footer.app-footer a[data-lang-link][aria-current=\"true\"] {\n}", "pair stays on one line"],
+    ["UL52 a page back from the back/forward cache keeps the language it was left in", "js/i18n.js", "    if (!e.persisted) return;", "    return;", "back/forward cache"],
+    ["UL53 the language re-decided on every pageshow, a page drawn anew too", "js/i18n.js", "    if (!e.persisted) return;\n", "", "back/forward cache"],
+    ["UL54 a page back from the cache keeps what it shows as a choice", "js/i18n.js", "    if (want !== I18n.lang) I18n.showLang(want);", "    if (want !== I18n.lang) I18n.setLang(want);", "back/forward cache"],
+    ["UL55 the tab's title stays Spanish while an English page is held", "js/boot-head.js", "    titleEl.textContent = titleEl.getAttribute(\"data-en\");\n", "", "title is English while"],
+    ["UL56 the English title left over the Spanish page when the strings never come", "js/boot-head.js", "    if (titleEl) titleEl.textContent = titleEl.getAttribute(\"data-es\");\n", "", "strings never come"],
+    ["UL57 the English title left over the Spanish page when the strings cannot start", "js/i18n-early.js", "    if (title) title.textContent = title.getAttribute(\"data-es\");\n", "", "strings cannot start"],
+    ["UL58 the Spanish hreflang link commented out: Google is told of no Spanish address", "index.html", "    <link rel=\"alternate\" hreflang=\"es\" href=\"https://pillb.github.io/vocal-singing-training/?lang=es\" />", "    <!-- <link rel=\"alternate\" hreflang=\"es\" href=\"https://pillb.github.io/vocal-singing-training/?lang=es\" /> -->", "tests/node/hreflang.test.mjs"],
+    ["UL59 the privacy page's English half stops saying the tab remembers a linked language", "privacy.html", "this tab remembers", "this tab keeps", "tests/node/language-disclosure.test.mjs"],
+    ["UL60 js/boot-head.js keeps the browser's languages, which the privacy page says it never does", "js/boot-head.js", "  var SEEN_KEY = \"vt_lang_seen_v1\";\n", "  var SEEN_KEY = \"vt_lang_seen_v1\";\n  try {\n    localStorage.setItem(\"vt_langs_v1\", browserTags().join(\",\"));\n  } catch (e) {\n    /* */\n  }\n", "tests/node/language-disclosure.test.mjs"]
+  ].map(([name, file, from, to, grep, also]) => ({
+    name,
+    file,
+    from,
+    to,
+    ...(also ? { also } : {}),
+    cmd: grep.startsWith("tests/node/")
+      ? node([grep])
+      : [...PIANO_SPEC.slice(0, 3), "tests/browser-language.spec.js", "--project=chromium", "--workers=4", "--reporter=dot", "-g", grep]
   }))
 };
 
-export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger"];
+export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger", "claims", "path", "curriculum"];
 
 /** What the last failing command printed, so a red baseline in CI says which test failed. */
 let lastFailure = "";

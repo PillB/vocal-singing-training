@@ -803,7 +803,7 @@ window.VT_EXERCISES = {
       ],
       metrics: [
         { id: "maxHold", label: "Longest hold (seconds)", type: "number", target: 15, unit: "s" },
-        { id: "closure", label: "Closure quality", type: "scale", min: 1, max: 5 },
+        { id: "closure", label: "Comfort and ease (self)", type: "scale", min: 1, max: 5 },
         { id: "air", label: "Air dosing (not breathy)", type: "scale", min: 1, max: 5 }
       ],
       audio: { timer: true, record: true, piano: true, refPitch: "A2", pitchViz: true },
@@ -836,7 +836,7 @@ window.VT_EXERCISES = {
       metrics: [
         { id: "reps", label: "Reps completed", type: "number", target: 25, unit: "" },
         { id: "pitchComfort", label: "Pitch comfort", type: "scale", min: 1, max: 5 },
-        { id: "closure", label: "Closure quality", type: "scale", min: 1, max: 5 },
+        { id: "closure", label: "Comfort and ease (self)", type: "scale", min: 1, max: 5 },
         { id: "breathiness", label: "Clarity of tone (5=clear)", type: "scale", min: 1, max: 5 }
       ],
       audio: { timer: true, record: true, piano: true, progressions: true, pitchViz: true },
@@ -860,41 +860,39 @@ window.VT_EXERCISES = {
       number: 3,
       title: "Song Stanzas (your songs)",
       durationMin: 20,
-      original:
-        "Apply technique to song phrases you know: finish each phrase without mid-phrase gasps; dose air; keep intonation.",
-      research:
-        "Early song work should prioritize breath between phrases, air dosing, and clean sound — not ‘pretty’ volume.",
+      original: "Apply one practice focus to a short song phrase in a comfortable key and octave.",
+      research: "Songs combine pitch, rhythm, text and expression. These are teaching tasks, not an automatic measure of artistry or a clinically validated song programme.",
       steps: [
-        "Pick two short phrases/stanzas from songs you know (public-domain or your own lyrics).",
-        "Speak → speak-on-pitch → sing, with piano under you.",
-        "Goal: complete each musical phrase without breathing in the middle.",
-        "Change pitch every couple of words when practicing flexibility; keep closure.",
-        "Log 5 phrase-complete reps per song; use Sustain + pitch graph to settle notes."
+        "Choose a short phrase from the historical score library below or a song of your own.",
+        "Choose a comfortable key and octave. Listen to the melody or play it from the score before singing.",
+        "Tap the pulse, sing on a vowel, then try your own words; work on only one focus at a time.",
+        "Choose breathing pauses for comfort. Shorten the phrase rather than forcing its ending.",
+        "Stop the accompaniment, record a phrase, then listen for your chosen focus and compare a later attempt."
       ],
       tips: [
-        "Priority is correct tools (air, closure, pitch) — not sounding ‘pretty’ yet.",
-        "Breathe between phrases; don’t dump all air on the first word.",
-        "Never sacrifice closure for melody; mid-lower keys protect the voice.",
-        "Discover comfortable body sensations — your voice is a personal instrument."
+        "The A/B chord loops are generic accompaniment, not recordings of the library melodies.",
+        "The pitch graph helps with sustained notes; it does not grade lyrics, rhythm or expression.",
+        "A lower key does not guarantee comfort. Any voice can choose a different key or octave.",
+        "Rest between attempts. Stop for pain, dizziness or hoarseness; do not squeeze for closure."
       ],
       mistakes: [
-        "Breathing mid-phrase from poor air dosing",
-        "Pushing chest too high",
-        "Only memorizing pitch without closure",
-        "Forcing volume with throat instead of support"
+        "Holding breath or forcing a phrase ending",
+        "Choosing key from sex rather than comfort",
+        "Treating a pitch trace as an artistry score",
+        "Playing a reference into the microphone while judging your own take"
       ],
       metrics: [
-        { id: "repsFeel", label: "Song A phrase-complete reps", type: "number", target: 5, unit: "" },
-        { id: "repsBetter", label: "Song B phrase-complete reps", type: "number", target: 5, unit: "" },
+        { id: "repsFeel", label: "Song A short-phrase attempts (self)", type: "number", target: 5, unit: "" },
+        { id: "repsBetter", label: "Song B short-phrase attempts (self)", type: "number", target: 5, unit: "" },
         { id: "accuracy", label: "Note accuracy (self)", type: "scale", min: 1, max: 5 },
-        { id: "closure", label: "Closure quality", type: "scale", min: 1, max: 5 },
-        { id: "phraseBreath", label: "Phrase without a mid-phrase pause", type: "scale", min: 1, max: 5 }
+        { id: "closure", label: "Comfort and ease (self)", type: "scale", min: 1, max: 5 },
+        { id: "phraseBreath", label: "Chosen breathing pauses (self)", type: "scale", min: 1, max: 5 }
       ],
       audio: { timer: true, record: true, piano: true, progressions: true, songs: true, pitchViz: true },
       timerDefaultSec: 1200,
       songs: [
-        { id: "feel", title: "Song A (mid-low range)", keyHint: "Male mid-low friendly key", prog: "songFeel" },
-        { id: "better", title: "Song B (mid-low range)", keyHint: "Male mid-low friendly key", prog: "songBetter" }
+        { id: "feel", title: "Song A (mid-low range)", keyHint: "Choose a comfortable key and octave", prog: "songFeel" },
+        { id: "better", title: "Song B (mid-low range)", keyHint: "Choose a comfortable key and octave", prog: "songBetter" }
       ]
     },
     {
@@ -1676,17 +1674,17 @@ window.VT_EXERCISES = {
       durationMin: 5,
       original: "Start tone without glottal slam or breathy h.",
       research:
-        "Balanced onset (not hard glottal, not aspirate) is core healthy phonation; fry→tone can assist finding it.",
+        "This task explores an easy onset; the pitch trace cannot diagnose vocal-fold closure or voice health.",
       steps: [
         "Practice silent inhale, then easy /A/ as if continuing a thought.",
-        "Contrast: 2 hard glottal ‘uh’ (too pressed) vs 2 breathy ‘ha’ (too airy) vs 2 easy onsets.",
+        "Try a few gentle vowel starts at a comfortable pitch; rest between attempts. Do not demonstrate a forced glottal attack.",
         "Match piano pitch with easy onset; hold 3–5s (sustain).",
         "10 easy onsets across a few pitches."
       ],
       tips: [
         "Think ‘speak the vowel’ more than ‘attack the note’.",
-        "Fry can locate closure, then immediately ease into tone.",
-        "Visualizer should show quick settle, not wild attack spike only."
+        "Stop if the onset feels pressed, painful or persistently hoarse; do not squeeze to seek closure.",
+        "Use listening and comfort to review the onset; the pitch graph does not measure closure."
       ],
       mistakes: ["Hard glottal punches", "Chronic breathy starts", "Tension in jaw/tongue"],
       metrics: [

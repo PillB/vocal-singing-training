@@ -1,0 +1,2885 @@
+{
+"note": "Blind id -> concept, language and respondent. Written when the batches were shuffled; the coders and raters saw only the blind id and the answer text.",
+"key": {
+"x001": {
+"concept": "C4",
+"id": "R43",
+"lang": "es"
+},
+"x002": {
+"concept": "C3",
+"id": "R21",
+"lang": "es"
+},
+"x003": {
+"concept": "C4",
+"id": "R15",
+"lang": "es"
+},
+"x004": {
+"concept": "C2",
+"id": "R44",
+"lang": "es"
+},
+"x005": {
+"concept": "C0",
+"id": "R41",
+"lang": "en"
+},
+"x006": {
+"concept": "C2",
+"id": "R41",
+"lang": "en"
+},
+"x007": {
+"concept": "C5",
+"id": "R33",
+"lang": "es"
+},
+"x008": {
+"concept": "N",
+"id": "R10",
+"lang": "en"
+},
+"x009": {
+"concept": "C2",
+"id": "R19",
+"lang": "en"
+},
+"x010": {
+"concept": "C1",
+"id": "R07",
+"lang": "es"
+},
+"x011": {
+"concept": "C0",
+"id": "R18",
+"lang": "en"
+},
+"x012": {
+"concept": "C2",
+"id": "R28",
+"lang": "es"
+},
+"x013": {
+"concept": "C0p",
+"id": "R10",
+"lang": "en"
+},
+"x014": {
+"concept": "N",
+"id": "R42",
+"lang": "en"
+},
+"x015": {
+"concept": "C3",
+"id": "R31",
+"lang": "es"
+},
+"x016": {
+"concept": "N",
+"id": "R17",
+"lang": "es"
+},
+"x017": {
+"concept": "C0p",
+"id": "R05",
+"lang": "es"
+},
+"x018": {
+"concept": "C2",
+"id": "R49",
+"lang": "es"
+},
+"x019": {
+"concept": "C5",
+"id": "R44",
+"lang": "es"
+},
+"x020": {
+"concept": "C2",
+"id": "R06",
+"lang": "es"
+},
+"x021": {
+"concept": "C1",
+"id": "R09",
+"lang": "es"
+},
+"x022": {
+"concept": "P",
+"id": "R45",
+"lang": "en"
+},
+"x023": {
+"concept": "P",
+"id": "R05",
+"lang": "es"
+},
+"x024": {
+"concept": "C1",
+"id": "R45",
+"lang": "en"
+},
+"x025": {
+"concept": "C4",
+"id": "R52",
+"lang": "es"
+},
+"x026": {
+"concept": "C4",
+"id": "R18",
+"lang": "en"
+},
+"x027": {
+"concept": "C1",
+"id": "R50",
+"lang": "es"
+},
+"x028": {
+"concept": "P",
+"id": "R37",
+"lang": "en"
+},
+"x029": {
+"concept": "C3",
+"id": "R48",
+"lang": "es"
+},
+"x030": {
+"concept": "P",
+"id": "R23",
+"lang": "en"
+},
+"x031": {
+"concept": "C0",
+"id": "R49",
+"lang": "es"
+},
+"x032": {
+"concept": "P",
+"id": "R47",
+"lang": "en"
+},
+"x033": {
+"concept": "C0p",
+"id": "R07",
+"lang": "es"
+},
+"x034": {
+"concept": "C1",
+"id": "R17",
+"lang": "es"
+},
+"x035": {
+"concept": "P",
+"id": "R03",
+"lang": "es"
+},
+"x036": {
+"concept": "C0p",
+"id": "R34",
+"lang": "es"
+},
+"x037": {
+"concept": "C3",
+"id": "R13",
+"lang": "es"
+},
+"x038": {
+"concept": "N",
+"id": "R09",
+"lang": "es"
+},
+"x039": {
+"concept": "C0p",
+"id": "R45",
+"lang": "en"
+},
+"x040": {
+"concept": "N",
+"id": "R14",
+"lang": "es"
+},
+"x041": {
+"concept": "C3",
+"id": "R07",
+"lang": "es"
+},
+"x042": {
+"concept": "C3",
+"id": "R62",
+"lang": "es"
+},
+"x043": {
+"concept": "C1",
+"id": "R56",
+"lang": "es"
+},
+"x044": {
+"concept": "N",
+"id": "R48",
+"lang": "es"
+},
+"x045": {
+"concept": "N",
+"id": "R56",
+"lang": "es"
+},
+"x046": {
+"concept": "C1",
+"id": "R15",
+"lang": "es"
+},
+"x047": {
+"concept": "P",
+"id": "R55",
+"lang": "en"
+},
+"x048": {
+"concept": "C4",
+"id": "R06",
+"lang": "es"
+},
+"x049": {
+"concept": "C0p",
+"id": "R04",
+"lang": "es"
+},
+"x050": {
+"concept": "C1",
+"id": "R18",
+"lang": "en"
+},
+"x051": {
+"concept": "C5",
+"id": "R21",
+"lang": "es"
+},
+"x052": {
+"concept": "C3",
+"id": "R53",
+"lang": "es"
+},
+"x053": {
+"concept": "C0",
+"id": "R36",
+"lang": "en"
+},
+"x054": {
+"concept": "C1",
+"id": "R34",
+"lang": "es"
+},
+"x055": {
+"concept": "C4",
+"id": "R19",
+"lang": "en"
+},
+"x056": {
+"concept": "P",
+"id": "R56",
+"lang": "es"
+},
+"x057": {
+"concept": "C2",
+"id": "R50",
+"lang": "es"
+},
+"x058": {
+"concept": "C1",
+"id": "R40",
+"lang": "es"
+},
+"x059": {
+"concept": "C5",
+"id": "R49",
+"lang": "es"
+},
+"x060": {
+"concept": "C3",
+"id": "R02",
+"lang": "en"
+},
+"x061": {
+"concept": "N",
+"id": "R41",
+"lang": "en"
+},
+"x062": {
+"concept": "C0",
+"id": "R51",
+"lang": "es"
+},
+"x063": {
+"concept": "C1",
+"id": "R43",
+"lang": "es"
+},
+"x064": {
+"concept": "C0",
+"id": "R55",
+"lang": "en"
+},
+"x065": {
+"concept": "C4",
+"id": "R31",
+"lang": "es"
+},
+"x066": {
+"concept": "C2",
+"id": "R48",
+"lang": "es"
+},
+"x067": {
+"concept": "N",
+"id": "R20",
+"lang": "es"
+},
+"x068": {
+"concept": "C5",
+"id": "R46",
+"lang": "es"
+},
+"x069": {
+"concept": "P",
+"id": "R44",
+"lang": "es"
+},
+"x070": {
+"concept": "C0",
+"id": "R25",
+"lang": "en"
+},
+"x071": {
+"concept": "C1",
+"id": "R39",
+"lang": "es"
+},
+"x072": {
+"concept": "C4",
+"id": "R23",
+"lang": "en"
+},
+"x073": {
+"concept": "C0",
+"id": "R50",
+"lang": "es"
+},
+"x074": {
+"concept": "C0",
+"id": "R06",
+"lang": "es"
+},
+"x075": {
+"concept": "C2",
+"id": "R11",
+"lang": "en"
+},
+"x076": {
+"concept": "C2",
+"id": "R36",
+"lang": "en"
+},
+"x077": {
+"concept": "C3",
+"id": "R27",
+"lang": "es"
+},
+"x078": {
+"concept": "P",
+"id": "R63",
+"lang": "en"
+},
+"x079": {
+"concept": "C1",
+"id": "R23",
+"lang": "en"
+},
+"x080": {
+"concept": "C2",
+"id": "R22",
+"lang": "es"
+},
+"x081": {
+"concept": "N",
+"id": "R58",
+"lang": "en"
+},
+"x082": {
+"concept": "C5",
+"id": "R43",
+"lang": "es"
+},
+"x083": {
+"concept": "C1",
+"id": "R57",
+"lang": "es"
+},
+"x084": {
+"concept": "C0",
+"id": "R29",
+"lang": "es"
+},
+"x085": {
+"concept": "C0p",
+"id": "R38",
+"lang": "es"
+},
+"x086": {
+"concept": "N",
+"id": "R03",
+"lang": "es"
+},
+"x087": {
+"concept": "C1",
+"id": "R13",
+"lang": "es"
+},
+"x088": {
+"concept": "N",
+"id": "R21",
+"lang": "es"
+},
+"x089": {
+"concept": "P",
+"id": "R52",
+"lang": "es"
+},
+"x090": {
+"concept": "P",
+"id": "R24",
+"lang": "es"
+},
+"x091": {
+"concept": "C0p",
+"id": "R30",
+"lang": "es"
+},
+"x092": {
+"concept": "N",
+"id": "R07",
+"lang": "es"
+},
+"x093": {
+"concept": "N",
+"id": "R27",
+"lang": "es"
+},
+"x094": {
+"concept": "C0p",
+"id": "R46",
+"lang": "es"
+},
+"x095": {
+"concept": "C5",
+"id": "R36",
+"lang": "en"
+},
+"x096": {
+"concept": "C0",
+"id": "R07",
+"lang": "es"
+},
+"x097": {
+"concept": "N",
+"id": "R30",
+"lang": "es"
+},
+"x098": {
+"concept": "C4",
+"id": "R04",
+"lang": "es"
+},
+"x099": {
+"concept": "C0p",
+"id": "R54",
+"lang": "en"
+},
+"x100": {
+"concept": "C2",
+"id": "R57",
+"lang": "es"
+},
+"x101": {
+"concept": "N",
+"id": "R34",
+"lang": "es"
+},
+"x102": {
+"concept": "N",
+"id": "R19",
+"lang": "en"
+},
+"x103": {
+"concept": "C4",
+"id": "R05",
+"lang": "es"
+},
+"x104": {
+"concept": "N",
+"id": "R16",
+"lang": "es"
+},
+"x105": {
+"concept": "C0p",
+"id": "R15",
+"lang": "es"
+},
+"x106": {
+"concept": "C4",
+"id": "R62",
+"lang": "es"
+},
+"x107": {
+"concept": "C5",
+"id": "R17",
+"lang": "es"
+},
+"x108": {
+"concept": "C5",
+"id": "R50",
+"lang": "es"
+},
+"x109": {
+"concept": "C0",
+"id": "R12",
+"lang": "es"
+},
+"x110": {
+"concept": "N",
+"id": "R22",
+"lang": "es"
+},
+"x111": {
+"concept": "C2",
+"id": "R32",
+"lang": "en"
+},
+"x112": {
+"concept": "C5",
+"id": "R13",
+"lang": "es"
+},
+"x113": {
+"concept": "C2",
+"id": "R08",
+"lang": "en"
+},
+"x114": {
+"concept": "C1",
+"id": "R19",
+"lang": "en"
+},
+"x115": {
+"concept": "C2",
+"id": "R51",
+"lang": "es"
+},
+"x116": {
+"concept": "C3",
+"id": "R59",
+"lang": "es"
+},
+"x117": {
+"concept": "C5",
+"id": "R15",
+"lang": "es"
+},
+"x118": {
+"concept": "C1",
+"id": "R26",
+"lang": "en"
+},
+"x119": {
+"concept": "C1",
+"id": "R32",
+"lang": "en"
+},
+"x120": {
+"concept": "N",
+"id": "R62",
+"lang": "es"
+},
+"x121": {
+"concept": "P",
+"id": "R21",
+"lang": "es"
+},
+"x122": {
+"concept": "C0",
+"id": "R56",
+"lang": "es"
+},
+"x123": {
+"concept": "N",
+"id": "R06",
+"lang": "es"
+},
+"x124": {
+"concept": "C1",
+"id": "R59",
+"lang": "es"
+},
+"x125": {
+"concept": "C3",
+"id": "R47",
+"lang": "en"
+},
+"x126": {
+"concept": "C0",
+"id": "R20",
+"lang": "es"
+},
+"x127": {
+"concept": "C0p",
+"id": "R18",
+"lang": "en"
+},
+"x128": {
+"concept": "C3",
+"id": "R52",
+"lang": "es"
+},
+"x129": {
+"concept": "C1",
+"id": "R42",
+"lang": "en"
+},
+"x130": {
+"concept": "C0p",
+"id": "R61",
+"lang": "es"
+},
+"x131": {
+"concept": "C2",
+"id": "R04",
+"lang": "es"
+},
+"x132": {
+"concept": "C0p",
+"id": "R64",
+"lang": "en"
+},
+"x133": {
+"concept": "P",
+"id": "R58",
+"lang": "en"
+},
+"x134": {
+"concept": "C2",
+"id": "R18",
+"lang": "en"
+},
+"x135": {
+"concept": "N",
+"id": "R37",
+"lang": "en"
+},
+"x136": {
+"concept": "C5",
+"id": "R56",
+"lang": "es"
+},
+"x137": {
+"concept": "P",
+"id": "R51",
+"lang": "es"
+},
+"x138": {
+"concept": "P",
+"id": "R20",
+"lang": "es"
+},
+"x139": {
+"concept": "P",
+"id": "R07",
+"lang": "es"
+},
+"x140": {
+"concept": "N",
+"id": "R52",
+"lang": "es"
+},
+"x141": {
+"concept": "P",
+"id": "R32",
+"lang": "en"
+},
+"x142": {
+"concept": "P",
+"id": "R06",
+"lang": "es"
+},
+"x143": {
+"concept": "C1",
+"id": "R61",
+"lang": "es"
+},
+"x144": {
+"concept": "C3",
+"id": "R35",
+"lang": "en"
+},
+"x145": {
+"concept": "C2",
+"id": "R02",
+"lang": "en"
+},
+"x146": {
+"concept": "C0",
+"id": "R22",
+"lang": "es"
+},
+"x147": {
+"concept": "C2",
+"id": "R13",
+"lang": "es"
+},
+"x148": {
+"concept": "C4",
+"id": "R30",
+"lang": "es"
+},
+"x149": {
+"concept": "C0",
+"id": "R60",
+"lang": "es"
+},
+"x150": {
+"concept": "N",
+"id": "R08",
+"lang": "en"
+},
+"x151": {
+"concept": "C2",
+"id": "R16",
+"lang": "es"
+},
+"x152": {
+"concept": "C4",
+"id": "R24",
+"lang": "es"
+},
+"x153": {
+"concept": "C5",
+"id": "R60",
+"lang": "es"
+},
+"x154": {
+"concept": "C2",
+"id": "R15",
+"lang": "es"
+},
+"x155": {
+"concept": "C1",
+"id": "R02",
+"lang": "en"
+},
+"x156": {
+"concept": "N",
+"id": "R63",
+"lang": "en"
+},
+"x157": {
+"concept": "C0",
+"id": "R43",
+"lang": "es"
+},
+"x158": {
+"concept": "C0",
+"id": "R01",
+"lang": "en"
+},
+"x159": {
+"concept": "C4",
+"id": "R08",
+"lang": "en"
+},
+"x160": {
+"concept": "C0",
+"id": "R58",
+"lang": "en"
+},
+"x161": {
+"concept": "C5",
+"id": "R27",
+"lang": "es"
+},
+"x162": {
+"concept": "C3",
+"id": "R39",
+"lang": "es"
+},
+"x163": {
+"concept": "C2",
+"id": "R35",
+"lang": "en"
+},
+"x164": {
+"concept": "P",
+"id": "R38",
+"lang": "es"
+},
+"x165": {
+"concept": "C4",
+"id": "R03",
+"lang": "es"
+},
+"x166": {
+"concept": "C0",
+"id": "R46",
+"lang": "es"
+},
+"x167": {
+"concept": "C3",
+"id": "R46",
+"lang": "es"
+},
+"x168": {
+"concept": "C5",
+"id": "R23",
+"lang": "en"
+},
+"x169": {
+"concept": "C1",
+"id": "R46",
+"lang": "es"
+},
+"x170": {
+"concept": "C2",
+"id": "R23",
+"lang": "en"
+},
+"x171": {
+"concept": "C3",
+"id": "R41",
+"lang": "en"
+},
+"x172": {
+"concept": "C4",
+"id": "R28",
+"lang": "es"
+},
+"x173": {
+"concept": "C0p",
+"id": "R20",
+"lang": "es"
+},
+"x174": {
+"concept": "C0p",
+"id": "R52",
+"lang": "es"
+},
+"x175": {
+"concept": "C3",
+"id": "R54",
+"lang": "en"
+},
+"x176": {
+"concept": "C4",
+"id": "R36",
+"lang": "en"
+},
+"x177": {
+"concept": "P",
+"id": "R43",
+"lang": "es"
+},
+"x178": {
+"concept": "C0p",
+"id": "R19",
+"lang": "en"
+},
+"x179": {
+"concept": "C2",
+"id": "R63",
+"lang": "en"
+},
+"x180": {
+"concept": "C2",
+"id": "R21",
+"lang": "es"
+},
+"x181": {
+"concept": "P",
+"id": "R34",
+"lang": "es"
+},
+"x182": {
+"concept": "C0",
+"id": "R35",
+"lang": "en"
+},
+"x183": {
+"concept": "C0",
+"id": "R47",
+"lang": "en"
+},
+"x184": {
+"concept": "N",
+"id": "R31",
+"lang": "es"
+},
+"x185": {
+"concept": "N",
+"id": "R50",
+"lang": "es"
+},
+"x186": {
+"concept": "C4",
+"id": "R17",
+"lang": "es"
+},
+"x187": {
+"concept": "C5",
+"id": "R53",
+"lang": "es"
+},
+"x188": {
+"concept": "P",
+"id": "R62",
+"lang": "es"
+},
+"x189": {
+"concept": "C4",
+"id": "R55",
+"lang": "en"
+},
+"x190": {
+"concept": "P",
+"id": "R29",
+"lang": "es"
+},
+"x191": {
+"concept": "P",
+"id": "R25",
+"lang": "en"
+},
+"x192": {
+"concept": "C2",
+"id": "R17",
+"lang": "es"
+},
+"x193": {
+"concept": "C5",
+"id": "R47",
+"lang": "en"
+},
+"x194": {
+"concept": "C5",
+"id": "R32",
+"lang": "en"
+},
+"x195": {
+"concept": "C5",
+"id": "R39",
+"lang": "es"
+},
+"x196": {
+"concept": "C5",
+"id": "R51",
+"lang": "es"
+},
+"x197": {
+"concept": "C2",
+"id": "R56",
+"lang": "es"
+},
+"x198": {
+"concept": "C3",
+"id": "R34",
+"lang": "es"
+},
+"x199": {
+"concept": "C5",
+"id": "R08",
+"lang": "en"
+},
+"x200": {
+"concept": "C4",
+"id": "R25",
+"lang": "en"
+},
+"x201": {
+"concept": "C0",
+"id": "R14",
+"lang": "es"
+},
+"x202": {
+"concept": "C0p",
+"id": "R03",
+"lang": "es"
+},
+"x203": {
+"concept": "C5",
+"id": "R57",
+"lang": "es"
+},
+"x204": {
+"concept": "C5",
+"id": "R05",
+"lang": "es"
+},
+"x205": {
+"concept": "C3",
+"id": "R09",
+"lang": "es"
+},
+"x206": {
+"concept": "C4",
+"id": "R29",
+"lang": "es"
+},
+"x207": {
+"concept": "C5",
+"id": "R37",
+"lang": "en"
+},
+"x208": {
+"concept": "C0",
+"id": "R11",
+"lang": "en"
+},
+"x209": {
+"concept": "C5",
+"id": "R26",
+"lang": "en"
+},
+"x210": {
+"concept": "C0",
+"id": "R44",
+"lang": "es"
+},
+"x211": {
+"concept": "C0p",
+"id": "R01",
+"lang": "en"
+},
+"x212": {
+"concept": "C5",
+"id": "R30",
+"lang": "es"
+},
+"x213": {
+"concept": "C4",
+"id": "R47",
+"lang": "en"
+},
+"x214": {
+"concept": "C2",
+"id": "R14",
+"lang": "es"
+},
+"x215": {
+"concept": "C4",
+"id": "R10",
+"lang": "en"
+},
+"x216": {
+"concept": "P",
+"id": "R57",
+"lang": "es"
+},
+"x217": {
+"concept": "N",
+"id": "R18",
+"lang": "en"
+},
+"x218": {
+"concept": "C5",
+"id": "R45",
+"lang": "en"
+},
+"x219": {
+"concept": "P",
+"id": "R33",
+"lang": "es"
+},
+"x220": {
+"concept": "N",
+"id": "R05",
+"lang": "es"
+},
+"x221": {
+"concept": "P",
+"id": "R42",
+"lang": "en"
+},
+"x222": {
+"concept": "C0",
+"id": "R48",
+"lang": "es"
+},
+"x223": {
+"concept": "C3",
+"id": "R44",
+"lang": "es"
+},
+"x224": {
+"concept": "C3",
+"id": "R58",
+"lang": "en"
+},
+"x225": {
+"concept": "C2",
+"id": "R37",
+"lang": "en"
+},
+"x226": {
+"concept": "C0p",
+"id": "R49",
+"lang": "es"
+},
+"x227": {
+"concept": "P",
+"id": "R19",
+"lang": "en"
+},
+"x228": {
+"concept": "C0",
+"id": "R38",
+"lang": "es"
+},
+"x229": {
+"concept": "C3",
+"id": "R06",
+"lang": "es"
+},
+"x230": {
+"concept": "C5",
+"id": "R24",
+"lang": "es"
+},
+"x231": {
+"concept": "N",
+"id": "R59",
+"lang": "es"
+},
+"x232": {
+"concept": "C3",
+"id": "R17",
+"lang": "es"
+},
+"x233": {
+"concept": "C3",
+"id": "R05",
+"lang": "es"
+},
+"x234": {
+"concept": "N",
+"id": "R35",
+"lang": "en"
+},
+"x235": {
+"concept": "C5",
+"id": "R42",
+"lang": "en"
+},
+"x236": {
+"concept": "C3",
+"id": "R26",
+"lang": "en"
+},
+"x237": {
+"concept": "C1",
+"id": "R60",
+"lang": "es"
+},
+"x238": {
+"concept": "C4",
+"id": "R14",
+"lang": "es"
+},
+"x239": {
+"concept": "P",
+"id": "R36",
+"lang": "en"
+},
+"x240": {
+"concept": "C3",
+"id": "R01",
+"lang": "en"
+},
+"x241": {
+"concept": "C0",
+"id": "R62",
+"lang": "es"
+},
+"x242": {
+"concept": "C0p",
+"id": "R28",
+"lang": "es"
+},
+"x243": {
+"concept": "C0p",
+"id": "R23",
+"lang": "en"
+},
+"x244": {
+"concept": "N",
+"id": "R13",
+"lang": "es"
+},
+"x245": {
+"concept": "C2",
+"id": "R34",
+"lang": "es"
+},
+"x246": {
+"concept": "C3",
+"id": "R42",
+"lang": "en"
+},
+"x247": {
+"concept": "C0",
+"id": "R45",
+"lang": "en"
+},
+"x248": {
+"concept": "C2",
+"id": "R12",
+"lang": "es"
+},
+"x249": {
+"concept": "C5",
+"id": "R64",
+"lang": "en"
+},
+"x250": {
+"concept": "C2",
+"id": "R27",
+"lang": "es"
+},
+"x251": {
+"concept": "C2",
+"id": "R39",
+"lang": "es"
+},
+"x252": {
+"concept": "C4",
+"id": "R09",
+"lang": "es"
+},
+"x253": {
+"concept": "P",
+"id": "R41",
+"lang": "en"
+},
+"x254": {
+"concept": "C2",
+"id": "R01",
+"lang": "en"
+},
+"x255": {
+"concept": "N",
+"id": "R12",
+"lang": "es"
+},
+"x256": {
+"concept": "P",
+"id": "R50",
+"lang": "es"
+},
+"x257": {
+"concept": "N",
+"id": "R24",
+"lang": "es"
+},
+"x258": {
+"concept": "C0p",
+"id": "R09",
+"lang": "es"
+},
+"x259": {
+"concept": "C3",
+"id": "R15",
+"lang": "es"
+},
+"x260": {
+"concept": "C5",
+"id": "R02",
+"lang": "en"
+},
+"x261": {
+"concept": "N",
+"id": "R40",
+"lang": "es"
+},
+"x262": {
+"concept": "C0p",
+"id": "R42",
+"lang": "en"
+},
+"x263": {
+"concept": "C2",
+"id": "R40",
+"lang": "es"
+},
+"x264": {
+"concept": "C0",
+"id": "R34",
+"lang": "es"
+},
+"x265": {
+"concept": "C5",
+"id": "R29",
+"lang": "es"
+},
+"x266": {
+"concept": "P",
+"id": "R31",
+"lang": "es"
+},
+"x267": {
+"concept": "C1",
+"id": "R03",
+"lang": "es"
+},
+"x268": {
+"concept": "C0p",
+"id": "R37",
+"lang": "en"
+},
+"x269": {
+"concept": "C4",
+"id": "R35",
+"lang": "en"
+},
+"x270": {
+"concept": "C1",
+"id": "R48",
+"lang": "es"
+},
+"x271": {
+"concept": "C2",
+"id": "R43",
+"lang": "es"
+},
+"x272": {
+"concept": "C0",
+"id": "R10",
+"lang": "en"
+},
+"x273": {
+"concept": "C0",
+"id": "R61",
+"lang": "es"
+},
+"x274": {
+"concept": "C0p",
+"id": "R13",
+"lang": "es"
+},
+"x275": {
+"concept": "C5",
+"id": "R09",
+"lang": "es"
+},
+"x276": {
+"concept": "C0",
+"id": "R02",
+"lang": "en"
+},
+"x277": {
+"concept": "C3",
+"id": "R29",
+"lang": "es"
+},
+"x278": {
+"concept": "C5",
+"id": "R41",
+"lang": "en"
+},
+"x279": {
+"concept": "C5",
+"id": "R01",
+"lang": "en"
+},
+"x280": {
+"concept": "C4",
+"id": "R41",
+"lang": "en"
+},
+"x281": {
+"concept": "C4",
+"id": "R46",
+"lang": "es"
+},
+"x282": {
+"concept": "C0p",
+"id": "R43",
+"lang": "es"
+},
+"x283": {
+"concept": "P",
+"id": "R49",
+"lang": "es"
+},
+"x284": {
+"concept": "C1",
+"id": "R31",
+"lang": "es"
+},
+"x285": {
+"concept": "C1",
+"id": "R44",
+"lang": "es"
+},
+"x286": {
+"concept": "C5",
+"id": "R28",
+"lang": "es"
+},
+"x287": {
+"concept": "C0p",
+"id": "R32",
+"lang": "en"
+},
+"x288": {
+"concept": "P",
+"id": "R16",
+"lang": "es"
+},
+"x289": {
+"concept": "P",
+"id": "R27",
+"lang": "es"
+},
+"x290": {
+"concept": "C2",
+"id": "R55",
+"lang": "en"
+},
+"x291": {
+"concept": "N",
+"id": "R44",
+"lang": "es"
+},
+"x292": {
+"concept": "C1",
+"id": "R21",
+"lang": "es"
+},
+"x293": {
+"concept": "N",
+"id": "R55",
+"lang": "en"
+},
+"x294": {
+"concept": "C1",
+"id": "R53",
+"lang": "es"
+},
+"x295": {
+"concept": "C0p",
+"id": "R36",
+"lang": "en"
+},
+"x296": {
+"concept": "N",
+"id": "R53",
+"lang": "es"
+},
+"x297": {
+"concept": "C3",
+"id": "R25",
+"lang": "en"
+},
+"x298": {
+"concept": "C0p",
+"id": "R60",
+"lang": "es"
+},
+"x299": {
+"concept": "C2",
+"id": "R64",
+"lang": "en"
+},
+"x300": {
+"concept": "C4",
+"id": "R57",
+"lang": "es"
+},
+"x301": {
+"concept": "C5",
+"id": "R48",
+"lang": "es"
+},
+"x302": {
+"concept": "N",
+"id": "R57",
+"lang": "es"
+},
+"x303": {
+"concept": "C3",
+"id": "R24",
+"lang": "es"
+},
+"x304": {
+"concept": "C1",
+"id": "R55",
+"lang": "en"
+},
+"x305": {
+"concept": "C0",
+"id": "R28",
+"lang": "es"
+},
+"x306": {
+"concept": "C1",
+"id": "R22",
+"lang": "es"
+},
+"x307": {
+"concept": "P",
+"id": "R64",
+"lang": "en"
+},
+"x308": {
+"concept": "C0",
+"id": "R57",
+"lang": "es"
+},
+"x309": {
+"concept": "C4",
+"id": "R48",
+"lang": "es"
+},
+"x310": {
+"concept": "C0",
+"id": "R53",
+"lang": "es"
+},
+"x311": {
+"concept": "C1",
+"id": "R20",
+"lang": "es"
+},
+"x312": {
+"concept": "C5",
+"id": "R63",
+"lang": "en"
+},
+"x313": {
+"concept": "C4",
+"id": "R58",
+"lang": "en"
+},
+"x314": {
+"concept": "C3",
+"id": "R11",
+"lang": "en"
+},
+"x315": {
+"concept": "C3",
+"id": "R03",
+"lang": "es"
+},
+"x316": {
+"concept": "C0p",
+"id": "R58",
+"lang": "en"
+},
+"x317": {
+"concept": "C4",
+"id": "R34",
+"lang": "es"
+},
+"x318": {
+"concept": "P",
+"id": "R15",
+"lang": "es"
+},
+"x319": {
+"concept": "C0",
+"id": "R09",
+"lang": "es"
+},
+"x320": {
+"concept": "C0p",
+"id": "R11",
+"lang": "en"
+},
+"x321": {
+"concept": "C2",
+"id": "R42",
+"lang": "en"
+},
+"x322": {
+"concept": "N",
+"id": "R51",
+"lang": "es"
+},
+"x323": {
+"concept": "C5",
+"id": "R52",
+"lang": "es"
+},
+"x324": {
+"concept": "C0",
+"id": "R64",
+"lang": "en"
+},
+"x325": {
+"concept": "C0p",
+"id": "R26",
+"lang": "en"
+},
+"x326": {
+"concept": "C1",
+"id": "R63",
+"lang": "en"
+},
+"x327": {
+"concept": "C0",
+"id": "R39",
+"lang": "es"
+},
+"x328": {
+"concept": "C0",
+"id": "R63",
+"lang": "en"
+},
+"x329": {
+"concept": "C2",
+"id": "R26",
+"lang": "en"
+},
+"x330": {
+"concept": "C1",
+"id": "R36",
+"lang": "en"
+},
+"x331": {
+"concept": "C3",
+"id": "R50",
+"lang": "es"
+},
+"x332": {
+"concept": "N",
+"id": "R02",
+"lang": "en"
+},
+"x333": {
+"concept": "C1",
+"id": "R10",
+"lang": "en"
+},
+"x334": {
+"concept": "C0",
+"id": "R17",
+"lang": "es"
+},
+"x335": {
+"concept": "C2",
+"id": "R47",
+"lang": "en"
+},
+"x336": {
+"concept": "C2",
+"id": "R30",
+"lang": "es"
+},
+"x337": {
+"concept": "N",
+"id": "R43",
+"lang": "es"
+},
+"x338": {
+"concept": "C5",
+"id": "R14",
+"lang": "es"
+},
+"x339": {
+"concept": "C3",
+"id": "R56",
+"lang": "es"
+},
+"x340": {
+"concept": "P",
+"id": "R30",
+"lang": "es"
+},
+"x341": {
+"concept": "C4",
+"id": "R50",
+"lang": "es"
+},
+"x342": {
+"concept": "C1",
+"id": "R04",
+"lang": "es"
+},
+"x343": {
+"concept": "C1",
+"id": "R35",
+"lang": "en"
+},
+"x344": {
+"concept": "C5",
+"id": "R55",
+"lang": "en"
+},
+"x345": {
+"concept": "C4",
+"id": "R49",
+"lang": "es"
+},
+"x346": {
+"concept": "C1",
+"id": "R54",
+"lang": "en"
+},
+"x347": {
+"concept": "C3",
+"id": "R28",
+"lang": "es"
+},
+"x348": {
+"concept": "C0",
+"id": "R37",
+"lang": "en"
+},
+"x349": {
+"concept": "C4",
+"id": "R44",
+"lang": "es"
+},
+"x350": {
+"concept": "C1",
+"id": "R16",
+"lang": "es"
+},
+"x351": {
+"concept": "C4",
+"id": "R01",
+"lang": "en"
+},
+"x352": {
+"concept": "C3",
+"id": "R45",
+"lang": "en"
+},
+"x353": {
+"concept": "C4",
+"id": "R20",
+"lang": "es"
+},
+"x354": {
+"concept": "C1",
+"id": "R62",
+"lang": "es"
+},
+"x355": {
+"concept": "C5",
+"id": "R38",
+"lang": "es"
+},
+"x356": {
+"concept": "C2",
+"id": "R29",
+"lang": "es"
+},
+"x357": {
+"concept": "C0p",
+"id": "R59",
+"lang": "es"
+},
+"x358": {
+"concept": "C5",
+"id": "R12",
+"lang": "es"
+},
+"x359": {
+"concept": "C0p",
+"id": "R08",
+"lang": "en"
+},
+"x360": {
+"concept": "C0",
+"id": "R15",
+"lang": "es"
+},
+"x361": {
+"concept": "C3",
+"id": "R36",
+"lang": "en"
+},
+"x362": {
+"concept": "C0",
+"id": "R30",
+"lang": "es"
+},
+"x363": {
+"concept": "N",
+"id": "R54",
+"lang": "en"
+},
+"x364": {
+"concept": "C2",
+"id": "R05",
+"lang": "es"
+},
+"x365": {
+"concept": "N",
+"id": "R01",
+"lang": "en"
+},
+"x366": {
+"concept": "C0p",
+"id": "R41",
+"lang": "en"
+},
+"x367": {
+"concept": "C1",
+"id": "R14",
+"lang": "es"
+},
+"x368": {
+"concept": "C1",
+"id": "R38",
+"lang": "es"
+},
+"x369": {
+"concept": "C0p",
+"id": "R51",
+"lang": "es"
+},
+"x370": {
+"concept": "C5",
+"id": "R19",
+"lang": "en"
+},
+"x371": {
+"concept": "C0p",
+"id": "R62",
+"lang": "es"
+},
+"x372": {
+"concept": "C0p",
+"id": "R27",
+"lang": "es"
+},
+"x373": {
+"concept": "N",
+"id": "R38",
+"lang": "es"
+},
+"x374": {
+"concept": "C0",
+"id": "R08",
+"lang": "en"
+},
+"x375": {
+"concept": "P",
+"id": "R46",
+"lang": "es"
+},
+"x376": {
+"concept": "C3",
+"id": "R60",
+"lang": "es"
+},
+"x377": {
+"concept": "C4",
+"id": "R11",
+"lang": "en"
+},
+"x378": {
+"concept": "C0",
+"id": "R54",
+"lang": "en"
+},
+"x379": {
+"concept": "C2",
+"id": "R25",
+"lang": "en"
+},
+"x380": {
+"concept": "C1",
+"id": "R05",
+"lang": "es"
+},
+"x381": {
+"concept": "C4",
+"id": "R21",
+"lang": "es"
+},
+"x382": {
+"concept": "C0p",
+"id": "R33",
+"lang": "es"
+},
+"x383": {
+"concept": "P",
+"id": "R09",
+"lang": "es"
+},
+"x384": {
+"concept": "C5",
+"id": "R34",
+"lang": "es"
+},
+"x385": {
+"concept": "C2",
+"id": "R38",
+"lang": "es"
+},
+"x386": {
+"concept": "C3",
+"id": "R20",
+"lang": "es"
+},
+"x387": {
+"concept": "C0p",
+"id": "R44",
+"lang": "es"
+},
+"x388": {
+"concept": "N",
+"id": "R49",
+"lang": "es"
+},
+"x389": {
+"concept": "C1",
+"id": "R11",
+"lang": "en"
+},
+"x390": {
+"concept": "N",
+"id": "R28",
+"lang": "es"
+},
+"x391": {
+"concept": "C3",
+"id": "R64",
+"lang": "en"
+},
+"x392": {
+"concept": "C3",
+"id": "R38",
+"lang": "es"
+},
+"x393": {
+"concept": "P",
+"id": "R13",
+"lang": "es"
+},
+"x394": {
+"concept": "C5",
+"id": "R62",
+"lang": "es"
+},
+"x395": {
+"concept": "C5",
+"id": "R11",
+"lang": "en"
+},
+"x396": {
+"concept": "P",
+"id": "R11",
+"lang": "en"
+},
+"x397": {
+"concept": "C5",
+"id": "R03",
+"lang": "es"
+},
+"x398": {
+"concept": "C0",
+"id": "R42",
+"lang": "en"
+},
+"x399": {
+"concept": "C3",
+"id": "R12",
+"lang": "es"
+},
+"x400": {
+"concept": "P",
+"id": "R61",
+"lang": "es"
+},
+"x401": {
+"concept": "C0p",
+"id": "R25",
+"lang": "en"
+},
+"x402": {
+"concept": "C1",
+"id": "R12",
+"lang": "es"
+},
+"x403": {
+"concept": "C1",
+"id": "R24",
+"lang": "es"
+},
+"x404": {
+"concept": "P",
+"id": "R39",
+"lang": "es"
+},
+"x405": {
+"concept": "P",
+"id": "R60",
+"lang": "es"
+},
+"x406": {
+"concept": "P",
+"id": "R14",
+"lang": "es"
+},
+"x407": {
+"concept": "C3",
+"id": "R23",
+"lang": "en"
+},
+"x408": {
+"concept": "C3",
+"id": "R04",
+"lang": "es"
+},
+"x409": {
+"concept": "C4",
+"id": "R12",
+"lang": "es"
+},
+"x410": {
+"concept": "C0p",
+"id": "R22",
+"lang": "es"
+},
+"x411": {
+"concept": "C0p",
+"id": "R48",
+"lang": "es"
+},
+"x412": {
+"concept": "C0p",
+"id": "R53",
+"lang": "es"
+},
+"x413": {
+"concept": "C2",
+"id": "R07",
+"lang": "es"
+},
+"x414": {
+"concept": "C0p",
+"id": "R39",
+"lang": "es"
+},
+"x415": {
+"concept": "C0",
+"id": "R19",
+"lang": "en"
+},
+"x416": {
+"concept": "C0",
+"id": "R23",
+"lang": "en"
+},
+"x417": {
+"concept": "C0p",
+"id": "R47",
+"lang": "en"
+},
+"x418": {
+"concept": "P",
+"id": "R18",
+"lang": "en"
+},
+"x419": {
+"concept": "C3",
+"id": "R57",
+"lang": "es"
+},
+"x420": {
+"concept": "C0",
+"id": "R27",
+"lang": "es"
+},
+"x421": {
+"concept": "C0p",
+"id": "R40",
+"lang": "es"
+},
+"x422": {
+"concept": "C4",
+"id": "R38",
+"lang": "es"
+},
+"x423": {
+"concept": "C0",
+"id": "R31",
+"lang": "es"
+},
+"x424": {
+"concept": "C4",
+"id": "R07",
+"lang": "es"
+},
+"x425": {
+"concept": "C3",
+"id": "R18",
+"lang": "en"
+},
+"x426": {
+"concept": "P",
+"id": "R53",
+"lang": "es"
+},
+"x427": {
+"concept": "C5",
+"id": "R54",
+"lang": "en"
+},
+"x428": {
+"concept": "C0",
+"id": "R24",
+"lang": "es"
+},
+"x429": {
+"concept": "C5",
+"id": "R04",
+"lang": "es"
+},
+"x430": {
+"concept": "C0",
+"id": "R40",
+"lang": "es"
+},
+"x431": {
+"concept": "C2",
+"id": "R62",
+"lang": "es"
+},
+"x432": {
+"concept": "C1",
+"id": "R06",
+"lang": "es"
+},
+"x433": {
+"concept": "P",
+"id": "R40",
+"lang": "es"
+},
+"x434": {
+"concept": "C0",
+"id": "R32",
+"lang": "en"
+},
+"x435": {
+"concept": "C1",
+"id": "R27",
+"lang": "es"
+},
+"x436": {
+"concept": "C4",
+"id": "R64",
+"lang": "en"
+},
+"x437": {
+"concept": "P",
+"id": "R59",
+"lang": "es"
+},
+"x438": {
+"concept": "C1",
+"id": "R29",
+"lang": "es"
+},
+"x439": {
+"concept": "N",
+"id": "R45",
+"lang": "en"
+},
+"x440": {
+"concept": "C5",
+"id": "R25",
+"lang": "en"
+},
+"x441": {
+"concept": "C4",
+"id": "R45",
+"lang": "en"
+},
+"x442": {
+"concept": "C3",
+"id": "R55",
+"lang": "en"
+},
+"x443": {
+"concept": "C2",
+"id": "R61",
+"lang": "es"
+},
+"x444": {
+"concept": "N",
+"id": "R04",
+"lang": "es"
+},
+"x445": {
+"concept": "C2",
+"id": "R54",
+"lang": "en"
+},
+"x446": {
+"concept": "C0",
+"id": "R59",
+"lang": "es"
+},
+"x447": {
+"concept": "C4",
+"id": "R59",
+"lang": "es"
+},
+"x448": {
+"concept": "C3",
+"id": "R33",
+"lang": "es"
+},
+"x449": {
+"concept": "C3",
+"id": "R49",
+"lang": "es"
+},
+"x450": {
+"concept": "C2",
+"id": "R46",
+"lang": "es"
+},
+"x451": {
+"concept": "P",
+"id": "R12",
+"lang": "es"
+},
+"x452": {
+"concept": "C4",
+"id": "R54",
+"lang": "en"
+},
+"x453": {
+"concept": "P",
+"id": "R01",
+"lang": "en"
+},
+"x454": {
+"concept": "C4",
+"id": "R02",
+"lang": "en"
+},
+"x455": {
+"concept": "C0p",
+"id": "R24",
+"lang": "es"
+},
+"x456": {
+"concept": "P",
+"id": "R04",
+"lang": "es"
+},
+"x457": {
+"concept": "C3",
+"id": "R51",
+"lang": "es"
+},
+"x458": {
+"concept": "P",
+"id": "R17",
+"lang": "es"
+},
+"x459": {
+"concept": "N",
+"id": "R11",
+"lang": "en"
+},
+"x460": {
+"concept": "C0",
+"id": "R13",
+"lang": "es"
+},
+"x461": {
+"concept": "C4",
+"id": "R13",
+"lang": "es"
+},
+"x462": {
+"concept": "C1",
+"id": "R01",
+"lang": "en"
+},
+"x463": {
+"concept": "C3",
+"id": "R43",
+"lang": "es"
+},
+"x464": {
+"concept": "C4",
+"id": "R61",
+"lang": "es"
+},
+"x465": {
+"concept": "C0p",
+"id": "R63",
+"lang": "en"
+},
+"x466": {
+"concept": "C1",
+"id": "R28",
+"lang": "es"
+},
+"x467": {
+"concept": "C2",
+"id": "R03",
+"lang": "es"
+},
+"x468": {
+"concept": "C0",
+"id": "R33",
+"lang": "es"
+},
+"x469": {
+"concept": "C1",
+"id": "R49",
+"lang": "es"
+},
+"x470": {
+"concept": "C5",
+"id": "R06",
+"lang": "es"
+},
+"x471": {
+"concept": "N",
+"id": "R60",
+"lang": "es"
+},
+"x472": {
+"concept": "C0",
+"id": "R52",
+"lang": "es"
+},
+"x473": {
+"concept": "C2",
+"id": "R60",
+"lang": "es"
+},
+"x474": {
+"concept": "C5",
+"id": "R40",
+"lang": "es"
+},
+"x475": {
+"concept": "C0p",
+"id": "R50",
+"lang": "es"
+},
+"x476": {
+"concept": "N",
+"id": "R47",
+"lang": "en"
+},
+"x477": {
+"concept": "C3",
+"id": "R08",
+"lang": "en"
+},
+"x478": {
+"concept": "C3",
+"id": "R19",
+"lang": "en"
+},
+"x479": {
+"concept": "C4",
+"id": "R22",
+"lang": "es"
+},
+"x480": {
+"concept": "P",
+"id": "R02",
+"lang": "en"
+},
+"x481": {
+"concept": "C5",
+"id": "R16",
+"lang": "es"
+},
+"x482": {
+"concept": "C3",
+"id": "R10",
+"lang": "en"
+},
+"x483": {
+"concept": "C0p",
+"id": "R02",
+"lang": "en"
+},
+"x484": {
+"concept": "C3",
+"id": "R30",
+"lang": "es"
+},
+"x485": {
+"concept": "C4",
+"id": "R42",
+"lang": "en"
+},
+"x486": {
+"concept": "C3",
+"id": "R37",
+"lang": "en"
+},
+"x487": {
+"concept": "C3",
+"id": "R61",
+"lang": "es"
+},
+"x488": {
+"concept": "C5",
+"id": "R07",
+"lang": "es"
+},
+"x489": {
+"concept": "C2",
+"id": "R20",
+"lang": "es"
+},
+"x490": {
+"concept": "C0p",
+"id": "R06",
+"lang": "es"
+},
+"x491": {
+"concept": "C3",
+"id": "R22",
+"lang": "es"
+},
+"x492": {
+"concept": "N",
+"id": "R15",
+"lang": "es"
+},
+"x493": {
+"concept": "C4",
+"id": "R27",
+"lang": "es"
+},
+"x494": {
+"concept": "N",
+"id": "R29",
+"lang": "es"
+},
+"x495": {
+"concept": "C2",
+"id": "R52",
+"lang": "es"
+},
+"x496": {
+"concept": "C0",
+"id": "R16",
+"lang": "es"
+},
+"x497": {
+"concept": "C1",
+"id": "R33",
+"lang": "es"
+},
+"x498": {
+"concept": "N",
+"id": "R61",
+"lang": "es"
+},
+"x499": {
+"concept": "C4",
+"id": "R56",
+"lang": "es"
+},
+"x500": {
+"concept": "C5",
+"id": "R31",
+"lang": "es"
+},
+"x501": {
+"concept": "C2",
+"id": "R53",
+"lang": "es"
+},
+"x502": {
+"concept": "C1",
+"id": "R64",
+"lang": "en"
+},
+"x503": {
+"concept": "C2",
+"id": "R10",
+"lang": "en"
+},
+"x504": {
+"concept": "C3",
+"id": "R40",
+"lang": "es"
+},
+"x505": {
+"concept": "C0",
+"id": "R04",
+"lang": "es"
+},
+"x506": {
+"concept": "P",
+"id": "R26",
+"lang": "en"
+},
+"x507": {
+"concept": "P",
+"id": "R08",
+"lang": "en"
+},
+"x508": {
+"concept": "N",
+"id": "R26",
+"lang": "en"
+},
+"x509": {
+"concept": "C1",
+"id": "R30",
+"lang": "es"
+},
+"x510": {
+"concept": "N",
+"id": "R39",
+"lang": "es"
+},
+"x511": {
+"concept": "C0p",
+"id": "R29",
+"lang": "es"
+},
+"x512": {
+"concept": "C0p",
+"id": "R35",
+"lang": "en"
+},
+"x513": {
+"concept": "C3",
+"id": "R63",
+"lang": "en"
+},
+"x514": {
+"concept": "C4",
+"id": "R32",
+"lang": "en"
+},
+"x515": {
+"concept": "P",
+"id": "R10",
+"lang": "en"
+},
+"x516": {
+"concept": "C0p",
+"id": "R57",
+"lang": "es"
+},
+"x517": {
+"concept": "C5",
+"id": "R18",
+"lang": "en"
+},
+"x518": {
+"concept": "C0p",
+"id": "R14",
+"lang": "es"
+},
+"x519": {
+"concept": "P",
+"id": "R54",
+"lang": "en"
+},
+"x520": {
+"concept": "N",
+"id": "R64",
+"lang": "en"
+},
+"x521": {
+"concept": "C0p",
+"id": "R56",
+"lang": "es"
+},
+"x522": {
+"concept": "N",
+"id": "R25",
+"lang": "en"
+},
+"x523": {
+"concept": "N",
+"id": "R46",
+"lang": "es"
+},
+"x524": {
+"concept": "C5",
+"id": "R22",
+"lang": "es"
+},
+"x525": {
+"concept": "N",
+"id": "R36",
+"lang": "en"
+},
+"x526": {
+"concept": "N",
+"id": "R32",
+"lang": "en"
+},
+"x527": {
+"concept": "C2",
+"id": "R58",
+"lang": "en"
+},
+"x528": {
+"concept": "C2",
+"id": "R33",
+"lang": "es"
+},
+"x529": {
+"concept": "C0",
+"id": "R21",
+"lang": "es"
+},
+"x530": {
+"concept": "C3",
+"id": "R16",
+"lang": "es"
+},
+"x531": {
+"concept": "C5",
+"id": "R59",
+"lang": "es"
+},
+"x532": {
+"concept": "N",
+"id": "R23",
+"lang": "en"
+},
+"x533": {
+"concept": "C5",
+"id": "R61",
+"lang": "es"
+},
+"x534": {
+"concept": "C5",
+"id": "R10",
+"lang": "en"
+},
+"x535": {
+"concept": "C4",
+"id": "R63",
+"lang": "en"
+},
+"x536": {
+"concept": "P",
+"id": "R35",
+"lang": "en"
+},
+"x537": {
+"concept": "C3",
+"id": "R14",
+"lang": "es"
+},
+"x538": {
+"concept": "C1",
+"id": "R08",
+"lang": "en"
+},
+"x539": {
+"concept": "C1",
+"id": "R52",
+"lang": "es"
+},
+"x540": {
+"concept": "C2",
+"id": "R09",
+"lang": "es"
+},
+"x541": {
+"concept": "C2",
+"id": "R31",
+"lang": "es"
+},
+"x542": {
+"concept": "C0",
+"id": "R26",
+"lang": "en"
+},
+"x543": {
+"concept": "C5",
+"id": "R58",
+"lang": "en"
+},
+"x544": {
+"concept": "P",
+"id": "R22",
+"lang": "es"
+},
+"x545": {
+"concept": "P",
+"id": "R48",
+"lang": "es"
+},
+"x546": {
+"concept": "C0",
+"id": "R03",
+"lang": "es"
+},
+"x547": {
+"concept": "C4",
+"id": "R60",
+"lang": "es"
+},
+"x548": {
+"concept": "C2",
+"id": "R24",
+"lang": "es"
+},
+"x549": {
+"concept": "C2",
+"id": "R45",
+"lang": "en"
+},
+"x550": {
+"concept": "C0p",
+"id": "R31",
+"lang": "es"
+},
+"x551": {
+"concept": "C1",
+"id": "R25",
+"lang": "en"
+},
+"x552": {
+"concept": "C4",
+"id": "R16",
+"lang": "es"
+},
+"x553": {
+"concept": "C0p",
+"id": "R17",
+"lang": "es"
+},
+"x554": {
+"concept": "N",
+"id": "R33",
+"lang": "es"
+},
+"x555": {
+"concept": "C0p",
+"id": "R16",
+"lang": "es"
+},
+"x556": {
+"concept": "C5",
+"id": "R35",
+"lang": "en"
+},
+"x557": {
+"concept": "C2",
+"id": "R59",
+"lang": "es"
+},
+"x558": {
+"concept": "C0p",
+"id": "R55",
+"lang": "en"
+},
+"x559": {
+"concept": "C4",
+"id": "R33",
+"lang": "es"
+},
+"x560": {
+"concept": "C4",
+"id": "R40",
+"lang": "es"
+},
+"x561": {
+"concept": "C5",
+"id": "R20",
+"lang": "es"
+},
+"x562": {
+"concept": "C4",
+"id": "R53",
+"lang": "es"
+},
+"x563": {
+"concept": "C1",
+"id": "R41",
+"lang": "en"
+},
+"x564": {
+"concept": "C1",
+"id": "R47",
+"lang": "en"
+},
+"x565": {
+"concept": "C4",
+"id": "R39",
+"lang": "es"
+},
+"x566": {
+"concept": "C4",
+"id": "R51",
+"lang": "es"
+},
+"x567": {
+"concept": "C1",
+"id": "R37",
+"lang": "en"
+},
+"x568": {
+"concept": "C1",
+"id": "R58",
+"lang": "en"
+},
+"x569": {
+"concept": "C0",
+"id": "R05",
+"lang": "es"
+},
+"x570": {
+"concept": "C0p",
+"id": "R12",
+"lang": "es"
+},
+"x571": {
+"concept": "C4",
+"id": "R26",
+"lang": "en"
+},
+"x572": {
+"concept": "C0p",
+"id": "R21",
+"lang": "es"
+},
+"x573": {
+"concept": "C4",
+"id": "R37",
+"lang": "en"
+},
+"x574": {
+"concept": "C3",
+"id": "R32",
+"lang": "en"
+},
+"x575": {
+"concept": "C1",
+"id": "R51",
+"lang": "es"
+},
+"x576": {
+"concept": "P",
+"id": "R28",
+"lang": "es"
+}
+}
+}

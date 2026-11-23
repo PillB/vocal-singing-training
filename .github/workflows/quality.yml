@@ -28,6 +28,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  safari-layout:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install webkit
+      - name: macOS WebKit design selection and device layouts
+        run: npx playwright test --project=webkit-layout --workers=2 --reporter=line --global-timeout=600000
+      - name: Native select regression must be detected on macOS
+        env:
+          # Isolate this nested runner from the preceding suite's server.
+          VT_TEST_PORT: '8766'
+          DEBUG: 'pw:webserver'
+        run: bash qa/check-safari-selector.sh
+      - name: Preserve macOS WebKit diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safari-layout-failures
+          path: test-results/
+          if-no-files-found: ignore
+
   contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -87,7 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        set: [stage, a11y, flows, regress, boot, billing, scoring, controls, audit, toast, designs, splits, syncing, inject, learner, authwall]
+        set: [stage, a11y, flows, regress, boot, billing, scoring, controls, audit, toast, designs, splits, syncing, inject, learner, authwall, lang, promises, pathui, curriculumui]
     env:
       CI: '1'
       MIC_HELP: '0'

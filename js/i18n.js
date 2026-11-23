@@ -1,15 +1,18 @@
 /**
- * Localization: Spanish (LatAm / Perú, clear international) default + English toggle.
- * Best practices: native language names, no flags, localStorage persistence, full UI parity.
+ * Localization: Spanish (LatAm / Perú, clear international) + English, with a toggle.
+ * Opens in the language js/boot-head.js decides before the first paint
+ * (window.VTLangPref.resolve, and the numbered rule written there).
+ * Best practices: native language names, no flags, localStorage persistence of
+ * the visitor's own choice only, full UI parity.
  */
 (function (global) {
   "use strict";
 
   const STRINGS = {
     es: {
-      "meta.title": "Entrenamiento vocal y de canto",
+      "meta.title": "Canto y oratoria: ejercicios gratis para tu voz",
       "meta.desc":
-        "Práctica en casa: entrenamiento vocal y de canto, grabación, métricas, piano y plan de 12 semanas.",
+        "Ejercicios de canto y para hablar en público, gratis y sin límite de minutos. Ves en vivo si afinas. Sin instalar nada y sin tarjeta.",
       "brand.title": "Entrenamiento vocal y de canto",
       "brand.tag": "Práctica en casa · Grabar · Revisar · Crecer",
       "nav.history": "Historial",
@@ -243,8 +246,8 @@
       "pricing.railStripe": "Tarjeta internacional",
       "pricing.railMp": "Mercado Pago (Perú / LATAM)",
       "pricing.dream": "La meta: voz clara y afinada, con un plan que puedes seguir cada semana.",
-      "pricing.proof1": "Casi todas las apps de canto limitan la práctica gratis: minutos al día, ejercicios al día, o solo los niveles de principiante. Aquí todos los ejercicios, el micrófono y el piano son gratis, siempre.",
-      "pricing.proof2": "Pro suma: sin anuncios, descargar tu progreso, más perfiles y consejos según tu práctica.",
+      "pricing.proof1": "Muchas apps de canto con suscripción limitan la práctica gratis: a unos minutos al día o a los niveles de principiante. Aquí todos los ejercicios, el micrófono y el piano son gratis, siempre.",
+      "pricing.proof2": "Pro suma: tus últimos 28 días en un gráfico, un resumen para tu profesor, metas semanales y más perfiles.",
       "pricing.proof3": "Un año de Pro cuesta menos que 3 clases particulares en Lima.",
       "pricing.personalEmpty": "Aún sin sesiones guardadas — prueba un ejercicio gratis y vuelve a ver tu progreso aquí.",
       "pricing.personalHave": "Sesiones guardadas: {sessions} · ~{minutes} min · días seguidos: {streak} · mejor sostenido: {hold} s",
@@ -272,7 +275,7 @@
       "pricing.feat.ad_free": "Sin anuncios ni recomendaciones patrocinadas",
       "pricing.feat.export_progress": "Descarga todo tu progreso en un archivo para guardarlo",
       "pricing.feat.multi_profile": "Hasta 3 perfiles, cada uno con su propio progreso",
-      "pricing.feat.pro_insights": "Un gráfico de tus últimos 28 días, cómo van tus sostenidos y qué practicar después",
+      "pricing.feat.pro_insights": "Un gráfico de tus últimos 28 días, cómo van tus notas largas y qué practicar después",
       "pricing.feat.coach_pack": "Un resumen escrito de tu práctica para enviárselo a tu profesor",
       "pricing.feat.studio_goals": "Elige cuántas sesiones quieres hacer por semana",
       "pricing.feat.pro_progressions": "2 acompañamientos de piano más para cantar",
@@ -353,7 +356,7 @@
       "retain.audioNewer": "Después",
       "pricing.feat.all_pro_monthly": "Todo lo de Pro mensual",
       "pricing.feat.yearly_savings": "Un solo cobro al año en lugar de doce",
-      "pricing.feat.lesson_anchor": "Un año entero cuesta menos que 3 clases particulares",
+      "pricing.feat.lesson_anchor": "Un año entero cuesta menos que 3 clases particulares en Lima",
       "value.pulseTitle": "Tu progreso",
       "value.sessions": "Sesiones",
       "value.minutes": "Minutos",
@@ -361,7 +364,7 @@
       "value.bestHold": "Nota más larga",
       "value.exercises": "Ejercicios",
       "value.ctaPro": "Ver qué añade Pro",
-      "value.anchor": "Una clase particular ≈ el año de Pro. Practica gratis siempre.",
+      "value.anchor": "Un año de Pro cuesta menos que 3 clases particulares en Lima. Practicar es gratis, siempre.",
       "value.tagTrial": "Prueba · {n}d",
       "value.tagPro": "Pro",
       "value.tagFree": "Gratis",
@@ -371,8 +374,8 @@
       "value.insightsPro": "Análisis Pro",
       "value.bannerCta": "Ver Pro",
       "value.bannerDismiss": "Ahora no",
-      "value.moment.trial_ending": "Tu prueba de Pro termina en {n} días. Descarga tu progreso si quieres guardarlo.",
-      "value.moment.trial_ending_one": "Tu prueba de Pro termina en {n} día. Descarga tu progreso si quieres guardarlo.",
+      "value.moment.trial_ending": "Tu prueba de Pro termina en {n} días. Tu progreso se queda en este navegador y todo lo gratis sigue igual.",
+      "value.moment.trial_ending_one": "Tu prueba de Pro termina en {n} día. Tu progreso se queda en este navegador y todo lo gratis sigue igual.",
       "value.moment.sessions_3": "Ya llevas {n} sesiones. Con Pro ves qué practicar después y descargas tu progreso para tu profesor.",
       "value.moment.hold_pr": "Nuevo récord: sostuviste una nota {s} s. Con Pro guardas y descargas esa evolución.",
       "value.moment.plan_active": "Tu plan de 12 semanas ya tiene registros. Con Pro descargas el plan completo para tu profesor.",
@@ -380,10 +383,10 @@
       "home.nextStepLabel": "Siguiente paso",
       "nav.practice": "Practicar",
       "nav.progress": "Progreso",
-      "sv.label": "Diseño del sitio",
-      "sv.a": "A · Clásico",
-      "sv.b": "B · Enfocado",
-      "sv.hint": "Dos formas de ordenar lo mismo. Cambia cuando quieras.",
+      "sv.label": "Vista de la página",
+      "sv.a": "Clásica",
+      "sv.b": "Enfocada",
+      "sv.hint": "Los mismos ejercicios, ordenados de dos formas. Cambia cuando quieras.",
       "pt.aria": "Progreso",
       "pt.history": "Historial",
       "pt.plan": "Plan",
@@ -404,7 +407,7 @@
       "stepDone.next": "Siguiente: {name} →",
       "stepDone.more": "{n} s más",
       "stepDone.rate": "Calificar este ejercicio",
-      "start.kickerNew": "Canto y oratoria · gratis",
+      "start.kickerNew": "Para cantar y para hablar · gratis",
       "ex.stageGuideLabel": "Qué vas a hacer",
       "pricing.moreFeatures": "Ver {n} ventajas más",
       "ex.stageGuideMore": "Ver todos los pasos y consejos",
@@ -426,25 +429,25 @@
       "start.step1": "Elige un ejercicio",
       "start.step1sub": "Hablar para presentaciones, Cantar para canciones.",
       "start.step2": "Practica con el micrófono",
-      "start.step2sub": "El piano y el afinador te guían en pantalla.",
+      "start.step2sub": "La pantalla te muestra en vivo tu nota, tu volumen o tu ritmo. Tu voz se queda en tu dispositivo.",
       "start.step3": "Guarda y revisa",
-      "start.step3sub": "Tu progreso se queda en este navegador.",
-      "start.step3subOffer": "Tu progreso se queda en este navegador. Con Entrar lo llevas a cualquier dispositivo.",
+      "start.step3sub": "Tu progreso se guarda en este navegador. No necesitas cuenta para practicar.",
+      "start.step3subOffer": "Se guarda en este navegador, sin cuenta. Con Entrar lo llevas a cualquier dispositivo.",
       "start.step3subSignedIn": "Tu progreso se guarda en tu cuenta.",
       // —— Design: first-visit —— what to train, then the Mínimo for it
       "first.q": "¿Qué quieres entrenar?",
       "first.sing": "Cantar",
-      "first.singSub": "canciones, afinación",
+      "first.singSub": "canciones, coro, afinación",
       "first.speak": "Hablar",
-      "first.speakSub": "presentaciones, dicción",
+      "first.speakSub": "presentaciones, entrevistas, dicción",
       "first.title": "Entrena tu voz {min}\u00a0minutos al día.",
       // The markup's hero title: first.title for the first load's routine (Hablar's Mínimo, 3 min), so the words shown
       // before the app has started are the ones it then writes (js/boot-head.js, html.vt-boot-hero)
       "first.titleMarkup": "Entrena tu voz 3\u00a0minutos al día.",
       "first.label": "Tus básicos · {min}\u00a0min",
-      "first.trills": "trinos de labios",
-      "first.why": "Sin libro ni partitura: solo tu voz y el micrófono.",
-      "first.whyVocal": "Solo tu voz, el micrófono y un texto corto para leer en voz alta.",
+      "first.trills": "trinos de labios (brrr)",
+      "first.why": "Sin cuenta, sin tarjeta y sin saber música: solo tu voz y el micrófono.",
+      "first.whyVocal": "Sin cuenta ni tarjeta: solo tu voz, el micrófono y un texto corto para leer en voz alta.",
       "first.cta": "▶ Empezar ({min}\u00a0min)",
       "home.nextStepLabelGuided": "Vas por aquí",
       "home.nextStepWhyGuided": "El siguiente ejercicio de tu sesión guiada.",
@@ -674,8 +677,8 @@
       "home.singingTitle": "Cantar",
       "home.singingSub":
         "Técnica: calentamientos, afinación y escalas. Clase: aire, colocación y tus canciones.",
-      "tab.vocal": "presentaciones, dicción",
-      "tab.singing": "canciones, afinación",
+      "tab.vocal": "presentaciones, entrevistas, dicción",
+      "tab.singing": "canciones, coro, afinación",
       "tab.vocalShort": "Hablar",
       "tab.singingShort": "Cantar",
       "home.catalog": "Catálogo de ejercicios",
@@ -801,7 +804,7 @@
       "piano.secsLabel": "Duración {n} s",
       "piano.songFeel": "Canción A (registro medio-bajo)",
       "piano.songBetter": "Canción B (registro medio-bajo)",
-      "piano.songKey": "Tono cómodo para voz masculina media-grave",
+      "piano.songKey": "Elige una tonalidad y octava cómodas",
       "piano.songTip": "Usa estrofas que conozcas. Practica con piano, no con pistas completas con derechos de autor.",
       "piano.songPlay": "Reproducir la progresión de la canción",
       "loop.todayAria": "Práctica",
@@ -1179,9 +1182,9 @@
       "ex.s27-lip-trill-solfege": "Solfeo en trino de labios"
     },
     en: {
-      "meta.title": "Vocal & Singing Training",
+      "meta.title": "Singing and speaking practice, free in your browser",
       "meta.desc":
-        "Self-paced vocal and singing practice with recording, metrics, piano chords, and a 12-week plan.",
+        "Free singing and public-speaking exercises with no daily time limit. See your pitch live. Nothing to install, no card.",
       "brand.title": "Vocal & Singing Training",
       "brand.tag": "Home practice · Record · Review · Grow",
       "nav.history": "History",
@@ -1411,9 +1414,9 @@
       "pricing.railStripe": "International card",
       "pricing.railMp": "Mercado Pago (Peru / LATAM)",
       "pricing.dream": "The goal: a clear, in-tune voice, with a plan you can keep week to week.",
-      "pricing.proof1": "Almost every singing app caps free practice: minutes a day, exercises a day, or beginner levels only. Here every exercise, the mic and the piano are free, always.",
-      "pricing.proof2": "Pro adds: no ads, a download of your progress, more profiles, and tips based on your practice.",
-      "pricing.proof3": "A year of Pro costs less than three private lessons.",
+      "pricing.proof1": "Many subscription singing apps cap free practice: to a few minutes a day, or to beginner levels. Here every exercise, the mic and the piano are free, always.",
+      "pricing.proof2": "Pro adds: your last 28 days in a chart, a summary for your teacher, weekly goals and more profiles.",
+      "pricing.proof3": "A year of Pro costs less than three private lessons in Lima.",
       "pricing.personalEmpty": "No saved sessions yet — try a free exercise, then see your progress here.",
       "pricing.personalHave": "Saved sessions: {sessions} · ~{minutes} min · days in a row: {streak} · longest hold: {hold}s",
       "pricing.trialLeft": "{n} days left on Pro trial",
@@ -1440,7 +1443,7 @@
       "pricing.feat.ad_free": "No ads or sponsored tips",
       "pricing.feat.export_progress": "Download all your progress as a file to keep",
       "pricing.feat.multi_profile": "Up to 3 profiles, each with its own progress",
-      "pricing.feat.pro_insights": "A chart of your last 28 days, how your holds are going, and what to practice next",
+      "pricing.feat.pro_insights": "A chart of your last 28 days, how your long notes are going, and what to practise next",
       "pricing.feat.coach_pack": "A written summary of your practice to send to your teacher",
       "pricing.feat.studio_goals": "Choose how many sessions to aim for each week",
       "pricing.feat.pro_progressions": "2 more piano accompaniments to sing with",
@@ -1521,7 +1524,7 @@
       "retain.audioNewer": "After",
       "pricing.feat.all_pro_monthly": "Everything in Pro monthly",
       "pricing.feat.yearly_savings": "One charge a year instead of twelve",
-      "pricing.feat.lesson_anchor": "A whole year costs less than 3 private lessons",
+      "pricing.feat.lesson_anchor": "A whole year costs less than 3 private lessons in Lima",
       "value.pulseTitle": "Your progress",
       "value.sessions": "Sessions",
       "value.minutes": "Minutes",
@@ -1529,7 +1532,7 @@
       "value.bestHold": "Longest note",
       "value.exercises": "Exercises",
       "value.ctaPro": "See what Pro adds",
-      "value.anchor": "One private lesson ≈ a year of Pro. Practice free forever.",
+      "value.anchor": "A year of Pro costs less than three private lessons in Lima. Practice is free, always.",
       "value.tagTrial": "Trial · {n}d",
       "value.tagPro": "Pro",
       "value.tagFree": "Free",
@@ -1539,8 +1542,8 @@
       "value.insightsPro": "Pro analysis",
       "value.bannerCta": "See Pro",
       "value.bannerDismiss": "Not now",
-      "value.moment.trial_ending": "Your Pro trial ends in {n} days. Download your progress if you want to keep it.",
-      "value.moment.trial_ending_one": "Your Pro trial ends in {n} day. Download your progress if you want to keep it.",
+      "value.moment.trial_ending": "Your Pro trial ends in {n} days. Your progress stays in this browser, and everything free carries on as before.",
+      "value.moment.trial_ending_one": "Your Pro trial ends in {n} day. Your progress stays in this browser, and everything free carries on as before.",
       "value.moment.sessions_3": "You’re at {n} sessions. With Pro you see what to practice next and download your progress for your teacher.",
       "value.moment.hold_pr": "New record: you held a note {s} s. With Pro you keep and download that history.",
       "value.moment.plan_active": "Your 12-week plan has entries. With Pro you download the whole plan for your teacher.",
@@ -1548,10 +1551,10 @@
       "home.nextStepLabel": "Next step",
       "nav.practice": "Practice",
       "nav.progress": "Progress",
-      "sv.label": "Site design",
-      "sv.a": "A · Classic",
-      "sv.b": "B · Focused",
-      "sv.hint": "Two ways to arrange the same things. Switch whenever you like.",
+      "sv.label": "Page layout",
+      "sv.a": "Classic",
+      "sv.b": "Focused",
+      "sv.hint": "The same exercises, arranged two ways. Switch whenever you like.",
       "pt.aria": "Progress",
       "pt.history": "History",
       "pt.plan": "Plan",
@@ -1570,7 +1573,7 @@
       "stepDone.next": "Next: {name} →",
       "stepDone.more": "{n} s more",
       "stepDone.rate": "Rate this exercise",
-      "start.kickerNew": "Singing and speaking · free",
+      "start.kickerNew": "For singing and speaking · free",
       "ex.stageGuideLabel": "What you are going to do",
       "pricing.moreFeatures": "See {n} more benefits",
       "ex.stageGuideMore": "See all the steps and tips",
@@ -1592,23 +1595,23 @@
       "start.step1": "Pick an exercise",
       "start.step1sub": "Speaking for presentations, Singing for songs.",
       "start.step2": "Practise with your mic",
-      "start.step2sub": "The piano and tuner guide you on screen.",
+      "start.step2sub": "The screen shows your pitch, volume or pace as you go. Your voice stays on your device.",
       "start.step3": "Save and review",
-      "start.step3sub": "Your progress stays in this browser.",
-      "start.step3subOffer": "Your progress stays in this browser. Sign in to take it to any device.",
+      "start.step3sub": "Your progress is saved in this browser. You don't need an account to practise.",
+      "start.step3subOffer": "Saved in this browser, no account needed. Sign in to take it to any device.",
       "start.step3subSignedIn": "Your progress is saved to your account.",
       // —— Design: first-visit —— what to train, then the Minimum for it
       "first.q": "What do you want to train?",
       "first.sing": "Singing",
-      "first.singSub": "songs, pitch",
+      "first.singSub": "songs, choir, pitch",
       "first.speak": "Speaking",
-      "first.speakSub": "presentations, diction",
+      "first.speakSub": "talks, interviews, diction",
       "first.title": "Train your voice {min}\u00a0minutes a day.",
       "first.titleMarkup": "Train your voice 3\u00a0minutes a day.",
       "first.label": "Your basics · {min}\u00a0min",
-      "first.trills": "lip trills",
-      "first.why": "No book or sheet music: just your voice and the mic.",
-      "first.whyVocal": "Just your voice, the mic and a short text to read aloud.",
+      "first.trills": "lip trills (brrr)",
+      "first.why": "No account, no card, no music theory: just your voice and the mic.",
+      "first.whyVocal": "No account, no card: just your voice, the mic and a short text to read aloud.",
       "first.cta": "▶ Start ({min}\u00a0min)",
       "home.nextStepLabelGuided": "You are here",
       "home.nextStepWhyGuided": "The next exercise in your guided session.",
@@ -1838,8 +1841,8 @@
       "home.singingTitle": "Singing",
       "home.singingSub":
         "Technique: warm-ups, pitch and scales. Class: breath, placement and your songs.",
-      "tab.vocal": "presentations, diction",
-      "tab.singing": "songs, pitch",
+      "tab.vocal": "talks, interviews, diction",
+      "tab.singing": "songs, choir, pitch",
       "tab.vocalShort": "Speaking",
       "tab.singingShort": "Singing",
       "home.catalog": "Exercise catalog",
@@ -1925,7 +1928,7 @@
       "pitch.target": "Tgt",
       "pitch.you": "You",
       "pitch.cents": "¢",
-      "piano.title": "Piano · mid-lower male range",
+      "piano.title": "Piano · choose a comfortable range",
       "piano.oneNote": "1 note",
       "piano.arpeggio": "Arpeggio",
       "piano.sustain": "Sustain",
@@ -1956,7 +1959,7 @@
       "piano.secsLabel": "Hold {n} s",
       "piano.songFeel": "Song A (mid-low range)",
       "piano.songBetter": "Song B (mid-low range)",
-      "piano.songKey": "Male mid-low friendly key",
+      "piano.songKey": "Choose a comfortable key and octave",
       "piano.songTip": "Use stanzas you know. Practice with piano, not full copyrighted tracks.",
       "piano.songPlay": "Play song progression",
       "loop.todayAria": "Practice",
@@ -2367,6 +2370,7 @@
       }
       return v == null ? "" : v;
     },
+    /** The visitor's choice: kept, then shown. */
     setLang(lang) {
       this.lang = lang === "en" ? "en" : "es";
       try {
@@ -2374,18 +2378,49 @@
       } catch {
         /* ignore */
       }
+      this.showLang(this.lang);
+    },
+    /** Shows a language without keeping it as a choice (setLang keeps it; a page back from the cache does not). */
+    showLang(lang) {
+      this.lang = lang === "en" ? "en" : "es";
       document.documentElement.lang = this.lang === "es" ? "es" : "en";
+      this.keepAddress();
       this.applyDom();
       if (typeof this.onChange === "function") this.onChange(this.lang);
     },
-    init() {
-      let saved = "es";
+    /**
+     * A page opened at an address that names its language (?lang=en, the URL
+     * index.html's hreflang links give each version) names the one now shown
+     * after a switch: that address outranks the stored choice, so left as it
+     * was a reload, or the link copied from it, would show the other one. An
+     * address that names none is left alone.
+     */
+    keepAddress() {
       try {
-        saved = localStorage.getItem("vt_lang") || "es";
+        const url = new URL(location.href);
+        if (!url.searchParams.has("lang")) return;
+        url.searchParams.set("lang", this.lang);
+        history.replaceState(history.state, "", url.href);
       } catch {
-        /* ignore */
+        /* the address stays as it was */
       }
-      this.lang = saved === "en" ? "en" : "es";
+    },
+    /**
+     * The language to open in. js/boot-head.js decides it, before the first
+     * paint (VTLangPref.resolve; its numbered rule). Without it (the file
+     * failed to load) only a choice counts, as before: no hold was put on the
+     * page, so switching it to English now would flash the Spanish first.
+     */
+    startLang() {
+      try {
+        if (global.VTLangPref && typeof global.VTLangPref.resolve === "function") return global.VTLangPref.resolve();
+        return localStorage.getItem("vt_lang");
+      } catch {
+        return "es";
+      }
+    },
+    init() {
+      this.lang = this.startLang() === "en" ? "en" : "es";
       document.documentElement.lang = this.lang === "es" ? "es" : "en";
       this.applyDom();
     },
@@ -2423,11 +2458,32 @@
       if (title) document.title = title;
       const meta = document.querySelector('meta[name="description"]');
       if (meta) meta.setAttribute("content", this.t("meta.desc"));
+      // The way out for a visitor shown the language they do not read: named in
+      // its own language and marked as that language (WCAG 3.1.2), and named
+      // by those words alone, so "click Español" reaches it (2.5.3). It used to
+      // carry the aria-label "Cambiar idioma", which hid its one useful word.
       const langBtn = document.getElementById("btn-lang");
-      if (langBtn) langBtn.textContent = this.t("nav.lang");
+      if (langBtn) {
+        langBtn.textContent = this.t("nav.lang");
+        langBtn.lang = this.lang === "es" ? "en" : "es";
+      }
     }
   };
 
   global.VTI18n = I18n;
   global.t = (k, v) => I18n.t(k, v);
+
+  // A page brought back from the back/forward cache keeps the language it was
+  // left in, while what decides it may have moved meanwhile: the tab now
+  // remembers another language's address (/ to /?lang=en, then Back), or
+  // another tab made a choice. Shown, not kept: what the browser asked for
+  // never turns into a choice. A page drawn anew decided at its own start.
+  // (The catalog check and the copy tests read these strings in a bare VM,
+  // with no events.)
+  if (typeof global.addEventListener !== "function") return;
+  global.addEventListener("pageshow", (e) => {
+    if (!e.persisted) return;
+    const want = I18n.startLang() === "en" ? "en" : "es";
+    if (want !== I18n.lang) I18n.showLang(want);
+  });
 })(window);

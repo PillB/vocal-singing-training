@@ -16,6 +16,8 @@ on:
       - 'AGENTS.md'
       - 'agent.md'
       - 'CLAUDE.md'
+      - 'docs/50-TEACHING-VISUAL-PEDAGOGY.md'
+      - 'docs/51-VOICE-SKILLS-PROGRESSION.md'
       - '.github/workflows/breathflow-qa.yml'
   workflow_dispatch:
 permissions:

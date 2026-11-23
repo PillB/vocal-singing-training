@@ -98,3 +98,21 @@ Physical Safari/acoustic, instructor/novice, bilingual and sync validation are
 still open. Keep the draft unmerged until fixed and validated; green synthetic
 CI does not close those gates. No claim that every feature is perfect or
 production-ready is justified by this integration.
+
+## Hosted CI reconciliation — 2026-11-23
+
+The first combined browser run found stale expected document titles from50
+against48's marketing title, and a solfege teaser assertion against47's
+clearer do-re-mi wording. Preserve readable do-re-mi labels and new marketing
+titles; assert explicit expected user-visible values in both languages.
+
+macOS layout fixtures contacted the real worker from localhost, whose origin
+policy correctly refused them. Port41's controlled auth-methods fixture; keep
+page-error checks strict rather than expanding ignored-error patterns.
+
+One browser install failed on an Ubuntu26.04 Microsoft apt403/signature error.
+Pin browser jobs to supported Ubuntu24.04; this trades automatic OS rollout for
+an explicit upgrade/revalidation decision. [Playwright requirements](https://playwright.dev/docs/intro#system-requirements)
+and [GitHub runner labels](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+identify the supported platform and the mutability of latest aliases. A focused
+integration job runs in parallel with core to expose these failures earlier.

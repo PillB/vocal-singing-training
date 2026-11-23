@@ -37,8 +37,8 @@ const shown = () => ({
   stored: localStorage.getItem("vt_lang")
 });
 
-const ENGLISH = { lang: "en", nav: "History", title: "Vocal & Singing Training", hero: "Train your voice 3 minutes a day.", button: "Español" };
-const SPANISH = { lang: "es", nav: "Historial", title: "Entrenamiento vocal y de canto", hero: "Entrena tu voz 3 minutos al día.", button: "English" };
+const ENGLISH = { lang: "en", nav: "History", title: "Singing and speaking practice, free in your browser", hero: "Train your voice 3 minutes a day.", button: "Español" };
+const SPANISH = { lang: "es", nav: "Historial", title: "Canto y oratoria: ejercicios gratis para tu voz", hero: "Entrena tu voz 3 minutos al día.", button: "English" };
 const UI = ["lang", "nav", "title", "hero", "button"];
 // Someone with practice kept sees another hero ("3 minutes and you're back"); the rest is the same
 const RETURNING = ["lang", "nav", "title", "button"];

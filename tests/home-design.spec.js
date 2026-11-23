@@ -120,7 +120,7 @@ test.describe("First visit: what to train, then the Mínimo", () => {
       ["singing", "true"],
       ["vocal", "false"]
     ]);
-    await expect(page.locator("#next-step-title")).toHaveText(`Trinos de labios (brrr) 1${NBSP}min 30${NBSP}s → solfeo en trino 1${NBSP}min 30${NBSP}s`);
+    await expect(page.locator("#next-step-title")).toHaveText(`Trinos de labios (brrr) 1${NBSP}min 30${NBSP}s → do-re-mi en trino 1${NBSP}min 30${NBSP}s`);
     await expect(page.locator("#next-step-why")).toHaveText("Sin cuenta, sin tarjeta y sin saber música: solo tu voz y el micrófono.");
     // The choice is the track: the catalog, which keeps its own switch, follows it.
     await expect(page.locator("#catalog-panel #track-switch")).toBeAttached();
@@ -164,7 +164,7 @@ test.describe("First visit: what to train, then the Mínimo", () => {
     await boot(page, { lang: "en", tab: "singing" });
     await expect(page.locator("#track-pick-q")).toHaveText("What do you want to train?");
     await expect(page.locator("#start-title")).toHaveText(`Train your voice 3${NBSP}minutes a day.`);
-    await expect(page.locator("#next-step-title")).toHaveText(`Lip trills (brrr) 1${NBSP}min 30${NBSP}s → trill solfège 1${NBSP}min 30${NBSP}s`);
+    await expect(page.locator("#next-step-title")).toHaveText(`Lip trills (brrr) 1${NBSP}min 30${NBSP}s → do-re-mi on a trill 1${NBSP}min 30${NBSP}s`);
     await expect(page.locator("#next-step-why")).toHaveText("No account, no card, no music theory: just your voice and the mic.");
     await expect(page.locator("#btn-next-step")).toHaveText(`▶ Start (3${NBSP}min)`);
     const text = await page.locator("#start-panel").innerText();

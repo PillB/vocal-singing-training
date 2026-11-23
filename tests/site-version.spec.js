@@ -9,6 +9,7 @@
  * each defect and expects red.
  */
 const { test, expect } = require("@playwright/test");
+const { stubAuthMethods } = require("./helpers/auth-methods");
 // Events go to a fake host the page's Content Security Policy rightly refuses;
 // the policy has its own tests (tests/csp.spec.js) against the real worker.
 test.use({ bypassCSP: true, timezoneId: "America/Lima", locale: "es-PE" });
@@ -25,6 +26,7 @@ const LS_KEY = "vt_site_version_v1";
  * @returns {Promise<{bodies: object[]}>} What was posted.
  */
 async function boot(page, opts = {}) {
+  await stubAuthMethods(page);
   const sent = { bodies: [] };
   await page.route("https://events.test/**", async (route) => {
     try {

@@ -174,13 +174,22 @@ test("day/week/month and every main navigation view share a single calendar auth
     expect(actual).toEqual({ n: baseline.n, ex: baseline.ex });
   }
   await page.goto(BASE + "/index.html");
-  for (const btn of ["btn-history", "btn-plan", "btn-nav-home"]) {
-    await page.locator("#" + btn).click();
-    expect(await page.evaluate(() => {
-      const D = window.VTDays, k = D.dayKey(), row = D.read().days[k];
-      return { n: row.n, ex: row.ex.slice() };
-    })).toEqual({ n: baseline.n, ex: baseline.ex });
-  }
+  // An independent UI oracle: storage may be correct while a rendered tab is stale.
+  await page.locator("#btn-history").click();
+  await expect(page.locator("#view-history")).toHaveClass(/active/);
+  await expect(page.locator("#hist-days-count strong")).toHaveText("1");
+  await page.locator("#btn-plan").click();
+  await expect(page.locator("#view-plan")).toHaveClass(/active/);
+  await page.locator("#element-chips .chip:visible").first().click();
+  await page.locator("#btn-plan-start").click();
+  await expect(page.locator("#plan-days")).toBeVisible();
+  await expect(page.locator("#plan-days")).toContainText(/\\b1\\b/);
+  await page.locator("#btn-nav-home").click();
+  await expect(page.locator("#view-home")).toHaveClass(/active/);
+  expect(await page.evaluate(() => {
+    const D = window.VTDays, k = D.dayKey(), row = D.read().days[k];
+    return { n: row.n, ex: row.ex.slice() };
+  })).toEqual({ n: baseline.n, ex: baseline.ex });
   await page.goto(BASE + "/breathflow.html");
   await expect(page.locator("#flow-day")).toContainText("ya tienes un día");
   await page.locator("#flow-tab-week").click();

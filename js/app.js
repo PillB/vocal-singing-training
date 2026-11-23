@@ -11578,7 +11578,7 @@
         // A refusal keeps its reason: a 401 has just signed them out here.
         const moved = res?.ok && (window.VTAccount.getSessionToken?.() || null) !== asker;
         if (moved || res?.reason === "signed_out") return;
-        const target = res?.ok ? window.VTBilling.validateCheckoutUrl(res.url) : null;
+        const target = res?.ok ? window.VTBilling.validateCreemPageUrl(res.url) : null;
         if (target?.ok) {
           window.location.assign(target.url);
           return;

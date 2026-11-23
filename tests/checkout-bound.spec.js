@@ -387,7 +387,11 @@ test.describe("a checkout the worker opens for the account", () => {
       [[429, { ok: false, reason: "rate_limited", retryAfter: 60 }], /Too many tries in a row/],
       [[502, { ok: false, reason: "provider_error" }], /couldn't open the checkout, and nothing was charged/],
       // The page checks the worker's answer too: somewhere that is not a checkout host is not followed.
-      [[200, { ok: true, url: "https://evil.example/pay" }], /couldn't open the checkout, and nothing was charged/]
+      [[200, { ok: true, url: "https://evil.example/pay" }], /couldn't open the checkout, and nothing was charged/],
+      // Nor another rail's payment page, though a pasted link may name one: the
+      // worker opens Creem checkouts only (red team round two, truth-6).
+      [[200, { ok: true, url: "https://buy.stripe.com/test_not_creem" }], /couldn't open the checkout, and nothing was charged/],
+      [[200, { ok: true, url: "https://www.mercadopago.com.pe/checkout/v1/redirect?pref_id=not_creem" }], /couldn't open the checkout, and nothing was charged/]
     ];
     for (const [reply, said] of cases) {
       state.checkoutAnswer = reply;
@@ -403,7 +407,7 @@ test.describe("a checkout the worker opens for the account", () => {
       await expect(cta).toHaveText(label);
     }
     expect(navigations).toEqual([]);
-    expect(state.checkouts).toHaveLength(3);
+    expect(state.checkouts).toHaveLength(5);
   });
 
   test("before paying, the buyer is told Creem sells the subscription, with its Buyer Terms", async ({ page }) => {

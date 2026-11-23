@@ -379,17 +379,12 @@ steps 1 to 4 exists so that this commit is boring.
 >   with this switch on, when `/v1/health` says `creemEurConfigured: true`;
 >   with pasted links, when `providers.creem.linksEur` holds the euro links.
 >   Otherwise a European sees, and pays, US$.
->
-> **Launch blocker, open: the terms.** `terms.html` still says "Fuera de
-> Perú: US$ 7.99 al mes o US$ 49 al año" (and "Elsewhere: US$ 7.99 …") and
-> names no euro price, while a European is already shown 7,99 € and 49 €
-> (the planned price, before launch). Add the Union's line to both halves,
-> e.g. "En la Unión Europea: 7,99 € al mes o 49 € al año, IVA incluido." and
-> "In the European Union: €7.99 a month or €49 a year, VAT included.", before
-> this switch goes on. Two `test.fail` markers in
-> `tests/pricing-markets.spec.js` ("the terms' price for the Union is the
-> dialog's") turn red the day each half says so; delete `.fail` then, and
-> the comparison keeps the terms and the dialog equal from there on.
+> - **The terms state the Union's price (2026-11-23).** Both halves of
+>   `terms.html` now give the card price in the European Union, 7,99 € a
+>   month or 49 € a year (€7.99 / €49 in English), in euros, VAT included,
+>   beside the Mercado Pago price in soles and the Creem price in US$.
+>   `tests/pricing-markets.spec.js` ("the terms' price for the Union is the
+>   dialog's") keeps each half equal to what the dialog shows in Spain.
 
 The site's own validation refuses anything that is not an allowed checkout
 host, so a mistyped link fails closed rather than sending somebody somewhere

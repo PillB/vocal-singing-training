@@ -785,6 +785,26 @@
   }
 
   /**
+   * A page the worker sends the buyer to on Creem's behalf, a bound checkout
+   * or the customer portal: https on creem.io or one of its subdomains, with
+   * no user name or password in it, the worker's own isCreemPageUrl rule, and
+   * on the operator's checkout host list as well. validateCheckoutUrl alone is
+   * the list for pasted links, which also holds every Stripe and Mercado Pago
+   * checkout host, so a worker answer naming a payment page there was followed
+   * from "Manage or cancel subscription" (red team round two, truth-6).
+   * @returns {{ ok: boolean, url?: string, reason?: string }}
+   */
+  function validateCreemPageUrl(url) {
+    const v = validateCheckoutUrl(url);
+    if (!v.ok) return v;
+    const u = new URL(v.url);
+    const host = u.hostname.toLowerCase();
+    if (u.username || u.password) return { ok: false, reason: "credentials" };
+    if (host !== "creem.io" && !host.endsWith(".creem.io")) return { ok: false, reason: "not_creem", host };
+    return v;
+  }
+
+  /**
    * A plan's pasted link on a rail, in the money its card shows: the euro
    * product's (`linksEur`) where the card shows €, else the rail's own. A
    * card in euros with no euro link has no link: the dollar one would charge
@@ -1066,9 +1086,13 @@
     return answer;
   }
 
-  /** Go to the checkout the worker opened, or say why there is none, in startCheckout's shape. */
+  /**
+   * Go to the checkout the worker opened, or say why there is none, in
+   * startCheckout's shape. The worker opens Creem checkouts only
+   * (apiCheckoutEnabled), so its answer is followed only to a Creem page.
+   */
   function followWorkerAnswer(res, planId, rail) {
-    const target = res && res.ok ? validateCheckoutUrl(res.url) : null;
+    const target = res && res.ok ? validateCreemPageUrl(res.url) : null;
     if (target && target.ok) {
       rememberCheckoutIntent(planId, rail);
       lastRedirect = { plan: planId, provider: rail, session: sessionNow(), url: target.url, at: nowMs() };
@@ -1725,6 +1749,7 @@
     startCheckout,
     checkoutUrl,
     validateCheckoutUrl,
+    validateCreemPageUrl,
     linksConfigured,
     apiCheckoutEnabled,
     getBillingHealth,

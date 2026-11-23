@@ -549,14 +549,9 @@ test.describe("the privacy notice says where the account's email goes", () => {
   });
 });
 
-// Markers for a launch blocker this branch may not fix: terms.html (another change's file) still says "Fuera de Perú:
-// US$ 7.99 al mes o US$ 49 al año" / "Elsewhere: US$ 7.99 a month or US$ 49 a year" and states no euro price, while a
-// European's dialog shows 7,99 € and 49 € (€7.99 and €49 in English). Each is green while its half of the terms
-// disagrees, and turns red ("expected to fail, but passed") the day that half states the Union's price, e.g. "En la
-// Unión Europea: 7,99 € al mes o 49 € al año, IVA incluido." / "In the European Union: €7.99 a month or €49 a year,
-// VAT included.": then delete `.fail` and the comparison keeps the two equal for good. docs/40-GO-LIVE-GATE.md step 5
-// lists it as a launch blocker. The dialog half is proved green on its own by the truth-4 tests above, so a failure
-// there cannot hide behind `.fail`.
+// The Union's price in the terms is the dialog's, in each half. Wrong (before): the terms stated no euro price, so a
+// European was shown 7,99 € beside terms that said US$ 7.99. The dialog half is proved green on its own by the truth-4
+// tests above, so the comparison cannot pass on a dialog that shows nothing.
 for (const half of [
   { lang: "es", heading: /^Precios$/, monthly: `7,99${NBSP}€`, yearly: `49${NBSP}€`, read: /(\d+(?:,\d{2})?) €[^.]*? (\d+(?:,\d{2})?) €/ },
   { lang: "en", heading: /^Prices$/, monthly: "€7.99", yearly: "€49", read: /(€\d+(?:\.\d{2})?)[^.]*?(€\d+(?:\.\d{2})?)/ }
@@ -564,7 +559,7 @@ for (const half of [
   test.describe(`truth-4 under VG-85: the terms' price for the Union is the dialog's (${half.lang})`, () => {
     test.use({ locale: "es-ES", timezoneId: "Europe/Madrid" });
 
-    test.fail(`the ${half.lang === "es" ? "Spanish" : "English"} terms state the euro price the dialog shows in Spain`, async ({ page }) => {
+    test(`the ${half.lang === "es" ? "Spanish" : "English"} terms state the euro price the dialog shows in Spain`, async ({ page }) => {
       await install(page, freshState({ eur: true }), { config: CREEM_ON_SALE, lang: half.lang });
       await open(page);
       await openPricing(page);
@@ -575,7 +570,7 @@ for (const half of [
       await page.goto(`${BASE}/terms.html`, { waitUntil: "domcontentloaded" });
       const para = flat(await page.locator("main h2", { hasText: half.heading }).locator("xpath=following-sibling::p[1]").textContent());
       const euro = half.read.exec(para);
-      // Wrong (today): no euro price in the terms, so a European is shown 7,99 € beside terms that say US$ 7.99.
+      // Wrong (before): no euro price in the terms, so a European was shown 7,99 € beside terms that said US$ 7.99.
       expect(euro && { monthly: euro[1] + (half.lang === "es" ? " €" : ""), yearly: euro[2] + (half.lang === "es" ? " €" : "") })
         .toEqual({ monthly: flat(half.monthly), yearly: flat(half.yearly) });
     });

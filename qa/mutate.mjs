@@ -156,7 +156,7 @@ export const MUTANTS = {
     ["VP1 an area counts every exercise of a day, not the day", "js/voice-path.js", "const hit = new Set(ex.map((id) => AREA_OF.get(id)).filter(Boolean));", "const hit = ex.map((id) => AREA_OF.get(id)).filter(Boolean);"],
     ["VP2 a week in range is judged on the goal's high end", "js/voice-path.js", 'const lo = Number(g.split("-")[0]);', 'const lo = Number(g.split("-")[1]);'],
     ["VP3 a week below the goal takes the weeks before it away", "js/voice-path.js", "      if (c >= lo) n += 1;\n", "      n = c >= lo ? n + 1 : 0;\n"],
-    ["VP4 a gap the rest days covered counts as a comeback", "js/voice-path.js", "if (diff(lg.keys[i - 1], b) >= 2 && !rest.has(add(b, -1))) n += 1;", "if (diff(lg.keys[i - 1], b) >= 2) n += 1;"],
+    ["VP4 a gap the rest days covered counts as a comeback", "js/voice-path.js", "if (current - previous >= 172800000 && !rest.has(add(b, -1))) n += 1;", "if (current - previous >= 172800000) n += 1;"],
     ["VP5 a first run announces months of history as news", "js/voice-path.js", "if (!flags[INIT] || hidden()) return true;", "if (hidden()) return true;"],
     ["VP6 hidden, it still saves up news for later", "js/voice-path.js", "if (!flags[INIT] || hidden()) return true;", "if (!flags[INIT]) return true;"],
     ["VP7 news on a day with no practice (a sync's days announced)", "js/voice-path.js", "    if (!D().summary?.().todayDone) return true;\n", ""],
@@ -214,15 +214,15 @@ export const MUTANTS = {
     cmd: [process.execPath, "node_modules/@playwright/test/cli.js", "test", "tests/site-version-devices.spec.js", "--project=webkit-layout", "--workers=1", "--reporter=line", "-g", "iPhone 12-16"]
   }],
   curriculum: [
-    ["CU1 skill filter silently shows every routine", "js/session-sets.js", 'sets.filter((set) => set.focus === focus)', 'sets'],
-    ["CU2 future skill tag disappears without authoring failure", "js/session-sets.js", '"id": "s-breath-phrases",\n      "track": "singing",\n      "focus": "breath",', '"id": "s-breath-phrases",\n      "track": "singing",\n      "focus": "retired-skill",'],
-    ["CU3 song transfer ends on a speech-only delayed review", "js/session-sets.js", '["s3-song-stanzas", 180]', '["v7-record-review", 180]'],
-    ["CU4 edited song text becomes executable markup", "js/song-library.js", 'esc(song[l].task)', 'song[l].task']
+    ["CUR1 skill filter silently shows every routine", "js/session-sets.js", 'sets.filter((set) => set.focus === focus)', 'sets'],
+    ["CUR2 future skill tag disappears without authoring failure", "js/session-sets.js", '"id": "s-breath-phrases",\n      "track": "singing",\n      "focus": "breath",', '"id": "s-breath-phrases",\n      "track": "singing",\n      "focus": "retired-skill",'],
+    ["CUR3 song transfer ends on a speech-only delayed review", "js/session-sets.js", '["s3-song-stanzas", 180]', '["v7-record-review", 180]'],
+    ["CUR4 edited song text becomes executable markup", "js/song-library.js", 'esc(song[l].task)', 'song[l].task']
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/curriculum.test.mjs"]) })),
   curriculumui: [
-    ["CU5 score library is not integrated into the exercise", "js/app.js", 'if (globalThis.VTSongLibrary) row.insertAdjacentHTML("beforeend", globalThis.VTSongLibrary.html(VTI18n.lang));', ''],
-    ["CU6 skill selection never redraws cards", "js/session-sets.js", 'picker.onchange = paint;', 'picker.onchange = null;']
-  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: [...PIANO_SPEC.slice(0, 3), name.startsWith("CU5") ? "tests/song-library.spec.js" : "tests/session-sets.spec.js", "--project=chromium", "--workers=1", "--reporter=dot", "-g", name.startsWith("CU5") ? "song library en at 360" : "skill picker filters"] })),
+    ["CUR5 score library is not integrated into the exercise", "js/app.js", 'if (globalThis.VTSongLibrary) row.insertAdjacentHTML("beforeend", globalThis.VTSongLibrary.html(VTI18n.lang));', ''],
+    ["CUR6 skill selection never redraws cards", "js/session-sets.js", 'picker.onchange = paint;', 'picker.onchange = null;']
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: [...PIANO_SPEC.slice(0, 3), name.startsWith("CUR5") ? "tests/song-library.spec.js" : "tests/session-sets.spec.js", "--project=chromium", "--workers=1", "--reporter=dot", "-g", name.startsWith("CUR5") ? "song library en at 360" : "skill picker filters"] })),
   audio: [
     ["M6 +150c (adjacent semitone) accepted as in tune", "js/practice-modes.js", "const hi = this.profile.centsHi == null ? 50 : this.profile.centsHi;", "const hi = this.profile.centsHi == null ? 150 : this.profile.centsHi;"],
     ["M7 -140c accepted as in tune", "js/practice-modes.js", "const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;", "const lo = this.profile.centsLo == null ? -140 : this.profile.centsLo;"],

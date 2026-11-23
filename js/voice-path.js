@@ -242,9 +242,13 @@
     if (!diff || !add) return 0;
     const rest = new Set(lg.restUsed);
     let n = 0;
+    // ISO date-only keys represent calendar days in UTC, independent of DST.
+    let previous = Date.parse(lg.keys[0]);
     for (let i = 1; i < lg.keys.length; i += 1) {
       const b = lg.keys[i];
-      if (diff(lg.keys[i - 1], b) >= 2 && !rest.has(add(b, -1))) n += 1;
+      const current = Date.parse(b);
+      if (current - previous >= 172800000 && !rest.has(add(b, -1))) n += 1;
+      previous = current;
     }
     return n;
   }

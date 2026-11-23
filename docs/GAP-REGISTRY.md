@@ -36,5 +36,6 @@
 | P48-23 | 2026-11-22 | Tu camino · when the handover is answered on a later day than the practice, that practice's logros are filed quietly (internal review, round 5) | Low | Accepted | News is about today's practice, as for any logro filed on a day with no practice; they stay earned and listed |
 | P48-25 | 2026-11-23 | Tu camino · the home button's scroll fired on any draw of the card, so one made while the recordings were read landed a screen short at 200% zoom (a red browser run under load) | Low | Fixed | Scrolls once Historial says its list is drawn (VU18, VU19) |
 | P48-24 | 2026-11-22 | Sync · admin.html loads the account without sync, so a sign-in there is not seen as a handover; a newcomer's leftover practice then stays with the owner (internal review, round 5) | Low | Open | Load sync's listener on admin.html, or move the handover note into account.js |
+| P48-26 | 2026-11-23 | Sync · round five's clean-up (the first sync of a sign-in forgets a handover record of the owner's own) hid whether the owner's own sign-in was noted as a handover: mutant SY38 survived a run on the merged branch | Low | Fixed | Sync test: the owner signs in again and out before any sync ran, and keeps her practice (SY38) |
 
 Update after each validation round.

@@ -620,6 +620,11 @@ time they left is unknown, and the person present keeps what she did.
   out after a sign-in sync never saw…" (both against the real account
   worker); browser "at 200% zoom the home button lands on the card's
   title…", now with a draw of the card while the recordings are read;
+  sync "Ana signing in again on her own laptop and out before any sync
+  ran keeps her practice there" (SY38: once the first sync of a sign-in
+  forgot a record of the owner's own, the old control no longer told
+  whether her own sign-in was noted as a handover; a run of the mutation
+  sets on the merged branch showed it surviving);
   mutants VP65 to VP75, SY47 to SY54, VU18 and VU19.
 
 Verification after round four's fixes: `npm run test:core` (lint and
@@ -629,4 +634,14 @@ pathui` 17 of 17 killed; browser voice-path, daily-loop, session sets,
 sync, shared-browser sync, synced-doc injection, accounts, ab-events,
 pro-features, home-design, home-choices, account-pro-states and
 redteam-accounts-profiles 331 of 331 pass.
+
+Verification after round five's fixes and the merge with main
+(2026-11-23): `npm run test:core` 1,319 pass, 0 fail, 2 todo;
+`node qa/mutate.mjs path sets syncing pathui` 75 of 75, 25 of 25, 54 of
+54 (SY38 after its new test) and 19 of 19 killed; 17 browser specs
+(voice-path, daily-loop, session sets, sync, shared-browser sync,
+accounts, ab-events, pro-features, home-design, home-choices,
+account-pro-states, redteam-accounts-profiles, synced-doc injection,
+stage-design, safari-mobile-recovery, retention, redteam-home-retention)
+452 of 452 pass under load.
 

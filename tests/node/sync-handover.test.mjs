@@ -197,6 +197,25 @@ test("control: Ana signing out of her own laptop leaves her practice there", asy
   assert.deepEqual(takes(laptop.win.VTStorage.readSyncBag("default")), ["A-1", "A-2"], "nothing of hers is put aside");
 });
 
+test("Ana signing in again on her own laptop and out before any sync ran keeps her practice there", async () => {
+  // The first sync of a sign-in forgets a record of her own (ownerStop), so only a sign-out before it ran
+  // (offline, or at once) shows whether her own sign-in was noted as a handover.
+  const worker = createWorker();
+  const laptop = createBrowser(worker);
+  await laptop.signIn("ana@example.test");
+  laptop.take("A-1");
+  assert.equal((await laptop.win.VTSync.syncNow()).ok, true);
+  await laptop.win.VTAccount.signOut();
+  await nextMs();
+  await laptop.signIn("ana@example.test");
+  assert.equal(laptop.win.VTSync.getStatus().otherOwner, false, "control: it is her own practice");
+  await nextMs();
+  laptop.take("A-2");
+  await laptop.win.VTAccount.signOut();
+  assert.equal(laptop.store.has("vt_sync_aside_v1"), false, "nothing is put aside");
+  assert.deepEqual(takes(laptop.win.VTStorage.readSyncBag("default")), ["A-1", "A-2"], "and both takes stay here");
+});
+
 /**
  * Ana signs in again on a page without sync (admin.html loads account.js alone): her session replaces Bruno's
  * in storage and nothing tells sync. Then she opens the app: a page loaded over the same storage.

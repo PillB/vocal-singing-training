@@ -30,8 +30,11 @@ function emptyStorage() {
   return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) };
 }
 
-/** VTBilling as an American browser builds it. */
-function billingHere() {
+/**
+ * VTBilling as an American browser builds it, with the operator's own
+ * checkout host list `hosts` when one is given.
+ */
+function billingHere(hosts) {
   const win = {
     console: { ...console, warn() {} },
     setTimeout,
@@ -53,6 +56,19 @@ function billingHere() {
   };
   win.window = win;
   const ctx = vm.createContext(win);
+  // The config locks itself once assigned (QA-05), so the operator's list is
+  // patched in as it is assigned, the way tests/helpers/billing.js does.
+  if (hosts) {
+    let held;
+    Object.defineProperty(win, "VT_BILLING_CONFIG", {
+      configurable: true,
+      enumerable: true,
+      get: () => held,
+      set: (v) => {
+        held = { ...v, allowedCheckoutHosts: hosts };
+      }
+    });
+  }
   for (const src of SOURCES) vm.runInContext(src, ctx);
   return win.VTBilling;
 }
@@ -88,4 +104,17 @@ test("truth-6: the pasted-link check still takes Stripe and Mercado Pago, so the
   // still a valid checkout link; only a worker answer is held to Creem.
   assert.equal(billing.validateCheckoutUrl("https://buy.stripe.com/test_not_a_portal").ok, true);
   assert.equal(billing.validateCheckoutUrl("https://www.mercadopago.com.pe/checkout/v1/redirect?pref_id=1").ok, true);
+});
+
+test("truth-6: the Creem check holds on its own, whatever the operator's host list admits", () => {
+  // An operator list (`allowedCheckoutHosts`) is free text. A look-alike host
+  // on it, which merely ends in "creem.io", is a pasted-link host the
+  // operator chose, never a page the worker can name for Creem.
+  const listed = billingHere(["creem.io", "checkout.creem.io", "notcreem.io"]);
+  // Control: the operator's list does admit it for a pasted link.
+  assert.equal(listed.validateCheckoutUrl("https://notcreem.io/portal").ok, true);
+  // Wrong: the Creem check reads "ends in creem.io" and follows it.
+  assert.equal(listed.validateCreemPageUrl("https://notcreem.io/portal").ok, false);
+  // And Creem's own pages on that list still pass.
+  assert.equal(listed.validateCreemPageUrl("https://checkout.creem.io/ch_1").ok, true);
 });

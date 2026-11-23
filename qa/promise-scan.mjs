@@ -3,17 +3,20 @@
  * proves them for the visitors it plays; tests/node/promise-guards.test.mjs uses this to prove what no set of
  * visitors can: that no other path could break them, signed in or not, on any day, after any number of takes.
  *
- * - sinksIn: every place a script can send something off the device. A fetch, a beacon, a socket, a message
- *   to another window, a worker, a WebRTC connection, an element given an address that it then loads, a
- *   navigation, a form submit, a cookie, a call into the account module's request, a resource hint (DNS
- *   prefetch and preconnect send a name out with no request the page can see), and an HTML or CSS string that
- *   loads a URL.
- * - voiceSourcesIn: every place a script can hear the voice or read a take.
+ * - sinksIn: the places a script can send something off the device, in their ordinary spellings. A fetch
+ *   (called, deferred with fetchLater, bound, or handed on as a value), a beacon, a socket, WebTransport, a
+ *   message to another window, a worker, a WebRTC connection, speech recognition (Chrome streams the
+ *   microphone to Google's servers for it), an element given an address that it then loads (by property,
+ *   setAttribute(NS) or Object.assign), a navigation, a form submit, a cookie (document.cookie or
+ *   cookieStore), a call into the account module's request, a resource hint (DNS prefetch and preconnect send
+ *   a name out with no request the page can see), a module import, and an HTML or CSS string that loads a URL.
+ * - voiceSourcesIn: every place a script can hear the voice or read a take, by name or by the takes' store.
  * - billingNamesIn / practicePath: where the plan is read, and whether Start, Stop, the routines, the rating
  *   and the step buttons can reach any of it.
  *
  * It finds the ordinary spellings, which is what an honest change uses. It is not a sandbox: a sink reached
- * through a computed name (`w["fe" + "tch"]`) is not seen, and the review of the change is what catches that.
+ * through a computed name (`w["fe" + "tch"]`), an alias made through a variable that is not a sink's own name,
+ * or a value handed from one file to another is not seen, and the review of the change is what catches that.
  */
 import { parse } from "espree";
 import { readFileSync, readdirSync } from "node:fs";
@@ -31,17 +34,24 @@ const CHANNELS = new Set([
   "Image",
   "Audio",
   "Request",
-  "BroadcastChannel"
+  "BroadcastChannel",
+  "WebTransport"
 ]);
+/** Speech recognition: in Chrome it streams the microphone to a web service, so naming it at all is a way off the device. */
+const SPEECH = new Set(["SpeechRecognition", "webkitSpeechRecognition"]);
 /** Properties that, when set, make the browser fetch or go somewhere. */
 const URL_PROPS = new Set(["src", "srcset", "href", "action", "formAction", "ping", "poster", "location"]);
-/** Elements that fetch as soon as they have an address (an anchor waits for a click, so it is not here). */
-const FETCHING_TAGS = new Set(["img", "script", "iframe", "frame", "link", "form", "object", "embed", "video", "audio", "source", "track", "input"]);
+/** Parts of the location that, when set, load a new page. */
+const LOCATION_PARTS = new Set(["href", "search", "pathname", "host", "hostname", "port", "protocol"]);
+/** Elements that fetch as soon as they have an address (an anchor waits for a click, so it is not here). SVG's are lower-cased. */
+const FETCHING_TAGS = new Set(["img", "script", "iframe", "frame", "link", "form", "object", "embed", "video", "audio", "source", "track", "input", "image", "use", "feimage"]);
 /** Names a window goes by, for `.open(` and friends. */
 const WINDOW_NAMES = new Set(["window", "global", "globalThis", "self", "top", "parent", "opener", "w", "win"]);
 const HINT = /\b(dns-prefetch|preconnect|prefetch|prerender|modulepreload)\b/;
 const HTML_TAG = new RegExp(`<(${[...FETCHING_TAGS].join("|")})\\b`, "i");
 const CSS_URL = /\burl\(/i;
+const CSS_IMPORT = /@import\b/i;
+const ANCHOR_PING = /<a\b[^>]*\bping\s*=/i;
 
 /** What hears the voice or reads a take: the microphone, the recorder, the analyser's data, the stored takes. */
 export const VOICE_SOURCES = new Set([
@@ -58,15 +68,24 @@ export const VOICE_SOURCES = new Set([
   "getFloatFrequencyData",
   "getByteTimeDomainData",
   "getFloatTimeDomainData",
+  "createMediaElementSource",
+  "decodeAudioData",
+  "webkitGetUserMedia",
+  "mozGetUserMedia",
+  ...SPEECH,
   "recBlob",
   "saveRecording",
   "getRecordingBlob",
   "listRecordings"
 ]);
+/** The takes' own store, opened by its name rather than through js/storage.js. */
+const VOICE_LITERALS = new Set(["vt_recordings_db", "recordings"]);
 /** What reads the plan or opens the sale. */
 export const BILLING_NAMES = new Set(["VTBilling", "openPricing", "openAccount", "isPro", "trialActive", "trialStartedAt", "trialDaysLeft", "getEntitlement"]);
 /** What asks whether the visitor is signed in. */
-export const ACCOUNT_NAMES = new Set(["signedIn", "getSessionToken", "openAccount"]);
+export const ACCOUNT_NAMES = new Set(["VTAccount", "VTSync", "signedIn", "getSessionToken", "openAccount", "signInWithGoogle", "startEmailSignIn", "renderGoogleButton"]);
+/** What `VTAccount.getState()` says about the visitor: `.account` is who is signed in, `.entitlement` what they bought. */
+const ACCOUNT_STATE = new Set(["account", "entitlement"]);
 
 const nameOf = (node) => {
   if (!node) return "";
@@ -77,71 +96,128 @@ const nameOf = (node) => {
 const propName = (member) => (member.computed && member.property.type !== "Literal" ? "" : nameOf(member.property));
 const objName = (member) => (member.object.type === "MemberExpression" ? propName(member.object) : nameOf(member.object));
 
-/** The name a function is known by: its own, the variable or property it is assigned to, or the method's key. */
-function functionName(node, parent) {
+/** The key a function is set under: the property it is assigned to, or its key in an object or class. */
+function keyOf(parent) {
+  if (parent.type === "AssignmentExpression") return propName(parent.left);
+  return parent.type === "Property" || parent.type === "MethodDefinition" ? nameOf(parent.key) : "";
+}
+
+/**
+ * The name a function is known by: its own, the variable it is assigned to, or its key. A callback set on a
+ * property or in an object inside a named function (`btn.onclick = () => ...` in renderNextStepCard) is named
+ * after both, "renderNextStepCard.onclick", so a file's many onclicks are not merged into one. A class's
+ * methods keep their own names, for `this.method()`.
+ */
+function functionName(node, parent, owner) {
   if (node.id?.name) return node.id.name;
   if (!parent) return "";
   if (parent.type === "VariableDeclarator") return nameOf(parent.id);
-  if (parent.type === "AssignmentExpression") return parent.left.type === "MemberExpression" ? propName(parent.left) : nameOf(parent.left);
-  if (parent.type === "Property" || parent.type === "MethodDefinition") return nameOf(parent.key);
-  return "";
+  if (parent.type === "AssignmentExpression" && parent.left.type !== "MemberExpression") return nameOf(parent.left);
+  const key = keyOf(parent);
+  return key && owner !== "(top)" && parent.type !== "MethodDefinition" ? `${owner}.${key}` : key;
 }
 
 const isFunction = (n) => n.type === "FunctionDeclaration" || n.type === "FunctionExpression" || n.type === "ArrowFunctionExpression";
 
+/** A script, or a module when it imports or exports. */
+function parseScript(source) {
+  try {
+    return parse(source, { ecmaVersion: "latest", sourceType: "script" });
+  } catch (err) {
+    try {
+      return parse(source, { ecmaVersion: "latest", sourceType: "module" });
+    } catch {
+      throw err;
+    }
+  }
+}
+
 /**
- * Walk a script, calling `fn(node, parent, owner)` for every node, where `owner` is the nearest named function
- * around it ("(top)" outside any): a sink in an unnamed callback is filed under the function that made it.
+ * Walk a script, calling `fn(node, parent, owner, outer, up)` for every node. `owner` is the nearest named
+ * function around it ("(top)" outside any): a sink in an unnamed callback is filed under the function that made
+ * it. `outer` is set on the node where a named function opens, to the function it opens in. `up` is the chain
+ * of nodes above, nearest last.
  */
 function walk(source, fn) {
-  const ast = parse(source, { ecmaVersion: "latest", sourceType: "script" });
-  const visit = (node, parent, owner) => {
+  const up = [];
+  const visit = (node, owner) => {
     if (!node || typeof node.type !== "string") return;
-    const here = isFunction(node) ? functionName(node, parent) || owner : owner;
-    fn(node, parent, here, isFunction(node) && here !== owner);
+    const parent = up.at(-1) || null;
+    const here = isFunction(node) ? functionName(node, parent, owner) || owner : owner;
+    fn(node, parent, here, here !== owner ? owner : null, up);
+    up.push(node);
     for (const v of Object.values(node)) {
-      if (Array.isArray(v)) v.forEach((c) => visit(c, node, here));
-      else if (v && typeof v.type === "string") visit(v, node, here);
+      if (Array.isArray(v)) v.forEach((c) => visit(c, here));
+      else if (v && typeof v.type === "string") visit(v, here);
     }
+    up.pop();
   };
-  visit(ast, null, "(top)");
+  visit(parseScript(source), "(top)");
 }
 
 /** Methods that send whatever they are called on. */
 const NAMED_CALLS = new Map([
   ["fetch", "fetch"],
+  ["fetchLater", "fetchLater"],
   ["sendBeacon", "sendBeacon"],
   ["postMessage", "postMessage"],
   ["submit", "submit"],
-  ["requestSubmit", "submit"]
+  ["requestSubmit", "submit"],
+  ["importScripts", "importScripts"]
 ]);
+/** Functions that send when called bare. */
+const BARE_CALLS = new Set(["fetch", "fetchLater", "importScripts"]);
+/** A script that has its own `open`, so a bare `open(` there is not the window's. */
+const OWN_OPEN = /\bfunction\s+open\s*\(|\b(?:const|let|var)\s+open\b/;
 
 /** Methods that send only on one object, as `object.method`, and the sink each makes. */
 const OWNED_CALLS = new Map([
   ["serviceWorker.register", "serviceWorker.register"],
   ["location.assign", "navigate"],
   ["location.replace", "navigate"],
+  ["navigation.navigate", "navigate"],
   ["navigator.share", "share"],
+  ["cookieStore.set", "cookie"],
   ["VTAccount.request", "VTAccount.request"]
 ]);
+/** Ways to call a function later or on another object: `fetch.call(...)`, `navigator.sendBeacon.bind(navigator)`. */
+const BOUND = new Set(["call", "apply", "bind"]);
+
+/** The sink a function is, as a value: `fetch`, `window.fetch`, `navigator.sendBeacon`, or "". */
+function sinkValue(node) {
+  if (node.type === "Identifier") return BARE_CALLS.has(node.name) ? node.name : "";
+  return node.type === "MemberExpression" ? NAMED_CALLS.get(propName(node)) || "" : "";
+}
 
 /** The sink a call makes, or "". */
-function callSink(node) {
+function callSink(node, ctx) {
   const c = node.callee;
-  if (c.type === "Identifier") return c.name === "fetch" || c.name === "importScripts" ? c.name : "";
+  if (c.type === "Identifier") return BARE_CALLS.has(c.name) ? c.name : c.name === "open" && !ctx.ownOpen ? "window.open" : "";
   if (c.type !== "MemberExpression") return "";
   const prop = propName(c);
+  if (BOUND.has(prop)) return sinkValue(c.object);
   const obj = objName(c);
   if (NAMED_CALLS.has(prop)) return NAMED_CALLS.get(prop);
   if (prop === "open" && WINDOW_NAMES.has(obj)) return "window.open";
+  if (obj === "Object" && prop === "assign") return assignedAddress(node.arguments.slice(1));
   return OWNED_CALLS.get(`${obj}.${prop}`) || attributeSink(node, prop);
 }
 
 function attributeSink(node, prop) {
-  const arg = node.arguments[0];
+  const arg = node.arguments[prop.endsWith("NS") ? 1 : 0];
   const value = arg?.type === "Literal" && typeof arg.value === "string" ? arg.value.toLowerCase() : "";
-  if (prop === "setAttribute" && (URL_PROPS.has(value) || value === "formaction")) return "setAttribute:" + value;
-  if (prop === "createElement" && FETCHING_TAGS.has(value)) return "createElement:" + value;
+  const attribute = URL_PROPS.has(value) || value === "formaction" || value === "xlink:href";
+  if ((prop === "setAttribute" || prop === "setAttributeNS") && attribute) return "setAttribute:" + value;
+  if ((prop === "createElement" || prop === "createElementNS") && FETCHING_TAGS.has(value)) return "createElement:" + value;
+  return "";
+}
+
+/** `Object.assign(img, { src: url })`: the first address an object sets, as "set:src", or "". */
+function assignedAddress(sources) {
+  for (const o of sources) {
+    const hit = o.type === "ObjectExpression" && o.properties.find((p) => p.type === "Property" && URL_PROPS.has(nameOf(p.key)) && !notAnAddress(p.value));
+    if (hit) return "set:" + nameOf(hit.key);
+  }
   return "";
 }
 
@@ -160,38 +236,74 @@ function assignSink(node) {
   const prop = propName(l);
   const obj = objName(l);
   if (prop === "cookie" && obj === "document") return "cookie";
-  if (prop === "location" || (obj === "location" && prop === "href")) return "navigate";
+  if (prop === "location" || (obj === "location" && LOCATION_PARTS.has(prop))) return "navigate";
   return URL_PROPS.has(prop) ? "set:" + prop : "";
 }
 
-/** The sink a string carries: a resource hint, an HTML tag that fetches, or a CSS url(). */
+/** The sink a string carries: a resource hint, an HTML tag that fetches, an anchor that pings, or CSS that loads. */
 function textSink(text) {
   if (HINT.test(text)) return "hint";
   if (HTML_TAG.test(text)) return "html:" + HTML_TAG.exec(text)[1].toLowerCase();
+  if (ANCHOR_PING.test(text)) return "html:a-ping";
+  if (CSS_IMPORT.test(text)) return "css-import";
   if (CSS_URL.test(text)) return "css-url";
   return "";
 }
 
-function nodeSink(node) {
-  switch (node.type) {
-    case "CallExpression":
-      return callSink(node);
-    case "ImportExpression":
-      return "import()";
-    case "NewExpression": {
-      const name = node.callee.type === "MemberExpression" ? propName(node.callee) : nameOf(node.callee);
-      return CHANNELS.has(name) ? "new " + name : "";
-    }
-    case "AssignmentExpression":
-      return assignSink(node);
-    case "Literal":
-      return typeof node.value === "string" ? textSink(node.value) : "";
-    case "TemplateElement":
-      return textSink(node.value.cooked ?? node.value.raw);
-    default:
-      return "";
-  }
+/** Whether a value reaches its parent's result: through `a || b` or `a ? b : c`, but not as `&&`'s left or a test. */
+function flowsThrough(p, child) {
+  if (p.type === "LogicalExpression") return p.operator !== "&&" || p.right === child;
+  if (p.type === "ConditionalExpression") return p.test !== child;
+  if (p.type === "SequenceExpression") return p.expressions.at(-1) === child;
+  return p.type === "ChainExpression" || p.type === "AwaitExpression";
 }
+
+/** Where a value is kept, passed or returned. */
+const HOLDS = {
+  VariableDeclarator: (p, c) => p.init === c,
+  AssignmentExpression: (p, c) => p.right === c,
+  Property: (p, c) => p.value === c,
+  ArrayExpression: () => true,
+  CallExpression: (p, c) => p.arguments.includes(c),
+  NewExpression: (p, c) => p.arguments.includes(c),
+  ReturnStatement: () => true,
+  ArrowFunctionExpression: (p, c) => p.body === c
+};
+
+/** Whether `node` is handed on as a value (`const f = fetch`, `go(fetch)`), rather than called or only tested. */
+function handedOn(node, up) {
+  let child = node;
+  let i = up.length - 1;
+  while (i >= 0 && flowsThrough(up[i], child)) child = up[i--];
+  const holds = i >= 0 ? HOLDS[up[i].type] : null;
+  return !!holds && holds(up[i], child);
+}
+
+/** A sink function handed on as a value, to be called later. */
+function valueSink(node, up) {
+  const v = sinkValue(node);
+  return v && handedOn(node, up) ? v : "";
+}
+
+const ctorName = (callee) => {
+  if (callee.type === "LogicalExpression") return ctorName(callee.left) || ctorName(callee.right);
+  return callee.type === "MemberExpression" ? propName(callee) : nameOf(callee);
+};
+
+/** The sink each kind of node can make. */
+const NODE_SINKS = {
+  CallExpression: (n, up, ctx) => callSink(n, ctx),
+  NewExpression: (n) => (CHANNELS.has(ctorName(n.callee)) ? "new " + ctorName(n.callee) : ""),
+  AssignmentExpression: (n) => assignSink(n),
+  Identifier: (n, up) => (SPEECH.has(n.name) ? "speech-recognition" : valueSink(n, up)),
+  MemberExpression: (n, up) => valueSink(n, up),
+  Literal: (n) => (typeof n.value === "string" ? textSink(n.value) : ""),
+  TemplateElement: (n) => textSink(n.value.cooked ?? n.value.raw),
+  ImportExpression: () => "import()",
+  ImportDeclaration: () => "import",
+  ExportAllDeclaration: () => "import",
+  ExportNamedDeclaration: (n) => (n.source ? "import" : "")
+};
 
 const bump = (bag, key) => {
   bag[key] = (Object.hasOwn(bag, key) ? bag[key] : 0) + 1;
@@ -204,42 +316,84 @@ const bump = (bag, key) => {
  */
 export function sinksIn(source) {
   const found = Object.create(null);
-  walk(source, (node, _parent, owner) => {
-    const kind = nodeSink(node);
+  const ctx = { ownOpen: OWN_OPEN.test(source) };
+  walk(source, (node, _parent, owner, _outer, up) => {
+    const kind = NODE_SINKS[node.type]?.(node, up, ctx);
     if (kind) bump(found, `${owner} › ${kind}`);
   });
   return found;
 }
 
-/** Each name from `names` the script uses, as an identifier or a property, with a count. */
-function namesIn(source, names) {
+/** The name a node uses from `names`: an identifier or property, a bracketed key (`m["getUserMedia"]`), or one of `literals` anywhere. */
+function nameUsed(node, parent, names, literals) {
+  if (node.type === "Identifier") return names.has(node.name) ? node.name : "";
+  if (node.type !== "Literal" || typeof node.value !== "string") return "";
+  if (literals?.has(node.value)) return node.value;
+  return parent?.type === "MemberExpression" && parent.computed && parent.property === node && names.has(node.value) ? node.value : "";
+}
+
+/** `VTAccount.getState().account` (or `.entitlement`): who is signed in, read straight from the account module. */
+function accountState(node) {
+  if (node.type !== "MemberExpression" || !ACCOUNT_STATE.has(propName(node))) return "";
+  const c = node.object.type === "CallExpression" ? node.object.callee : null;
+  return c?.type === "MemberExpression" && propName(c) === "getState" && objName(c) === "VTAccount" ? "getState()." + propName(node) : "";
+}
+
+/** What a node uses that asks whether the visitor is signed in. */
+const accountUsed = (node, parent) => nameUsed(node, parent, ACCOUNT_NAMES) || accountState(node);
+
+/** Each name from `names` the script uses, with a count. */
+function namesIn(source, used) {
   const found = {};
-  walk(source, (node) => {
-    if (node.type === "Identifier" && names.has(node.name)) bump(found, node.name);
+  walk(source, (node, parent) => {
+    const name = used(node, parent);
+    if (name) bump(found, name);
   });
   return found;
 }
 
 /** Where a script hears the voice or reads a take. */
-export const voiceSourcesIn = (source) => namesIn(source, VOICE_SOURCES);
+export const voiceSourcesIn = (source) => namesIn(source, (n, p) => nameUsed(n, p, VOICE_SOURCES, VOICE_LITERALS));
 /** Where a script reads the plan or opens the sale. */
-export const billingNamesIn = (source) => namesIn(source, BILLING_NAMES);
+export const billingNamesIn = (source) => namesIn(source, (n, p) => nameUsed(n, p, BILLING_NAMES));
+/** Where a script asks whether the visitor is signed in. */
+export const accountNamesIn = (source) => namesIn(source, accountUsed);
+
+/** Bump what a node uses into its function's billing, voice and account bags. */
+function tally(fn, node, parent) {
+  const billing = nameUsed(node, parent, BILLING_NAMES);
+  if (billing) bump(fn.billing, billing);
+  const voice = nameUsed(node, parent, VOICE_SOURCES, VOICE_LITERALS);
+  if (voice) bump(fn.voice, voice);
+  const account = accountUsed(node, parent);
+  if (account) bump(fn.account, account);
+}
+
+/** The function a node refers to: a name that is not a property, or a method called on `this`. */
+function refOf(node, parent) {
+  if (node.type !== "Identifier") return "";
+  const isProperty = parent?.type === "MemberExpression" && parent.property === node && !parent.computed;
+  return !isProperty || parent.object.type === "ThisExpression" ? node.name : "";
+}
 
 /**
- * Each named function of a script: the names it refers to (a call, or a function handed on as a callback),
- * and the billing names and voice sources it uses. Functions that share a name are merged, which can only add paths.
+ * Each named function of a script: the names it refers to (a call, a function handed on as a callback, a method
+ * called on `this`, and every named function made inside it, such as a callback it sets on a property), and the
+ * billing names, voice sources and sign-in checks it uses. Functions that share a name are merged, which can
+ * only add paths.
  */
 export function functionsOf(source) {
   const fns = Object.create(null);
   const entry = (name) => (fns[name] ||= { refs: new Set(), billing: {}, voice: {}, account: {} });
-  walk(source, (node, parent, owner, opens) => {
-    if (opens) entry(owner);
-    if (node.type !== "Identifier" || !fns[owner]) return;
-    if (BILLING_NAMES.has(node.name)) bump(fns[owner].billing, node.name);
-    if (VOICE_SOURCES.has(node.name)) bump(fns[owner].voice, node.name);
-    if (ACCOUNT_NAMES.has(node.name)) bump(fns[owner].account, node.name);
-    const isProperty = parent?.type === "MemberExpression" && parent.property === node && !parent.computed;
-    if (!isProperty) fns[owner].refs.add(node.name);
+  walk(source, (node, parent, owner, outer) => {
+    if (outer) {
+      entry(owner);
+      fns[outer]?.refs.add(owner);
+    }
+    if (!fns[owner]) return;
+    tally(fns[owner], node, parent);
+    const ref = refOf(node, parent);
+    if (ref) fns[owner].refs.add(ref);
   });
   return fns;
 }
@@ -278,7 +432,10 @@ export function practicePath(source, roots, kind = "billing") {
   return out;
 }
 
-/** The scripts a visitor's browser runs: everything under js/, and the inline scripts of the pages. */
+/** Inline script types the browser runs as code. Speculation rules are a prefetch, kept as a string so they read as a hint. */
+const RUNS = /^(text\/javascript|application\/javascript|module)?$/;
+
+/** The scripts a visitor's browser runs: everything under js/, and the inline scripts of every page. */
 export function shippedScripts(root) {
   const out = {};
   const visit = (dir) => {
@@ -289,11 +446,14 @@ export function shippedScripts(root) {
     }
   };
   visit("js");
-  for (const page of ["index.html", "guide.html", "privacy.html", "terms.html"]) {
+  for (const page of readdirSync(root).filter((f) => f.endsWith(".html")).sort()) {
     const html = readFileSync(path.join(root, page), "utf8");
-    const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]);
-    inline.forEach((code, i) => {
-      if (code.trim()) out[`${page}#inline-${i + 1}`] = code;
+    const inline = [...html.matchAll(/<script\b(?![^>]*\bsrc\s*=)([^>]*)>([\s\S]*?)<\/script>/gi)];
+    inline.forEach(([, attrs, code], i) => {
+      const type = (/\btype\s*=\s*["']?([^"'\s>]*)/i.exec(attrs)?.[1] || "").toLowerCase();
+      if (!code.trim()) return;
+      if (RUNS.test(type)) out[`${page}#inline-${i + 1}`] = code;
+      else if (type === "speculationrules") out[`${page}#inline-${i + 1}`] = JSON.stringify(code);
     });
   }
   return out;
@@ -307,4 +467,46 @@ export function acrossScripts(root, scan) {
     if (Object.keys(found).length) out[file] = found;
   }
   return out;
+}
+
+/** Names an expression uses, as identifiers or properties. */
+function mentions(node, names) {
+  let hit = false;
+  walkNode(node, (n) => {
+    if (n.type === "Identifier" && names.has(n.name)) hit = true;
+  });
+  return hit;
+}
+
+function walkNode(node, fn) {
+  if (!node || typeof node.type !== "string") return;
+  fn(node);
+  for (const v of Object.values(node)) {
+    if (Array.isArray(v)) v.forEach((c) => walkNode(c, fn));
+    else if (v && typeof v.type === "string") walkNode(v, fn);
+  }
+}
+
+/** A variable made from AdSense's queue: `const q = (window.adsbygoogle = window.adsbygoogle || [])`. */
+function queueAlias(node, queues) {
+  if (node.type === "VariableDeclarator" && node.init && mentions(node.init, queues)) return nameOf(node.id);
+  if (node.type === "AssignmentExpression" && node.left.type === "Identifier" && mentions(node.right, queues)) return node.left.name;
+  return "";
+}
+
+/**
+ * Every push to AdSense's queue, by its name or by a variable made from it, as the number of keys in each
+ * object pushed ("?" for anything else). `{}` asks for the unit the page drew, and nothing more.
+ */
+export function adPushes(source) {
+  const queues = new Set(["adsbygoogle"]);
+  const pushes = [];
+  walk(source, (node) => {
+    const alias = queueAlias(node, queues);
+    if (alias) queues.add(alias);
+    const c = node.type === "CallExpression" ? node.callee : null;
+    if (c?.type !== "MemberExpression" || propName(c) !== "push" || !mentions(c.object, queues)) return;
+    pushes.push(node.arguments.map((a) => (a.type === "ObjectExpression" ? a.properties.length : "?")).join(","));
+  });
+  return pushes;
 }

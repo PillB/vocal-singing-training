@@ -11,16 +11,22 @@
 //    on any path, fails until somebody writes down why, and says why it cannot carry the voice.
 // 2. Only the files that make a take can hear the voice or read a take, and in each of them no function that
 //    does leads to one that sends.
-// 3. Start, Stop, Continue, the routines, the rating, Next and '+30 s' never reach the pricing window, and
-//    read the plan only in the functions listed, to draw Pro's own extras. A cap needs one or the other.
+// 3. Start, Stop, Continue, the routines (their banner's pause, continue and end too), the take's own record
+//    and stop, the welcome-back and reminder starts, the rating, Next and '+30 s' never reach the pricing
+//    window, and read the plan only in the functions listed, to draw Pro's own extras. A cap needs one or the
+//    other. The path follows calls, callbacks handed on, callbacks set on a property (a button's onclick, the
+//    engine's onFrame) and methods called on `this`.
 // 4. The plan is read only in the files listed, so a cap in a routine, a goal set or the engine shows here.
 // 5. Every event's props are the ones in the plan below: js/analytics.js sends only what the worker keeps
 //    (tests/node/analytics-wire.test.mjs), and this keeps a new prop on a known event from riding out.
 // 6. No account needed: nothing on the way to practising, saving a take, rating it or looking back at the
-//    history asks whether the visitor is signed in (but the header's label); the code that keeps a guest's
+//    history touches the account module or asks whether the visitor is signed in (but the header's label);
+//    the code that keeps a guest's
 //    progress never asks, never keeps it for the tab only, and keeps it under the names it always has.
 // 7. No ad during practice: only js/ads.js reads the ad config, so no toast or card elsewhere can carry an ad
-//    past its practice gate, and it asks Google for nothing but the units it draws.
+//    past its practice gate, and it asks Google for nothing but the units it draws. Google's Auto ads (anchor
+//    and vignette overlays) are not asked for by the page: they are a switch in the AdSense account, which no
+//    test can see, so the go-live checklist keeps it off (docs/40 step 9c).
 //
 // What these do not do: see a sink spelt through a computed name, or follow a value handed between files by a
 // variable. They are tripwires for honest changes, which is how the 27 were written; review is the rest.
@@ -29,7 +35,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parse } from "espree";
 import {
+  ACCOUNT_NAMES,
+  accountNamesIn,
   acrossScripts,
+  adPushes,
   billingNamesIn,
   functionsOf,
   practicePath,
@@ -120,15 +129,21 @@ export const VOICE_FILES = {
     "recBlob"
   ],
   "js/recorder.js": ["MediaRecorder", "createMediaStreamSource", "getByteTimeDomainData", "getUserMedia", "ondataavailable"],
-  "js/storage.js": ["getRecordingBlob", "listRecordings", "saveRecording"]
+  "js/storage.js": ["getRecordingBlob", "listRecordings", "recordings", "saveRecording", "vt_recordings_db"]
 };
 
 /** Sinks that reach the network. An element's address and a player's blob: are left to the list above. */
-const NETWORK = /› (fetch|sendBeacon|postMessage|window\.open|navigate|submit|cookie|share|VTAccount\.request|import\(\)|importScripts|serviceWorker\.register|hint|new (?!Audio$))/;
+const NETWORK = /› (fetch|fetchLater|sendBeacon|postMessage|window\.open|navigate|submit|cookie|share|VTAccount\.request|import|importScripts|serviceWorker\.register|hint|speech-recognition|new (?!Audio$))/;
 
-/** Where practice starts, goes on and ends, and where a take is saved and looked back at: the binders and what they call. */
+/**
+ * Where practice starts, goes on and ends, and where a take is saved and looked back at: the binders and what they
+ * call. The routine's banner (pause, continue, end), the take's own record and stop (bindTakeTools) and the
+ * welcome-back and reminder starts (startMicroSession) are wired in binders that also open other things, so their
+ * practice handlers are roots by name.
+ */
 export const PRACTICE_ROOTS = [
   "bindPracticeButtons",
+  "bindTakeTools",
   "bindRating",
   "bindReferenceCues",
   "renderNextStepCard",
@@ -152,7 +167,12 @@ export const PRACTICE_ROOTS = [
   "leaveUnrated",
   "showPlayback",
   "renderHistory",
-  "bindHistoryList"
+  "bindHistoryList",
+  "pauseStructured",
+  "resumeStructured",
+  "askEndStructured",
+  "endStructured",
+  "startMicroSession"
 ];
 
 /** The functions on that path that read the plan, what they read, and why: each draws, none stops practice. */
@@ -168,12 +188,13 @@ export const PLAN_READERS = {
   progressionKeysFor: ["VTBilling:1", "Pro's extra piano progressions, an extra on top of the exercise"]
 };
 
-/** The one function on that way that asks whether the visitor is signed in, and why. */
-export const SIGN_IN_READERS = { headerPlanState: ["signedIn:1", "the header's plan label: Pro, trial, or signed in"] };
+/** The one function on that way that touches the account module or asks whether the visitor is signed in, and why. */
+export const SIGN_IN_READERS = { headerPlanState: ["VTAccount:1 signedIn:1", "the header's plan label: Pro, trial, or signed in"] };
 
-/** The files that ask whether the visitor is signed in, and why. */
+/** The files that use the account module or ask whether the visitor is signed in, and why. */
 export const SIGN_IN_FILES = {
   "js/account.js": "the account itself",
+  "js/admin-layouts.js": "the owner's admin window, its layout counts",
   "js/admin.js": "the owner's admin window",
   "js/app.js": "the account panel, the header and the checkout's need of an account",
   "js/billing.js": "a purchase tied to an account",
@@ -183,7 +204,7 @@ export const SIGN_IN_FILES = {
 
 /** The files that keep a guest's progress: they never ask about an account and never keep anything for the tab only. */
 export const GUEST_STORES = ["js/practice-days.js", "js/session.js", "js/storage.js"];
-const NOT_IN_GUEST_STORES = /\b(sessionStorage|VTAccount|VTSync|signedIn|getSessionToken|openAccount)\b/g;
+const NOT_IN_GUEST_STORES = new RegExp(`\\b(sessionStorage|${[...ACCOUNT_NAMES].join("|")})\\b`, "g");
 
 /**
  * The names a guest's progress is kept under. With no account there is nothing to restore it from, so renaming one
@@ -401,6 +422,19 @@ test("every event carries only the props in the plan, and nothing passes one on 
   assert.deepEqual([...new Set(relays)].sort(), [...TRACK_RELAYS].sort());
 });
 
+test("every event in the plan is one the worker keeps, with props it keeps: the wire filter cannot hide a drift", async () => {
+  // js/analytics.js drops on the way out what the worker would drop on arrival, so the worker's count of unknown
+  // events can no longer show a client that raises one. This is where that drift shows instead: before it ships.
+  const { EVENT_NAMES, sanitizeProps } = await import("../../workers/entitlements/src/events.js");
+  const missing = [];
+  for (const [name, keys] of Object.entries(TRACKING_PLAN)) {
+    const known = name.endsWith("*") ? [...EVENT_NAMES].some((n) => n.startsWith(name.slice(0, -1))) : EVENT_NAMES.has(name);
+    if (!known) missing.push(name);
+    for (const k of keys.filter((k) => !k.startsWith("..."))) if (!Object.hasOwn(sanitizeProps({ [k]: "x" }), k)) missing.push(`${name}.${k}`);
+  }
+  assert.deepEqual(missing, [], "an event or a prop the worker drops: add it to workers/entitlements/src/events.js and js/analytics.js's WIRE_NAMES together");
+});
+
 test("nothing on the way to practising, saving, rating or the history asks whether the visitor is signed in, but the header", () => {
   const path = practicePath(readFileSync("js/app.js", "utf8"), PRACTICE_ROOTS, "account");
   const found = Object.fromEntries(Object.entries(path).map(([n, { uses }]) => [n, uses]));
@@ -408,13 +442,8 @@ test("nothing on the way to practising, saving, rating or the history asks wheth
   assert.deepEqual(diffCounts(found, expected), [], `asked on the way: ${JSON.stringify(path, null, 1)}`);
 });
 
-test("only the files listed ask whether the visitor is signed in", () => {
-  const asks = (source) => {
-    const n = {};
-    for (const m of source.matchAll(/\b(signedIn|getSessionToken|openAccount)\b/g)) n[m[1]] = (n[m[1]] || 0) + 1;
-    return n;
-  };
-  assert.deepEqual(Object.keys(acrossScripts(".", asks)).sort(), Object.keys(SIGN_IN_FILES).sort());
+test("only the files listed use the account module or ask whether the visitor is signed in", () => {
+  assert.deepEqual(Object.keys(acrossScripts(".", accountNamesIn)).sort(), Object.keys(SIGN_IN_FILES).sort());
 });
 
 test("the code that keeps a guest's progress never asks about an account and never keeps anything for the tab only", () => {
@@ -437,21 +466,13 @@ test("only js/ads.js reads the ad config, and it asks AdSense for nothing but th
     .map(([f]) => f)
     .sort();
   assert.deepEqual(readers, AD_FILES);
-  const pushes = [];
-  const visit = (node) => {
-    if (!node || typeof node.type !== "string") return;
-    if (node.type === "CallExpression" && node.callee.type === "MemberExpression" && node.callee.property.name === "push") {
-      const target = readFileSync("js/ads.js", "utf8").slice(node.callee.object.start, node.callee.object.end);
-      if (/adsbygoogle/.test(target)) pushes.push(node.arguments.map((a) => (a.type === "ObjectExpression" ? a.properties.length : "?")).join(","));
-    }
-    for (const v of Object.values(node)) {
-      if (Array.isArray(v)) v.forEach(visit);
-      else if (v && typeof v.type === "string") visit(v);
-    }
-  };
-  visit(parse(readFileSync("js/ads.js", "utf8"), { ecmaVersion: "latest", sourceType: "script", range: true }));
+  const pushes = adPushes(readFileSync("js/ads.js", "utf8"));
   assert.ok(pushes.length >= 1, "control: the unit's own push is found");
-  assert.deepEqual([...new Set(pushes)], ["0"], "every push to adsbygoogle is an empty {}: a unit, never page-level or overlay ads");
+  assert.deepEqual(
+    [...new Set(pushes)],
+    ["0"],
+    "every push to adsbygoogle is an empty {}: the unit the page drew, never page-level ads asked for by the page (Auto ads are an AdSense account switch: docs/40 step 9c)"
+  );
 });
 
 /* ------------------------------------------------------------------ controls: each finder sees the red team's changes */
@@ -522,4 +543,112 @@ test("control: a new prop on a known event, a new event and a new relay are each
     ]
   );
   assert.deepEqual(relays, ["x.js › relay"]);
+});
+
+test("control: the review's spellings of a way off the device are each found, and a module's own open or a test of beacon support is not", () => {
+  const src = `
+    function speak() { const r = new (window.SpeechRecognition || window.webkitSpeechRecognition)(); r.start(); }
+    function later(b) { window.fetchLater?.("/api/backup", { method: "PUT", body: b, activateAfter: 120000 }); }
+    function bound(b) { const send = navigator.sendBeacon.bind(navigator); send("/v", b); fetch.call(window, "/g", { body: b }); }
+    function alias(b) { const f = window.fetch || polyfill; return f("/g", { body: b }); }
+    function quic(u) { new WebTransport(u); }
+    function crumb(p) { cookieStore.set("t", p); }
+    function assign(u) { Object.assign(img, { src: u }); }
+    function svg(u) { const i = document.createElementNS(NS, "image"); i.setAttributeNS(XLINK, "href", u); }
+    function markup(u) { el.innerHTML = '<svg><image href="' + u + '"></image></svg>'; }
+    function pinged(u) { el.innerHTML = '<a href="/x" ping="' + u + '">x</a>'; }
+    function css(u) { style.textContent = "@import '" + u + "';"; }
+    function search(q) { location.search = "?d=" + q; }
+    function nav(u) { navigation.navigate(u); }
+    function worker() { self.importScripts("/w.js"); }
+    function popup(u) { open(u); }
+    function tested() { if (navigator.sendBeacon && ok) go(); }
+  `;
+  assert.deepEqual({ ...sinksIn(src) }, {
+    "speak › speech-recognition": 2,
+    "later › fetchLater": 1,
+    "bound › sendBeacon": 1,
+    "bound › fetch": 1,
+    "alias › fetch": 1,
+    "quic › new WebTransport": 1,
+    "crumb › cookie": 1,
+    "assign › set:src": 1,
+    "svg › createElement:image": 1,
+    "svg › setAttribute:href": 1,
+    "markup › html:image": 1,
+    "pinged › html:a-ping": 1,
+    "css › css-import": 1,
+    "search › navigate": 1,
+    "nav › navigate": 1,
+    "worker › importScripts": 1,
+    "popup › window.open": 1
+  });
+  assert.deepEqual({ ...sinksIn("function open(o) {} function wire() { open({ kind: 'bug' }); }") }, {}, "a module's own open() is not the window's");
+});
+
+test("control: the review's ways to hear the voice or read a take, and to ask about an account, are each found", () => {
+  const voice = `
+    function a() { return navigator.mediaDevices["getUserMedia"]({ audio: true }); }
+    function b(el) { return ctx.createMediaElementSource(el); }
+    async function c(blob) { return ctx.decodeAudioData(await blob.arrayBuffer()); }
+    function d() { return indexedDB.open("vt_recordings_db"); }
+    function e() { navigator.webkitGetUserMedia({ audio: true }, ok, no); }
+    function f() { return new webkitSpeechRecognition(); }
+  `;
+  assert.deepEqual(Object.keys(voiceSourcesIn(voice)).sort(), [
+    "createMediaElementSource",
+    "decodeAudioData",
+    "getUserMedia",
+    "vt_recordings_db",
+    "webkitGetUserMedia",
+    "webkitSpeechRecognition"
+  ]);
+  const account = `
+    function save() { if (!window.VTAccount?.getState?.()?.account) return window.VTAccount.signInWithGoogle?.(); }
+  `;
+  assert.deepEqual(practicePath(account, ["save"], "account"), {
+    save: { uses: "VTAccount:2 getState().account:1 signInWithGoogle:1", via: "save" }
+  });
+});
+
+test("control: a cap in a callback set on a property, in a method called on this, and a hearer's method that sends are caught", () => {
+  const app = `
+    function renderNextStepCard() { btn.onclick = () => { if (overHour() && !window.VTBilling?.isPro?.()) return openPricing(); startDaily(); }; }
+    function wireEngineForTake() { state.practice.onFrame = (f) => { if (overHour()) return; paint(f); }; }
+    function overHour() { return spent() > 3600; }
+    function showMicBlocked() { retry.onclick = () => go(); skip.onclick = () => openPricing(); }
+  `;
+  const path = practicePath(app, ["renderNextStepCard", "wireEngineForTake"]);
+  assert.deepEqual(Object.keys(path), ["renderNextStepCard.onclick"], "the Start card's onclick is on the path; showMicBlocked's skip, not reached, is not");
+  assert.equal(path["renderNextStepCard.onclick"].uses, "VTBilling:1 isPro:1 openPricing:1");
+  assert.deepEqual(reachable(functionsOf(app), ["wireEngineForTake"]).get("overHour"), ["wireEngineForTake", "wireEngineForTake.onFrame", "overHour"]);
+
+  const engine = `
+    class Engine {
+      start() { this.recorder = new MediaRecorder(this.stream); this.recorder.onstop = () => this._report(this.recBlob); }
+      _report(b) { fetch("/api/grade", { method: "POST", body: b }); }
+    }
+  `;
+  const fns = functionsOf(engine);
+  const reach = reachable(fns, Object.keys(fns).filter((n) => Object.keys(fns[n].voice).length));
+  assert.deepEqual(reach.get("_report"), ["start.onstop", "_report"], "the hearer that holds the take reaches the method it calls on this");
+});
+
+test("control: an aliased push to AdSense's queue is found, and a page's JSON-LD or speculation rules do not break the scan", async () => {
+  assert.deepEqual(adPushes("const q = (window.adsbygoogle = window.adsbygoogle || []); q.push({ google_ad_client: 'ca-pub-1', enable_page_level_ads: true }); (adsbygoogle = adsbygoogle || []).push({});"), ["2", "0"]);
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const root = mkdtempSync(tmpdir() + "/vt-scan-");
+  mkdirSync(root + "/js");
+  writeFileSync(root + "/js/a.js", "function a() {}");
+  writeFileSync(
+    root + "/new-page.html",
+    '<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication"}</script>' +
+      '<script type="speculationrules">{"prerender":[{"urls":["/guide.html"]}]}</script>' +
+      '<script type="module">import "./x.js";</script><script>window.VT_X = 1;</script>'
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(acrossScripts(root, sinksIn))), {
+    "new-page.html#inline-2": { "(top) › hint": 1 },
+    "new-page.html#inline-3": { "(top) › import": 1 }
+  });
 });

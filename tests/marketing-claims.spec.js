@@ -9,8 +9,11 @@
  *    on the third page load, from the catalog and a routine; and one who first came 45 days ago. Single
  *    exercises, Start again after a rating, a pitch exercise, the catalog and a routine are each a way in.
  *    Third round: the longest exercise (20 minutes), a drill with no microphone, "+30 s" and Next in a routine,
- *    the daily class, and a visitor on a phone in Madrid whose trial has ended and whose basics are done; every
- *    take checks that the microphone listens and the piano sounds where its box is ticked.
+ *    the daily class, and a visitor on a phone in Madrid whose trial has ended and whose basics are done. Every
+ *    take played to its end, and the takes "+30 s" and Start right after Stop begin, check at their start and
+ *    five seconds before their end that the microphone listens and its frames reach the take (the level meter
+ *    moves), and that the piano sounds where its box is ticked; the take stopped half a minute in checks at its
+ *    start.
  *  - "Tu voz se queda en tu dispositivo" / "your voice stays on your device": for a visitor the app treats as
  *    a person (so its analytics send), recording a take, saving it, a minute after, leaving the page and the
  *    next visit together send nothing the size of the take, by any request, header, cookie, WebSocket frame,
@@ -29,9 +32,10 @@
  *    ad in the same way when practice is over, so none of them passes because nothing could be drawn.
  *
  * Each has planted defects in qa/mutate.mjs (the "promises" and "promises-account-ads" sets: MK3, MK19 to MK22,
- * MK26 to MK46, MK49 to MK70) that turn it red. MK26 to MK29 are what Codex's review showed the first version let
+ * MK26 to MK46, MK49 to MK75) that turn it red. MK26 to MK29 are what Codex's review showed the first version let
  * through; MK30 to MK46 are what the second red team showed the second version let through; MK49 to MK70 are the
- * third red team's, on paths the third version walks now (docs/48 section 11). What no scenario can walk is held
+ * third red team's, on paths the third version walks now, and MK71 to MK75 the review of that round's: silent
+ * takes and a send on a third tick (docs/48 section 11). What no scenario can walk is held
  * in the code itself by tests/node/promise-guards.test.mjs ("guards" set).
  */
 const { test, expect } = require("@playwright/test");
@@ -196,7 +200,7 @@ async function nothingInTheWay(page, label) {
 /** Drills that never open the microphone (release and breathing), so a take of them is not expected to listen. */
 const MIC_FREE = new Set(["s17-jaw-neck-release", "s18-costal-breath"]);
 
-/** What a live take is doing for the visitor: is the microphone listening, and does the reference piano sound. */
+/** What a live take is doing for the visitor: is the microphone open, and does the reference piano sound. */
 const heard = (page) =>
   page.evaluate(() => ({
     mic: !!window.VTApp.getState().practice?.running,
@@ -204,13 +208,47 @@ const heard = (page) =>
     pianoOn: !!document.querySelector("#chk-auto-piano")?.checked
   }));
 
+/** Seconds left on the live take's clock. */
+const secondsLeft = (page) => page.evaluate(() => (window.VTApp.getState().timer.endAt - performance.now()) / 1000);
+
+/**
+ * The live take hears and plays: the microphone is open and its frames reach the take (the level meter, set to
+ * zero here, moves again within half a second, and the analysis is not paused), and the reference piano sounds
+ * where its box is ticked. The third red team showed a take could be live and counted while it heard nothing and
+ * played nothing; the review of that round showed that an open microphone alone (`running`) stays true while
+ * every frame is dropped, and that a piano checked only at the start could fall silent after it.
+ */
+async function hears(page, label, { mic = true } = {}) {
+  const now = await heard(page);
+  if (now.pianoOn) expect(now.piano, `${label}: the reference piano sounds, as its tick says`).toBe(true);
+  if (!mic) return;
+  expect(now.mic, `${label}: the microphone is listening`).toBe(true);
+  const meter = await page.evaluate(() => {
+    const el = document.querySelector("#level-fill");
+    if (!el?.getClientRects().length) return false;
+    el.style.width = "0%";
+    return true;
+  });
+  await page.clock.runFor(500);
+  const after = await page.evaluate(() => ({
+    width: parseFloat(document.querySelector("#level-fill")?.style.width) || 0,
+    paused: !!window.VTApp.getState().practice?._analysisPaused
+  }));
+  expect(after.paused, `${label}: the microphone's analysis is not paused`).toBe(false);
+  expect(meter, `control: ${label}: the level meter is on screen, so frames that stop would show`).toBe(true);
+  expect(after.width, `${label}: the microphone's frames reach the take (the level meter moves)`).toBeGreaterThan(0);
+}
+
 /**
  * One take of its full length, `expected` seconds as a first visitor gets it: it starts with all of it on the
- * clock, listens (unless it is one of the MIC_FREE drills) and plays its reference wherever "piano"
- * is ticked, is still live and still listening five seconds before its end, ends on its own, and is counted as
- * practice. Most of it is jumped over, but not shortened, so a cap that cuts the take is seen (the first
- * version set every take to 50 s). The third red team showed a take could be live and counted while it heard
- * nothing and played nothing, so that is checked too.
+ * clock, hears and plays (see hears; no microphone for the MIC_FREE drills) at its start and five seconds before
+ * its end, is still live then, ends on its own, and is counted as practice. Most of it is jumped over, but not
+ * shortened, so a cap that cuts the take on the clock is seen (the first version set every take to 50 s).
+ *
+ * What the jump cannot show: Playwright's fastForward fires each due timer once and runs no frames in between, so
+ * a take of minutes is analysed for about a second. A cap counted in heard audio, in frames or in a timer's ticks
+ * ("stop after two minutes of singing") is not reached here; playing each take in real frames would cost its full
+ * length in CPU. The guards hold the free-visitor form of it (a plan read in the engine's onFrame, PX2).
  */
 async function fullTake(page, label, expected, { mic = null } = {}) {
   const id = await page.evaluate(() => window.VTApp.getState().exercise?.id);
@@ -220,14 +258,12 @@ async function fullTake(page, label, expected, { mic = null } = {}) {
   await start(page, label);
   const left = await page.evaluate(() => (window.VTApp.getState().timer.endAt - performance.now()) / 1000);
   expect(left, `${label}: all of it is on the clock`).toBeGreaterThanOrEqual(expected - 3);
-  const now = await heard(page);
-  if (mic) expect(now.mic, `${label}: the microphone is listening`).toBe(true);
-  if (now.pianoOn) expect(now.piano, `${label}: the reference piano sounds, as its tick says`).toBe(true);
-  await page.clock.fastForward((expected - 5) * 1000);
-  if (mic) expect((await heard(page)).mic, `${label}: still listening five seconds before its end`).toBe(true);
+  await hears(page, label, { mic });
+  await page.clock.fastForward((await secondsLeft(page) - 5.5) * 1000);
   expect(await live(page), `${label}: still live five seconds before its end`).toBe(true);
+  await hears(page, `${label}, five seconds before its end`, { mic });
   await nothingInTheWay(page, label);
-  await page.clock.runFor(5600);
+  await page.clock.runFor(6500);
   expect(await live(page), `${label}: it ends when its clock does`).toBe(false);
   expect((await todaySec(page)) - before, `${label}: the whole take is counted as practice`).toBeGreaterThanOrEqual(expected - 10);
   await nothingInTheWay(page, label);
@@ -283,17 +319,19 @@ const stepNow = (page) =>
     return { path: s?.path, status: s?.status, id, sec };
   });
 
-/** '+30 s' on a finished routine step: thirty more seconds, live to their end and counted. */
+/** '+30 s' on a finished routine step: thirty more seconds, hearing and playing, live to their end and counted. */
 async function moreTake(page, label) {
   const before = await todaySec(page);
   await page.locator("#btn-step-done-more").click();
   await expect.poll(() => live(page), { timeout: 10000, message: `${label}: it starts` }).toBe(true);
   const left = await page.evaluate(() => (window.VTApp.getState().timer.endAt - performance.now()) / 1000);
   expect(left, `${label}: thirty seconds on the clock`).toBeGreaterThanOrEqual(27);
-  await page.clock.fastForward(25000);
+  await hears(page, label);
+  await page.clock.fastForward((await secondsLeft(page) - 5.5) * 1000);
   expect(await live(page), `${label}: still live five seconds before its end`).toBe(true);
+  await hears(page, `${label}, five seconds before its end`);
   await nothingInTheWay(page, label);
-  await page.clock.runFor(5600);
+  await page.clock.runFor(6500);
   expect(await live(page), `${label}: it ends when its clock does`).toBe(false);
   expect((await todaySec(page)) - before, `${label}: counted as practice`).toBeGreaterThanOrEqual(25);
 }
@@ -399,14 +437,17 @@ test("no time limit: a visitor who first came 45 days ago, past an hour today, t
   // Stopped half a minute in and started again at once, as somebody does who fluffed the opening.
   await rate(page);
   await start(page, "a take stopped half a minute in");
-  await page.clock.runFor(30000);
+  await hears(page, "a take stopped half a minute in");
+  await page.clock.runFor(29500);
   await page.locator("#btn-practice-stop").click();
   await page.clock.runFor(300);
   expect(await live(page), "control: the take stopped").toBe(false);
   await start(page, "Start right after Stop");
+  await hears(page, "Start right after Stop");
   const rest = await page.evaluate(() => (window.VTApp.getState().timer.endAt - performance.now()) / 1000);
-  await page.clock.fastForward(Math.max(0, rest - 5) * 1000);
+  await page.clock.fastForward(Math.max(0, rest - 5.5) * 1000);
   expect(await live(page), "Start right after Stop: still live five seconds before its end").toBe(true);
+  await hears(page, "Start right after Stop, five seconds before its end");
   await nothingInTheWay(page, "Start right after Stop");
   await page.clock.runFor(5600);
   expect(await live(page), "Start right after Stop: it ends when its clock does").toBe(false);
@@ -715,8 +756,10 @@ test("your voice stays on your device: recording, saving, rating, a second take 
   await expect(page.locator("#btn-save-rec"), "control: and was recorded").toBeVisible();
   await page.locator("#btn-save-rec").click();
   await expect(page.locator("#btn-save-rec"), "control: the second save finished").toBeDisabled();
-  // Jumped rather than run frame by frame: every timer due in the three minutes still fires.
-  await page.clock.fastForward(180000);
+  // Three minutes on, in ten-second steps. One jump fires each timer once at most (an interval ticks once, and a
+  // timer set during the jump waits past its end), so a send on an interval's third tick, or at the end of a
+  // chain of timeouts, needs the steps (the review of the third round sent the takes on a third tick, unseen).
+  for (let i = 0; i < 18; i++) await page.clock.fastForward(10000);
   await page.clock.runFor(2000);
   await page.evaluate(() => {
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });

@@ -12,10 +12,32 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { parse } from "espree";
 import { EVENT_NAMES, sanitizeProps } from "../../workers/entitlements/src/events.js";
 
-/** js/analytics.js in a page of its own, sending to a recorded endpoint. `region` stands in for js/region-gate.js. */
-export function loadAnalytics(region) {
+/** The names in js/analytics.js's WIRE_NAMES, read from the source rather than asked of the filter. */
+function wireNames(source) {
+  const names = [];
+  const visit = (node) => {
+    if (!node || typeof node.type !== "string") return;
+    if (node.type === "VariableDeclarator" && node.id.name === "WIRE_NAMES") {
+      const list = node.init?.arguments?.[0]?.elements || [];
+      for (const el of list) names.push(el.type === "Literal" ? el.value : `<${el.type}>`);
+    }
+    for (const v of Object.values(node)) {
+      if (Array.isArray(v)) v.forEach(visit);
+      else if (v && typeof v.type === "string") visit(v);
+    }
+  };
+  visit(parse(source, { ecmaVersion: "latest", sourceType: "script" }));
+  return names;
+}
+
+/**
+ * js/analytics.js in a page of its own, sending to a recorded endpoint. `region` stands in for js/region-gate.js;
+ * `edit` changes the source first, for the control that runs it without its filter.
+ */
+export function loadAnalytics(region, edit = (src) => src) {
   const sent = [];
   const store = new Map();
   const storage = {
@@ -48,7 +70,7 @@ export function loadAnalytics(region) {
   };
   win.window = win;
   vm.createContext(win);
-  vm.runInContext(readFileSync("js/analytics.js", "utf8"), win);
+  vm.runInContext(edit(readFileSync("js/analytics.js", "utf8")), win);
   return { A: win.VTAnalytics, sent };
 }
 
@@ -107,9 +129,16 @@ function randomProps(r) {
 }
 
 test("the browser sends only the events the worker keeps, every one of them", () => {
+  // The list itself, both ways: a name added to the browser's list alone would let an event the worker does not
+  // know (a pitch contour's own, say) leave with its props, and a name the browser lacks would never be counted.
+  const names = wireNames(readFileSync("js/analytics.js", "utf8"));
+  assert.ok(names.length > 40, "control: the list is read from the source");
+  assert.equal(new Set(names).size, names.length, "no name twice");
+  assert.deepEqual([...names].sort(), [...EVENT_NAMES].sort());
+  // And the filter uses that list: every name passes, and names that are not on it do not.
   const { A } = loadAnalytics();
-  const client = new Set([...EVENT_NAMES, "take_shape", "take_saved", "voice_type", ""].filter((n) => A.wireEvent(n, {}) !== null));
-  assert.deepEqual([...client].sort(), [...EVENT_NAMES].sort());
+  assert.deepEqual(names.filter((n) => A.wireEvent(n, {}) === null), []);
+  assert.deepEqual(["take_shape", "take_saved", "voice_type", "", "PRACTICE_START", "practice_start "].filter((n) => A.wireEvent(n, {}) !== null), []);
 });
 
 test("the props that leave are the ones the worker keeps, for every case tried", () => {
@@ -155,11 +184,19 @@ test("what an event can no longer carry: the take, a pitch contour, an unknown e
 });
 
 test("control: without the filter the same events would carry the take and the contour out", () => {
-  // The worker's rules applied to nothing: what js/analytics.js sent before wireEvent existed.
+  // js/analytics.js run with wireEvent passing everything through, which is what it sent before the filter:
+  // this recorder would see the take and the contour leave, so their absence above is the filter's doing.
+  const FILTER = "    return WIRE_NAMES.has(name) ? { name, props: wireProps(props) } : null;";
+  const source = readFileSync("js/analytics.js", "utf8");
+  assert.equal(source.split(FILTER).length, 2, "control: the filter's line is where this control expects it");
   const take = "UklGRi4AAABXQVZF".repeat(8);
   const contour = "220.5.221.0.223.4.226.1";
   const raw = { exerciseId: "v10-power-pause", audio: take, f0: contour };
-  assert.equal(JSON.stringify(raw).includes(contour), true);
+  const open = loadAnalytics(undefined, (src) => src.replace(FILTER, "    return { name, props };"));
+  open.A.track("take_shape", raw);
+  open.A.flush();
+  const wire = open.sent.join("");
+  assert.ok(wire.includes(take) && wire.includes(contour), "unfiltered, the take and the contour leave");
   // And the worker's own rules keep the contour, which is why the event name is the browser's first gate:
   // a short dotted list is an id as far as the value rule can tell.
   assert.equal(sanitizeProps(raw).f0, contour);

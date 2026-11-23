@@ -84,10 +84,10 @@ silently replacing a score with a modern copyrighted arrangement.
 
 ## Validation updates
 
-All25 set,27 path and4 curriculum mutations were killed before the final
-calendar-summary optimization; the added unchanged-summary negative control
-checks that repeated renders do not rebuild the whole day calendar. Complete
-core/platform checks must run on the final tree.
+The finalized local core suite passed1330 tests with0 new failures and2
+pre-existing billing TODOs. All25 set,28 path and4 curriculum mutations were
+killed, including the unchanged-summary control. Platform Chromium/WebKit
+checks must run on the final tree; a queued run is not a passed run.
 
 ## Draft51 remains gated
 

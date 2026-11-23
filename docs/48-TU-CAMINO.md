@@ -236,7 +236,7 @@ seen once the card is on screen, not when it is drawn.
 
 ### D8 · Sharing is one sentence, sent by the singer
 
-"Esta semana canté 2 días (mi meta: 3 a 5). Llevo 5 días cantados. Entreno
+"Esta semana practiqué mi voz 2 días (mi meta: 3 a 5). Llevo 5 días de práctica. Entreno
 con Entrenamiento vocal y de canto: <address>". A week with nothing yet says
 only the total. The share sheet if there is one, else the clipboard, else
 the sentence on screen to copy.
@@ -365,7 +365,7 @@ already uses for celebration.
    "Nuevo", the home dot); the accent for stages; green only for "esta
    semana", as on the calendar. Motion only on the completion card, off with
    reduced motion. English checked in full (no Spanish left on the card) and
-   for plurals ("1 day sung so far").
+   for plurals ("1 day of practice so far").
 
 ## 7. Verification
 

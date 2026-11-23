@@ -402,7 +402,7 @@ test.describe("Tu camino", () => {
     const copied = await page.evaluate(() => window.__copied);
     expect(copied).toHaveLength(1);
     expect(copied[0]).toBe(
-      `Esta semana canté 2 días (mi meta: 3 a 5). Llevo 5 días cantados. Entreno con Entrenamiento vocal y de canto: ${BASE}/`
+      `Esta semana practiqué mi voz 2 días (mi meta: 3 a 5). Llevo 5 días de práctica. Entreno con Entrenamiento vocal y de canto: ${BASE}/`
     );
     // Nothing about the person: no address, no name, no logro list.
     expect(copied[0]).not.toMatch(/@|De vuelta|Una semana/);
@@ -412,7 +412,7 @@ test.describe("Tu camino", () => {
     await boot(page, { days: FIVE_DAYS, share: "refuse" });
     await openFromHome(page);
     await page.locator("#path-card [data-path-share]").click();
-    await expect(page.locator("#path-card .path-share-status")).toContainText("No se pudo compartir. Este es el texto: Esta semana canté 2 días");
+    await expect(page.locator("#path-card .path-share-status")).toContainText("No se pudo compartir. Este es el texto: Esta semana practiqué mi voz 2 días");
   });
 
   test("the arm without it shows nothing, stores nothing, and is still counted as exposed", async ({ page }) => {

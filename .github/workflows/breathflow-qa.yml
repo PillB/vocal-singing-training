@@ -37,7 +37,7 @@ jobs:
         run: npx playwright test tests/breathflow.spec.js --project=chromium --workers=2 --reporter=line
         env:
           CI: '1'
-      - name: Source-drift contract: WebKit must actually select BreathFlow tests
+      - name: "Source-drift contract: WebKit must actually select BreathFlow tests"
         run: node --test tests/node/playwright-projects.test.mjs
       - name: Mutant falsifiability gate — each planted defect must turn its own test red
         run: node qa/mutate-breathflow.mjs

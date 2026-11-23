@@ -25,13 +25,13 @@
     },
     {
       title: "4 · Lleva el aire hasta la idea completa",
-      caption: "Respira en la pausa que te ayuda y di la frase con intención. Si necesitas aire antes, adapta la frase: no compitas por quedarte sin respirar.",
-      svg: "Una pausa para tomar aire aparece antes de una barra de frase; una marca recorre la línea sin imponer un tiempo de respiración."
+      caption: "Compara el fraseo fragmentado con una pausa entre ideas. Elige dónde respirar para conservar intención y comodidad; si necesitas aire antes, adapta la frase sin tensión.",
+      svg: "Una pausa tranquila precede una frase completa. Debajo se comparan respiraciones tras cada palabra con pausas entre ideas, sin obligar a sostener frases incómodas."
     }
   ];
   const KEY_PREFIX = "vt_breathflow_lesson_v1_";
   const state = { stage: 0, sound: "hiss", paused: false, ready: false,
-    decision: "", completion: null, profile: "", expanded: true, soundEpoch: 0, context: null };
+    decision: "", pattern: "", completion: null, profile: "", expanded: true, soundEpoch: 0, context: null };
 
   function profileId() {
     return global.VTStorage?.getActiveProfileId?.() || "default";
@@ -68,6 +68,7 @@
     state.expanded = !state.ready || global.location.hash === "#flow-coach";
     state.stage = 0;
     state.decision = "";
+    state.pattern = "";
     ["shoulders", "ribs", "jaw"].forEach((k) => { el("coach-check-" + k).checked = false; });
     render();
     global.VTBreathFlow?.refreshReadiness?.();
@@ -116,6 +117,9 @@
     el("coach-play").hidden = n < 2;
     el("coach-checks").hidden = n !== 3;
     el("coach-decision").hidden = n !== 3;
+    el("coach-pattern").hidden = n !== 3;
+    el("coach-pattern-word").setAttribute("aria-pressed", String(state.pattern === "word"));
+    el("coach-pattern-phrase").setAttribute("aria-pressed", String(state.pattern === "phrase"));
     el("coach-hiss").setAttribute("aria-pressed", String(state.sound === "hiss"));
     el("coach-vowel").setAttribute("aria-pressed", String(state.sound === "vowel"));
     el("coach-toggle").setAttribute("aria-pressed", String(state.paused));
@@ -149,7 +153,7 @@
   }
 
   function finish() {
-    if (state.ready || state.stage !== 3 || !checksComplete() || state.decision !== "adapt") return;
+    if (state.ready || state.stage !== 3 || !checksComplete() || state.decision !== "adapt" || state.pattern !== "phrase") return;
     complete("verified");
   }
 
@@ -172,7 +176,19 @@
   }
 
   function updateChecks() {
-    el("coach-finish").disabled = !(state.stage === 3 && checksComplete() && state.decision === "adapt");
+    el("coach-finish").disabled = !(state.stage === 3 && checksComplete() && state.decision === "adapt" && state.pattern === "phrase");
+  }
+
+  /** Teach-back: distinguish a useful boundary from interruption after each word. */
+  function choosePattern(choice) {
+    if (!["word", "phrase"].includes(choice) || state.ready) return;
+    state.pattern = choice;
+    el("coach-pattern-word").setAttribute("aria-pressed", String(choice === "word"));
+    el("coach-pattern-phrase").setAttribute("aria-pressed", String(choice === "phrase"));
+    el("coach-pattern-feedback").textContent = choice === "phrase"
+      ? "Correcto: conserva la idea y respira en una pausa útil; dentro de la frase también puedes adaptar si te falta aire."
+      : "Respirar después de cada palabra corta la intención. Prueba entre ideas; nunca fuerces la frase si necesitas aire.";
+    updateChecks();
   }
 
   function chooseResponse(choice) {
@@ -261,6 +277,8 @@
     el("coach-finish").addEventListener("click", finish);
     el("coach-choice-force").addEventListener("click", () => chooseResponse("force"));
     el("coach-choice-adapt").addEventListener("click", () => chooseResponse("adapt"));
+    el("coach-pattern-word").addEventListener("click", () => choosePattern("word"));
+    el("coach-pattern-phrase").addEventListener("click", () => choosePattern("phrase"));
     el("coach-skip").addEventListener("click", () => complete("skipped"));
     el("coach-reopen").addEventListener("click", reopen);
     ["shoulders", "ribs", "jaw"].forEach((key) => {
@@ -281,7 +299,8 @@
     isReady: () => state.ready && state.profile === profileId(),
     reopen,
     state: () => ({ stage: state.stage, sound: state.sound, paused: state.paused,
-      ready: state.ready, decision: state.decision, completion: state.completion, profile: state.profile }),
+      ready: state.ready, decision: state.decision, pattern: state.pattern,
+      completion: state.completion, profile: state.profile }),
     stopSound
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, { once: true });

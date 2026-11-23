@@ -39,8 +39,8 @@ const cases = [
   {
     id: "BF-M4 unearned completion after unsafe choice",
     path: "js/breathflow-teach.js",
-    anchor: '    el("coach-finish").disabled = !(state.stage === 3 && checksComplete() && state.decision === "adapt");',
-    broken: '    el("coach-finish").disabled = !(state.stage === 3 && checksComplete());',
+    anchor: '    el("coach-finish").disabled = !(state.stage === 3 && checksComplete() && state.decision === "adapt" && state.pattern === "phrase");',
+    broken: '    el("coach-finish").disabled = !(state.stage === 3 && checksComplete() && state.pattern === "phrase");',
     name: "first-use lesson teaches body and mouth before enabling Start"
   },
   {
@@ -84,6 +84,13 @@ const cases = [
     anchor: '    days.textContent = idle ? "" : tt(weekOver ? "plan.daysPast" : "plan.days", { n: planWeekDays(plan) });',
     broken: '    days.textContent = idle ? "" : tt(weekOver ? "plan.daysPast" : "plan.days", { n: 0 });',
     name: "day/week/month and every main navigation view share a single calendar authority"
+  },
+  {
+    id: "BF-M12 lesson completes without understanding phrase boundaries",
+    path: "js/breathflow-teach.js",
+    anchor: '    el("coach-finish").disabled = !(state.stage === 3 && checksComplete() && state.decision === "adapt" && state.pattern === "phrase");',
+    broken: '    el("coach-finish").disabled = !(state.stage === 3 && checksComplete() && state.decision === "adapt");',
+    name: "phrase-boundary teach-back blocks word-by-word breathing even after comfort checks"
   },
   {
     id: "BF-M9 WebKit selector silently drops teaching tests",
@@ -137,4 +144,4 @@ function evaluateMutant(item) {
 }
 
 for (const item of cases) evaluateMutant(item);
-process.stdout.write("PASS: all eleven BreathFlow behavioral mutants killed and restored\n");
+process.stdout.write("PASS: all twelve BreathFlow behavioral mutants killed and restored\n");

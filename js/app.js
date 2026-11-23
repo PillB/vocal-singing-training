@@ -675,22 +675,6 @@
     stage.style.height = `${h}px`;
   }
 
-  /** Keep the stage's top in view so the sticky geometry matches the measure. */
-  function anchorStageTop(stage) {
-    try {
-      const anchor =
-        document.getElementById("ex-title") || document.getElementById("practice-cockpit") || stage;
-      const ar = anchor.getBoundingClientRect();
-      if (ar.top < 0 || ar.top > (window.innerHeight || 600) * 0.35) {
-        // "instant": html has scroll-behavior: smooth, so "auto" glided and
-        // the stage below was measured mid-scroll.
-        anchor.scrollIntoView({ block: "start", behavior: "instant" });
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
   /**
    * The lowest the stage sits at rest. It is sticky, so a page scrolled by a
    * few pixels lifts it to its sticky offset; measured then, the stage came
@@ -865,7 +849,7 @@
         clearStageFit(stage);
         return;
       }
-      anchorStageTop(stage);
+      // A refit measures layout; only explicit navigation may move the reader.
       syncStageInsets();
       const { vh, offsetTop, safeBottom } = getViewportMetrics();
       // Gap: short/landscape + safe-area (home indicator)

@@ -116,3 +116,12 @@ an explicit upgrade/revalidation decision. [Playwright requirements](https://pla
 and [GitHub runner labels](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
 identify the supported platform and the mutability of latest aliases. A focused
 integration job runs in parallel with core to expose these failures earlier.
+
+A shared layout defect was isolated from a draft53 browser trace: refitting the
+stage unconditionally scrolled its title back into view, undoing a reader's
+scroll to instructions (700px became43px). Refit now measures without navigating;
+explicit exercise entry still scrolls to the top. The regression invokes the
+actual refit while reading below the stage for speaking and singing; its mutant
+restores the unwanted title jump. Existing panel/language preservation remains
+an independent check. This trades automatic stage recentering during resize for
+preserving reading intent; initial navigation and visible-control tests remain.

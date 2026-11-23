@@ -221,9 +221,10 @@ export const MUTANTS = {
     ["CUR4 edited song text becomes executable markup", "js/song-library.js", 'esc(song[l].task)', 'song[l].task']
   ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: node(["tests/node/curriculum.test.mjs"]) })),
   curriculumui: [
+    ["CUR7 a layout refit jumps back to the exercise title", "js/app.js", 'const top = stageRestTop(stage, vh);', 'document.getElementById("ex-title").scrollIntoView({ block: "start", behavior: "instant" });\n      const top = stageRestTop(stage, vh);'],
     ["CUR5 score library is not integrated into the exercise", "js/app.js", 'if (globalThis.VTSongLibrary) row.insertAdjacentHTML("beforeend", globalThis.VTSongLibrary.html(VTI18n.lang));', ''],
     ["CUR6 skill selection never redraws cards", "js/session-sets.js", 'picker.onchange = paint;', 'picker.onchange = null;']
-  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: [...PIANO_SPEC.slice(0, 3), name.startsWith("CUR5") ? "tests/song-library.spec.js" : "tests/session-sets.spec.js", "--project=chromium", "--workers=1", "--reporter=dot", "-g", name.startsWith("CUR5") ? "song library en at 360" : "skill picker filters"] })),
+  ].map(([name, file, from, to]) => ({ name, file, from, to, cmd: [...PIANO_SPEC.slice(0, 3), name.startsWith("CUR7") ? "tests/redteam-exercise-language.spec.js" : name.startsWith("CUR5") ? "tests/song-library.spec.js" : "tests/session-sets.spec.js", "--project=chromium", "--workers=1", "--reporter=dot", "-g", name.startsWith("CUR7") ? "stage refit respects" : name.startsWith("CUR5") ? "song library en at 360" : "skill picker filters"] })),
   audio: [
     ["M6 +150c (adjacent semitone) accepted as in tune", "js/practice-modes.js", "const hi = this.profile.centsHi == null ? 50 : this.profile.centsHi;", "const hi = this.profile.centsHi == null ? 150 : this.profile.centsHi;"],
     ["M7 -140c accepted as in tune", "js/practice-modes.js", "const lo = this.profile.centsLo == null ? -40 : this.profile.centsLo;", "const lo = this.profile.centsLo == null ? -140 : this.profile.centsLo;"],

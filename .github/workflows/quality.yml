@@ -43,6 +43,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test tests/browser-language.spec.js tests/home-design.spec.js tests/session-sets.spec.js tests/song-library.spec.js --project=chromium --workers=2 --reporter=line
+      - run: npx playwright test tests/redteam-exercise-language.spec.js --project=chromium --workers=2 --reporter=line -g 'stage refit respects|open panels and the scroll position'
       - name: Preserve focused browser diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

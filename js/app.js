@@ -11051,8 +11051,33 @@
     window.VTSync?.onDataChange?.(() => showSyncedRecord());
   }
 
+  /**
+   * What to say when a claim comes back. A Mercado Pago subscription still
+   * waiting is the normal case for about an hour: the worker signs only once
+   * the first charge has gone through (VG-84), and Mercado Pago takes it
+   * "approximately one hour" after the card is authorised. "We can't confirm
+   * the payment; if you were charged, contact support" would alarm a buyer
+   * who has nothing wrong, so that rail says how long to expect instead. One
+   * whose charge Mercado Pago turned down (the worker's 402 "declined") is
+   * told so, and to check the card, not to wait. Both are long, so they stay
+   * up for the toast's own reading rate (about 20 characters a second).
+   */
+  function claimResultToast(res, provider) {
+    const mp = provider === "mercadopago";
+    if (res?.ok) {
+      toast(tt("pricing.toast.verifyOk"), { durationMs: 3600 });
+    } else if (mp && res?.reason === "pending") {
+      toast(tt("pricing.toast.verifyPendingMp"), { durationMs: 9000 });
+    } else if (mp && res?.reason === "declined") {
+      toast(tt("pricing.toast.verifyDeclinedMp"), { durationMs: 12000 });
+    } else {
+      toast(tt("pricing.toast.verifyFailed"), { durationMs: 6000 });
+    }
+  }
+
   /** "Ya pagué": ask the worker again for the payment the browser is waiting on. */
   function recheckPayment() {
+    const provider = window.VTBilling?.getEntitlement?.()?.raw?.provider || null;
     const claiming = window.VTBilling?.resumePendingClaim?.({ force: true });
     if (!claiming) {
       toast(tt("pricing.toast.verifyFailed"), { durationMs: 5200 });
@@ -11060,9 +11085,7 @@
     }
     toast(tt("pricing.toast.verifyPending"), { durationMs: 3600 });
     claiming.then((res) => {
-      toast(res?.ok ? tt("pricing.toast.verifyOk") : tt("pricing.toast.verifyFailed"), {
-        durationMs: res?.ok ? 3600 : 6000
-      });
+      claimResultToast(res, provider);
       updateBillingChrome();
       renderPricingModal();
     });
@@ -11290,9 +11313,7 @@
       // Payment recorded; Pro waits on the entitlement worker's signed license.
       toast(tt("pricing.toast.verifyPending"), { durationMs: 4600 });
       ret.claiming?.then((res) => {
-        toast(res?.ok ? tt("pricing.toast.verifyOk") : tt("pricing.toast.verifyFailed"), {
-          durationMs: res?.ok ? 3600 : 6000
-        });
+        claimResultToast(res, ret.provider);
         updateBillingChrome();
         if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
       });

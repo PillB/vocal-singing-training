@@ -12,6 +12,7 @@ import {
   generateLicenseId,
   isAwaitingPayment,
   isLicenseIdShape,
+  isDeclined,
   isSuspended,
   isTokenIssuable,
   PLAN_INTERVAL_SECONDS,
@@ -208,6 +209,17 @@ test("only a license still waiting for its money is told to keep polling", () =>
   assert.equal(isAwaitingPayment({ ...live, status: "suspended" }), false);
   assert.equal(isAwaitingPayment(live), false);
   assert.equal(isAwaitingPayment(null), false);
+
+  // A Mercado Pago subscription whose first charge was turned down, or whose
+  // money went back, is not waiting for money "about an hour" away: it is a
+  // refusal a later charge may undo (402). It used to wait, for weeks.
+  const mp = { ...live, provider: "mercadopago", paid: false };
+  assert.equal(isAwaitingPayment(mp), true, "a mandate before its first charge waits");
+  assert.equal(isAwaitingPayment({ ...mp, declinedAt: now - 60 }), false, "its first charge turned down");
+  assert.equal(isAwaitingPayment({ ...mp, declinedAt: now - 60, chargedAt: now - 60 }), true,
+    "collected on the same debit date it was turned down on: not outstanding (paid is still to be confirmed)");
+  assert.equal(isAwaitingPayment({ ...mp, reversedAt: now - 60 }), false, "first heard of already refunded");
+  assert.equal(isAwaitingPayment({ ...live, paid: false, declinedAt: now - 60 }), true, "the other rails keep their rule");
 });
 
 test("only a refusal a later payment can undo is suspended", () => {
@@ -230,8 +242,25 @@ test("only a refusal a later payment can undo is suspended", () => {
   assert.equal(isSuspended({ ...sub, status: "canceled", periodEnd: now - 10 }, now), false, "cancelled, period over");
   assert.equal(isSuspended({ ...sub, periodEnd: now - 10 }, now), false, "a period that ran out");
   assert.equal(isSuspended({ ...refunded, status: "canceled" }, now), false, "refunded, then the subscription stopped");
-  assert.equal(isSuspended({ ...refunded, periodEnd: now - 3600 }, now), false, "the period had ended before the refund");
   assert.equal(isSuspended({ ...refunded, subscriptionId: null, status: "canceled" }, now), false, "a refunded one-off payment");
+
+  // A Mercado Pago subscription still authorized is charged again, whatever
+  // ended its period, so its browser keeps the license (VG-84 review). These
+  // used to be 403: the paid month running out before the renewal was
+  // processed, which is every renewal.
+  const mp = { ...sub, provider: "mercadopago", paid: true, chargedAt: now - 31 * 86400 - 600, periodEnd: now - 600 };
+  assert.equal(isSuspended(mp, now), true, "authorized, the paid month ran out, the renewal not processed yet");
+  assert.equal(isSuspended({ ...refunded, periodEnd: now - 3600 }, now), true, "authorized, the period had ended before the refund");
+  assert.equal(isSuspended({ ...mp, status: "canceled" }, now), false, "cancelled or paused (mapped to canceled), period over");
+  assert.equal(isSuspended({ ...mp, subscriptionId: null }, now), false, "a one-off Mercado Pago payment that ran out");
+  assert.equal(isSuspended({ ...mp, periodEnd: now + 600 }, now), false, "still entitled");
+  assert.equal(isDeclined({ ...mp, declinedAt: now - 700 }), true, "turned down after the last charge");
+  assert.equal(isDeclined({ ...mp, declinedAt: mp.chargedAt }), false, "the same instant: the invoice was collected on its debit date");
+  assert.equal(isDeclined({ ...mp, declinedAt: mp.chargedAt - 1 }), false, "turned down before a charge that went through");
+  assert.equal(isDeclined({ ...mp, chargedAt: undefined, declinedAt: now - 700 }), true, "no charge ever went through");
+  assert.equal(isDeclined({ ...mp, status: "canceled", declinedAt: now - 700 }), false, "stopped: nothing will retry it");
+  assert.equal(isDeclined({ ...mp, provider: "stripe", declinedAt: now - 700 }), false);
+  assert.equal(isDeclined(null), false);
   assert.equal(isSuspended({ ...sub, status: "pending" }, now), false, "waiting is 202, not 402");
   assert.equal(isSuspended(null, now), false);
 });

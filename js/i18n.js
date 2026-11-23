@@ -569,6 +569,10 @@
         "Ese medio de pago no está disponible ahora mismo, así que no te cobramos nada. Inténtalo en un rato; si sigue igual, cuéntanoslo con «Reportar un problema».",
       "pricing.toast.verifyPending":
         "Confirmando tu pago… Pro se activa en cuanto el proveedor nos confirme.",
+      "pricing.toast.verifyPendingMp":
+        "Mercado Pago hace el primer cobro alrededor de una hora después de suscribirte. Cuando entre, Pro se activa al volver a abrir la app o al pulsar «Comprobar mi pago».",
+      "pricing.toast.verifyDeclinedMp":
+        "Mercado Pago no pudo cobrar con tu tarjeta y volverá a intentarlo durante unos 10 días. Revisa tu medio de pago en Mercado Pago; cuando el cobro entre, Pro se activa al volver a abrir la app o al pulsar «Comprobar mi pago».",
       "pricing.toast.verifyOk": "¡Pago verificado! Pro activo en este navegador.",
       "pricing.toast.verifyFailed":
         "Todavía no podemos confirmar el pago. Seguimos reintentando; si ya te cobraron, escribe a soporte con el comprobante.",
@@ -1749,6 +1753,10 @@
         "That payment method isn’t available right now, so you have not been charged. Try again in a while, and if it stays that way, tell us with “Report a problem”.",
       "pricing.toast.verifyPending":
         "Confirming your payment… Pro switches on as soon as the provider confirms.",
+      "pricing.toast.verifyPendingMp":
+        "Mercado Pago takes the first payment about an hour after you subscribe. Once it goes through, Pro switches on the next time you open the app, or when you tap “Check my payment”.",
+      "pricing.toast.verifyDeclinedMp":
+        "Mercado Pago couldn’t charge your card and will try again for about 10 days. Check your payment method in Mercado Pago; once a charge goes through, Pro switches on the next time you open the app, or when you tap “Check my payment”.",
       "pricing.toast.verifyOk": "Payment verified — Pro is active in this browser.",
       "pricing.toast.verifyFailed":
         "We can’t confirm the payment yet. We’ll keep retrying; if you were charged, contact support with your receipt.",

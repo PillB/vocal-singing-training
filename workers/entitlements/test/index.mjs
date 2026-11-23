@@ -97,3 +97,7 @@ import "./sign-in-identity.test.mjs";
 // request_id it chose, so a purchase reaches every device from the webhook
 // alone (VG-83), and the billing portal a subscriber cancels from.
 import "./checkout-bound.test.mjs";
+
+// VG-84: Mercado Pago entitles for money that arrived, not for an authorised
+// mandate, and a turned-down instalment ends Pro with the month paid for.
+import "./mp-paid-first.test.mjs";

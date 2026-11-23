@@ -60,6 +60,7 @@ import {
   buildJwks,
   createLicenseToken,
   isAwaitingPayment,
+  isDeclined,
   isLicenseIdShape,
   isSuspended,
   isTokenIssuable,
@@ -171,6 +172,9 @@ function parseJsonObject(text) {
  * Issue a fresh token for an entitlement, or explain why we will not:
  * 202 while an async payment is still settling, 402 while it is refused but a
  * later payment on its subscription can bring it back, 403 once nothing can.
+ * The 402 says "declined" when a Mercado Pago charge was turned down and none
+ * has gone through since, so the page can tell the buyer to check the card
+ * rather than to wait, and "suspended" otherwise.
  *
  * The 402 is for the site's client as it is deployed: js/license.js forgets
  * the license on a 403 and keeps it on any other refusal, and js/billing.js
@@ -189,7 +193,7 @@ async function respondWithToken(record, env, cors) {
   }
   if (!isTokenIssuable(record, now)) {
     return isSuspended(record, now)
-      ? json({ ok: false, reason: "suspended", entitlement: toPublicEntitlement(record) }, 402, cors)
+      ? json({ ok: false, reason: isDeclined(record) ? "declined" : "suspended", entitlement: toPublicEntitlement(record) }, 402, cors)
       : json({ ok: false, reason: "inactive", entitlement: toPublicEntitlement(record) }, 403, cors);
   }
   const { token } = await createLicenseToken(record, env, now);

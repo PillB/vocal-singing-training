@@ -386,12 +386,34 @@ wrangler secret put MP_ACCESS_TOKEN
 
 Then the preapproval link into `js/billing-config.js`, exactly as step 5.
 
-> **Not yet: VG-84 (P0) stands in front of this step.** The worker grants Pro
-> when a Mercado Pago subscription is *authorised*, before the first charge
-> (which Mercado Pago makes about an hour later), and keeps it through declined
-> instalments until Mercado Pago cancels the subscription itself — up to about
-> three months on a card that never pays, against what the terms say. It is on
-> `main`, older than #26, and the fix and its test are in the registry row.
+> **VG-84 is fixed (2026-11-21, reviewed 2026-11-22), and it changes what you
+> set up here.** The worker grants Pro for an approved charge, not for an
+> authorised card, and each charge buys one month (31 days) or one year from
+> when it went through, whatever the subscription's next charge date says.
+> When that runs out with no new charge, Pro stops while Mercado Pago retries,
+> as the terms say, and the browser keeps the licence (402), so Pro comes back
+> when a charge goes through. So:
+>
+> - **Subscribe the webhook to "Planes y suscripciones"** (topics
+>   `subscription_preapproval` and `subscription_authorized_payment`), and to
+>   **"Pagos"** (`payment`) as well. The authorized-payment topic is the one
+>   whose link to the subscription (`preapproval_id`) Mercado Pago documents,
+>   and it is enough on its own to turn Pro on; the payments API documents no
+>   such field, so the `payment` topic only helps if the sandbox shows one
+>   (check 2 below). The subscription's own notices carry its plan.
+> - **Give the Mercado Pago plan no free trial and no fixed billing day.** The
+>   app's trial is the account trial (`TRIAL_DAYS`). A trial on the plan
+>   delays the first charge, and the buyer would wait that long for Pro; a
+>   fixed billing day may too (Mercado Pago's page on it does not say when the
+>   first charge is taken), and is untested here.
+>
+> Before you switch the rail on, in the sandbox: **(1)** time the first charge
+> of a subscription bought through the plan checkout link. "About an hour" is
+> what Mercado Pago documents for subscriptions without a plan; the page tells
+> the buyer that, and says to reopen the app or press «Comprobar mi pago».
+> **(2)** Read a subscription charge on the `payment` topic and note which
+> field names its preapproval. Details, sources and trade-offs are in the
+> registry row.
 
 **What proves it worked:** `/v1/health` reports `mercadopagoConfigured: true`.
 Until it does, the site refuses to send a Peruvian buyer down this rail at all,

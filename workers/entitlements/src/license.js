@@ -386,7 +386,11 @@ export function isTokenIssuable(entitlement, nowSeconds) {
  * That is a "pending" record, or one the provider already treats as live (a
  * subscription can turn active while a delayed payment is still settling)
  * whose payment has not been confirmed. A payment that failed is not on its
- * way, whatever status a later event left the record in.
+ * way, whatever status a later event left the record in, and neither is a
+ * Mercado Pago subscription whose first charge was turned down or whose money
+ * went back: that is a refusal Mercado Pago may still undo by charging again
+ * (402, see `isSuspended`), and told "about an hour" the buyer would wait for
+ * a card that keeps failing (VG-84 review).
  * @param {Object} entitlement Stored entitlement record.
  * @returns {boolean} Whether the payment is still expected.
  */
@@ -401,7 +405,9 @@ export function isAwaitingPayment(entitlement) {
     return true;
   }
   return entitlement.paid === false
-    && (entitlement.status === "active" || entitlement.status === "past_due");
+    && (entitlement.status === "active" || entitlement.status === "past_due")
+    && !(entitlement.provider === "mercadopago"
+      && (declinedSinceLastCharge(entitlement) || Number.isFinite(entitlement.reversedAt)));
 }
 
 /**
@@ -416,11 +422,17 @@ export function isAwaitingPayment(entitlement) {
  *     makes it active again;
  *   - a payment that failed with nothing paid since (a delayed payment method
  *     that did not clear): the subscription's invoice can still be paid;
- *   - a Mercado Pago subscription still authorized whose period ended when a
- *     charge's money went back (a refund, a chargeback): it charges again.
+ *   - a Mercado Pago subscription still authorized, whatever ended its
+ *     period: the paid interval running out before the next charge is
+ *     processed, a charge turned down, or a charge's money going back (a
+ *     refund, a chargeback). Mercado Pago charges an authorized subscription
+ *     again (it retries a declined instalment and goes on generating the next
+ *     ones) until it cancels it, which arrives as its own notice. Its renewal
+ *     can be processed after the paid interval ends, and answered 403 then,
+ *     a paying subscriber's browser forgot its license at the renewal (VG-84
+ *     review).
  * Never a one-off payment (nothing charges it again), a deleted Stripe
- * subscription, a paused or cancelled Mercado Pago one, or a period that ran
- * out.
+ * subscription, or a paused or cancelled Mercado Pago one.
  * @param {Object} entitlement Stored entitlement record.
  * @param {number} nowSeconds Unix seconds.
  * @returns {boolean} Whether the refusal can still be undone by a payment.
@@ -436,10 +448,32 @@ export function isSuspended(entitlement, nowSeconds) {
   if (entitlement.paymentFailed === true && entitlement.paid !== true) {
     return true;
   }
-  return entitlement.provider === "mercadopago"
-    && entitlement.status === "active"
-    && Number.isFinite(entitlement.reversedAt)
-    && entitlement.periodEnd === entitlement.reversedAt;
+  return entitlement.provider === "mercadopago" && entitlement.status === "active";
+}
+
+/**
+ * True when a refused Mercado Pago subscription is off because a charge was
+ * turned down and none has gone through since, so the routes say "declined"
+ * rather than "suspended" and the buyer can be told to check the card,
+ * rather than to wait. Only meaningful for a record `isSuspended` holds.
+ * @param {Object} entitlement Stored entitlement record.
+ * @returns {boolean} Whether the refusal is an outstanding decline.
+ */
+export function isDeclined(entitlement) {
+  return Boolean(entitlement) && entitlement.provider === "mercadopago"
+    && entitlement.status === "active" && declinedSinceLastCharge(entitlement);
+}
+
+/**
+ * Whether a charge was turned down after the latest one that went through,
+ * or with none ever through. A charge and a decline dated the same instant
+ * are the same invoice turned down and then collected on its debit date: the
+ * charge counts as since.
+ * @param {Object} entitlement Stored entitlement record.
+ * @returns {boolean} Whether a decline is outstanding.
+ */
+function declinedSinceLastCharge(entitlement) {
+  return Number.isFinite(entitlement.declinedAt) && !(entitlement.chargedAt >= entitlement.declinedAt);
 }
 
 /**

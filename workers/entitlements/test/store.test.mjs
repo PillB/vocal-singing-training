@@ -669,14 +669,27 @@ test("a charge processed before its subscription is counted on the subscription'
     }
   }
 
-  // An authorized subscription's own next charge date stands: its charge is
-  // not counted past it.
+  // An authorized subscription's next charge date is when Mercado Pago will
+  // charge again, not where the paid year ends, in either direction (VG-84
+  // review). This used to assert the next charge date stood: a renewal due an
+  // hour before the year was up then ended Pro at that hour, before the
+  // renewal's approval could be processed, at every renewal.
   let kv = createFakeKv();
   let generateId = idSequence("lic_");
   await upsertEntitlement(kv, mercadoPagoUpdate("payment", charges.payment), { now: NOW + 200, generateId });
   const authorized = await upsertEntitlement(kv, yearly("authorized", YEAR - 3600), { now: NOW + 200, generateId });
   assert.equal(authorized.record.plan, "pro_yearly");
-  assert.equal(authorized.record.periodEnd, NOW + YEAR - 3600);
+  assert.equal(authorized.record.periodEnd, NOW + 55 + YEAR, "an earlier next charge date takes nothing off the year paid");
+  // ...nor does a later one, with no money behind it, add to it.
+  const moved = await upsertEntitlement(kv, mercadoPagoUpdate("subscription_preapproval", {
+    id: "pre_y",
+    status: "authorized",
+    reason: "Vocal Studio Pro anual",
+    next_payment_date: isoAt(YEAR + 60 * 86400),
+    date_last_updated: isoAt(180),
+    payer_id: 9
+  }), { now: NOW + 200, generateId });
+  assert.equal(moved.record.periodEnd, NOW + 55 + YEAR, "a later next charge date buys no time");
 
   // The charge's refund still ends the year, whichever comes first.
   const refund = mercadoPagoUpdate("subscription_authorized_payment", {
@@ -2012,4 +2025,71 @@ test("the client view carries no provider-internal ids", () => {
     periodEnd: NOW,
     updatedAt: NOW
   });
+});
+
+test("a Mercado Pago subscription read back runs to what its latest charge bought, even when the record lost that charge to a concurrent write (VG-84 review)", async () => {
+  // On KV a preapproval notice processed alongside the charge can write the
+  // record from a read that had not seen the charge: the record then holds
+  // the next charge date (a reactivation's, a month past what was paid) and
+  // no `chargedAt`, while the charge's own `charged:` key holds when it went
+  // through. Wrong behaviour: Pro read back to that next charge date.
+  const DAY = 86400;
+  const kv = createFakeKv();
+  const chargedAt = NOW - 45 * DAY;
+  const record = {
+    licenseId: "lic_race", provider: "mercadopago", plan: "pro_monthly", status: "active",
+    subscriptionId: "pre_race", paid: true, periodEnd: NOW + 15 * DAY, occurredAt: NOW - DAY
+  };
+  await kv.put(licenseKey("lic_race"), JSON.stringify(record));
+  await kv.put(chargedKey("lic_race"), String(chargedAt));
+  const read = await getEntitlement(kv, "lic_race");
+  assert.equal(read.chargedAt, chargedAt);
+  assert.equal(read.periodEnd, chargedAt + periodEndForPlan("pro_monthly", 0), "the month the charge bought, not the next charge date");
+  assert.equal(isTokenIssuable(read, NOW), false);
+
+  // Controls: a one-off payment's licence and another rail's subscription keep what they hold.
+  for (const other of [{ licenseId: "lic_one", provider: "mercadopago", subscriptionId: null }, { licenseId: "lic_str", provider: "stripe" }]) {
+    await kv.put(licenseKey(other.licenseId), JSON.stringify({ ...record, ...other }));
+    await kv.put(chargedKey(other.licenseId), String(chargedAt));
+    assert.equal((await getEntitlement(kv, other.licenseId)).periodEnd, NOW + 15 * DAY, JSON.stringify(other));
+  }
+});
+
+test("a Mercado Pago subscription turned down and then collected on a retry is written with the retry's month, not cut at the decline (VG-84 review)", async () => {
+  // What the store writes is what any reader that does not re-derive the
+  // period sees: the record upsertEntitlement hands back, and the stored
+  // `lic:` value itself. Wrong behaviour (mutant MP6): the period written
+  // ends at the decline even though the retry paid a new month since, which
+  // only a read through getEntitlement, re-deriving it, would hide.
+  const DAY = 86400;
+  const MONTH = periodEndForPlan("pro_monthly", 0);
+  const kv = createFakeKv();
+  const generateId = idSequence("lic_mp6_");
+  const write = (kind, resource) => upsertEntitlement(kv, mercadoPagoUpdate(kind, resource), { now: NOW, generateId });
+  // Mercado Pago's documented invoice: its payment has an id, a status and a
+  // status detail, and no date of its own; it is dated by its debit date.
+  const invoice = (id, debit, updated, status, paymentStatus) => ({
+    id, type: "scheduled", preapproval_id: "pre_mp6", status, retry_attempt: 1,
+    date_created: isoAt(debit - 2 * DAY), debit_date: isoAt(debit), last_modified: isoAt(updated),
+    payment: { id: id + 500, status: paymentStatus, status_detail: paymentStatus === "approved" ? "accredited" : "cc_rejected_other_reason" }
+  });
+  await write("subscription_preapproval", {
+    id: "pre_mp6", status: "authorized", reason: "Vocal Studio Pro mensual", payer_id: 9,
+    auto_recurring: { frequency: 1, frequency_type: "months", transaction_amount: 19.9, currency_id: "PEN" },
+    date_created: isoAt(-41 * DAY), last_modified: isoAt(-40 * DAY + 600), next_payment_date: isoAt(-10 * DAY)
+  });
+  await write("subscription_authorized_payment", invoice(61, -40 * DAY, -40 * DAY + 300, "processed", "approved"));
+  const declined = await write("subscription_authorized_payment", invoice(62, -10 * DAY, -10 * DAY + 300, "recycling", "rejected"));
+  // Control: turned down and not collected, the month the first charge bought is what is written.
+  assert.equal(declined.record.declinedAt, NOW - 10 * DAY);
+  assert.equal(declined.record.periodEnd, NOW - 40 * DAY + MONTH, "a decline takes nothing off the month paid, and adds nothing");
+
+  const retried = await write("subscription_authorized_payment", invoice(62, -10 * DAY, -8 * DAY, "processed", "approved"));
+  const stored = JSON.parse(await kv.get(licenseKey(retried.record.licenseId)));
+  const read = await getEntitlement(kv, retried.record.licenseId);
+  for (const [where, record] of [["returned", retried.record], ["stored", stored], ["read back", read]]) {
+    assert.equal(record.chargedAt, NOW - 10 * DAY, `${where}: the retry is dated by the invoice's debit date`);
+    assert.equal(record.periodEnd, NOW - 10 * DAY + MONTH, `${where}: the month the retry bought, not cut at the decline it collected`);
+    assert.equal(isTokenIssuable(record, NOW), true, where);
+  }
 });

@@ -32,7 +32,7 @@ hard-codes them.
 | Price in Peru | **S/ 19.90 per month, S/ 119.90 per year** | Decided, not a range — the evidence is in [35-PRICING.md](35-PRICING.md). Under Spotify's S/ 20.90, and well under what Yousician (S/ 30.90) and Duolingo (S/ 32.90) charge Peruvians. Note the fee cliffs in stage 5: at S/ 19.90 a Culqi charge costs 17.6% in commission alone, against 10.0% on Mercado Pago. |
 | Price abroad | **USD 7.99 per month, USD 49 per year** | Decided in [35-PRICING.md](35-PRICING.md). The fixed fee per charge dominates below $7, so $7.99 is the floor worth using. The old $79 annual was double the category median of $38–45. |
 | Annual option | Yes, at 6 months' price (50% off) | **The biggest lever you have.** One charge a year pays the fixed fee once instead of twelve times, halving the take to about 5%, and an annual subscriber beats a monthly one on net revenue until month 6.4. |
-| Trial | **Seven days**, one per account | Already built. `TRIAL_DAYS` in `wrangler.toml`, changed from 30 on 2026-09-24 — the reasoning is in [35-PRICING.md](35-PRICING.md). Convenient: Mercado Pago's seller UI presets are 7 and 14 days, so this needs no API call. |
+| Trial | **Seven days**, one per account | Already built. `TRIAL_DAYS` in `wrangler.toml`, changed from 30 on 2026-09-24 — the reasoning is in [35-PRICING.md](35-PRICING.md). It is the account's trial, so do **not** also set Mercado Pago's own free trial on the plan (its seller UI offers 7 and 14 days): the worker grants Pro for an approved charge, and a trial on the plan delays the first charge, so the buyer would wait that long for Pro. Leave the plan's billing day unset too: Mercado Pago does not say when the first charge of a plan with one is taken, and it is untested here (VG-84). |
 
 These are already in `js/billing-config.js`. They become the Mercado Pago plan
 and the merchant-of-record products.
@@ -507,10 +507,20 @@ What is confirmed from Mercado Pago's own documentation:
 - **Charging really is automatic.** Mercado Pago's Peru page says it outright:
   *"Nos encargamos de los cobros y si algún pago es rechazado, hacemos nuevos
   intentos."* A rejected instalment is retried up to four times over ten days,
-  and three consecutive failures cancel the subscription and email you. ⚠ Those
-  three numbers are unverified: the Peru Suscripciones page and the
-  subscriptions overview, re-read 2026-10-28, say only that rejected charges
-  are retried automatically, with no count, interval or cancellation rule.
+  and three instalments with rejected payments cancel the subscription and
+  email you. The Peru Suscripciones page and the subscriptions overview,
+  re-read 2026-10-28, say only that rejected charges are retried; the three
+  numbers are on the developer page for subscriptions with authorized payments
+  (re-read 2026-11-21: "a maximum of 4 possibilities", "a 10-day window",
+  "After 3 installments with rejected payments, the subscription is
+  automatically canceled"). The same page says the first instalment is charged
+  "approximately one hour" after subscribing, which is when Pro starts: the
+  worker grants it for an approved charge, not for the authorised card, and
+  each charge buys one month (31 days) or one year from when it went through;
+  when that runs out with no new charge, Pro stops while Mercado Pago retries
+  and comes back when a charge goes through (VG-84). That page is about
+  subscriptions without a plan; the plan checkout link this site uses has no
+  stated timing, so time it in the sandbox (gate step 6).
 - **The buyer needs no Mercado Pago account and you need no website** for the
   hosted flow.
 - **Peru accepts DNI, CE and RUC** as payer document types.
@@ -552,7 +562,10 @@ Steps:
 2. Add your Peruvian bank account (CCI) for payouts, in your own name.
 3. In the developer panel, create an **application**, take its **Access Token**
    and **Public Key**, and point a **webhook** at
-   `https://<your-worker>.workers.dev/v1/webhooks/mercadopago`.
+   `https://<your-worker>.workers.dev/v1/webhooks/mercadopago`, subscribed to
+   **Planes y suscripciones** and **Pagos**. The subscription's charges are
+   what turn Pro on, and the authorized-payment topic under "Planes y
+   suscripciones" is the one whose link to the subscription is documented.
 4. Store the secrets:
    ```bash
    wrangler secret put MP_ACCESS_TOKEN

@@ -92,6 +92,30 @@ test("phrase-boundary teach-back blocks word-by-word breathing even after comfor
   await expect(page.locator("#flow-start")).toBeEnabled();
   expect(await page.evaluate(() => window.VTBreathTeach.state().pattern)).toBe("phrase");
 });
+test("phrase contrast fits narrow mobile and enlarged type without clipping", async ({ page }) => {
+  await open(page, { teach: true });
+  for (let n = 0; n < 3; n++) await page.locator("#coach-next").click();
+  for (const width of [320, 360, 390]) {
+    await page.setViewportSize({ width, height: 740 });
+    await expect(page.locator("#coach-pattern-phrase")).toBeVisible();
+    const layout = await page.evaluate(() => {
+      const cards = [...document.querySelectorAll(".coach-pattern-card")];
+      const buttons = [...document.querySelectorAll("#coach-pattern button")];
+      return {
+        overflow: document.documentElement.scrollWidth > innerWidth,
+        cardWidths: cards.map(x => x.getBoundingClientRect().width),
+        buttonHeights: buttons.map(x => x.getBoundingClientRect().height)
+      };
+    });
+    expect(layout.overflow, JSON.stringify({ width, layout })).toBe(false);
+    expect(layout.cardWidths.every(w => w > 160 && w <= width), JSON.stringify(layout)).toBe(true);
+    expect(layout.buttonHeights.every(h => h >= 44), JSON.stringify(layout)).toBe(true);
+  }
+  // Enlarged-type stress test; not a replacement for actual iOS 200% zoom.
+  await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+  const clip = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+  expect(clip).toBe(false);
+});
 test("teaching stage does not save any day, ask for a microphone or invent measured checkpoints", async ({ page }) => {
   await open(page, { teach: true });
   const initial = await page.evaluate(() => JSON.stringify(window.VTDays.read().days));

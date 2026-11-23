@@ -32,11 +32,11 @@
  *    ad in the same way when practice is over, so none of them passes because nothing could be drawn.
  *
  * Each has planted defects in qa/mutate.mjs (the "promises", "promises-voice" and "promises-account-ads" sets:
- * MK3, MK19 to MK22, MK26 to MK46, MK49 to MK77) that turn it red. MK26 to MK29 are what Codex's review showed the
+ * MK3, MK19 to MK22, MK26 to MK46, MK49 to MK78) that turn it red. MK26 to MK29 are what Codex's review showed the
  * first version let through; MK30 to MK46 are what the second red team showed the second version let through;
  * MK49 to MK70 are the third red team's, on paths the third version walks now; MK71 to MK75 the review of that
- * round's: silent takes and a send on an interval's later tick; MK76 and MK77 the review of those fixes: a cap
- * after the level meter, and a piano booked but not heard (docs/48 section 11). What no scenario can walk is held
+ * round's: silent takes and a send on an interval's later tick; MK76 to MK78 the review of those fixes: a cap
+ * after the level meter, a piano booked but not heard, and a loop silent after its first pass (docs/48 section 11). What no scenario can walk is held
  * in the code itself by tests/node/promise-guards.test.mjs ("guards" set).
  */
 const { test, expect } = require("@playwright/test");
@@ -215,23 +215,16 @@ const secondsLeft = (page) => page.evaluate(() => (window.VTApp.getState().timer
 /**
  * The live take hears and plays: the microphone is open and its frames reach the take (the level meter, set to
  * zero here, moves again within half a second, the exercise's own mode is handed the microphone's frames in that
- * time, and the analysis is not paused), and the reference piano is heard where its box is ticked: its notes are
- * booked and its output carries sound. The third red team showed a take could be live and counted while it heard
- * nothing and played nothing; the review of that round showed that an open microphone alone (`running`) stays
- * true while every frame is dropped, that a piano checked only at the start could fall silent after it; the
- * review of the fix, that the meter is only the first thing a frame feeds (a cap after it would drop the rest),
- * and that a piano's books are not its sound.
+ * time, and the analysis is not paused), and the reference piano plays where its box is ticked (see pianoPlays).
+ * The third red team showed a take could be live and counted while it heard nothing and played nothing; the
+ * review of that round showed that an open microphone alone (`running`) stays true while every frame is dropped,
+ * that a piano checked only at the start could fall silent after it; the review of the fix, that the meter is
+ * only the first thing a frame feeds (a cap after it would drop the rest), and that a piano's books are not its
+ * sound. `end` marks the check five seconds before a take's end.
  */
-async function hears(page, label, { mic = true } = {}) {
+async function hears(page, label, { mic = true, end = false } = {}) {
   const now = await heard(page);
-  if (now.pianoOn) {
-    expect(now.piano, `${label}: the reference piano's notes are booked, as its tick says`).toBe(true);
-    // Its output, as the piano's own monitor on the master bus reads it, in real time: the audio clock is not the
-    // page's, so this waits rather than jumps. Silence reads 0, the unlock blips about 0.001, a note 0.2 to 0.9.
-    await expect
-      .poll(() => page.evaluate(() => window.VTPiano.outputPeak()), { message: `${label}: the reference piano is heard: its output carries sound`, timeout: 3000, intervals: [100] })
-      .toBeGreaterThan(0.01);
-  }
+  if (now.pianoOn) await pianoPlays(page, label, { booked: now.piano, end });
   if (!mic) return;
   expect(now.mic, `${label}: the microphone is listening`).toBe(true);
   const meter = await page.evaluate(() => {
@@ -264,6 +257,74 @@ async function hears(page, label, { mic = true } = {}) {
 }
 
 /**
+ * The reference piano where its box is ticked: its notes are booked, and its output, as the piano's own monitor on
+ * the master bus reads it, carries sound (silence reads 0, the unlock blips about 0.001, a note 0.2 to 0.9). The
+ * audio runs on the real clock and the page's timers on the test's, so the check steps the page's clock 100 ms at a
+ * time, up to three seconds, while it waits: a looping piano schedules each pass on a timer, and a jump leaves the
+ * last pass to run out in real time while the next waits on the page's clock (CI caught this).
+ *
+ * A take's minutes are jumped in a second or two of real time, so near the end the start's notes may still be
+ * ringing: sound there does not show that the piano still plays. So from the start's check on, every note the
+ * piano schedules is counted, with whether it is wired to the master bus, and near the end every one must be
+ * (MK78: a loop silent after its first pass). A pass can be longer than a short take (up to 20 notes of up to
+ * 5.5 s in the one-note mode), so a take may schedule none in between; the long takes schedule several.
+ *
+ * A piano that cues (an exercise whose mode sounds each target once, for about a second and a half, when the
+ * target changes) need not sound near the end: it sounds again only when the singer moves the mode on, which the
+ * fake microphone's one tone does not. Any cue it did schedule must still be wired.
+ */
+async function pianoPlays(page, label, { booked, end }) {
+  expect(booked, `${label}: the reference piano's notes are booked, as its tick says`).toBe(true);
+  const loops = await page.evaluate(() => !!window.VTPiano.loopActive);
+  if (end) {
+    const notes = await page.evaluate(() => window.__vtPianoNotes);
+    expect(notes, `control: ${label}: the piano's notes were counted since the take's start`).toBeTruthy();
+    expect(notes.wired, `${label}: every note the piano scheduled since the start reaches its master bus`).toBe(notes.made);
+    if (!loops) return;
+  }
+  let stepped = 0;
+  const peak = async () => {
+    const p = await page.evaluate(() => window.VTPiano.outputPeak());
+    if (p <= 0.01 && stepped < 3000) {
+      await page.clock.runFor(100);
+      stepped += 100;
+    }
+    return p;
+  };
+  await expect
+    .poll(peak, { message: `${label}: the reference piano is heard: its output carries sound`, timeout: 10000, intervals: [50] })
+    .toBeGreaterThan(0.01);
+  if (!end) await countPianoNotes(page);
+}
+
+/**
+ * From now on, count each note the piano schedules and whether its gain is wired to the piano's master bus. A
+ * count only: the notes are made and wired by the piano's own code, as before.
+ */
+function countPianoNotes(page) {
+  return page.evaluate(() => {
+    window.__vtPianoNotes = { made: 0, wired: 0 };
+    const P = window.VTPiano;
+    if (P.__vtCounted) return;
+    P.__vtCounted = true;
+    const connect = AudioNode.prototype.connect;
+    AudioNode.prototype.connect = function (dest, ...rest) {
+      if (dest && dest === window.VTPiano.master) this.__vtToMaster = true;
+      return connect.call(this, dest, ...rest);
+    };
+    const playNote = P.playNote;
+    P.playNote = function (...args) {
+      const gain = playNote.apply(this, args);
+      if (gain) {
+        window.__vtPianoNotes.made++;
+        if (gain.__vtToMaster) window.__vtPianoNotes.wired++;
+      }
+      return gain;
+    };
+  });
+}
+
+/**
  * One take of its full length, `expected` seconds as a first visitor gets it: it starts with all of it on the
  * clock, hears and plays (see hears; no microphone for the MIC_FREE drills) at its start and five seconds before
  * its end, is still live then, ends on its own, and is counted as practice. Most of it is jumped over, but not
@@ -285,7 +346,7 @@ async function fullTake(page, label, expected, { mic = null } = {}) {
   await hears(page, label, { mic });
   await page.clock.fastForward((await secondsLeft(page) - 5.5) * 1000);
   expect(await live(page), `${label}: still live five seconds before its end`).toBe(true);
-  await hears(page, `${label}, five seconds before its end`, { mic });
+  await hears(page, `${label}, five seconds before its end`, { mic, end: true });
   await nothingInTheWay(page, label);
   await page.clock.runFor(6500);
   expect(await live(page), `${label}: it ends when its clock does`).toBe(false);
@@ -353,7 +414,7 @@ async function moreTake(page, label) {
   await hears(page, label);
   await page.clock.fastForward((await secondsLeft(page) - 5.5) * 1000);
   expect(await live(page), `${label}: still live five seconds before its end`).toBe(true);
-  await hears(page, `${label}, five seconds before its end`);
+  await hears(page, `${label}, five seconds before its end`, { end: true });
   await nothingInTheWay(page, label);
   await page.clock.runFor(6500);
   expect(await live(page), `${label}: it ends when its clock does`).toBe(false);
@@ -471,7 +532,7 @@ test("no time limit: a visitor who first came 45 days ago, past an hour today, t
   const rest = await page.evaluate(() => (window.VTApp.getState().timer.endAt - performance.now()) / 1000);
   await page.clock.fastForward(Math.max(0, rest - 5.5) * 1000);
   expect(await live(page), "Start right after Stop: still live five seconds before its end").toBe(true);
-  await hears(page, "Start right after Stop, five seconds before its end");
+  await hears(page, "Start right after Stop, five seconds before its end", { end: true });
   await nothingInTheWay(page, "Start right after Stop");
   await page.clock.runFor(5600);
   expect(await live(page), "Start right after Stop: it ends when its clock does").toBe(false);

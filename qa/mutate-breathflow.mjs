@@ -11,6 +11,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { behaviorDetected } from "./breathflow-oracle.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cases = [
@@ -111,16 +112,6 @@ function runMutant(item) {
   const result = spawnSync(command, args, { cwd: root, encoding: "utf8",
     timeout: 90000, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, CI: "1" } });
   return { result, log: (result.stdout || "") + "\n" + (result.stderr || "") };
-}
-
-function behaviorDetected(item, result, log) {
-  const sourceOracle = item.node
-    ? log.includes("not ok") && log.includes(item.name)
-    : log.includes("Error: expect(") && log.includes(item.name);
-  return result.status !== 0 && sourceOracle &&
-    // The Node contract quotes "No tests found" in its *expected* assertion.
-    // Reject that Playwright runner error only for browser-based mutants.
-    (item.node || !log.includes("No tests found")) && !log.includes("SyntaxError");
 }
 
 function evaluateMutant(item) {

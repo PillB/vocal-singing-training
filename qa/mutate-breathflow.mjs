@@ -93,6 +93,13 @@ const cases = [
     name: "phrase-boundary teach-back blocks word-by-word breathing even after comfort checks"
   },
   {
+    id: "BF-M13 phrase comparison ignores narrow viewports",
+    path: "css/breathflow-teach.css",
+    anchor: '#flow-coach .coach-pattern-card{border:2px solid #8ba9b6;border-radius:12px;padding:12px;min-width:0;overflow-wrap:anywhere}',
+    broken: '#flow-coach .coach-pattern-card{border:2px solid #8ba9b6;border-radius:12px;padding:12px;min-width:550px;overflow-wrap:anywhere}',
+    name: "phrase contrast fits narrow mobile and enlarged type without clipping"
+  },
+  {
     id: "BF-M9 WebKit selector silently drops teaching tests",
     path: "playwright.config.js",
     anchor: '      name: "webkit",\n      use: { browserName: "webkit" },\n      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call|breathflow)\\.spec\\.js/',
@@ -144,4 +151,4 @@ function evaluateMutant(item) {
 }
 
 for (const item of cases) evaluateMutant(item);
-process.stdout.write("PASS: all twelve BreathFlow behavioral mutants killed and restored\n");
+process.stdout.write("PASS: all thirteen BreathFlow behavioral mutants killed and restored\n");

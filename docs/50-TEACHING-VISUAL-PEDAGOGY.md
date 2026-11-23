@@ -197,3 +197,20 @@ SpeechSynthesis share audio session state. Relevant external evidence:
 <https://bugs.webkit.org/show_bug.cgi?id=323104>.
 Remain manual-only rather than fabricate recorded breath detection or
 speaker audibility.
+
+### Source-drift incident: WebKit project allowlist (fixed 2026-11-22)
+
+The first new WebKit job failed with `No tests found`, **before** any
+browser assertion. Root cause: `playwright.config.js` maintained per-project
+`testMatch` allowlists for four legacy audio specs. Adding a new workflow
+was insufficient: both `webkit` and `mobile-safari` silently excluded
+`breathflow.spec.js`. The corrected allowlists now include exactly the new
+spec in both projects; Firefox and mobile Chrome remain unchanged. A test
+that only checks CI exit status without verifying the test count would
+mistakenly call this a product defect or skip the intended Safari coverage.
+
+The new run must show **nonzero WebKit and mobile-safari tests actually
+executed**, then inspect failures individually. On a future rename, update
+both the workflow and the Playwright project allowlist and confirm
+`--list` names the expected tests. Never weaken the oracle by dropping the
+file or running just Chromium instead.

@@ -112,8 +112,8 @@
     "sha": "3cb392b8987ff544"
   },
   "js/breathflow.js": {
-    "v": "20261122e",
-    "sha": "ceae7100dfc32b96"
+    "v": "20261122f",
+    "sha": "519dd89cd03024d3"
   },
   "js/daily-loop.js": {
     "v": "20261113a",
@@ -304,7 +304,7 @@
     "sha": "18559c9800b9bcf9"
   },
   "js/breathflow-teach.js": {
-    "v": "20261122d",
-    "sha": "24ffe816e6fbbd4b"
+    "v": "20261122e",
+    "sha": "086503ca28408a7e"
   }
 }

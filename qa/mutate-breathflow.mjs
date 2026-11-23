@@ -55,6 +55,20 @@ const cases = [
     anchor: '      const rec = global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });',
     broken: '      const rec = global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });\n      global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });',
     name: "one manual round updates the same day, week and month ledger used by main"
+  },
+  {
+    id: "BF-M7 unsaved browser falsely reports success",
+    path: "js/breathflow.js",
+    anchor: '      if (global.VTStorage?.isUnsaved?.()) {',
+    broken: '      if (false) {',
+    name: "refused browser storage never confirms a day was saved across a reload"
+  },
+  {
+    id: "BF-M8 returning profile forgets completion",
+    path: "js/breathflow-teach.js",
+    anchor: '    state.ready = !!state.completion;',
+    broken: '    state.ready = false;',
+    name: "returning learner remembers an explicit skip and can reopen the full animated guide"
   }
 ];
 
@@ -96,4 +110,4 @@ function evaluateMutant(item) {
 }
 
 for (const item of cases) evaluateMutant(item);
-process.stdout.write("PASS: all six BreathFlow behavioral mutants killed and restored\n");
+process.stdout.write("PASS: all eight BreathFlow behavioral mutants killed and restored\n");

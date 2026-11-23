@@ -29,7 +29,56 @@
       svg: "Una pausa para tomar aire aparece antes de una barra de frase; una marca recorre la línea sin imponer un tiempo de respiración."
     }
   ];
-  const state = { stage: 0, sound: "hiss", paused: false, ready: false, decision: "", soundEpoch: 0, context: null };
+  const KEY_PREFIX = "vt_breathflow_lesson_v1_";
+  const state = { stage: 0, sound: "hiss", paused: false, ready: false,
+    decision: "", completion: null, profile: "", expanded: true, soundEpoch: 0, context: null };
+
+  function profileId() {
+    return global.VTStorage?.getActiveProfileId?.() || "default";
+  }
+
+  function recalled(profile) {
+    try {
+      const v = global.localStorage.getItem(KEY_PREFIX + profile);
+      return ["verified", "skipped"].includes(v) ? v : null;
+    } catch { return null; }
+  }
+
+  function remember(mode) {
+    try { global.localStorage.setItem(KEY_PREFIX + state.profile, mode); return true; }
+    catch { return false; }
+  }
+
+  function syncProfile() {
+    const current = profileId();
+    if (current === state.profile) {
+      // A separate tab can finish the tutorial for the same profile.
+      if (!state.ready && recalled(current)) {
+        state.completion = recalled(current);
+        state.ready = true;
+        state.expanded = false;
+        render();
+        global.VTBreathFlow?.refreshReadiness?.();
+      }
+      return;
+    }
+    state.profile = current;
+    state.completion = recalled(current);
+    state.ready = !!state.completion;
+    state.expanded = !state.ready || global.location.hash === "#flow-coach";
+    state.stage = 0;
+    state.decision = "";
+    ["shoulders", "ribs", "jaw"].forEach((k) => { el("coach-check-" + k).checked = false; });
+    render();
+    global.VTBreathFlow?.refreshReadiness?.();
+  }
+
+  function reopen() {
+    state.expanded = true;
+    render();
+    el("flow-coach").scrollIntoView({ block: "start", behavior: "instant" });
+    el("coach-title").focus({ preventScroll: true });
+  }
 
   function stopSound() {
     state.soundEpoch++;
@@ -52,6 +101,8 @@
   function render() {
     const n = state.stage, lesson = LESSONS[n];
     const box = el("flow-coach");
+    box.hidden = state.ready && !state.expanded;
+    el("coach-reopen").hidden = !state.ready;
     box.dataset.stage = String(n);
     box.dataset.sound = state.sound;
     box.dataset.paused = String(state.paused);
@@ -99,13 +150,18 @@
 
   function finish() {
     if (state.ready || state.stage !== 3 || !checksComplete() || state.decision !== "adapt") return;
-    complete();
+    complete("verified");
   }
 
-  function complete() {
+  function complete(mode = "verified") {
     stopSound();
     state.ready = true;
+    state.completion = mode;
+    const kept = remember(mode);
+    state.expanded = false;
     render();
+    if (!kept) el("coach-reopen").textContent =
+      "Repasar técnica · el navegador no pudo recordar tu preferencia";
     const setup = el("flow-setup");
     setup?.scrollIntoView?.({ block: "start", behavior: "instant" });
     el("flow-level")?.focus?.({ preventScroll: true });
@@ -205,18 +261,27 @@
     el("coach-finish").addEventListener("click", finish);
     el("coach-choice-force").addEventListener("click", () => chooseResponse("force"));
     el("coach-choice-adapt").addEventListener("click", () => chooseResponse("adapt"));
-    el("coach-skip").addEventListener("click", complete);
+    el("coach-skip").addEventListener("click", () => complete("skipped"));
+    el("coach-reopen").addEventListener("click", reopen);
     ["shoulders", "ribs", "jaw"].forEach((key) => {
       el("coach-check-" + key).addEventListener("change", updateChecks);
     });
+    global.addEventListener("storage", (e) => {
+      if (e.key === "vt_profiles_v1" || e.key?.startsWith(KEY_PREFIX)) syncProfile();
+    });
     global.addEventListener("pagehide", stopSound);
-    document.addEventListener("visibilitychange", () => { if (document.hidden) stopSound(); });
-    render();
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) stopSound();
+      else syncProfile();
+    });
+    syncProfile();
   }
 
   global.VTBreathTeach = {
-    isReady: () => state.ready,
-    state: () => ({ stage: state.stage, sound: state.sound, paused: state.paused, ready: state.ready, decision: state.decision }),
+    isReady: () => state.ready && state.profile === profileId(),
+    reopen,
+    state: () => ({ stage: state.stage, sound: state.sound, paused: state.paused,
+      ready: state.ready, decision: state.decision, completion: state.completion, profile: state.profile }),
     stopSound
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, { once: true });

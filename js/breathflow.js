@@ -390,7 +390,7 @@
       $("flow-run-status").textContent = "Respiración dentro de la frase registrada (" + state.mid[state.idx] + "). Está bien adaptar la frase.";
     });
     $("flow-next").addEventListener("click", next);
-    $("flow-run-teach").addEventListener("click", () => { $("flow-coach")?.scrollIntoView?.({ block: "start", behavior: "instant" }); });
+    $("flow-run-teach").addEventListener("click", () => global.VTBreathTeach?.reopen?.());
     $("flow-abort").addEventListener("click", reset);
     $("flow-restart").addEventListener("click", reset);
     $("flow-save").addEventListener("click", save);

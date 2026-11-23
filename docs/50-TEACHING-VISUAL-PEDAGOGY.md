@@ -164,3 +164,36 @@ a listener. These checks and their explicit failure oracles run in
 independent actual defects in the shipped modules and verifies red tests.
 Any failed/blocked gate remains in the release ledger; CI WebKit is not a
 physical iPhone or a pedagogy study.
+
+## Round follow-up: returning users, no-save paths and WebKit (2026-11-22)
+
+The old guide forced repeat/Skip on **every reload**, a failure in daily use,
+even for someone who had already demonstrated the concept. BreathFlow now
+remembers the outcome **per local profile** (`vt_breathflow_lesson_v1_<profile>`,
+value `verified` or `skipped`), folds the tutorial for that profile and
+shows an explicit "Repasar técnica" control. A direct guide link
+(`#flow-coach`) opens it even for returning learners. A different profile
+must review or explicitly skip; audio/resources remain separate. This
+preference is **local only**, not a synchronized test score or clinical
+qualification; denied localStorage means the learner may need to repeat.
+
+A newly executed regression will intentionally refuse `vt_days_v1`
+writes. The save must stay in review and say the browser refused persistence;
+a reload must **not** show a saved day. Mutation BF-M7 disables that error
+guard. Mutation BF-M8 removes remembered tutorial readiness; the returning
+user test must reject the change. Thus the tests are sensitive to source
+drift rather than checking a checkbox string.
+
+Alongside Chromium, a new `webkit-learning` CI job checks selected
+onboarding, cross-tab, date rollover and no-storage cases in desktop WebKit
+and emulated Mobile Safari. This is **simulation only**, and is never
+evidence that real iPhone hardware or VoiceOver was tested.
+
+A regression against current WebKit and iOS Safari audio can appear even if
+AudioContext reports `running`; browser autoplay/output routes and
+SpeechSynthesis share audio session state. Relevant external evidence:
+<https://developer.mozilla.org/en-US/docs/Web/API/BaseAudioContext/state>,
+<https://bugs.webkit.org/show_bug.cgi?id=218815>,
+<https://bugs.webkit.org/show_bug.cgi?id=323104>.
+Remain manual-only rather than fabricate recorded breath detection or
+speaker audibility.

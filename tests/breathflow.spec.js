@@ -247,6 +247,60 @@ test("Sunday-to-Monday and November-to-December rollovers never fabricate comple
   const saved = await page.evaluate(() => window.VTDays.read().days["2026-11-22"]?.n);
   expect(saved).toBe(1);
 });
+
+test("returning learner remembers an explicit skip and can reopen the full animated guide", async ({ page }) => {
+  await open(page, { teach: true });
+  await page.locator("#coach-skip").click();
+  await expect(page.locator("#flow-start")).toBeEnabled();
+  await expect(page.locator("#flow-coach")).toBeHidden();
+  await expect(page.locator("#coach-reopen")).toBeVisible();
+  await page.reload();
+  await expect(page.locator("#flow-start")).toBeEnabled();
+  await expect(page.locator("#flow-coach")).toBeHidden();
+  await page.locator("#coach-reopen").click();
+  await expect(page.locator("#flow-coach")).toBeVisible();
+  await page.locator("#coach-next").click();
+  await expect(page.locator("#coach-stage")).toContainText("costillas");
+  await page.goto(BASE + "/breathflow.html#flow-coach");
+  await expect(page.locator("#flow-coach")).toBeVisible();
+});
+test("verified lesson completion persists; a different profile must learn or explicitly skip", async ({ page }) => {
+  await open(page, { teach: true });
+  for (let i = 0; i < 3; i++) await page.locator("#coach-next").click();
+  for (const k of ["shoulders", "ribs", "jaw"]) await page.locator("#coach-check-" + k).check();
+  await page.locator("#coach-choice-adapt").click();
+  await page.locator("#coach-finish").click();
+  await page.reload();
+  await expect(page.locator("#flow-start")).toBeEnabled();
+  expect(await page.evaluate(() => window.VTBreathTeach.state().completion)).toBe("verified");
+  await page.evaluate(() => {
+    window.VTStorage.getActiveProfileId = () => "alternate-profile";
+    window.dispatchEvent(new StorageEvent("storage", { key: "vt_profiles_v1" }));
+  });
+  await expect(page.locator("#flow-start")).toBeDisabled();
+  await expect(page.locator("#flow-coach")).toBeVisible();
+});
+test("refused browser storage never confirms a day was saved across a reload", async ({ page }) => {
+  await open(page);
+  await finish(page);
+  await page.locator("#flow-comfort").selectOption("easy");
+  await page.evaluate(() => {
+    const oldSet = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "vt_days_v1") throw new DOMException("quota simulated", "QuotaExceededError");
+      return oldSet.call(this, key, value);
+    };
+  });
+  await page.locator("#flow-save").click();
+  await expect(page.locator("#flow-notice")).toContainText("rechazó guardar");
+  await expect(page.locator("#flow-review")).toBeVisible();
+  await page.reload();
+  const persisted = await page.evaluate(() => {
+    const days = window.VTDays;
+    return !!days.read().days[days.dayKey()]?.ex?.includes("bf-breathflow");
+  });
+  expect(persisted).toBe(false);
+});
 test("validation stops one phrase or overlong text from entering active state", async ({ page }) => {
   await open(page);
   await page.locator("#flow-lines").fill("Una sola frase");

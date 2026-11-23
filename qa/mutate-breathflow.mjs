@@ -16,6 +16,29 @@ import { behaviorDetected } from "./breathflow-oracle.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cases = [
   {
+    id: "BF-M16 cached retry erases a newer tab",
+    path: "js/storage.js",
+    anchor: 'const bag = global.VTDays.merge(JSON.parse(unsaved.get(key)), persisted);',
+    broken: 'const bag = JSON.parse(unsaved.get(key));',
+    name: "retry merges newer practice from another tab"
+  },
+
+  {
+    id: "BF-M14 guide continues into microphone permission",
+    path: "js/breathflow.js",
+    anchor: '    global.VTBreathTeach?.stopSound?.();',
+    broken: '',
+    name: "microphone tap cancels guide playback before requesting capture"
+  },
+  {
+    id: "BF-M15 retry counts another round",
+    path: "js/breathflow.js",
+    anchor: '      if (!state.receipt) {',
+    broken: '      if (true) {',
+    name: "retry after quota recovery persists exactly the original round"
+  },
+
+  {
     id: "BF-M1 readiness bypass",
     path: "js/breathflow.js",
     anchor: '    $("flow-start").disabled = !global.VTBreathTeach?.isReady?.();',
@@ -53,14 +76,14 @@ const cases = [
   {
     id: "BF-M6 duplicate ledger write",
     path: "js/breathflow.js",
-    anchor: '      const rec = global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });',
-    broken: '      const rec = global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });\n      global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });',
+    anchor: '        state.receipt = global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });',
+    broken: '        state.receipt = global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });\n      global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });',
     name: "one manual round updates the same day, week and month ledger used by main"
   },
   {
     id: "BF-M7 unsaved browser falsely reports success",
     path: "js/breathflow.js",
-    anchor: '      if (global.VTStorage?.isUnsaved?.()) {',
+    anchor: '      if (!global.VTStorage?.retryDaysSave?.()) {',
     broken: '      if (false) {',
     name: "refused browser storage never confirms a day was saved across a reload"
   },

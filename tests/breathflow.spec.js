@@ -457,3 +457,90 @@ test("keyboard tabs cycle and never display two panels simultaneously", async ({
   await expect(page.locator("#flow-tab-month")).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#flow-week")).toBeHidden();
 });
+
+test("retry after quota recovery persists exactly the original round", async ({ page }) => {
+  await open(page);
+  await finish(page);
+  await page.locator("#flow-comfort").selectOption("easy");
+  await page.evaluate(() => {
+    const set = Storage.prototype.setItem;
+    window.__allowDaySave = false;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "vt_days_v1" && !window.__allowDaySave) throw new DOMException("quota", "QuotaExceededError");
+      return set.call(this, key, value);
+    };
+  });
+  await page.locator("#flow-save").click();
+  await expect(page.locator("#flow-notice")).toContainText("rechazó guardar");
+  const first = await page.evaluate(() => window.VTDays.read().days[window.VTDays.dayKey()]);
+  expect(first.n).toBe(1);
+  await page.locator("#flow-save").click();
+  expect(await page.evaluate(() => window.VTDays.read().days[window.VTDays.dayKey()].n)).toBe(1);
+  await page.evaluate(() => { window.__allowDaySave = true; });
+  await page.locator("#flow-save").click();
+  await expect(page.locator("#flow-done")).toBeVisible();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("vt_days_v1")).days[window.VTDays.dayKey()]);
+  expect(saved.n).toBe(1);
+  expect(saved.sec).toBe(first.sec);
+});
+
+test("microphone tap cancels guide playback before requesting capture", async ({ page }) => {
+  await open(page, { teach: true });
+  await page.locator("#coach-next").click();
+  await page.locator("#coach-next").click();
+  await page.evaluate(() => {
+    window.__guideContexts = [];
+    window.__captureAudio = null;
+    const Audio = window.AudioContext;
+    window.AudioContext = class extends Audio {
+      constructor(...args) {
+        super(...args);
+        window.__guideContexts.push(this);
+      }
+      createBufferSource() {
+        const source = super.createBufferSource();
+        source.loop = true;
+        const stop = source.stop.bind(source);
+        // A long guide must still be active when the learner taps mic, even
+        // on a slow runner; natural ending cannot impersonate cancellation.
+        source.stop = (when) => stop(when + 30);
+        return source;
+      }
+    };
+    navigator.mediaDevices.getUserMedia = () => {
+      window.__captureAudio = window.__guideContexts.map((ctx) => ctx.state);
+      return Promise.reject(new DOMException("denied for contract", "NotAllowedError"));
+    };
+  });
+  await page.locator("#coach-play").click();
+  await expect(page.locator("#coach-audio-status")).toContainText("sintética");
+  await page.locator("#flow-mic").click();
+  // Existing page.clock freezes the guide's scheduled audio ending; capture
+  // must see its real context closed, not just a mocked stop function called.
+  await expect.poll(() => page.evaluate(() => window.__captureAudio)).toEqual(["closed"]);
+});
+
+test("retry merges newer practice from another tab", async ({ page }) => {
+  await open(page);
+  await finish(page);
+  await page.locator("#flow-comfort").selectOption("easy");
+  await page.evaluate(() => {
+    const set = Storage.prototype.setItem;
+    window.__restoreDayStorage = () => { Storage.prototype.setItem = set; };
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "vt_days_v1") throw new DOMException("quota", "QuotaExceededError");
+      return set.call(this, key, value);
+    };
+  });
+  await page.locator("#flow-save").click();
+  await expect(page.locator("#flow-notice")).toContainText("rechazó guardar");
+  await page.evaluate(() => {
+    window.__restoreDayStorage();
+    localStorage.setItem("vt_days_v1", JSON.stringify({ v: 1, backfilled: true, days: {
+      "2026-11-01": { n: 1, sec: 70, ex: ["v1-diction"] }
+    }, rest: { bank: 1, used: [] } }));
+  });
+  await page.locator("#flow-save").click();
+  await expect(page.locator("#flow-done")).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("vt_days_v1")).days["2026-11-01"].sec)).toBe(70);
+});

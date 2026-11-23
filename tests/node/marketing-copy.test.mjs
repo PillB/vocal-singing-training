@@ -94,7 +94,10 @@ export const BANNED = [
   [/casi todas las apps|a diferencia de otras|almost every|unlike other apps/i, "no market-wide comparison the product cannot prove (Peru DL 1044 art. 8.3 and 12.2)"],
   [/clase particular ≈|lesson ≈|≈ (el|a) año/i, "no lesson-equals-a-year anchor: a Lima lesson is S/ 66 against S/ 119.90 a year (docs/35)"],
   [/ganaste|you won|solo hoy|today only|oferta termina|offer ends/i, "no prize or countdown wording: the scam patterns older adults are warned against (FTC, FBI IC3 2025)"],
-  [/cualquiera puede cantar afinado|anyone can sing in tune|nadie (es )?desafina|nobody is tone-deaf/i, "about 1.5% are amusic and training does not help them (Peretz & Vuvan 2017)"]
+  [/cualquiera puede cantar afinado|anyone can sing in tune|nadie (es )?desafina|nobody is tone-deaf/i, "about 1.5% are amusic and training does not help them (Peretz & Vuvan 2017)"],
+  // The owner chose, on 22 November 2026, to say what is true today rather than promise the future: the terms do not
+  // promise free practice forever, and in Spain and Peru advertising binds as the contract does (docs/48 section 13).
+  [/gratis,? (para )?siempre|siempre (es |será |seguirá siendo )?gratis|gratuit[oa] para siempre|free,? (always|forever)|(always|forever) free|free for(ever| life)|always be free/i, "no promise that practice stays free for ever: the terms do not make it (TRLGDCU art. 61.2, Ley 29571 art. 46); say \"sin límite de minutos\" instead"]
 ];
 
 /** Every [lang, key, why] where a selling string makes a ruled-out claim. */
@@ -132,6 +135,12 @@ test("control: each ruled-out claim is caught, and plain copy is not", () => {
   assert.equal(plant("Una clase particular ≈ el año de Pro").length, 1);
   assert.equal(plant("¡Ganaste un mes gratis!").length, 1);
   assert.equal(plant("Casi nadie desafina").length, 1);
+  for (const forever of ["Practicar es gratis, siempre.", "Todos los ejercicios (la práctica siempre es gratis)", "Gratis para siempre", "Practice is free, always.", "All exercises (practice is always free)", "Free forever"]) {
+    assert.equal(plant(forever).length, 1, `a promise of free practice for ever is caught: ${forever}`);
+  }
+  for (const plain of ["Practicar es gratis y sin límite de minutos.", "Practice is free, with no daily time limit.", "Siempre puedes volver a empezar", "You can always start again"]) {
+    assert.deepEqual(plant(plain), [], `control: plain copy passes: ${plain}`);
+  }
   assert.deepEqual(plant(S.es["meta.desc"]), [], "control: today's description passes");
   assert.equal(bannedClaims({ en: { "first.why": "An AI coach" } }).length, 1, "English is checked too");
   assert.equal(bannedClaims({ en: { "home.other": "An AI coach" } }).length, 0, "control: a key that does not sell is not");

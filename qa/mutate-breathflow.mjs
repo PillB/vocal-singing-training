@@ -69,6 +69,14 @@ const cases = [
     anchor: '    state.ready = !!state.completion;',
     broken: '    state.ready = false;',
     name: "returning learner remembers an explicit skip and can reopen the full animated guide"
+  },
+  {
+    id: "BF-M9 WebKit selector silently drops teaching tests",
+    path: "playwright.config.js",
+    anchor: '      name: "webkit",\n      use: { browserName: "webkit" },\n      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call|breathflow)\\.spec\\.js/',
+    broken: '      name: "webkit",\n      use: { browserName: "webkit" },\n      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call)\\.spec\\.js/',
+    name: "WebKit and emulated iPhone execute the BreathFlow lesson",
+    node: true
   }
 ];
 
@@ -86,14 +94,18 @@ function evaluateMutant(item) {
   const modified = replaceOnlyOnce(original, item.anchor, item.broken, item.id);
   try {
     writeFileSync(file, modified);
-    const result = spawnSync("npx", [
+    const command = item.node ? process.execPath : "npx";
+    const args = item.node ? ["--test", "tests/node/playwright-projects.test.mjs"] : [
       "--no-install", "playwright", "test", "tests/breathflow.spec.js",
       "--project=chromium", "--workers=1", "--reporter=line", "-g", item.name
-    ], { cwd: root, encoding: "utf8", timeout: 90000, maxBuffer: 4 * 1024 * 1024,
-      env: { ...process.env, CI: "1" } });
+    ];
+    const result = spawnSync(command, args, { cwd: root, encoding: "utf8",
+      timeout: 90000, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, CI: "1" } });
     const log = (result.stdout || "") + "\n" + (result.stderr || "");
-    const diedForBehavior = result.status !== 0 &&
-      log.includes("Error: expect(") && log.includes(item.name) &&
+    const sourceOracle = item.node
+      ? log.includes("not ok") && log.includes(item.name)
+      : log.includes("Error: expect(") && log.includes(item.name);
+    const diedForBehavior = result.status !== 0 && sourceOracle &&
       !log.includes("No tests found") && !log.includes("SyntaxError");
     if (result.error || !diedForBehavior) {
       throw new Error(item.id + ": mutant not killed by behavioral oracle. " +
@@ -110,4 +122,4 @@ function evaluateMutant(item) {
 }
 
 for (const item of cases) evaluateMutant(item);
-process.stdout.write("PASS: all eight BreathFlow behavioral mutants killed and restored\n");
+process.stdout.write("PASS: all nine BreathFlow behavioral mutants killed and restored\n");

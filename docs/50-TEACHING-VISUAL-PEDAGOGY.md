@@ -214,3 +214,13 @@ executed**, then inspect failures individually. On a future rename, update
 both the workflow and the Playwright project allowlist and confirm
 `--list` names the expected tests. Never weaken the oracle by dropping the
 file or running just Chromium instead.
+
+### Prevent future silent WebKit coverage loss
+
+The project selector is now under a **runtime Node contract**:
+`tests/node/playwright-projects.test.mjs` requires both `webkit`
+and `mobile-safari` to select `breathflow.spec.js`, while ensuring
+heavy headed sweeps are excluded. Mutation BF-M9 temporarily removes
+BreathFlow from desktop WebKit's selector and must make this test fail.
+The test runs in `npm run test:core` as well as the focused workflow.
+This does not imply a speaker test or true iOS physical compatibility.

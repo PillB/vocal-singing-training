@@ -7,6 +7,10 @@
     "v": "20261118b",
     "sha": "0e117cfde7d7f1dd"
   },
+  "css/breathflow-teach.css": {
+    "v": "20261123a",
+    "sha": "88c754fd62bc9957"
+  },
   "css/exercise-viz.css": {
     "v": "20261002a",
     "sha": "8a118da5afb38589"
@@ -110,6 +114,10 @@
   "js/boot-ready.js": {
     "v": "20261117c",
     "sha": "3cb392b8987ff544"
+  },
+  "js/breathflow-teach.js": {
+    "v": "20261123a",
+    "sha": "708e53ae8d78f980"
   },
   "js/breathflow.js": {
     "v": "20261122f",
@@ -298,13 +306,5 @@
   "qa/qa.js": {
     "v": "20261102a",
     "sha": "ef27b5dff6b85163"
-  },
-  "css/breathflow-teach.css": {
-    "v": "20261122c",
-    "sha": "18559c9800b9bcf9"
-  },
-  "js/breathflow-teach.js": {
-    "v": "20261122e",
-    "sha": "086503ca28408a7e"
   }
 }

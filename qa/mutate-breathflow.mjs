@@ -88,25 +88,33 @@ function replaceOnlyOnce(original, anchor, broken, id) {
   return original.slice(0, first) + broken + original.slice(first + anchor.length);
 }
 
+function runMutant(item) {
+  const command = item.node ? process.execPath : "npx";
+  const args = item.node ? ["--test", "tests/node/playwright-projects.test.mjs"] : [
+    "--no-install", "playwright", "test", "tests/breathflow.spec.js",
+    "--project=chromium", "--workers=1", "--reporter=line", "-g", item.name
+  ];
+  const result = spawnSync(command, args, { cwd: root, encoding: "utf8",
+    timeout: 90000, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, CI: "1" } });
+  return { result, log: (result.stdout || "") + "\n" + (result.stderr || "") };
+}
+
+function behaviorDetected(item, result, log) {
+  const sourceOracle = item.node
+    ? log.includes("not ok") && log.includes(item.name)
+    : log.includes("Error: expect(") && log.includes(item.name);
+  return result.status !== 0 && sourceOracle &&
+    !log.includes("No tests found") && !log.includes("SyntaxError");
+}
+
 function evaluateMutant(item) {
   const file = resolve(root, item.path);
   const original = readFileSync(file, "utf8");
   const modified = replaceOnlyOnce(original, item.anchor, item.broken, item.id);
   try {
     writeFileSync(file, modified);
-    const command = item.node ? process.execPath : "npx";
-    const args = item.node ? ["--test", "tests/node/playwright-projects.test.mjs"] : [
-      "--no-install", "playwright", "test", "tests/breathflow.spec.js",
-      "--project=chromium", "--workers=1", "--reporter=line", "-g", item.name
-    ];
-    const result = spawnSync(command, args, { cwd: root, encoding: "utf8",
-      timeout: 90000, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, CI: "1" } });
-    const log = (result.stdout || "") + "\n" + (result.stderr || "");
-    const sourceOracle = item.node
-      ? log.includes("not ok") && log.includes(item.name)
-      : log.includes("Error: expect(") && log.includes(item.name);
-    const diedForBehavior = result.status !== 0 && sourceOracle &&
-      !log.includes("No tests found") && !log.includes("SyntaxError");
+    const { result, log } = runMutant(item);
+    const diedForBehavior = behaviorDetected(item, result, log);
     if (result.error || !diedForBehavior) {
       throw new Error(item.id + ": mutant not killed by behavioral oracle. " +
         "status=" + result.status + " signal=" + result.signal + " error=" +

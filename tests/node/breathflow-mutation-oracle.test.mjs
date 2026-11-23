@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { behaviorDetected } from "../../qa/breathflow-oracle.mjs";
+import { behaviorDetected, diagnosticTail } from "../../qa/breathflow-oracle.mjs";
 
 const node = { node: true, name: "WebKit and emulated iPhone execute the BreathFlow lesson" };
 const browser = { name: "first-use lesson teaches body and mouth before enabling Start" };
@@ -46,4 +46,14 @@ test("browser source mutants require a named Playwright assertion, not just an e
   assert.equal(behaviorDetected(browser, { status: 1 },
     browser.name + "\nError: No tests found\nError: expect(received)"), false);
   assert.equal(behaviorDetected(browser, { status: 1 }, "Error: expect(received)"), false);
+});
+
+test("asset request noise cannot hide the failing assertion and server errors remain visible", () => {
+  const assertion = "Error: expect(received).toBe(expected)\nExpected: 70\nReceived: undefined";
+  const noise = Array(150).fill('[WebServer] 127.0.0.1 - "GET /js/app.js HTTP/1.1" 200 -').join("\n");
+  const result = diagnosticTail(assertion + "\n" + noise + '\n[WebServer] "GET /bad.js HTTP/1.1" 500 -');
+  assert.match(result, /Expected: 70/);
+  assert.match(result, /Received: undefined/);
+  assert.match(result, /500 -/);
+  assert.doesNotMatch(result, /200 -/);
 });

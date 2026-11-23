@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { behaviorDetected } from "./breathflow-oracle.mjs";
+import { behaviorDetected, diagnosticTail } from "./breathflow-oracle.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cases = [
@@ -178,7 +178,7 @@ function evaluateMutant(item) {
     if (result.error || !diedForBehavior) {
       throw new Error(item.id + ": mutant not killed by behavioral oracle. " +
         "status=" + result.status + " signal=" + result.signal + " error=" +
-        (result.error?.message || "none") + "\n" + log.slice(-5500));
+        (result.error?.message || "none") + "\n" + diagnosticTail(log));
     }
     process.stdout.write("KILLED " + item.id + " by: " + item.name + "\n");
   } finally {
@@ -190,4 +190,4 @@ function evaluateMutant(item) {
 }
 
 for (const item of cases) evaluateMutant(item);
-process.stdout.write("PASS: all fourteen BreathFlow behavioral mutants killed and restored\n");
+process.stdout.write(`PASS: all ${cases.length} BreathFlow behavioral mutants killed and restored\n`);

@@ -842,7 +842,7 @@ for (const size of [LAPTOP, PHONE]) {
       await expect(page.locator("#btn-toggle-guide")).toHaveAttribute("aria-expanded", "true");
       await page.evaluate(() => scrollTo({ top: 700, behavior: "instant" }));
       const before = await page.evaluate(() => scrollY);
-      expect(before, "control: the learner reached content below the stage").toBeGreaterThan(300);
+      expect(before).toBeGreaterThan(300);
       await page.evaluate(() => {
         window.VTApp.fitHighwayToViewport();
         window.VTApp.fitHighwayToViewport();
@@ -850,7 +850,8 @@ for (const size of [LAPTOP, PHONE]) {
       await settle(page, 150);
       expect((await page.locator("#highway-stage").boundingBox()).height).toBeGreaterThanOrEqual(120);
       const after = await page.evaluate(() => scrollY);
-      expect(Math.abs(after - before), `refit moved reading position ${before} -> ${after}`).toBeLessThanOrEqual(2);
+      console.log("stage-refit-scroll", { id, width: size.width, before, after });
+      expect(Math.abs(after - before)).toBeLessThanOrEqual(2);
     });
   }
 }

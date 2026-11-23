@@ -19,3 +19,10 @@ export function behaviorDetected(item, result, log) {
   return log.includes(item.name) && (namedMatcher || layoutAssertion) &&
     !log.includes("No tests found");
 }
+
+/** Keep assertion diagnostics instead of a tail filled with successful asset requests. */
+export function diagnosticTail(log) {
+  return String(log).split("\n").filter((line) =>
+    !/^\[WebServer\].*"(?:GET|HEAD) [^"]+ HTTP\/1\.[01]" (?:200|304) /.test(line)
+  ).slice(-100).join("\n");
+}

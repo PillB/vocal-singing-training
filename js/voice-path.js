@@ -435,7 +435,8 @@
     const flags = readFlags();
     const c = context(flags);
     const due = LOGROS.filter((l) => !flags[earnedKey(l.id)] && safeTest(l, c)).map((l) => l.id);
-    const quiet = quietNow(flags, due.length);
+    const hasNews = due.length > 0 || AREAS.some((a) => STAGES.some((t) => c.byArea[a.id].length >= t && !flags[stageEarnedKey(a.id, t)]));
+    const quiet = hasNews ? quietNow(flags, due.length) : true;
     const fresh = fileLogros(flags, due, quiet);
     const stagesChanged = fileStages(flags, c.byArea, quiet);
     const first = !flags[INIT];

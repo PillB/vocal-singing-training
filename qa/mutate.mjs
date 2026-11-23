@@ -175,6 +175,7 @@ export const MUTANTS = {
     ["VP20 a caption promises prevention", "js/voice-path.js", "que proteja de lesiones no está probado", "y así previene lesiones"],
     ["VP21 a song warmed up after it counts as warmed up first", "js/voice-path.js", "ex.slice(0, song).some((id) => WARM_AREAS.includes(AREA_OF.get(id)))", "ex.some((id) => WARM_AREAS.includes(AREA_OF.get(id)))"],
     ["VP22 three of the same weekday make a fixed day", "js/voice-path.js", " && set.has(add(k, -21))", ""],
+    ["VP28 unchanged evaluations rebuild the complete calendar", "js/voice-path.js", "const quiet = hasNews ? quietNow(flags, due.length) : true;", "const quiet = quietNow(flags, due.length);"],
     ["VP24 pending stage is stored as false and dropped by sync", "js/voice-path.js", "flags[stageEarnedKey(a.id, t)] = true;", "flags[stageEarnedKey(a.id, t)] = false;"],
     ["VP25 legacy pending stages never migrate", "js/voice-path.js", 'return migrateStages(f && typeof f === "object" && !Array.isArray(f) ? { ...f } : {});', 'return f && typeof f === "object" && !Array.isArray(f) ? { ...f } : {};'],
     ["VP26 speaking days are shared as singing", "js/voice-path.js", 'singing: ["This week I practised my voice on 1 day", "This week I practised my voice on {n} days"]', 'singing: ["This week I sang on 1 day", "This week I sang on {n} days"]'],

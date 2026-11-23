@@ -37,7 +37,7 @@ comfortable key/octave; sex and low pitch do not establish safe tessitura.
 | Global practice-day totals were labeled days sung | Generic voice-practice share wording; speaking-only ledger cannot produce singing claim. |
 | Unknown plausible stage keys could create phantom milestones | Validate exact area and stage membership; bogus area/999 negative fixture. |
 | Warm-up dose and share privacy copy exceeded evidence | Remove universal sufficient duration; scope disclosure to shared summary. |
-|1825day evaluation repeatedly recomputed immutable earned milestone predicates | Skip already-earned expensive predicates; preserve original60ms test rather than loosening it. Original PR47 also failed locally under load; runner variance is not evidence of a migration regression. |
+|1825day evaluation repeatedly recomputed immutable earned milestone predicates | Skip already-earned expensive predicates and rebuild the day summary only for actual news; preserve original60ms test rather than loosening it. Original PR47 also failed locally under load; runner variance is not evidence of a migration regression. |
 | New short routines initially reused delayed speech/video review | Use immediate clear-speech/pace/song tasks, preserve v7's own workflow. |
 | Song task forbade midphrase breathing and claimed low male keys protect voice | Bilingual comfort/pausing guidance; stable metric IDs with self-report labels. |
 | Easy-onset task asked for hard glottal demonstrations | Gentle vowel starts, rest, stop cues; trace cannot measure fold closure. |
@@ -81,6 +81,13 @@ older false-stage migration, stale remote seen flags, missing catalog IDs
 (existing set contract), edited research wording hashes and stale assets.
 External score links may change; recheck their specific edition rather than
 silently replacing a score with a modern copyrighted arrangement.
+
+## Validation updates
+
+All25 set,27 path and4 curriculum mutations were killed before the final
+calendar-summary optimization; the added unchanged-summary negative control
+checks that repeated renders do not rebuild the whole day calendar. Complete
+core/platform checks must run on the final tree.
 
 ## Draft51 remains gated
 

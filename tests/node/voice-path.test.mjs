@@ -523,3 +523,13 @@ test("valid-looking unknown stages cannot fabricate milestones", () => {
   const { P } = page({ flags: { "g:stage:bogus:5": true, "g:stage:breath:999": true, "g:stage:breath:5": true } });
   assert.deepEqual(plain(P.unseen().stages), [["breath", 5]]);
 });
+
+test("an unchanged milestone evaluation does not rebuild the whole calendar summary", () => {
+  const { P, win } = page({ days: daysOf(["2026-11-17"]) });
+  P.evaluate();
+  const summary = win.VTDays.summary;
+  let calls = 0;
+  win.VTDays.summary = (...args) => { calls += 1; return summary(...args); };
+  P.evaluate();
+  assert.equal(calls, 0, "no news needs no second full-ledger summary");
+});

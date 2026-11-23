@@ -148,6 +148,9 @@ test("health reports booleans and the site origin, never key material", async ()
     // holds the true case).
     creemCheckoutConfigured: false,
     creemPortalConfigured: false,
+    // Euros need that checkout and both euro products as well (VG-85;
+    // checkout-currency.test.mjs CK45 holds the true case).
+    creemEurConfigured: false,
     // No API key here, so no mode; "test" or "live" by the key's prefix
     // otherwise, never any of the key itself (asserted below).
     creemKeyMode: null,

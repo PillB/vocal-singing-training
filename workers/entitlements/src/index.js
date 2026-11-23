@@ -69,7 +69,7 @@ import {
 import { reportsEnabled, routeReportsApi } from "./reports.js";
 import { mapStripeEvent, verifyStripeSignature } from "./stripe.js";
 import { CREEM_SIGNATURE_HEADER, creemCheckoutBinding, mapCreemEvent, verifyCreemSignature } from "./creem.js";
-import { bindCheckoutRef, creemCheckoutConfigured, creemKeyMode, creemPortalConfigured, routeCheckoutApi } from "./checkout.js";
+import { bindCheckoutRef, creemCheckoutConfigured, creemEurCheckoutConfigured, creemKeyMode, creemPortalConfigured, routeCheckoutApi } from "./checkout.js";
 import { CLAIMABLE_PROVIDERS, MAX_BODY_BYTES, MAX_SESSION_ID_LENGTH } from "./limits.js";
 import { confirmAndMapNotification, resolveNotificationTarget, verifyMercadoPagoSignature } from "./mercadopago.js";
 import {
@@ -670,6 +670,9 @@ function healthConfiguration(env) {
     // checkouts through the worker only when the first is true.
     creemCheckoutConfigured: creemCheckoutConfigured(env),
     creemPortalConfigured: creemPortalConfigured(env),
+    // And whether it can sell in euros: both euro products as well (VG-85).
+    // The page shows a European € only when this is true.
+    creemEurConfigured: creemEurCheckoutConfigured(env),
     // Which Creem API the key reaches, so the gate can check a live key went
     // in before going live (a creem_test_ key sells nothing real).
     creemKeyMode: creemKeyMode(env),

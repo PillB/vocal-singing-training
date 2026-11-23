@@ -385,7 +385,8 @@ test.describe("one worker checkout at a time, whatever redraws the button", () =
 
     state.checkoutGate.open();
     await page.waitForURL(CHECKOUT_PAGE, { timeout: 10000 });
-    expect(state.checkouts).toEqual([{ plan: "pro_monthly", provider: "creem", returnPath: "/index.html" }]);
+    // In the dollars the card showed an American (VG-85: the page names the money it asks to be charged in).
+    expect(state.checkouts).toEqual([{ plan: "pro_monthly", provider: "creem", returnPath: "/index.html", currency: "USD" }]);
     expect(navigations).toEqual([CHECKOUT_PAGE]);
   });
 

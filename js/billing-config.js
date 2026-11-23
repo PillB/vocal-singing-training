@@ -137,6 +137,18 @@
           pro_yearly: ""
         },
         /**
+         * The same two products priced in euros, for the European Union
+         * (VG-85, decided 2026-11-22): the links of the euro products. A
+         * visitor in the EU is shown € on this rail only when both are set
+         * (or, through the worker, when /v1/health says
+         * `creemEurConfigured`); with one missing they are shown, and
+         * charged, the dollar price instead.
+         */
+        linksEur: {
+          pro_monthly: "", // e.g. https://www.creem.io/payment/prod_xxxx (the euro product)
+          pro_yearly: ""
+        },
+        /**
          * Open this rail's checkouts through the worker (POST /v1/me/checkout)
          * instead of a pasted link: the worker creates the Creem checkout for
          * the signed-in account and links the purchase inside the webhook, so
@@ -193,8 +205,9 @@
      * shown to a Peruvian to be in soles and to be the final IGV-inclusive
      * figure, and the merchant of record that bills the rest of the world
      * cannot charge soles at all. The soles line therefore answers to the
-     * Peruvian market and the dollar line to the category. The reasoning and
-     * the evidence behind each number are in docs/35-PRICING.md.
+     * Peruvian market, the dollar line to the category, and the euro line
+     * (the dollar numerals, VAT included) to the European Union. The
+     * reasoning and the evidence behind each number are in docs/35-PRICING.md.
      */
     plans: [
       {
@@ -204,6 +217,7 @@
         interval: null,
         priceUsd: 0,
         pricePen: 0,
+        priceEur: 0,
         features: [
           "all_exercises",
           "pitch_highway",
@@ -223,10 +237,11 @@
         // merchant of record cannot bill soles at all. See docs/35-PRICING.md.
         priceUsd: 7.99,
         pricePen: 19.9,
-        // No priceEur: the Creem products are US dollars, tax-inclusive, for
-        // every market (VG-85, docs/40 step 3), so the euro markets are shown
-        // the dollars they are charged. Add priceEur back only with euro
-        // products in Creem, and change the terms' prices with it.
+        // The European Union pays in euros, VAT included, on Creem's euro
+        // products (VG-85, decided 2026-11-22; docs/35-PRICING.md). Shown
+        // only where that rail can charge euros (js/billing.js euroChargeable),
+        // so the price on the card is always the price charged.
+        priceEur: 7.99,
         popular: true,
         // Only list features actually delivered in product (trust > feature stack theater).
         // The card shows the first five: what Pro adds that a learner asked for
@@ -257,6 +272,7 @@
         interval: "year",
         priceUsd: 49,
         pricePen: 119.9,
+        priceEur: 49,
         badge: "saveAnnual",
         popular: false,
         hero: true,
@@ -289,6 +305,32 @@
       { code: "AU", name: "Australia", currency: "AUD", rail: "creem", priority: 2 },
       { code: "PH", name: "Philippines", currency: "PHP", rail: "creem", priority: 3 },
       { code: "IN", name: "India", currency: "INR", rail: "creem", priority: 3 },
+      // The rest of the European Union, so every member state is shown the
+      // euro price (ES, DE, FR and IT are above). Non-EU Europe (GB, CH, NO,
+      // IS) stays in dollars: the decision is the EU's VAT-inclusive euro.
+      { code: "AT", name: "Austria", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "BE", name: "Belgium", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "BG", name: "Bulgaria", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "HR", name: "Croatia", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "CY", name: "Cyprus", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "CZ", name: "Czechia", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "DK", name: "Denmark", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "EE", name: "Estonia", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "FI", name: "Finland", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "GR", name: "Greece", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "HU", name: "Hungary", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "IE", name: "Ireland", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "LV", name: "Latvia", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "LT", name: "Lithuania", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "LU", name: "Luxembourg", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "MT", name: "Malta", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "NL", name: "Netherlands", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "PL", name: "Poland", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "PT", name: "Portugal", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "RO", name: "Romania", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "SK", name: "Slovakia", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "SI", name: "Slovenia", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "SE", name: "Sweden", currency: "EUR", rail: "creem", priority: 3 },
       { code: "WW", name: "Worldwide", currency: "USD", rail: "creem", priority: 3 }
     ]
   };

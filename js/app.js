@@ -9226,15 +9226,7 @@
     const priceRegion = priceRegionFor(B, region);
     const cfg = B.cfg() || {};
     const prelaunch = isCheckoutPrelaunch();
-    const regionEl = $("#pricing-region-label");
-    if (regionEl) {
-      // The currency of the price on the cards, in words: "PEN" meant nothing to
-      // 5 of 9 think-aloud readers who know it as soles or S/, and the market's
-      // own code claimed pesos above prices charged in dollars.
-      const paid = (cfg.plans || []).find((p) => p.interval) || {};
-      const cur = B.formatPrice(paid, priceRegion).currency;
-      regionEl.textContent = `${tt("pricing.region")}: ${market.name} · ${tt("pricing.currency." + cur)}`;
-    }
+    paintPricingRegion(B, cfg.plans || [], market, priceRegion);
     const status = $("#pricing-status");
     if (status) {
       const ent = B.getEntitlement();
@@ -9265,6 +9257,85 @@
     }
     paintMorNote(prelaunch);
     updateBillingChrome();
+  }
+
+  /**
+   * The Pro dialog's region line: where the prices are for, and the currency
+   * of the price on the cards, in words. "PEN" meant nothing to 5 of 9
+   * think-aloud readers who know it as soles or S/, and the market's own code
+   * claimed pesos above prices charged in dollars. Written only when it
+   * changes, so a repaint that changes nothing is not a change to anyone.
+   * @param {object} B VTBilling.
+   * @param {object[]} plans The config's plans.
+   * @param {{code: string, name: string}} market The visitor's market.
+   * @param {string} priceRegion The region the cards are priced for.
+   */
+  function paintPricingRegion(B, plans, market, priceRegion) {
+    const regionEl = $("#pricing-region-label");
+    if (!regionEl) return;
+    const paid = plans.find((p) => p.interval) || {};
+    const cur = B.formatPrice(paid, priceRegion).currency;
+    const line = `${tt("pricing.region")}: ${regionLabel(market, isEsLang())} · ${tt("pricing.currency." + cur)}`;
+    if (regionEl.textContent !== line) regionEl.textContent = line;
+  }
+
+  /**
+   * The cards' prices, the yearly saving and the region line, painted again
+   * in place: what /v1/health can change in the open dialog, since whether
+   * Creem can charge euros is in that answer (VG-85). In place rather than
+   * drawn again, because a rebuild of the cards took the keyboard, and a
+   * screen reader's reading position, off whatever it was on and closed an
+   * open "N more" fold, on the first opening after every load, for every
+   * visitor, the American whose prices it never changed included.
+   */
+  function repaintPricingPrices() {
+    const B = window.VTBilling;
+    const grid = $("#pricing-grid");
+    if (!B || !grid) return;
+    const region = B.detectRegion();
+    const priceRegion = priceRegionFor(B, region);
+    const plans = B.cfg()?.plans || [];
+    const savingPct = B.annualSavingPct(plans, priceRegion);
+    paintPricingRegion(B, plans, B.marketFor(region), priceRegion);
+    for (const p of plans) {
+      const card = grid.querySelector(`.plan-card[data-plan="${p.id}"]`);
+      if (card) repaintPlanPrice(card, B.formatPrice(p, priceRegion).text, planBadgeHtml(p, savingPct));
+    }
+  }
+
+  /**
+   * One card's price and badge, changed only where they differ from what is
+   * drawn, so the nodes the reader is on stay where they are.
+   * @param {Element} card The plan's card.
+   * @param {string} text Its price, without the interval.
+   * @param {string} badgeHtml Its badge, as planBadgeHtml writes it, or "".
+   */
+  function repaintPlanPrice(card, text, badgeHtml) {
+    const shown = card.querySelector(".plan-price")?.firstChild;
+    if (shown?.nodeType === Node.TEXT_NODE && shown.data !== text) shown.data = text;
+    const badge = card.querySelector(":scope > .plan-badge");
+    if ((badge ? badge.outerHTML : "") === badgeHtml) return;
+    badge?.remove();
+    if (badgeHtml) card.insertAdjacentHTML("afterbegin", badgeHtml);
+  }
+
+  /**
+   * A market's name in the page's language ("Polonia" on the Spanish page,
+   * "Poland" on the English one), from the browser's own country names, and
+   * "resto del mundo" for the markets priced at the worldwide dollar price;
+   * the config's name where the browser has none.
+   * @param {{code: string, name: string}} market From VTBilling.marketFor.
+   * @param {boolean} es Whether the page is in Spanish.
+   * @returns {string}
+   */
+  function regionLabel(market, es) {
+    if (market.code === "WW") return tt("pricing.regionElsewhere");
+    try {
+      const named = new Intl.DisplayNames([es ? "es" : "en"], { type: "region", fallback: "none" }).of(market.code);
+      return named || market.name;
+    } catch {
+      return market.name;
+    }
   }
 
   /**
@@ -9534,21 +9605,12 @@
   }
 
   /**
-   * The region whose prices the cards show: the visitor's own on the visitor's
-   * own rail, and on any other the rail's own money. The money follows the
-   * rail: a Peruvian who picks the card rail pays Creem, which cannot charge
-   * soles, so showing S/ 19.90 there promised a price nobody would charge.
-   * The other way round too: Mercado Pago's plans are a Peruvian seller's and
-   * charge soles wherever the buyer is, so an Argentine who picks that rail is
-   * shown S/ 19.90, not the US$ 7.99 it never charges. A rail sold in one
-   * country (its config `regions`) is priced as there; any other at the
-   * worldwide dollar price. Whether the euro markets' Creem products are
-   * priced in euros is the operator's to say (VG-85).
+   * The region whose prices the cards show for the rail chosen. The money
+   * follows the rail (VTBilling.priceRegion says how), and the checkout asks
+   * for that same money, read from the same function (VG-85).
    */
   function priceRegionFor(B, region) {
-    if (pricingRail === B.preferredRail(region)) return region;
-    const regions = window.VT_BILLING_CONFIG?.providers?.[pricingRail]?.regions || [];
-    return regions.length === 1 ? regions[0] : "WW";
+    return B.priceRegion(pricingRail, region);
   }
 
   /**
@@ -9613,8 +9675,11 @@
     // before that answer lands, so it is painted again when it does: a worker
     // that cannot open the portal used to leave the Manage button, and the
     // line naming it, on the first opening of every tab.
+    // The prices too: whether Creem can charge euros is in the same answer, so
+    // a European's cards turn from US$ to € when it says so (VG-85). For most
+    // Europeans it has landed before this (prefetchRailsForPrices).
     window.VTAccount?.ensureRails?.()?.then?.(() => {
-      if (!modal.hidden) updateBillingChrome();
+      if (!modal.hidden) repaintPricingOnHealth();
     }).catch(() => {});
     // Remember the trigger before renderPricingModal() rebuilds the card.
     const opener = document.activeElement;
@@ -9625,6 +9690,30 @@
     noteTrialCtaView("pricing");
     document.body.classList.add("pricing-open");
     window.VTFocusTrap?.activate(modal, { initialFocus: "#pricing-close", returnFocus: opener });
+  }
+
+  /**
+   * The open dialog once /v1/health has answered: its prices in place
+   * (repaintPricingPrices), and the chrome, whose portal button and note
+   * read the same answer.
+   */
+  function repaintPricingOnHealth() {
+    repaintPricingPrices();
+    updateBillingChrome();
+  }
+
+  /**
+   * Ask /v1/health early, once the page is idle, for a visitor whose prices
+   * wait on it (VTBilling.pricesWaitOnRails: somebody in the European Union
+   * while Creem is sold through the worker, VG-85), so the Pro dialog opens
+   * on the money a press will charge instead of showing US$ and turning to €
+   * a round trip later. Nobody else is asked before they open the dialog.
+   */
+  function prefetchRailsForPrices() {
+    if (!window.VTBilling?.pricesWaitOnRails?.()) return;
+    const ask = () => window.VTAccount?.ensureRails?.()?.catch?.(() => {});
+    if (window.requestIdleCallback) window.requestIdleCallback(ask, { timeout: 2000 });
+    else setTimeout(ask, 200);
   }
 
   function closePricing() {
@@ -11266,6 +11355,7 @@
       renderValuePulse();
       if ($("#pricing-modal") && !$("#pricing-modal").hidden) renderPricingModal();
     });
+    prefetchRailsForPrices();
     const ret = VTBilling.handleReturnFromCheckout();
     linkReturnedCheckout(ret);
     announceCheckoutReturn(ret);

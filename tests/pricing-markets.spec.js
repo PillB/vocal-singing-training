@@ -11,7 +11,11 @@
  *   said everyone outside Peru buys from Creem. Its button said "Perú / LATAM".
  * - truth-4: Spain and the other euro markets were shown "€7.99 · precios en
  *   euros (€)" for a Creem product priced in US dollars, beside terms that say
- *   US$ outside Peru. One of the two was wrong in every configuration.
+ *   US$ outside Peru. One of the two was wrong in every configuration. Since
+ *   VG-85 was decided (2026-11-22: euros in the European Union) the rule is
+ *   the same one the other way round: Spain is shown € when, and only when,
+ *   the worker can charge euros, and the checkout asks for the money shown
+ *   (tests/pricing-euro.spec.js has the rest of the Union).
  * - truth-6: the busy toast for the worker's hourly checkout limit said to wait
  *   "a few minutes", where the clock-aligned window can have 59 of them left.
  * - And the privacy notice said the account's email is never shared, a few
@@ -41,6 +45,8 @@ const MP_HOST = "www.mercadopago.com.pe";
 const MP_MONTHLY = `https://${MP_HOST}/subscriptions/checkout?preapproval_plan_id=markets_monthly`;
 const MP_YEARLY = `https://${MP_HOST}/subscriptions/checkout?preapproval_plan_id=markets_yearly`;
 const DOLLARS_ES = "precios en dólares de EE. UU. (US$)";
+const EUROS_ES = "precios en euros (€), IVA incluido";
+const NBSP = "\u00a0";
 const SOLES_ES = "precios en soles (S/)";
 const CARD_ES = { rail: "creem", text: "Tarjeta internacional" };
 const MP_ES = { rail: "mercadopago", text: "Mercado Pago (Perú)" };
@@ -91,9 +97,10 @@ function freshState(over) {
   return { checkouts: [], checkoutAnswer: null, ...(over || {}) };
 }
 
-/** The worker's health: Creem's checkout and Mercado Pago both able to take money. */
-function health() {
+/** The worker's health: Creem's checkout and Mercado Pago both able to take money, and euros when `state.eur`. */
+function health(state) {
   return {
+    creemEurConfigured: !!(state && state.eur),
     ok: true,
     signingKeyConfigured: true,
     accountsConfigured: true,
@@ -109,7 +116,7 @@ function health() {
 /** Answers that need no session, by path. */
 const OPEN_ROUTES = {
   "/v1/events": () => [200, { ok: true }],
-  "/v1/health": () => [200, health()],
+  "/v1/health": (state) => [200, health(state)],
   "/v1/auth/methods": () => [200, { ok: true, email: true, google: false, googleClientId: null, trialDays: 7 }]
 };
 
@@ -143,7 +150,7 @@ function bodyOf(request) {
 /** What the stand-in worker answers, as `[status, body]`. */
 function answer(state, request) {
   const path = new URL(request.url()).pathname;
-  if (OPEN_ROUTES[path]) return OPEN_ROUTES[path]();
+  if (OPEN_ROUTES[path]) return OPEN_ROUTES[path](state);
   const signedIn = (request.headers().authorization || "") === `Bearer ${SESSION}`;
   if (path.startsWith("/v1/me") && !signedIn) return [401, { ok: false, reason: "no_session" }];
   if (ACCOUNT_ROUTES[path]) return ACCOUNT_ROUTES[path](state, bodyOf(request));
@@ -280,7 +287,7 @@ for (const market of [
       await expect(page.locator("#pricing-mor-note")).toBeVisible();
       await cta.click();
       await page.waitForURL(CHECKOUT_PAGE);
-      expect(state.checkouts).toEqual([{ plan: "pro_monthly", provider: "creem", returnPath: "/index.html" }]);
+      expect(state.checkouts).toEqual([{ plan: "pro_monthly", provider: "creem", returnPath: "/index.html", currency: "USD" }]);
       expect(navigations, "nothing went to the Peruvian Mercado Pago plan").toEqual([CHECKOUT_PAGE]);
     });
 
@@ -353,15 +360,35 @@ test.describe("truth-3 control: Peru buys on Mercado Pago, in soles", () => {
   });
 });
 
-test.describe("truth-4: Spain is shown the US dollars Creem charges, never euros", () => {
+test.describe("truth-4 under VG-85: Spain is shown the money the worker will charge, euros once it can", () => {
   test.use({ locale: "es-ES", timezoneId: "Europe/Madrid" });
 
-  test("Spain is shown US$ 7.99 and US$ 49, the region line names US dollars, and no euro sign appears", async ({ page }) => {
-    await install(page, freshState(), { config: CREEM_ON_SALE });
+  test("with the euro products on the worker, Spain is shown 7,99 € and 49 €, the region line names euros, and Subscribe asks for euros", async ({ page }) => {
+    const state = freshState({ eur: true });
+    await install(page, state, { config: CREEM_ON_SALE });
     await open(page);
-    await openPricing(page);
-    // Wrong (before): "€7.99" and "precios en euros (€)", for a product Creem
-    // charges in dollars, beside terms saying US$ outside Peru.
+    const cta = await openPricing(page);
+    // Wrong (the old decision): "US$ 7.99" and dollars in the region line for
+    // a buyer in the Union, whose euro product is there to be charged.
+    await expect.poll(() => dialogReads(page)).toEqual({
+      region: `Tu región: España · ${EUROS_ES}`,
+      rails: [railShown(CARD_ES, true)],
+      monthly: `7,99${NBSP}€`,
+      yearly: `49${NBSP}€`
+    });
+    expect(flat(await page.locator("#pricing-modal").textContent())).not.toContain("US$");
+    await cta.click();
+    await page.waitForURL(CHECKOUT_PAGE);
+    // The price shown is the price charged: the worker is asked for euros.
+    expect(state.checkouts).toEqual([{ plan: "pro_monthly", provider: "creem", returnPath: "/index.html", currency: "EUR" }]);
+  });
+
+  test("control: a worker without the euro products shows Spain the US dollars it would charge, and the checkout asks for dollars", async ({ page }) => {
+    const state = freshState({ eur: false });
+    await install(page, state, { config: CREEM_ON_SALE });
+    await open(page);
+    const cta = await openPricing(page);
+    // Wrong: "7,99 €" over a checkout that can only charge US$ 7.99.
     await expect.poll(() => dialogReads(page)).toEqual({
       region: `Tu región: España · ${DOLLARS_ES}`,
       rails: [railShown(CARD_ES, true)],
@@ -371,10 +398,19 @@ test.describe("truth-4: Spain is shown the US dollars Creem charges, never euros
     const modal = flat(await page.locator("#pricing-modal").textContent());
     expect(modal).not.toContain("€");
     expect(modal).not.toMatch(/euro/i);
+    await cta.click();
+    await page.waitForURL(CHECKOUT_PAGE);
+    expect(state.checkouts).toEqual([{ plan: "pro_monthly", provider: "creem", returnPath: "/index.html", currency: "USD" }]);
   });
+});
 
-  test("the terms' price outside Peru is the price the dialog shows in Spain", async ({ page }) => {
-    await install(page, freshState(), { config: CREEM_ON_SALE });
+test.describe("truth-4: outside Peru and the Union, the terms' price is the dialog's", () => {
+  test.use({ locale: "en-GB", timezoneId: "Europe/London" });
+
+  test("the terms' price outside Peru is the price the dialog shows in the United Kingdom", async ({ page }) => {
+    // Euros were decided for the Union only, so the United Kingdom, in Europe
+    // and outside it, is where the terms' dollar price is checked now.
+    await install(page, freshState({ eur: true }), { config: CREEM_ON_SALE });
     const terms = await termsPrices(page);
     // Wrong (before): "$7.99", a bare dollar sign, which is the peso in
     // Mexico, Argentina, Chile and Colombia.
@@ -382,6 +418,7 @@ test.describe("truth-4: Spain is shown the US dollars Creem charges, never euros
     expect(terms.en.elsewhere, "the English half states the same").toEqual(terms.es.elsewhere);
     await open(page);
     await openPricing(page);
+    await expect.poll(() => dialogReads(page).then((d) => d.region)).toBe(`Tu región: Reino Unido · ${DOLLARS_ES}`);
     await expect.poll(() => dialogReads(page).then((d) => ({ monthly: d.monthly, yearly: d.yearly }))).toEqual(terms.es.elsewhere);
   });
 });
@@ -481,3 +518,36 @@ test.describe("the privacy notice says where the account's email goes", () => {
     expect(paras.filter((p) => /\b(sell or share|never share|do not share)\b/.test(p)), "no paragraph says it is never shared").toEqual([]);
   });
 });
+
+// Markers for a launch blocker this branch may not fix: terms.html (another change's file) still says "Fuera de Perú:
+// US$ 7.99 al mes o US$ 49 al año" / "Elsewhere: US$ 7.99 a month or US$ 49 a year" and states no euro price, while a
+// European's dialog shows 7,99 € and 49 € (€7.99 and €49 in English). Each is green while its half of the terms
+// disagrees, and turns red ("expected to fail, but passed") the day that half states the Union's price, e.g. "En la
+// Unión Europea: 7,99 € al mes o 49 € al año, IVA incluido." / "In the European Union: €7.99 a month or €49 a year,
+// VAT included.": then delete `.fail` and the comparison keeps the two equal for good. docs/40-GO-LIVE-GATE.md step 5
+// lists it as a launch blocker. The dialog half is proved green on its own by the truth-4 tests above, so a failure
+// there cannot hide behind `.fail`.
+for (const half of [
+  { lang: "es", heading: /^Precios$/, monthly: `7,99${NBSP}€`, yearly: `49${NBSP}€`, read: /(\d+(?:,\d{2})?) €[^.]*? (\d+(?:,\d{2})?) €/ },
+  { lang: "en", heading: /^Prices$/, monthly: "€7.99", yearly: "€49", read: /(€\d+(?:\.\d{2})?)[^.]*?(€\d+(?:\.\d{2})?)/ }
+]) {
+  test.describe(`truth-4 under VG-85: the terms' price for the Union is the dialog's (${half.lang})`, () => {
+    test.use({ locale: "es-ES", timezoneId: "Europe/Madrid" });
+
+    test.fail(`the ${half.lang === "es" ? "Spanish" : "English"} terms state the euro price the dialog shows in Spain`, async ({ page }) => {
+      await install(page, freshState({ eur: true }), { config: CREEM_ON_SALE, lang: half.lang });
+      await open(page);
+      await openPricing(page);
+      await expect.poll(() => dialogReads(page).then((d) => ({ monthly: d.monthly, yearly: d.yearly }))).toEqual({
+        monthly: half.monthly,
+        yearly: half.yearly
+      });
+      await page.goto(`${BASE}/terms.html`, { waitUntil: "domcontentloaded" });
+      const para = flat(await page.locator("main h2", { hasText: half.heading }).locator("xpath=following-sibling::p[1]").textContent());
+      const euro = half.read.exec(para);
+      // Wrong (today): no euro price in the terms, so a European is shown 7,99 € beside terms that say US$ 7.99.
+      expect(euro && { monthly: euro[1] + (half.lang === "es" ? " €" : ""), yearly: euro[2] + (half.lang === "es" ? " €" : "") })
+        .toEqual({ monthly: flat(half.monthly), yearly: flat(half.yearly) });
+    });
+  });
+}

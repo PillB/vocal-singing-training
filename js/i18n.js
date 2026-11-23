@@ -252,7 +252,7 @@
       "pricing.region": "Tu región",
       "pricing.currency.PEN": "precios en soles (S/)",
       "pricing.currency.USD": "precios en dólares de EE. UU. (US$)",
-      "pricing.currency.EUR": "precios en euros (€)",
+      "pricing.currency.EUR": "precios en euros (€), IVA incluido",
       "pricing.railStripe": "Tarjeta internacional",
       "pricing.railMp": "Mercado Pago (Perú)",
       "pricing.dream": "La meta: voz clara y afinada, con un plan que puedes seguir cada semana.",
@@ -1200,7 +1200,8 @@
       "ex.s24-nana-high": "Agudos con «NANA»",
       "ex.s25-zone-tour": "Recorrido por las tres zonas",
       "ex.s26-placement-compare": "Comparar colocaciones (A/B)",
-      "ex.s27-lip-trill-solfege": "Solfeo en trino de labios"
+      "ex.s27-lip-trill-solfege": "Solfeo en trino de labios",
+      "pricing.regionElsewhere": "resto del mundo"
     },
     en: {
       "meta.title": "Vocal & Singing Training",
@@ -1441,7 +1442,7 @@
       "pricing.region": "Your region",
       "pricing.currency.PEN": "prices in Peruvian soles (S/)",
       "pricing.currency.USD": "prices in US dollars (US$)",
-      "pricing.currency.EUR": "prices in euros (€)",
+      "pricing.currency.EUR": "prices in euros (€), VAT included",
       "pricing.railStripe": "International card",
       "pricing.railMp": "Mercado Pago (Peru)",
       "pricing.dream": "The goal: a clear, in-tune voice, with a plan you can keep week to week.",
@@ -2369,7 +2370,8 @@
       "ex.s24-nana-high": "High Notes on \u201cNANA\u201d",
       "ex.s25-zone-tour": "Three-Zone Tour (Low\u2013Mid\u2013High)",
       "ex.s26-placement-compare": "Placement A/B (Compare Two Takes)",
-      "ex.s27-lip-trill-solfege": "Lip Trill Solf\u00e8ge (Scale on the Bubble)"
+      "ex.s27-lip-trill-solfege": "Lip Trill Solf\u00e8ge (Scale on the Bubble)",
+      "pricing.regionElsewhere": "rest of the world"
     }
   };
 

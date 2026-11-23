@@ -77,32 +77,105 @@
     }
   }
 
+  /**
+   * The European Union's 27 member states (ISO 3166-1 alpha-2). The Creem
+   * products charge them euros, VAT included, and every other market on that
+   * rail US dollars, Europe outside the Union too (VG-85, decided 2026-11-22).
+   */
+  const EU_REGIONS = Object.freeze([
+    "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE",
+    "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE"
+  ]);
+
+  /**
+   * Each member state's IANA time zones, with the state. The Canaries, Ceuta,
+   * Madeira, the Azores and Åland are in the Union too, so their zones are here.
+   * So are the three old link names a browser may still report for a member
+   * state (js/region-gate.js lists them for the same reason): "Poland",
+   * "Portugal" and "Eire" name a place, and without them an "en-US" browser
+   * reporting "Poland" was read as American and shown dollars.
+   */
+  const EU_TIME_ZONES = new Map([
+    ["Europe/Vienna", "AT"], ["Europe/Brussels", "BE"], ["Europe/Sofia", "BG"], ["Europe/Zagreb", "HR"],
+    ["Europe/Nicosia", "CY"], ["Asia/Nicosia", "CY"], ["Asia/Famagusta", "CY"], ["Europe/Prague", "CZ"],
+    ["Europe/Copenhagen", "DK"], ["Europe/Tallinn", "EE"], ["Europe/Helsinki", "FI"], ["Europe/Mariehamn", "FI"],
+    ["Europe/Paris", "FR"], ["Europe/Berlin", "DE"], ["Europe/Busingen", "DE"], ["Europe/Athens", "GR"],
+    ["Europe/Budapest", "HU"], ["Europe/Dublin", "IE"], ["Europe/Rome", "IT"], ["Europe/Riga", "LV"],
+    ["Europe/Vilnius", "LT"], ["Europe/Luxembourg", "LU"], ["Europe/Malta", "MT"], ["Europe/Amsterdam", "NL"],
+    ["Europe/Warsaw", "PL"], ["Europe/Lisbon", "PT"], ["Atlantic/Azores", "PT"], ["Atlantic/Madeira", "PT"],
+    ["Europe/Bucharest", "RO"], ["Europe/Bratislava", "SK"], ["Europe/Ljubljana", "SI"], ["Europe/Madrid", "ES"],
+    ["Atlantic/Canary", "ES"], ["Africa/Ceuta", "ES"], ["Europe/Stockholm", "SE"],
+    ["Poland", "PL"], ["Portugal", "PT"], ["Eire", "IE"]
+  ]);
+
+  /**
+   * The member state this browser is in, or "" when it is not in the Union.
+   *
+   * The time zone decides whenever it names a place, because it says where
+   * the device is and so, more often than the language, where the card was
+   * issued: a member state's zone is that state (an "en-US" browser in
+   * Europe/Warsaw is Poland), and a zone anywhere else (London, Zurich, Lima,
+   * New York) is outside the Union whatever the language says. Only a zone
+   * that names no place, as UTC does in a hardened browser, "CET", or none at
+   * all, leaves it to the language's region subtag: "pl-PL" is Poland, a bare
+   * "pl" is nowhere in particular.
+   * @param {string} lang Lower-case language tag, e.g. "de-at".
+   * @param {string} tz IANA time zone, e.g. "Europe/Vienna".
+   * @returns {string} Two-letter member state, or "".
+   */
+  function euRegion(lang, tz) {
+    if (EU_TIME_ZONES.has(tz)) return EU_TIME_ZONES.get(tz);
+    if (tz.includes("/") && !tz.startsWith("Etc/")) return "";
+    const region = regionSubtag(lang);
+    return EU_REGIONS.includes(region) ? region : "";
+  }
+
+  /**
+   * A language tag's region subtag, upper case, or "": "AT" in "de-at", "RS"
+   * in "sr-latn-rs". It comes before any extension, so the "ca" of
+   * "en-u-ca-gregory" (a calendar) is not Canada.
+   * @param {string} lang Language tag.
+   * @returns {string}
+   */
+  function regionSubtag(lang) {
+    for (const part of String(lang || "").split(/[-_]/).slice(1)) {
+      if (part.length === 1) return "";
+      if (/^[a-z]{2}$/i.test(part)) return part.toUpperCase();
+    }
+    return "";
+  }
+
+  /**
+   * The other markets a browser is read into, tried in this order after the
+   * European Union: the first whose time zone contains one of its zone names,
+   * or whose language ends in one of its region suffixes. A table rather than
+   * a line per market, so detectRegion stays within the complexity ceiling
+   * (it was 36, in the legacy baseline, and editing it drops the exemption).
+   */
+  const REGION_SIGNS = [
+    ["PE", ["Lima"], ["-pe"]],
+    ["MX", ["Mexico"], ["-mx"]],
+    ["AR", ["Buenos_Aires"], ["-ar"]],
+    ["CL", ["Santiago"], ["-cl"]],
+    ["CO", ["Bogota"], ["-co"]],
+    ["BR", ["Sao_Paulo"], ["-br"]],
+    ["GB", ["London"], ["-gb"]],
+    ["US", ["New_York", "Los_Angeles", "Chicago"], ["-us"]],
+    ["CA", ["Toronto", "Vancouver"], ["-ca"]],
+    ["AU", ["Sydney", "Melbourne"], ["-au"]],
+    ["PH", ["Manila"], ["-ph"]],
+    ["IN", ["Kolkata", "Calcutta"], ["-in"]]
+  ];
+
   function detectRegion() {
     try {
       const lang = (navigator.language || "en").toLowerCase();
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-      if (tz.includes("Lima") || lang.endsWith("-pe") || lang === "es-pe") return "PE";
-      if (tz.includes("Mexico") || lang.endsWith("-mx")) return "MX";
-      if (tz.includes("Buenos_Aires") || lang.endsWith("-ar")) return "AR";
-      if (tz.includes("Santiago") || lang.endsWith("-cl")) return "CL";
-      if (tz.includes("Bogota") || lang.endsWith("-co")) return "CO";
-      if (tz.includes("Sao_Paulo") || lang.endsWith("-br")) return "BR";
-      if (lang.endsWith("-es") || tz.includes("Madrid")) return "ES";
-      if (lang.endsWith("-gb") || tz.includes("London")) return "GB";
-      if (lang.endsWith("-de") || tz.includes("Berlin")) return "DE";
-      if (lang.endsWith("-fr") || tz.includes("Paris")) return "FR";
-      if (lang.endsWith("-it") || tz.includes("Rome")) return "IT";
-      if (
-        lang.endsWith("-us") ||
-        tz.includes("New_York") ||
-        tz.includes("Los_Angeles") ||
-        tz.includes("Chicago")
-      )
-        return "US";
-      if (lang.endsWith("-ca") || tz.includes("Toronto") || tz.includes("Vancouver")) return "CA";
-      if (lang.endsWith("-au") || tz.includes("Sydney") || tz.includes("Melbourne")) return "AU";
-      if (lang.endsWith("-ph") || tz.includes("Manila")) return "PH";
-      if (lang.endsWith("-in") || tz.includes("Kolkata") || tz.includes("Calcutta")) return "IN";
+      const eu = euRegion(lang, tz);
+      if (eu) return eu;
+      const sign = REGION_SIGNS.find(([, zones, suffixes]) =>
+        zones.some((zone) => tz.includes(zone)) || suffixes.some((suffix) => lang.endsWith(suffix)));
+      if (sign) return sign[0];
       if (lang.startsWith("es")) return "PE";
       return "WW";
     } catch {
@@ -129,6 +202,31 @@
   }
 
   /**
+   * The region whose prices a rail's cards show, and so the money a press on
+   * that rail is charged in: the visitor's own on the visitor's own rail, and
+   * on any other the rail's own money. A Peruvian who picks the card rail pays
+   * Creem, which cannot charge soles; an Argentine who picks Mercado Pago pays
+   * a Peruvian plan in soles. A rail sold in one country (its config
+   * `regions`) is priced as there, any other at the worldwide dollar price.
+   * Moved here from js/app.js so the checkout asks for the money the card
+   * showed, read from the same function (VG-85).
+   * @param {string} rail Provider id.
+   * @param {string} [region] The visitor's region; the detected one when left out.
+   * @returns {string} Region code.
+   */
+  function priceRegion(rail, region) {
+    const own = region || detectRegion();
+    if (rail === preferredRail(own)) return own;
+    const regions = cfg().providers?.[rail]?.regions || [];
+    return regions.length === 1 ? regions[0] : "WW";
+  }
+
+  /** The paid plans' ids, in config order. */
+  function paidPlanIds() {
+    return (cfg().plans || []).filter((p) => p.interval).map((p) => p.id);
+  }
+
+  /**
    * The rails the Pro dialog offers, the region's own first: every rail a
    * market sells on, each marked sellable when a paid plan has a checkout link
    * on it. Read from the markets rather than drawn as a fixed pair, because the
@@ -142,7 +240,7 @@
   function checkoutRails(region) {
     const c = cfg();
     const named = (c.markets || []).map((m) => m.rail).filter((r) => CHECKOUT_RAILS.has(r));
-    const paid = (c.plans || []).filter((p) => p.interval).map((p) => p.id);
+    const paid = paidPlanIds();
     return [...new Set([preferredRail(region), ...named])].map((rail) => ({
       rail,
       sellable: apiCheckoutEnabled(rail) || paid.some((id) => !!checkoutUrl(id, rail))
@@ -490,8 +588,8 @@
       ? [providerId]
       : Object.keys(c.providers || {});
     for (const rail of rails) {
-      const links = (c.providers || {})[rail]?.links || {};
-      if (String(links.pro_monthly || "").trim() || String(links.pro_yearly || "").trim()) {
+      // A euro link sells as much as a dollar one (VG-85).
+      if (["links", "linksEur"].some((table) => hasPaidLink((c.providers || {})[rail]?.[table]))) {
         return true;
       }
       // A rail whose checkouts the worker opens has no link to paste and is on
@@ -500,6 +598,11 @@
       if (apiCheckoutEnabled(rail)) return true;
     }
     return false;
+  }
+
+  /** Whether a table of links holds a link for either paid plan. */
+  function hasPaidLink(links) {
+    return !!links && (!!String(links.pro_monthly || "").trim() || !!String(links.pro_yearly || "").trim());
   }
 
   /**
@@ -653,20 +756,48 @@
     return { ok: true, url: u.toString() };
   }
 
+  /**
+   * A plan's pasted link on a rail, in the money its card shows: the euro
+   * product's (`linksEur`) where the card shows €, else the rail's own. A
+   * card in euros with no euro link has no link: the dollar one would charge
+   * a price the card does not show (VG-85).
+   */
   function checkoutUrl(planId, providerId) {
-    const c = cfg();
-    const region = detectRegion();
-    const rail = providerId || preferredRail(region);
-    const prov = (c.providers || {})[rail];
-    if (!prov) return null;
-    const link = (prov.links || {})[planId];
-    if (!link || !String(link).trim()) return null;
+    const rail = providerId || preferredRail(detectRegion());
+    const link = linkOf(planId, rail, checkoutCurrency(planId, rail));
+    if (!link) return null;
     const v = validateCheckoutUrl(link);
     if (!v.ok) {
       console.warn("[VTBilling] checkout URL rejected:", v.reason, link);
       return null;
     }
     return v.url;
+  }
+
+  /**
+   * A plan's link on a rail in a currency ("EUR" reads `linksEur`), trimmed
+   * and not yet checked, or "".
+   * @param {string} planId Plan.
+   * @param {string} rail Provider id.
+   * @param {string} currency "EUR", or anything else for the rail's own links.
+   * @returns {string}
+   */
+  function linkOf(planId, rail, currency) {
+    const prov = (cfg().providers || {})[rail] || {};
+    const links = (currency === "EUR" ? prov.linksEur : prov.links) || {};
+    return String(links[planId] || "").trim();
+  }
+
+  /**
+   * The currency a press of a plan on a rail is charged in: the one its card
+   * shows, read through the same two functions that drew the card.
+   * @param {string} planId Plan.
+   * @param {string} rail Provider id.
+   * @returns {string} "USD", "EUR" or "PEN".
+   */
+  function checkoutCurrency(planId, rail) {
+    const plan = (cfg().plans || []).find((p) => p.id === planId) || {};
+    return formatPrice(plan, priceRegion(rail)).currency;
   }
 
   function startCheckout(planId, providerId) {
@@ -766,6 +897,9 @@
     subscription_open: "subscription_open",
     checkout_unconfigured: "provider_unavailable",
     plan_unavailable: "provider_unavailable",
+    // The euro product is missing on the worker. The page shows € only where
+    // /v1/health says it is there, so this is the net under that check.
+    currency_unavailable: "provider_unavailable",
     accounts_not_configured: "provider_unavailable"
   };
 
@@ -780,7 +914,7 @@
     if (typeof ask !== "function") {
       return Promise.resolve({ ok: false, mode: "provider_unavailable", plan: planId, provider: rail });
     }
-    return ask({ plan: planId, provider: rail, returnPath: returnPathHere() })
+    return ask({ plan: planId, provider: rail, returnPath: returnPathHere(), currency: checkoutCurrency(planId, rail) })
       .then((res) => {
         const target = res && res.ok ? validateCheckoutUrl(res.url) : null;
         if (target && target.ok) {
@@ -1159,8 +1293,103 @@
    */
   function currencySymbol(cur, marketCode) {
     if (cur === "PEN") return "S/ ";
-    if (cur === "EUR") return "€";
     return marketCode === "US" ? "$" : "US$ ";
+  }
+
+  /**
+   * A price as the reader's language writes it. The euro follows the page:
+   * "7,99 €" in Spanish (decimal comma, the sign after the number, as the
+   * RAE's Ortografía and Fundéu set it out; a no-break space keeps the sign
+   * on the number's line) and "€7.99" in English. Soles and dollars keep the
+   * form Peru and the dollar markets read: "S/ 19.90", "US$ 7.99", "$7.99".
+   * @param {string} cur Currency charged.
+   * @param {number} amount Amount.
+   * @param {string} marketCode The market the price is shown in.
+   * @returns {string}
+   */
+  function priceText(cur, amount, marketCode) {
+    if (cur !== "EUR") return currencySymbol(cur, marketCode) + money(amount);
+    return pageLang() === "en" ? "€" + money(amount) : money(amount).replace(".", ",") + "\u00a0€";
+  }
+
+  /** The page's language, "es" unless it is English. */
+  function pageLang() {
+    return global.VTI18n?.lang === "en" ? "en" : "es";
+  }
+
+  /**
+   * Whether a rail can charge euros on the path a press takes, so that a
+   * European is shown the price they will be charged (the Price Indication
+   * Directive 98/6/EC art. 2(a): the selling price, VAT and all other taxes
+   * included; Peru's Ley 29571 art. 6 says the same for Peruvians). Euros are
+   * Creem's only, and on Creem:
+   * - while no press can take money (salesClosed: the dialog's own
+   *   pre-launch, whose plan buttons say "not available yet"): yes, the
+   *   planned price, since no charge can follow it;
+   * - checkouts the worker opens: only once /v1/health has said
+   *   `creemEurConfigured`, so dollars until it answers;
+   * - pasted links: only with a euro link for every paid plan, so one dialog
+   *   never shows two currencies.
+   * @param {string} rail Provider id.
+   * @returns {boolean}
+   */
+  function euroChargeable(rail) {
+    if (rail !== "creem") return false;
+    if (salesClosed()) return true;
+    if (apiCheckoutEnabled(rail) && accountState()?.configured) return accountRails()?.creemEur === true;
+    return paidPlanIds().every((id) => validateCheckoutUrl(linkOf(id, rail, "EUR")).ok);
+  }
+
+  /**
+   * Whether no press can take money yet: not safe to sell (getBillingHealth)
+   * and no QA unlock standing in. It is the same reading as the dialog's own
+   * pre-launch (js/app.js isCheckoutPrelaunch), whose plan buttons then say
+   * "not available yet". Not `!ok` alone: with demo mode on, or entitlements
+   * unverified, a press can still reach a pasted link, and a European shown
+   * the planned 7,99 € was then charged the dollar link or unlocked by demo.
+   * @returns {boolean}
+   */
+  function salesClosed() {
+    const h = getBillingHealth();
+    return !h.ok && !h.demoUnlock;
+  }
+
+  /**
+   * Whether every plan has a euro price. All or none, like the euro links: a
+   * plan without one would leave its card in dollars beside the others in
+   * euros, and the region line names one money for the whole dialog.
+   * @returns {boolean}
+   */
+  function euroPriced() {
+    return (cfg().plans || []).every((p) => p.priceEur != null);
+  }
+
+  /**
+   * The money a plan is charged in for a market: the market's own where the
+   * plan is priced in it and its rail can charge it, else US dollars.
+   * @param {object} plan A plan from the billing config.
+   * @param {object} m Its market.
+   * @returns {string}
+   */
+  function chargedCurrency(plan, m) {
+    if (m.currency === "PEN" && plan.pricePen != null) return "PEN";
+    if (m.currency === "EUR" && plan.priceEur != null && euroPriced() && euroChargeable(preferredRail(m.code))) return "EUR";
+    return "USD";
+  }
+
+  /**
+   * Whether the money this visitor's cards show waits on the worker's
+   * /v1/health answer: a visitor in a euro market while Creem is sold through
+   * the worker and sales are open (euroChargeable reads `creemEur` then). The
+   * page asks for that answer early for them, and nobody else, so their Pro
+   * dialog opens on the money a press will charge rather than turning from
+   * US$ to € in front of them (VG-85).
+   * @returns {boolean}
+   */
+  function pricesWaitOnRails() {
+    const m = marketFor(detectRegion());
+    if (m.currency !== "EUR" || !apiCheckoutEnabled(preferredRail(m.code))) return false;
+    return !!accountState()?.configured && !salesClosed();
   }
 
   /**
@@ -1173,10 +1402,9 @@
    */
   function formatPrice(plan, region) {
     const m = marketFor(region || detectRegion());
-    const local = { PEN: plan.pricePen, EUR: plan.priceEur }[m.currency];
-    const cur = local != null ? m.currency : "USD";
-    const amount = local != null ? local : plan.priceUsd;
-    return { text: currencySymbol(cur, m.code) + money(amount), currency: cur, amount };
+    const cur = chargedCurrency(plan, m);
+    const amount = { PEN: plan.pricePen, EUR: plan.priceEur, USD: plan.priceUsd }[cur];
+    return { text: priceText(cur, amount, m.code), currency: cur, amount };
   }
 
   /**
@@ -1335,6 +1563,7 @@
     detectRegion,
     marketFor,
     preferredRail,
+    priceRegion,
     checkoutRails,
     getEntitlement,
     isPro,
@@ -1355,6 +1584,9 @@
     checkoutOpening,
     formatPrice,
     annualSavingPct,
+    EU_REGIONS,
+    euRegion,
+    pricesWaitOnRails,
     exportProgressJson,
     onChange,
     trialEndsAt,

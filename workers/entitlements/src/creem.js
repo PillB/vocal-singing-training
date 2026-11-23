@@ -177,19 +177,24 @@ export function isoSeconds(value) {
 }
 
 /**
- * Map a Creem product id to a plan id using the configured env bindings.
+ * Map a Creem product id to a plan id using the configured env bindings. The
+ * euro products (VG-85) are the same two plans, sold in the European Union.
+ * Each id is read trimmed, as the checkout route reads it (checkout.js
+ * readVar): a stray space in wrangler.toml used to open a checkout for the
+ * product and then refuse that product's own webhook as not ours.
  * @param {unknown} productId Creem product id.
  * @param {Object} env Worker env bindings.
  * @returns {string|null} Plan id or null.
  */
 export function planFromProductId(productId, env) {
-  if (typeof productId !== "string" || !productId) {
+  if (typeof productId !== "string" || !productId || !env) {
     return null;
   }
-  if (env && productId === env.CREEM_PRODUCT_PRO_MONTHLY) {
+  const names = (value) => typeof value === "string" && value.trim() === productId;
+  if (names(env.CREEM_PRODUCT_PRO_MONTHLY) || names(env.CREEM_PRODUCT_PRO_MONTHLY_EUR)) {
     return "pro_monthly";
   }
-  if (env && productId === env.CREEM_PRODUCT_PRO_YEARLY) {
+  if (names(env.CREEM_PRODUCT_PRO_YEARLY) || names(env.CREEM_PRODUCT_PRO_YEARLY_EUR)) {
     return "pro_yearly";
   }
   return null;
@@ -201,13 +206,16 @@ export function planFromProductId(productId, env) {
  * The same rule as the Stripe price table: where these are filled in they are
  * an allow-list as well as a label, so a donation or a one-off lesson sold
  * from the same Creem account cannot entitle; where they are empty — which is
- * how the repository ships — a product says only what it says.
+ * how the repository ships — a product says only what it says. A euro
+ * product counts as much as a dollar one: a table of euro products alone is
+ * still a table.
  * @param {Object} env Worker env bindings.
  * @returns {boolean} Whether at least one product id is configured.
  */
 export function creemProductTableConfigured(env) {
   const read = (key) => (env && typeof env[key] === "string" ? env[key].trim() : "");
-  return Boolean(read("CREEM_PRODUCT_PRO_MONTHLY") || read("CREEM_PRODUCT_PRO_YEARLY"));
+  return Boolean(read("CREEM_PRODUCT_PRO_MONTHLY") || read("CREEM_PRODUCT_PRO_YEARLY")
+    || read("CREEM_PRODUCT_PRO_MONTHLY_EUR") || read("CREEM_PRODUCT_PRO_YEARLY_EUR"));
 }
 
 /**

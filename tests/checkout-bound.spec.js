@@ -368,7 +368,8 @@ test.describe("a checkout the worker opens for the account", () => {
     // A second press while the worker is answering is not a second checkout.
     await cta.click({ force: true });
     await page.waitForURL(CHECKOUT_PAGE);
-    expect(state.checkouts).toEqual([{ plan: "pro_monthly", provider: "creem", returnPath: "/index.html" }]);
+    // In the dollars the card showed an American (VG-85: the page names the money it asks to be charged in).
+    expect(state.checkouts).toEqual([{ plan: "pro_monthly", provider: "creem", returnPath: "/index.html", currency: "USD" }]);
     expect(navigations).toEqual([CHECKOUT_PAGE]);
   });
 

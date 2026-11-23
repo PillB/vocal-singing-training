@@ -127,8 +127,15 @@ terms made a promise the product could not keep (VG-86).
    - Prices carry their currency: "S/ 0", "US$ 7.99" outside the US (a bare
      "$" is the peso in Mexico, Argentina, Chile and Colombia), and the region
      line says "precios en soles (S/)" rather than "PEN".
-   - The euro markets are shown US$, the money the Creem products charge
-     (VG-85's recommended answer), so the panel and the terms agree.
+   - The 27 EU states are shown euros (€7.99 and €49, VAT included; "7,99 €"
+     on the Spanish page, "€7.99" on the English one), and only once the euro
+     money can be charged: the worker's health says `creemEurConfigured`, or
+     the euro payment links are pasted. Until then they are shown the US$ they
+     would pay (VG-85, decided 2026-11-22). The United Kingdom, Switzerland,
+     Norway and Iceland stay in US$. The region line says the euro price
+     includes VAT, a European's page asks the worker once it is idle so the
+     dialog opens on the money it will charge, and the answer repaints the
+     prices in place, leaving the keyboard and any open fold where they were.
 7. **What the first red-team round fixed** (25 findings, two serious, none
    critical):
    - A pending purchase link is kept per account and per sign-in, so it is
@@ -172,7 +179,11 @@ terms made a promise the product could not keep (VG-86).
 
 Each behaviour has a test that models the right and the wrong result, proven
 red with `node qa/mutate.mjs`: worker mutants CK1 to CK16 (with CK3b, CK8b,
-CK12b, CK12c, CK15b and CK16b) and browser mutants B118 to B206.
+CK12b, CK12c, CK15b and CK16b) and browser mutants B118 to B206. The euro
+round (VG-85) added worker mutants CK40 to CK47 and browser mutants B280 to
+B299 (with letter suffixes for its repair round), and
+`tests/node/creem-products.test.mjs` checks that every pasted Creem link sells
+a product id `wrangler.toml` admits.
 
 ---
 
@@ -242,11 +253,13 @@ Each item gives what would show it and what we would do.
    **unconfirmed**. It is written down so nobody mistakes it for a bug.
 9. **Tax-exclusive prices in the EU.** Creem's product samples use
    `tax_mode: exclusive`. EU law requires the displayed price to include VAT.
-   - *What we'd do:* create the products as **tax-inclusive** at US$ 7.99 and
-     US$ 49, so VAT comes out of the price rather than on top of it. This is
-     the recommended answer to VG-85, and it is Pablo's call. The branch
-     already shows euro markets the US$ price; euro products would mean
-     putting `priceEur` back and changing the terms' prices with it.
+   - *What we did (VG-85, decided 2026-11-22):* four **tax-inclusive**
+     products, US$ 7.99 and US$ 49 for the world and €7.99 and €49 for the
+     27 EU states, so VAT comes out of the price rather than on top of it.
+     The net after VAT varies by country, from €6.83 a month in Luxembourg
+     (17%) to €6.29 in Hungary (27%); `docs/35-PRICING.md` has the table.
+   - *Still open:* the terms page still says US$ outside Peru and must
+     name the euro price before launch.
 10. **The billing portal trusts any licence linked to the account.** The
     worker opens the Creem portal of whichever customer a linked licence
     names, however that licence was linked. Round one's red team showed a
@@ -300,23 +313,30 @@ in his name.
 4. **Ask a contador about a RUC** and how payouts are taxed, then register.
 5. **Ask Creem support** how payouts reach a Peruvian bank, and whether a RUC
    is required.
-6. **Apply to Creem as an individual.** Create two **tax-inclusive USD**
-   products (US$ 7.99 a month, US$ 49 a year), setting `tax_mode` to
-   `"inclusive"` explicitly (it has no documented default, and Creem may add
+6. **Apply to Creem as an individual.** Create four **tax-inclusive**
+   products: US$ 7.99 a month and US$ 49 a year for the world, €7.99 a month
+   and €49 a year for the 27 EU states. Set `tax_mode` to `"inclusive"` on
+   every one explicitly (it has no documented default, and Creem may add
    Peru's 18% IGV for a Peruvian card under DL 1623), and set cancellation to
    the end of the period.
 7. **Store the keys on the Worker, never in a chat:**
    `wrangler secret put CREEM_API_KEY` and `wrangler secret put
-   CREEM_WEBHOOK_SECRET`. Put the two product ids in `wrangler.toml`.
+   CREEM_WEBHOOK_SECRET`. Put the four product ids in `wrangler.toml`: the
+   dollar ones in `CREEM_PRODUCT_PRO_MONTHLY` and `CREEM_PRODUCT_PRO_YEARLY`,
+   the euro ones in `CREEM_PRODUCT_PRO_MONTHLY_EUR` and
+   `CREEM_PRODUCT_PRO_YEARLY_EUR`. `/v1/health` then says
+   `creemEurConfigured: true`, and only then does Europe see euros.
 8. **Flip `providers.creem.apiCheckout` to `true` while the worker is still
    on the test key,** with `CREEM_ALLOW_TEST_MODE = "true"`, and buy it
    yourself, once with a Peruvian address and test card to see that the total
-   is the price shown. The in-app checkout can only be walked on the live
+   is the price shown, and once from a browser set to Spain with an EU
+   address, where the total must be €7.99. The in-app checkout can only be walked on the live
    site, so this commit is also the one that puts Pro on sale.
 9. **Refund every test purchase, then swap to live.** Test mode and live
-   mode share nothing in Creem, so in the live dashboard create the two
-   products again and register the worker's webhook again. Put in the live
-   `CREEM_API_KEY`, the live products' ids, and the **live** registration's
+   mode share nothing in Creem, so in the live dashboard create the four
+   products again (both euro ones included) and register the worker's
+   webhook again. Put in the live `CREEM_API_KEY`, the four live products'
+   ids, and the **live** registration's
    `CREEM_WEBHOOK_SECRET`. Set the flag back to `"false"` and redeploy.
    `/v1/health` must say `"creemKeyMode": "live"`, but that reads only the
    key. The proof is one real monthly purchase by you that shows Pro

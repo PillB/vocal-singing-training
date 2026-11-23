@@ -76,6 +76,16 @@ const PLAN_PRODUCT_VARS = new Map([
   ["pro_yearly", "CREEM_PRODUCT_PRO_YEARLY"]
 ]);
 
+/**
+ * The currencies a checkout can be charged in, and the suffix of the variable
+ * naming each one's product: US dollars everywhere, euros in the European
+ * Union (VG-85, decided 2026-11-22), e.g. CREEM_PRODUCT_PRO_MONTHLY_EUR.
+ */
+const CURRENCY_SUFFIX = new Map([
+  ["USD", ""],
+  ["EUR", "_EUR"]
+]);
+
 /** Query parameters the return address must not carry in from the caller. */
 const RETURN_PARAMS = ["billing", "plan", "provider", "checkout_id", "request_id", "signature"];
 
@@ -104,14 +114,30 @@ export function creemApiBase(env) {
 }
 
 /**
- * The Creem product a plan is sold as, or "" when that plan has none.
+ * The Creem product a plan is sold as in a currency, or "" when that plan has
+ * none in it.
  * @param {string} plan Plan id.
  * @param {Object} env Worker env bindings.
+ * @param {string} [currency] "USD" (the default) or "EUR".
  * @returns {string} Product id.
  */
-export function creemProductFor(plan, env) {
+export function creemProductFor(plan, env, currency) {
   const key = PLAN_PRODUCT_VARS.get(plan);
-  return key ? readVar(env, key) : "";
+  const suffix = CURRENCY_SUFFIX.get(currency || "USD");
+  return key && suffix !== undefined ? readVar(env, key + suffix) : "";
+}
+
+/**
+ * Whether a European can be sold Pro in euros through the worker: everything
+ * `creemCheckoutConfigured` needs, and a euro product for both plans. The page
+ * shows € on its cards only when `/v1/health` says this, so a price is never
+ * shown in a money the worker would then refuse to charge.
+ * @param {Object} env Worker env bindings.
+ * @returns {boolean}
+ */
+export function creemEurCheckoutConfigured(env) {
+  return creemCheckoutConfigured(env)
+    && Boolean(creemProductFor("pro_monthly", env, "EUR") && creemProductFor("pro_yearly", env, "EUR"));
 }
 
 /**
@@ -285,11 +311,25 @@ async function signedInWithinBudget(request, env, deps, bucket, limit) {
 }
 
 /**
- * What a checkout request asks for, checked: the plan, its product, and the
- * address to come back to. A refusal reason, or the three values.
+ * The currency a checkout asks to be charged in, or null for one not sold.
+ * A body that names none is a page cached from before euros, which showed
+ * dollars, so it is charged dollars.
+ * @param {Object} body Parsed request body.
+ * @returns {string|null} "USD", "EUR" or null.
+ */
+function askedCurrency(body) {
+  const currency = body.currency === undefined ? "USD" : body.currency;
+  return CURRENCY_SUFFIX.has(currency) ? currency : null;
+}
+
+/**
+ * What a checkout request asks for, checked: the plan, its product in the
+ * currency asked for, and the address to come back to. A refusal reason, or
+ * the values. A currency with no product for the plan is refused, never
+ * charged in another: the page showed that money (VG-85).
  * @param {Object} body Parsed request body.
  * @param {Object} env Worker env bindings.
- * @returns {{reason?: string, status?: number, plan?: string, productId?: string, successUrl?: string}} Result.
+ * @returns {{reason?: string, status?: number, plan?: string, currency?: string, productId?: string, successUrl?: string}} Result.
  */
 function checkoutRequest(body, env) {
   const plan = body && body.plan;
@@ -297,7 +337,14 @@ function checkoutRequest(body, env) {
   if (provider !== "creem" || !PLAN_PRODUCT_VARS.has(plan)) {
     return { reason: "bad_request", status: 400 };
   }
-  const productId = creemProductFor(plan, env);
+  const currency = askedCurrency(body);
+  if (!currency) {
+    return { reason: "invalid_currency", status: 400 };
+  }
+  const productId = creemProductFor(plan, env, currency);
+  if (!productId && currency !== "USD") {
+    return { reason: "currency_unavailable", status: 409 };
+  }
   if (!productId) {
     return { reason: "plan_unavailable", status: 503 };
   }
@@ -305,7 +352,7 @@ function checkoutRequest(body, env) {
   if (!successUrl) {
     return { reason: "bad_return_path", status: 400 };
   }
-  return { plan, productId, successUrl };
+  return { plan, currency, productId, successUrl };
 }
 
 /**
@@ -329,8 +376,10 @@ async function recordCheckoutRef(db, row, at) {
 /**
  * POST /v1/me/checkout — open a Creem checkout for the signed-in account.
  *
- * Body: `{plan: "pro_monthly"|"pro_yearly", provider?: "creem", returnPath?: "/path/"}`.
- * Answers `{ok: true, url}` with the Creem page to send the buyer to.
+ * Body: `{plan: "pro_monthly"|"pro_yearly", provider?: "creem", returnPath?: "/path/",
+ * currency?: "USD"|"EUR"}` (no currency is "USD"). Answers `{ok: true, url}`
+ * with the Creem page to send the buyer to; 409 `currency_unavailable` for a
+ * currency with no product for that plan, 400 `invalid_currency` for any other.
  * @param {Request} request Incoming request.
  * @param {Object} env Worker env bindings.
  * @param {Object} deps `{json, cors, now, fetchImpl, timeoutMs, requireSession, readJsonBody}`.

@@ -101,3 +101,7 @@ import "./checkout-bound.test.mjs";
 // VG-84: Mercado Pago entitles for money that arrived, not for an authorised
 // mandate, and a turned-down instalment ends Pro with the month paid for.
 import "./mp-paid-first.test.mjs";
+
+// Euros for the European Union, dollars elsewhere (VG-85): the currency a
+// checkout is charged in, and the euro products in the allow-list and health.
+import "./checkout-currency.test.mjs";

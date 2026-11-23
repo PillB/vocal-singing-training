@@ -225,6 +225,7 @@ Public, committed in `wrangler.toml`:
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. Filling either one in also makes it an **allow-list** — see below. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
 | `CREEM_PRODUCT_PRO_MONTHLY` / `CREEM_PRODUCT_PRO_YEARLY` | Optional Creem product id → plan mapping. Filling either one in makes it an **allow-list** too, as the Stripe prices do. Creem metadata is never read for the plan (a buyer can write it). |
+| `CREEM_PRODUCT_PRO_MONTHLY_EUR` / `CREEM_PRODUCT_PRO_YEARLY_EUR` | The same two plans priced in euros, VAT included, for the European Union (VG-85). Mapped to their plans and counted in the allow-list like the dollar ones, so a euro purchase becomes Pro. `POST /v1/me/checkout` with `currency: "EUR"` opens these, and refuses with 409 `currency_unavailable` for a plan with none (never falling back to dollars). `/v1/health` reports `creemEurConfigured` only with both set and everything `creemCheckoutConfigured` needs; the page shows a European € only then. |
 | `CREEM_ALLOW_TEST_MODE` | `"true"` lets a Creem event whose `mode` is `test`, `sandbox` or `local` entitle. Defaults off: a test purchase moves no money, so honouring one hands out the paid tier for nothing. Switch it on to prove the rail end to end, and off again before the first real sale. An unrecognised mode entitles either way, so a live value Creem renames cannot silently stop every sale. |
 | `TRIAL_DAYS` | Length of the free trial, in days. One per account, ever. Default 7. |
 | `TRIAL_LEN_EXPERIMENT` | `"on"` runs the trial-length A/B test (`trial_len_2026_11`): each account's trial is 7 or 14 days, assigned from its account id. **It overrides `TRIAL_DAYS`** — with the test on, that setting is ignored. Off (the default) everybody gets `TRIAL_DAYS`. It also needs `LICENSE_ID_KEY` or `LICENSE_PRIVATE_KEY_PKCS8_B64` to key the assignment with; without one the test stays off, because an arm anyone can predict is an arm anyone can pick. The browser cannot switch this on: the `enabled` flag in `js/experiments-config.js` governs only what the statistics record. |
@@ -242,7 +243,7 @@ Secrets — **never** in this repo, only `wrangler secret put`:
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` for *this* endpoint (test and live differ). |
 | `MP_WEBHOOK_SECRET` | Mercado Pago webhook signing secret. |
 | `CREEM_WEBHOOK_SECRET` | Creem webhook signing secret, from Developers → Webhook. Empty refuses every Creem webhook with `secret_not_configured` rather than trusting an unsigned body. |
-| `CREEM_API_KEY` | Creem API key, for `/v1/me/checkout` and `/v1/me/billing-portal`. A `creem_test_…` key sends those calls to `test-api.creem.io`, a live key to `api.creem.io`; `/v1/health` reports `creemCheckoutConfigured` and `creemPortalConfigured`. |
+| `CREEM_API_KEY` | Creem API key, for `/v1/me/checkout` and `/v1/me/billing-portal`. A `creem_test_…` key sends those calls to `test-api.creem.io`, a live key to `api.creem.io`; `/v1/health` reports `creemCheckoutConfigured`, `creemEurConfigured` and `creemPortalConfigured`. |
 | `MP_ACCESS_TOKEN` | Mercado Pago access token, used only for server-side reads. |
 | `LICENSE_PRIVATE_KEY_PKCS8_B64` | base64 PKCS#8 P-256 private key. |
 | `LICENSE_ID_KEY` | Optional. The key a new license id is derived under, so two webhooks for one new customer agree on one license. Without it a key derived from `LICENSE_PRIVATE_KEY_PKCS8_B64` is used; with neither, a new license gets a random id. Set it to keep derivation stable across a signing-key rotation. Any long random string. |
@@ -636,9 +637,15 @@ Subscribe exactly these events:
 | `refund.created` | Money going back. A **full** refund ends the access its transaction bought |
 | `dispute.created` | A chargeback. Ends access the day it is raised |
 
-Then create **two products** — monthly and yearly — because Creem has no single
-link that offers both, and put their ids in `CREEM_PRODUCT_PRO_MONTHLY` and
-`CREEM_PRODUCT_PRO_YEARLY`. Filling either one in makes it an allow-list as
+Then create **four products**: monthly and yearly, because Creem has no single
+link that offers both, each in US dollars (everywhere outside the European
+Union) and in euros (the Union, VG-85), all with `tax_mode` `"inclusive"`. Put
+their ids in `CREEM_PRODUCT_PRO_MONTHLY`, `CREEM_PRODUCT_PRO_YEARLY`,
+`CREEM_PRODUCT_PRO_MONTHLY_EUR` and `CREEM_PRODUCT_PRO_YEARLY_EUR`. The page
+asks `/v1/me/checkout` for the currency its card showed (`currency`, `"USD"`
+when absent), and the worker charges that currency or refuses: a euro request
+for a plan with no euro product is a 409 `currency_unavailable`, never a dollar
+checkout. Filling any one in makes it an allow-list as
 well as a label, so a donation or a one-off lesson sold from the same Creem
 account cannot become Pro. Unlike Stripe, `metadata.plan` is no way past that
 list, or a way to name a plan at all: a Creem payment link takes
@@ -650,7 +657,7 @@ on the monthly link count one monthly charge as a year (red-team WH-2,
 18 November 2026). A product of ours missing from the list is fixed by adding
 its id.
 Paste each product's share link into `js/billing-config.js` under
-`providers.creem.links`.
+`providers.creem.links`, and the euro products' under `providers.creem.linksEur`.
 
 Five things about this rail are not like Stripe's, and each one is a way to
 get it wrong:

@@ -595,9 +595,12 @@
           creem: d.creemConfigured === true,
           creemCheckout: d.creemCheckoutConfigured === true,
           creemPortal: d.creemPortalConfigured === true,
+          // The euro products (VG-85): missing is a no, like the fields
+          // above, so a worker without them is shown and charged dollars.
+          creemEur: d.creemEurConfigured === true,
           ok: true
         }
-        : { stripe: null, mercadopago: null, creem: null, creemCheckout: null, creemPortal: null, ok: false };
+        : { stripe: null, mercadopago: null, creem: null, creemCheckout: null, creemPortal: null, creemEur: null, ok: false };
       railsPending = null;
       return rails;
     })();
@@ -994,7 +997,7 @@
   /**
    * Ask the worker to open a checkout bound to this account
    * (`POST /v1/me/checkout`); js/billing.js navigates to the answer.
-   * @param {{plan: string, provider?: string, returnPath?: string}} input What to buy.
+   * @param {{plan: string, provider?: string, returnPath?: string, currency?: string}} input What to buy.
    * @returns {Promise<{ok: boolean, url?: string, reason?: string}>} Result.
    */
   async function openCheckout(input) {
@@ -1018,12 +1021,17 @@
     return out;
   }
 
-  /** The `/v1/me/checkout` body for what the page asked to buy. */
+  /**
+   * The `/v1/me/checkout` body for what the page asked to buy, in the money
+   * its card showed. The worker charges that currency or refuses; it never
+   * falls back to another (VG-85).
+   */
   function checkoutBody(input) {
     return {
       plan: String(input?.plan || ""),
       provider: String(input?.provider || "creem"),
-      returnPath: String(input?.returnPath || "/")
+      returnPath: String(input?.returnPath || "/"),
+      currency: String(input?.currency || "USD")
     };
   }
 

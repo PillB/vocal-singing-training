@@ -183,10 +183,20 @@ a country Stripe will take as a seller.
    against Code art. 4.1's all-in price and the terms' own promise.
 
 **Only you can do this.** Create the account as an individual, then create
-**two products**, a monthly and a yearly, because Creem has no single link
-that offers both. Make them **USD and tax-inclusive** (US$ 7.99 and US$ 49),
-so the price a European sees is the price they pay (VG-85). Set the store to
-**cancel at the end of the period**.
+**four products**, because Creem has no single link that offers both
+intervals and a product has one currency (VG-85, decided 2026-11-22):
+
+| Product | Price | Who is charged it |
+|---|---|---|
+| Pro monthly, US$ | US$ 7.99 | everyone outside the 27 EU states |
+| Pro yearly, US$ | US$ 49 | everyone outside the 27 EU states |
+| Pro monthly, € | €7.99 | the 27 EU states |
+| Pro yearly, € | €49 | the 27 EU states |
+
+**Every one of the four with `tax_mode: "inclusive"`** (item 7), so the price
+the page shows is the price the buyer pays: in the EU the VAT comes out of
+the €7.99, it is not added to it (`docs/35-PRICING.md`, *Euros in the European
+Union*). Set the store to **cancel at the end of the period**.
 
 Checkouts opened through the worker (step 5) carry their own return address,
 built from `SITE_ORIGIN`, so the product's own return URL matters only to the
@@ -204,13 +214,15 @@ removes all of them from the address. Without `billing=success` the page does
 not know it is a return, nothing is claimed, and the buyer waits until they
 sign in for Pro to arrive.
 
-Then four values, none of which belong in a chat message:
+Then six values, none of which belong in a chat message:
 
 ```bash
 # in workers/entitlements/wrangler.toml — public, so ids only, never secrets
-CREEM_PRODUCT_PRO_MONTHLY = "prod_…"
-CREEM_PRODUCT_PRO_YEARLY  = "prod_…"
-CREEM_ALLOW_TEST_MODE     = "true"    # while you test; see step 4
+CREEM_PRODUCT_PRO_MONTHLY     = "prod_…"   # US$ 7.99
+CREEM_PRODUCT_PRO_YEARLY      = "prod_…"   # US$ 49
+CREEM_PRODUCT_PRO_MONTHLY_EUR = "prod_…"   # €7.99
+CREEM_PRODUCT_PRO_YEARLY_EUR  = "prod_…"   # €49
+CREEM_ALLOW_TEST_MODE         = "true"    # while you test; see step 4
 
 # in your terminal, on your machine
 wrangler secret put CREEM_WEBHOOK_SECRET
@@ -225,7 +237,7 @@ Point Creem's webhook (Dashboard → Developers → Webhook) at
 `https://<your-worker-host>/v1/webhooks/creem` and subscribe the ten events
 listed in `workers/entitlements/README.md` under *Creem*.
 
-Filling either product id in also makes it an **allow-list**: anything else
+Filling any product id in also makes the four an **allow-list**: anything else
 ever sold from the same Creem account cannot become Pro. That is the point,
 and the cost of it is a product you add in Creem and forget here, which is
 then refused — add the id and redeploy. Naming a plan in metadata is no way
@@ -237,8 +249,11 @@ does not refuse.
 VG-19 and the code shape is identical; whichever answers first can be the rail.
 
 **What proves it worked:** `/v1/health` reports `creemConfigured: true`,
-`creemCheckoutConfigured: true` (key, webhook secret, database and a product)
-and `creemPortalConfigured: true` (what the cancel button needs).
+`creemCheckoutConfigured: true` (key, webhook secret, database and a product),
+`creemEurConfigured: true` (the same, plus both euro products) and
+`creemPortalConfigured: true` (what the cancel button needs). Until
+`creemEurConfigured` is true the page shows a European the US$ price, because
+that is what the worker would charge them; it never shows € it cannot charge.
 
 **Undo:** remove the secret and the product ids, redeploy. Any subscription
 already sold keeps charging in Creem until it is cancelled there — that is the
@@ -272,7 +287,11 @@ So steps 4 and 5 are one sitting, in this order:
    `signature` left in it. Once, buy with a Peruvian billing address and a
    Peruvian test card, and check that the total Creem charges is the price
    the page showed: only a purchase settles whether `tax_mode` holds for
-   Peru (step 3, item 7).
+   Peru (step 3, item 7). Once more, from a browser set to Spain (the page
+   shows 7,99 €), buy monthly with a Spanish or other EU billing address:
+   Creem's checkout and its receipt must total **€7.99**, VAT included. If
+   the total is higher, the euro product is tax-exclusive; fix it in Creem
+   before anything else.
 4. **Refund every test purchase in Creem's test-mode dashboard,** yours and
    any you did not make, *before* the next step. While this window is open,
    anyone who finds the site can take Pro with a test card. A refund ends Pro
@@ -281,10 +300,13 @@ So steps 4 and 5 are one sitting, in this order:
 5. Swap to live, and redeploy. Creem keeps test mode and live mode apart:
    products, webhooks and their signing secrets made in one do not exist in
    the other, so every one of these is needed:
-   - In Creem's dashboard with test mode **off**, create the two live
-     products the same way as in step 3 (tax-inclusive US$, `tax_mode`
-     `"inclusive"`, cancel at the end of the period), and put their ids in
-     `wrangler.toml`.
+   - In Creem's dashboard with test mode **off**, create the four live
+     products the same way as in step 3 (US$ 7.99, US$ 49, €7.99 and €49,
+     every one with `tax_mode` `"inclusive"`, cancel at the end of the
+     period), and put all four ids in `wrangler.toml`. Forget the two euro
+     ones and Europe is quietly sold in dollars (health says
+     `creemEurConfigured: false`); paste a test id and every euro checkout
+     fails.
    - In the same live dashboard, register
      `https://<your-worker>/v1/webhooks/creem` with the same events as in
      step 3, then `wrangler secret put CREEM_WEBHOOK_SECRET` with **that
@@ -330,26 +352,44 @@ providers.creem.apiCheckout = true
 
 With it on, the Subscribe button asks the worker (`POST /v1/me/checkout`) to
 open a Creem checkout for the signed-in account, and the purchase is bound to
-that account inside Creem's webhook. Pasted links (`providers.creem.links`)
-are optional: they are only the way to pay for a browser that cannot sign in
-at all (VG-88).
+that account inside Creem's webhook, in the currency the card showed. Pasted
+links (`providers.creem.links`, and `providers.creem.linksEur` for the two
+euro products) are optional: they are only the way to pay for a browser that
+cannot sign in at all (VG-88). Without `linksEur`, a European whose browser
+cannot sign in is offered no link rather than a dollar link under a euro
+price. Each pasted link must sell the product whose id is in `wrangler.toml`
+for that plan and currency: once any id is set the webhook admits only those,
+so a euro link for a product missing from `CREEM_PRODUCT_PRO_*_EUR` takes the
+money and never makes the buyer Pro. `tests/node/creem-products.test.mjs`
+fails on any such link.
 
 **This is the commit that makes the product sellable.** Before it, the pricing
 panel says nothing is on sale; after it, a stranger can pay. Everything in
 steps 1 to 4 exists so that this commit is boring.
 
-> **The fault that stood here is fixed; one decision is left.**
+> **The fault that stood here is fixed, and so is the decision.**
 >
 > - **VG-83 (P0), fixed 2026-11-21.** A buyer whose webhook arrived after the
 >   page's one link attempt lost the Pro they paid for. The worker now binds
 >   the checkout to the account before payment and links it inside the
 >   webhook, and the browser keeps retrying a pending link.
-> - **VG-85 (decision).** Say what currency the Creem products are priced in.
->   The recommendation is USD, tax-inclusive, for every market, and this
->   branch already assumes it: `priceEur` is out of the config, so the euro
->   markets are shown the US$ they will be charged, and the terms say US$. If
->   you price the products in euros instead, put `priceEur` back and change
->   the terms' prices with it.
+> - **VG-85 (decided 2026-11-22).** Creem charges euros in the 27 EU states
+>   (€7.99 a month, €49 a year, VAT included) and US$ everywhere else; Peru
+>   keeps Mercado Pago in soles. The page shows € only when it can charge €:
+>   with this switch on, when `/v1/health` says `creemEurConfigured: true`;
+>   with pasted links, when `providers.creem.linksEur` holds the euro links.
+>   Otherwise a European sees, and pays, US$.
+>
+> **Launch blocker, open: the terms.** `terms.html` still says "Fuera de
+> Perú: US$ 7.99 al mes o US$ 49 al año" (and "Elsewhere: US$ 7.99 …") and
+> names no euro price, while a European is already shown 7,99 € and 49 €
+> (the planned price, before launch). Add the Union's line to both halves,
+> e.g. "En la Unión Europea: 7,99 € al mes o 49 € al año, IVA incluido." and
+> "In the European Union: €7.99 a month or €49 a year, VAT included.", before
+> this switch goes on. Two `test.fail` markers in
+> `tests/pricing-markets.spec.js` ("the terms' price for the Union is the
+> dialog's") turn red the day each half says so; delete `.fail` then, and
+> the comparison keeps the terms and the dialog equal from there on.
 
 The site's own validation refuses anything that is not an allowed checkout
 host, so a mistyped link fails closed rather than sending somebody somewhere

@@ -1545,7 +1545,9 @@
 
   global.VTTour = {
     start,
-    end,
+    // From outside, a tour can only be dismissed, or closed unrecorded (false, null or nothing): the event it
+    // records is then one of the three the tracking plan knows, whatever another script passes.
+    end: (reason) => end(reason ? "dismiss" : false),
     maybeAutoStart,
     bindReplayButton,
     bindUiHelpButton,

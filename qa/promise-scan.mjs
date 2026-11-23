@@ -11,8 +11,9 @@
  *   cookieStore), a call into the account module's request, a resource hint (DNS prefetch and preconnect send
  *   a name out with no request the page can see), a module import, and an HTML or CSS string that loads a URL.
  * - voiceSourcesIn: every place a script can hear the voice or read a take, by name or by the takes' store.
- * - billingNamesIn / practicePath: where the plan is read, and whether Start, Stop, the routines, the rating
- *   and the step buttons can reach any of it.
+ * - billingNamesIn / practicePath / usesByFunction: where the plan is read or the sale opened (by a name, the
+ *   header button's id or the plan's storage key), whether Start, Stop, the routines, the rating and the step
+ *   buttons can reach any of it, and which function of each file does it.
  *
  * It finds the ordinary spellings, which is what an honest change uses. It is not a sandbox: a sink reached
  * through a computed name (`w["fe" + "tch"]`), an alias made through a variable that is not a sink's own name,
@@ -82,8 +83,15 @@ export const VOICE_SOURCES = new Set([
 const VOICE_LITERALS = new Set(["vt_recordings_db", "recordings"]);
 /** What reads the plan or opens the sale. */
 export const BILLING_NAMES = new Set(["VTBilling", "openPricing", "openAccount", "isPro", "trialActive", "trialStartedAt", "trialDaysLeft", "getEntitlement"]);
+/**
+ * The plan's handles that are not names: the header's Pro button (`$("#btn-pricing").click()` opens the plans with
+ * no name above in sight) and the plan's own keys in storage, which read it with no call into billing.
+ */
+export const BILLING_LITERALS = new Set(["btn-pricing", "#btn-pricing", "vt_billing_v1", "vt_billing_trial_started_v1"]);
 /** What asks whether the visitor is signed in. */
 export const ACCOUNT_NAMES = new Set(["VTAccount", "VTSync", "signedIn", "getSessionToken", "openAccount", "signInWithGoogle", "startEmailSignIn", "renderGoogleButton"]);
+/** The account's handles that are not names: the header's account button, and the session and plan it keeps. */
+export const ACCOUNT_LITERALS = new Set(["btn-account", "#btn-account", "vt_account_session_v1", "vt_account_plan_v1"]);
 /** What `VTAccount.getState()` says about the visitor: `.account` is who is signed in, `.entitlement` what they bought. */
 const ACCOUNT_STATE = new Set(["account", "entitlement"]);
 
@@ -91,6 +99,8 @@ const nameOf = (node) => {
   if (!node) return "";
   if (node.type === "Identifier") return node.name;
   if (node.type === "Literal") return String(node.value);
+  // A class's private member, `#archive`, is a name of its own: `this.#archive()` calls it.
+  if (node.type === "PrivateIdentifier") return "#" + node.name;
   return "";
 };
 const propName = (member) => (member.computed && member.property.type !== "Literal" ? "" : nameOf(member.property));
@@ -114,27 +124,55 @@ function selectorOf(expr) {
   return arg?.type === "Literal" && typeof arg.value === "string" ? arg.value : selectorOf(expr.callee);
 }
 
-/** " #wb-last" for a callback handed to `addEventListener` on an element found by its selector, or "". */
-function listenerKey(node, parent) {
+/**
+ * The element a listener is added to when no selector is in the call: a variable that was given one
+ * (`const again = $("#wb-again")` names it "#wb-again"), or else the variable, `this` or the property it is
+ * held in ("again", "document", "ui.close", "els[]"). "" for anything else.
+ */
+function receiverText(expr, held) {
+  if (expr.type === "ChainExpression") return receiverText(expr.expression, held);
+  if (expr.type === "Identifier") return held.get(expr.name) || expr.name;
+  if (expr.type === "ThisExpression") return "this";
+  if (expr.type !== "MemberExpression") return "";
+  const [object, prop] = [receiverText(expr.object, held), propName(expr)];
+  return object && object + (prop ? "." + prop : "[]");
+}
+
+/** The variables of a script that hold an element found by one selector, and that selector. */
+function heldSelectors(ast) {
+  const seen = new Map();
+  walkNode(ast, (n) => {
+    const sel = n.type === "VariableDeclarator" && n.id.type === "Identifier" && n.init ? selectorOf(n.init) : "";
+    if (sel) seen.set(n.id.name, new Set([...(seen.get(n.id.name) || []), sel]));
+  });
+  return new Map([...seen].filter(([, sels]) => sels.size === 1).map(([name, sels]) => [name, [...sels][0]]));
+}
+
+/**
+ * " #wb-last" for a callback handed to `addEventListener` on an element found by its selector, " #wb-again" for
+ * one on a variable that holds it, " document" or " ui.close" for one on an element held any other way, or "".
+ */
+function listenerKey(node, parent, held) {
   const c = parent.type === "CallExpression" && parent.arguments.includes(node) ? parent.callee : null;
   if (c?.type !== "MemberExpression" || propName(c) !== "addEventListener") return "";
-  const sel = selectorOf(c.object);
-  return sel ? " " + sel : "";
+  const on = selectorOf(c.object) || receiverText(c.object, held);
+  return on ? " " + on : "";
 }
 
 /**
  * The name a function is known by: its own, the variable it is assigned to, its key, or the element it listens
  * on. A callback set on a property or in an object inside a named function (`btn.onclick = () => ...` in
  * renderNextStepCard) is named after both, "renderNextStepCard.onclick", so a file's many onclicks are not
- * merged into one; a listener on an element found by its selector, "bindRetention #wb-last", so each button's
- * handler can be a way into practice of its own. A class's methods and fields keep their own names.
+ * merged into one; a listener after the element it is added to, "bindRetention #wb-last" or "bindRetention
+ * document", so each button's handler, and each page-wide one, is a way into practice of its own. A class's
+ * methods and fields, private ones too ("#archive"), keep their own names.
  */
-function functionName(node, parent, owner) {
+function functionName(node, parent, owner, held) {
   if (node.id?.name) return node.id.name;
   if (!parent) return "";
   if (parent.type === "VariableDeclarator") return nameOf(parent.id);
   if (parent.type === "AssignmentExpression" && parent.left.type !== "MemberExpression") return nameOf(parent.left);
-  const listener = listenerKey(node, parent);
+  const listener = listenerKey(node, parent, held);
   if (listener) return owner + listener;
   const key = keyOf(parent);
   return key && owner !== "(top)" && !CLASS_MEMBERS.has(parent.type) ? `${owner}.${key}` : key;
@@ -166,10 +204,12 @@ function parseScript(source) {
  */
 function walk(source, fn) {
   const up = [];
+  const ast = parseScript(source);
+  const held = heldSelectors(ast);
   const visit = (node, owner) => {
     if (!node || typeof node.type !== "string") return;
     const parent = up.at(-1) || null;
-    const here = isFunction(node) ? functionName(node, parent, owner) || owner : fieldName(node) || owner;
+    const here = isFunction(node) ? functionName(node, parent, owner, held) || owner : fieldName(node) || owner;
     fn(node, parent, here, here !== owner ? owner : null, up);
     up.push(node);
     for (const v of Object.values(node)) {
@@ -178,7 +218,7 @@ function walk(source, fn) {
     }
     up.pop();
   };
-  visit(parseScript(source), "(top)");
+  visit(ast, "(top)");
 }
 
 /** Methods that send whatever they are called on. */
@@ -383,7 +423,7 @@ function accountState(node) {
 }
 
 /** What a node uses that asks whether the visitor is signed in. */
-const accountUsed = (node, parent) => nameUsed(node, parent, ACCOUNT_NAMES) || accountState(node);
+const accountUsed = (node, parent) => nameUsed(node, parent, ACCOUNT_NAMES, ACCOUNT_LITERALS) || accountState(node);
 
 /** Each name from `names` the script uses, with a count. */
 function namesIn(source, used) {
@@ -398,13 +438,13 @@ function namesIn(source, used) {
 /** Where a script hears the voice or reads a take. */
 export const voiceSourcesIn = (source) => namesIn(source, (n, p) => nameUsed(n, p, VOICE_SOURCES, VOICE_LITERALS));
 /** Where a script reads the plan or opens the sale. */
-export const billingNamesIn = (source) => namesIn(source, (n, p) => nameUsed(n, p, BILLING_NAMES));
+export const billingNamesIn = (source) => namesIn(source, (n, p) => nameUsed(n, p, BILLING_NAMES, BILLING_LITERALS));
 /** Where a script asks whether the visitor is signed in. */
 export const accountNamesIn = (source) => namesIn(source, accountUsed);
 
 /** Bump what a node uses into its function's billing, voice and account bags. */
 function tally(fn, node, parent) {
-  const billing = nameUsed(node, parent, BILLING_NAMES);
+  const billing = nameUsed(node, parent, BILLING_NAMES, BILLING_LITERALS);
   if (billing) bump(fn.billing, billing);
   const voice = nameUsed(node, parent, VOICE_SOURCES, VOICE_LITERALS);
   if (voice) bump(fn.voice, voice);
@@ -415,8 +455,9 @@ function tally(fn, node, parent) {
 /** Marks a method called on `this`, resolved once every function is known. */
 const THIS = "this.";
 
-/** The function a node refers to: a name that is not a property, or a method called on `this`. */
+/** The function a node refers to: a name that is not a property, or a method called on `this` (`this.#archive` too). */
 function refOf(node, parent) {
+  if (node.type === "PrivateIdentifier") return parent?.object?.type === "ThisExpression" ? THIS + "#" + node.name : "";
   if (node.type !== "Identifier") return "";
   const isProperty = parent?.type === "MemberExpression" && parent.property === node && !parent.computed;
   if (!isProperty) return node.name;
@@ -443,25 +484,48 @@ function resolveThis(fns) {
 }
 
 /**
+ * The function a method's or property's own key names, when the key is a function's (`getRecordingBlob(id) {...}`
+ * in an object, or a class's `#archive(blob) {...}`), or "". The key is walked outside the function, so without
+ * this a store's method named for what it reads would be filed under the file's top.
+ */
+function keyedFunction(node, parent, owner) {
+  const keyed = (parent?.type === "Property" || parent?.type === "MethodDefinition") && parent.key === node;
+  return keyed && parent.value && isFunction(parent.value) ? functionName(parent.value, parent, owner, new Map()) : "";
+}
+
+/** `g(f)`: a function of the file handed another as an argument, which it may call (`proOnly(startDaily)`). */
+function handedTo(node) {
+  if (node.type !== "CallExpression" || node.callee.type !== "Identifier") return [];
+  return node.arguments.filter((a) => a.type === "Identifier").map((a) => [node.callee.name, a.name]);
+}
+
+/**
  * Each named function of a script: the names it refers to (a call, a function handed on as a callback, a method
- * called on `this`, and every named function made inside it, such as a callback it sets on a property), and the
- * billing names, voice sources and sign-in checks it uses. Functions that share a name are merged, and a
- * function reaches everything made inside it, which can only add paths. What it cannot follow is a call through
- * a computed name, a function kept in a variable or another object and called from there, or another file.
+ * called on `this`, and every named function made inside it, such as a callback it sets on a property), the
+ * functions handed to it (`proOnly(startDaily)` reaches startDaily), the function it is made in (`outer`), and
+ * the billing names, voice sources and sign-in checks it uses. Functions that share a name are merged, and a
+ * function reaches everything made inside it. What it cannot follow is a call through a computed name, a
+ * function kept in a variable or another object and called from there, or another file.
  */
 export function functionsOf(source) {
   const fns = Object.create(null);
-  const entry = (name) => (fns[name] ||= { refs: new Set(), billing: {}, voice: {}, account: {} });
+  const entry = (name) => (fns[name] ||= { refs: new Set(), billing: {}, voice: {}, account: {}, outer: "" });
+  const handed = [];
   walk(source, (node, parent, owner, outer) => {
     if (outer) {
       entry(owner);
       fns[outer]?.refs.add(owner);
+      if (outer !== "(top)") fns[owner].outer ||= outer;
     }
+    const keyed = keyedFunction(node, parent, owner);
+    if (keyed) return void tally(entry(keyed), node, parent);
+    handed.push(...handedTo(node));
     if (!fns[owner]) return;
     tally(fns[owner], node, parent);
     const ref = refOf(node, parent);
     if (ref) fns[owner].refs.add(ref);
   });
+  for (const [g, f] of handed) if (fns[g] && g !== f) fns[g].refs.add(f);
   resolveThis(fns);
   return fns;
 }
@@ -491,12 +555,34 @@ export function practicePath(source, roots, kind = "billing") {
   const fns = functionsOf(source);
   const out = {};
   for (const [name, trail] of reachable(fns, roots)) {
-    const uses = Object.entries(fns[name][kind])
-      .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([k, n]) => `${k}:${n}`)
-      .join(" ");
+    const uses = bagText(fns[name][kind]);
     if (uses) out[name] = { uses, via: trail.join(" > ") };
   }
+  return out;
+}
+
+/** A bag of names as "VTBilling:2 isPro:1", sorted. */
+const bagText = (bag) =>
+  Object.entries(bag)
+    .filter(([, n]) => n > 0)
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([k, n]) => `${k}:${n}`)
+    .join(" ");
+
+/**
+ * Every function of a script that uses a name of `kind`, with what it uses, and "(top)" for what the script's own
+ * top level uses: { openPricing: "openPricing:1", "bindBilling #value-banner-cta": "openPricing:1", ... }.
+ */
+export function usesByFunction(source, kind = "billing") {
+  const fns = functionsOf(source);
+  const top = { ...(kind === "billing" ? billingNamesIn : accountNamesIn)(source) };
+  const out = {};
+  for (const [name, fn] of Object.entries(fns)) {
+    const uses = bagText(fn[kind]);
+    if (uses) out[name] = uses;
+    for (const [k, n] of Object.entries(fn[kind])) top[k] -= n;
+  }
+  if (bagText(top)) out["(top)"] = bagText(top);
   return out;
 }
 
@@ -558,15 +644,20 @@ function walkNode(node, fn) {
 }
 
 /**
- * A name made from AdSense's queue: a variable (`const q = (window.adsbygoogle = window.adsbygoogle || [])`) or a
- * function that returns it (`function adQueue() { return window.adsbygoogle; }`, called as `adQueue().push`).
+ * A name made from AdSense's queue: a variable (`const q = (window.adsbygoogle = window.adsbygoogle || [])`), a
+ * function that returns it (`function adQueue() { return window.adsbygoogle; }`, called as `adQueue().push`), a
+ * name taken out of an object (`const { adsbygoogle: q } = window`, with a default or not), a default parameter
+ * (`function f(q = window.adsbygoogle)`) or a class field (`queue = window.adsbygoogle`, pushed as `this.queue`).
  */
-function queueAlias(node, queues, owner) {
-  if (node.type === "VariableDeclarator" && node.init && mentions(node.init, queues)) return nameOf(node.id);
-  if (node.type === "AssignmentExpression" && node.left.type === "Identifier" && mentions(node.right, queues)) return node.left.name;
-  if (node.type === "ReturnStatement" && node.argument && owner !== "(top)" && mentions(node.argument, queues)) return owner;
-  return "";
-}
+const QUEUE_HOLDERS = {
+  VariableDeclarator: (n, q) => (n.init && mentions(n.init, q) ? nameOf(n.id) : ""),
+  AssignmentExpression: (n, q) => (n.left.type === "Identifier" && mentions(n.right, q) ? n.left.name : ""),
+  Property: (n, q) => (mentions(n.key, q) ? nameOf(n.value.type === "AssignmentPattern" ? n.value.left : n.value) : ""),
+  AssignmentPattern: (n, q) => (mentions(n.right, q) ? nameOf(n.left) : ""),
+  PropertyDefinition: (n, q) => (n.value && mentions(n.value, q) ? nameOf(n.key) : ""),
+  ReturnStatement: (n, q, owner) => (n.argument && owner !== "(top)" && mentions(n.argument, q) ? owner : "")
+};
+const queueAlias = (node, queues, owner) => QUEUE_HOLDERS[node.type]?.(node, queues, owner) || "";
 
 /**
  * Every push to AdSense's queue, by its name or by a variable or function made from it, as the number of keys in

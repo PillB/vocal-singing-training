@@ -13,10 +13,12 @@
 //    does leads to one that sends.
 // 3. Start, Stop, Continue, the routines (their banner's pause, continue and end too), the take's own record
 //    and stop, the welcome-back and reminder starts, the rating, Next and '+30 s' never reach the pricing
-//    window, and read the plan only in the functions listed, to draw Pro's own extras. A cap needs one or the
-//    other. The path follows calls, callbacks handed on, callbacks set on a property (a button's onclick, the
-//    engine's onFrame) and methods called on `this`.
-// 4. The plan is read only in the files listed, so a cap in a routine, a goal set or the engine shows here.
+//    window, and read the plan only in the functions listed, to draw Pro's own extras. The path follows calls,
+//    callbacks handed on, functions handed another (`proOnly(startDaily)`), callbacks set on a property (a
+//    button's onclick, the engine's onFrame), each handler on its own element, and methods called on `this`.
+// 4. The plan is read only in the files listed, and in them only by the functions written down with why, as is
+//    every function that opens the sale or the sign-in: a cap need not be on the path (a page-wide capture
+//    listener swallows a Start and calls nothing in practice), and needs a plan read or a window to open.
 // 5. Every event's props are the ones in the plan below: js/analytics.js sends only what the worker keeps
 //    (tests/node/analytics-wire.test.mjs), and this keeps a new prop on a known event from riding out.
 // 6. No account needed: nothing on the way to practising, saving a take, rating it or looking back at the
@@ -28,8 +30,9 @@
 //    and vignette overlays) are not asked for by the page: they are a switch in the AdSense account, which no
 //    test can see, so the go-live checklist keeps it off (docs/40 step 9c).
 //
-// What these do not do: see a sink spelt through a computed name, or follow a value handed between files by a
-// variable. They are tripwires for honest changes, which is how the 27 were written; review is the rest.
+// What these do not do: see a sink spelt through a computed name, follow a value handed through a variable
+// (between files, or kept at a file's top level), or see a cap that reads no plan and opens no window. They are
+// tripwires for honest changes, which is how the 27 were written; the browser visitors and review are the rest.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -45,6 +48,7 @@ import {
   reachable,
   shippedScripts,
   sinksIn,
+  usesByFunction,
   voiceSourcesIn
 } from "../../qa/promise-scan.mjs";
 
@@ -77,9 +81,9 @@ export const EGRESS = {
     "renderExercise › html:input": [1, "the exercise's own sliders, no address"],
     "showPlayback › html:audio": [1, "the take played back from its blob: address, on the device"],
     "renderMetricsForm › html:input": [2, "the rating form's fields, no address"],
-    "bindHistoryList › createElement:audio": [1, "a saved take played back, on the device"],
-    "bindHistoryList › set:src": [1, "its blob: address"],
-    "bindHistoryList › html:audio": [2, "the saved takes' players"],
+    "bindHistoryList btn › createElement:audio": [1, "a saved take played back, on the device"],
+    "bindHistoryList btn › set:src": [1, "its blob: address"],
+    "bindHistoryList btn › html:audio": [2, "the saved takes' players"],
     "bindAccount #gift-grant-form › VTAccount.request": [1, "the owner's grants, admin only"],
     "bindAccount #gift-code-form › VTAccount.request": [1, "the owner's gift codes, admin only"],
     "renderGiftCodes › VTAccount.request": [1, "the owner's gift codes (GET), admin only"],
@@ -100,7 +104,7 @@ export const EGRESS = {
   },
   "js/reminders.js": { "downloadIcs › set:href": [1, "the calendar file the visitor downloads, from a blob: address"] },
   "js/reports.js": {
-    "mineSection › VTAccount.request": [1, "the visitor's own bug reports (GET)"],
+    "mineSection button › VTAccount.request": [1, "the visitor's own bug reports (GET)"],
     "send › VTAccount.request": [1, "a bug report the visitor typed and pressed send on"]
   },
   "js/scenes/guided.js": {
@@ -207,7 +211,7 @@ export const PRACTICE_ROOTS = [
 export const NOT_A_WAY_IN = {
   init: "the page's start: it hands startDaily to the daily loop and to the page's own hooks, and calls neither",
   "init.onChange": "the redraw after the language changes: it draws the price dialog too, and starts nothing",
-  bindRetention: "binds the reminders card, whose second time is Pro's; its three ways into practice are roots above",
+  "bindRetention document": "when the tab comes back, it redraws the next step's card: it starts nothing",
   "bindAuth #admin-clear-progress": "the owner's admin button: it clears the progress and redraws the history"
 };
 
@@ -227,7 +231,8 @@ export const PLAN_READERS = {
 /** The one function on that way that touches the account module or asks whether the visitor is signed in, and why. */
 export const SIGN_IN_READERS = {
   headerPlanState: ["VTAccount:1 signedIn:1", "the header's plan label: Pro, trial, or signed in"],
-  bindPageLifecycle: ["VTSync:2", "when the page hides, after the take is kept here, a signed-in visitor's copy is sent; a guest's is nothing"]
+  "bindPageLifecycle window": ["VTSync:1", "when the page hides, after the take is kept here, a signed-in visitor's copy is sent; a guest's is nothing"],
+  "bindPageLifecycle document": ["VTSync:1", "the same, when the tab is hidden rather than closed"]
 };
 
 /** The files that use the account module or ask whether the visitor is signed in, and why. */
@@ -279,6 +284,118 @@ export const PLAN_FILES = {
   "js/practice-days.js": "Pro's extra rest days for the streak",
   "js/reminders.js": "Pro's second reminder",
   "js/value-pulse.js": "the trial's days left on the progress board"
+};
+
+/**
+ * Every function that reads the plan or opens the sale, file by file, with what it uses and why. A cap needs one
+ * or the other, and it need not be on the way to practice to stop it: a page-wide capture listener that swallows
+ * the welcome-back Start and opens the plans calls nothing in practice. So a new one, anywhere, fails here until
+ * somebody writes down why, as a new way off the device does in EGRESS. "(top)" is the file's own top level.
+ */
+export const PLAN_USES = {
+  "js/ads.js": {
+    isProUser: ["VTBilling:1 isPro:1", "no ads for Pro"],
+    "renderNativeCard [data-ad-cta]": ["btn-pricing:1", "the house card that sells Pro opens the plans when it is pressed"]
+  },
+  "js/app.js": {
+    progressionKeysFor: ["VTBilling:1", "Pro's extra piano progressions, an extra on top of the exercise"],
+    isCheckoutPrelaunch: ["VTBilling:1", "whether checkout is open yet, for the pricing dialog's buttons"],
+    headerPlanState: ["VTBilling:1 getEntitlement:1", "the header's plan label"],
+    trialSpent: ["VTBilling:1 trialStartedAt:1", "the pricing dialog's line on a trial already used"],
+    updateBillingChrome: ["#btn-pricing:1 VTBilling:1 getEntitlement:1", "the header's Pro button's label"],
+    renderValuePulse: ["VTBilling:1 getEntitlement:1 trialDaysLeft:1", "the progress board's Pro panel and trial line"],
+    renderProGoalPicker: ["VTBilling:2", "Pro's goal picker, shown locked to a free visitor"],
+    renderReminderSettings: ["isPro:2", "the reminders card's second time field"],
+    renderRetentionChrome: ["VTBilling:2 isPro:3", "the reminders card: Pro's second reminder"],
+    saveTimes: ["VTBilling:1 isPro:2", "saving the reminders keeps the second time for Pro only"],
+    "bindRetention #rem-time-2": ["VTBilling:1 openPricing:1", "a free visitor setting a second reminder time is shown the plans"],
+    "bindProStudio #btn-profile-add": ["VTBilling:1 openPricing:1", "a second singer's profile is Pro's"],
+    "bindProStudio #sel-week-goal": ["VTBilling:1 openPricing:1", "the weekly goal picker is Pro's"],
+    valueMomentFor: ["getEntitlement:1 trialDaysLeft:2", "which note follows a rated take"],
+    showValueBanner: ["trialDaysLeft:1", "the trial's days left on that note"],
+    showValueMoment: ["VTBilling:1", "the note after a rated take about the trial"],
+    relabelValueBanner: ["VTBilling:1 trialDaysLeft:1", "the same note, redrawn in the new language"],
+    renderPricingModal: ["VTBilling:1 getEntitlement:2", "the pricing dialog itself"],
+    "renderPricingModal btn": ["openAccount:1", "a plan button pressed by someone not signed in opens the account first"],
+    pricingStatusLine: ["trialDaysLeft:1", "the pricing dialog's status line"],
+    openPricing: ["openPricing:1", "the pricing dialog's own opener"],
+    openAccount: ["openAccount:1", "the account panel's own opener"],
+    bindAuth: ["openAccount:1", "the header's account button"],
+    "bindAuth #btn-account-pricing": ["openPricing:1", "the account panel's button to the plans"],
+    "bindAuth #admin-force-pro": ["VTBilling:1", "the owner's admin button that turns Pro on"],
+    "bindAuth #admin-clear-billing": ["VTBilling:1", "the owner's admin button that clears the plan"],
+    recheckPayment: ["VTBilling:1", "'I have paid': asks the worker again"],
+    startAccountTrial: ["openAccount:1", "the account's trial: someone not signed in is sent to the panel"],
+    startLocalTrial: ["VTBilling:3 trialDaysLeft:1", "the browser's own trial, for a deploy with no sign-in"],
+    openBillingPortal: ["VTBilling:2", "the customer portal, from the pricing dialog"],
+    exportProgress: ["VTBilling:2 openPricing:1", "the progress export is Pro's: a free visitor is shown the plans"],
+    bindBillingEvents: ["VTBilling:3", "redraws when the plan changes, and the return from a checkout"],
+    bindBilling: ["#btn-pricing:1 VTBilling:1 openPricing:2", "binds the header's Pro button and the progress board's"],
+    "bindBilling #value-banner-cta": ["openPricing:1", "the trial note's button to the plans"],
+    "bindBilling #btn-demo-pro": ["VTBilling:2", "the demo build's button that turns Pro on"],
+    "(top)": ["openAccount:2 openPricing:2", "the page's exports of the two openers, for the other scripts"]
+  },
+  "js/auth.js": {
+    login: ["VTBilling:3", "the QA unlock of a test account"]
+  },
+  "js/billing.js": {
+    trialStartedAt: ["trialStartedAt:1", "the plan itself: when the trial started"],
+    ensureTrial: ["trialStartedAt:1", "the plan itself: the trial's start, once"],
+    canStartTrial: ["trialStartedAt:1", "the plan itself: whether this browser still has its trial"],
+    startTrial: ["trialActive:1 trialStartedAt:1", "the plan itself: starting the trial"],
+    trialActive: ["trialActive:1", "the plan itself"],
+    trialDaysLeft: ["trialActive:1 trialDaysLeft:1", "the plan itself"],
+    getEntitlement: ["getEntitlement:1 trialActive:1", "the plan itself"],
+    isPro: ["getEntitlement:1 isPro:1", "the plan itself"],
+    emit: ["getEntitlement:1", "the plan itself: tells its listeners it changed"],
+    can: ["isPro:1", "the plan itself: Pro's feature flags"],
+    exportProgressJson: ["getEntitlement:1", "the progress export, Pro's"],
+    "(top)": [
+      "VTBilling:2 getEntitlement:2 isPro:2 trialActive:2 trialDaysLeft:2 trialStartedAt:2 vt_billing_trial_started_v1:1 vt_billing_v1:1",
+      "the plan's storage keys and its exports"
+    ]
+  },
+  "js/practice-days.js": {
+    isPro: ["VTBilling:2 isPro:2", "Pro's extra rest days for the streak"],
+    restCap: ["isPro:1", "how many rest days the streak can bank"]
+  },
+  "js/reminders.js": {
+    freezeAllowance: ["isPro:2", "the old name for that rest-day allowance"]
+  },
+  "js/value-pulse.js": {
+    suggestUpgradeMoment: ["trialDaysLeft:6", "the trial's days left on the progress board"]
+  }
+};
+
+/** What opens the sign-in: the account panel, its button, Google's button or an emailed code. */
+const SIGN_IN_OPENER = /^(openAccount|#?btn-account|signInWithGoogle|startEmailSignIn|renderGoogleButton)$/;
+
+/**
+ * Every function that opens the sign-in, file by file, and why. A wall in front of practice can be the account as
+ * well as the plans, and need not read the plan: so these are written down as the plan's readers are.
+ */
+export const SIGN_IN_OPENERS = {
+  "js/account.js": {
+    startEmailSignIn: ["startEmailSignIn:1", "the account itself: the emailed code"],
+    renderGoogleButton: ["renderGoogleButton:1", "the account itself: Google's button"],
+    "renderGoogleButton.callback": ["signInWithGoogle:1", "what Google's button does when pressed"],
+    signInWithGoogle: ["signInWithGoogle:1", "the account itself"],
+    "(top)": ["renderGoogleButton:2 signInWithGoogle:2 startEmailSignIn:2", "the account's exports"]
+  },
+  "js/admin.js": {
+    drawSignIn: ["renderGoogleButton:1", "the owner's admin window asks its owner to sign in"]
+  },
+  "js/app.js": {
+    "renderPricingModal btn": ["openAccount:1", "a plan button pressed by someone not signed in opens the account first"],
+    refreshAccountUI: ["#btn-account:1", "the header's account button's label"],
+    mountGoogleButton: ["renderGoogleButton:1", "Google's button inside the account panel"],
+    openAccount: ["openAccount:1", "the account panel's own opener"],
+    bindAuth: ["#btn-account:1 openAccount:1", "the header's account button"],
+    "bindAccount #account-email-form": ["startEmailSignIn:1", "the account panel's email form"],
+    "bindAccount #account-code-resend": ["startEmailSignIn:1", "the account panel's 'send the code again'"],
+    startAccountTrial: ["openAccount:1", "the account's trial: someone not signed in is sent to the panel"],
+    "(top)": ["openAccount:2", "the page's export of the opener, for the other scripts"]
+  }
 };
 
 /** Every event and the props it may carry. `x_*` is app_open's re-asserted arms. */
@@ -365,46 +482,102 @@ const flat = (bag) => Object.fromEntries(Object.entries(bag).flatMap(([file, row
 /**
  * The events a script raises: [where, name, props keys] for each call, and the relays that pass one on. A name
  * made from a template (`tour_${reason}`) is each name the template can make: its one part must be a parameter of
- * the function it is in, and every call of that function must pass a literal, a choice of two, or a parameter of
- * its own that resolves the same way. One that cannot be resolved is listed, so no name is guessed by its prefix.
+ * the function it is in, that function must give it no other value, must be called only by its bare name in this
+ * file (never handed on, bound or exported, where a call from elsewhere could pass anything), and every call of it
+ * must pass a literal, a choice of two, or a parameter of its own that resolves the same way. One that cannot be
+ * resolved is listed, so no name is guessed by its prefix. A relay must pass on its own two parameters as they
+ * came (`props || {}` at most); one that adds to them, or changes either, is listed as changing what it passes on.
  */
 export function eventsIn(source, file) {
   const found = { calls: [], relays: [], unresolved: [] };
   const ast = parse(source, { ecmaVersion: "latest", sourceType: "script", loc: true });
-  const callsTo = new Map();
+  const ctx = { callsTo: new Map(), escaping: new Set() };
   const templates = [];
   const visit = (node, owner, frame, parent) => {
     if (!node || typeof node.type !== "string") return;
     const here = /Function/.test(node.type) && node.id?.name ? node.id.name : owner;
     const inner = frameOf(node, parent) || frame;
-    if (node.type === "CallExpression") {
-      const callee = node.callee.type === "Identifier" ? node.callee.name : "";
-      if (callee) callsTo.set(callee, [...(callsTo.get(callee) || []), { args: node.arguments, frame: inner }]);
-      eventCall(node, here, file, found, (ev, keys) => templates.push({ ev, keys, frame: inner, where: `${file}:${node.loc.start.line}` }));
-    }
+    if (node.type === "Identifier" && escapesAt(node, parent)) ctx.escaping.add(node.name);
+    if (node.type === "CallExpression") noteCall(node, ctx, { owner: here, file, found, frame: inner }, templates);
     for (const v of Object.values(node)) {
       if (Array.isArray(v)) v.forEach((c) => visit(c, here, inner, node));
       else if (v && typeof v.type === "string") visit(v, here, inner, node);
     }
   };
-  visit(ast, "(top)", { name: "", params: [] }, null);
+  visit(ast, "(top)", { name: "", params: [], node: null }, null);
   for (const { ev, keys, frame, where } of templates) {
     const [head, tail] = ev.quasis.map((q) => q.value.cooked);
     const part = ev.expressions.length === 1 ? ev.expressions[0] : null;
-    const values = part ? valuesOf(part, frame, callsTo, new Set()) : null;
+    const values = part ? valuesOf(part, frame, ctx, new Set()) : null;
     if (!values) found.unresolved.push(`${where} \`${ev.quasis.map((q) => q.value.raw).join("${}")}\``);
     else for (const v of values) found.calls.push([where, head + v + tail, keys]);
   }
   return found;
 }
 
+/** A call: kept by its bare name for the templates' parameters, and read for an event it raises. */
+function noteCall(node, ctx, where, templates) {
+  const callee = node.callee.type === "Identifier" ? node.callee.name : "";
+  if (callee) ctx.callsTo.set(callee, [...(ctx.callsTo.get(callee) || []), { args: node.arguments, frame: where.frame }]);
+  eventCall(node, where, (ev, keys) => templates.push({ ev, keys, frame: where.frame, where: `${where.file}:${node.loc.start.line}` }));
+}
+
 const paramName = (p) => (p.type === "AssignmentPattern" ? p.left.name : p.name) || "";
 
-/** A function's name (its own, or the variable it is kept in) and its parameters, or null for any other node. */
+/** A function's name (its own, or the variable it is kept in), its parameters and its node, or null for any other node. */
 function frameOf(node, parent) {
   if (!/Function/.test(node.type)) return null;
   const name = node.id?.name || (parent?.type === "VariableDeclarator" ? parent.id.name : "");
-  return { name, params: node.params.map(paramName) };
+  return { name, params: node.params.map(paramName), node };
+}
+
+/** Whether an identifier is used as a value here, where it can be handed on: anything but a call by it, its own declaration, or a property's name. */
+function escapesAt(node, p) {
+  if (!p) return true;
+  if (p.type === "CallExpression" || p.type === "NewExpression") return p.callee !== node;
+  if (/Function/.test(p.type)) return p.body === node;
+  if (p.type === "VariableDeclarator") return p.init === node;
+  if (p.type === "MemberExpression") return p.object === node || p.computed;
+  if (p.type === "Property" || p.type === "MethodDefinition" || p.type === "PropertyDefinition") return p.value === node || p.computed;
+  return true;
+}
+
+/** The names a pattern binds: `a`, `{ a, b: c }`, `[a, ...d]`, `a = 1`. */
+function patternNames(p) {
+  if (!p) return [];
+  if (p.type === "Identifier") return [p.name];
+  if (p.type === "AssignmentPattern") return patternNames(p.left);
+  if (p.type === "RestElement") return patternNames(p.argument);
+  if (p.type === "ArrayPattern") return p.elements.flatMap(patternNames);
+  if (p.type === "ObjectPattern") return p.properties.flatMap((q) => patternNames(q.value ?? q.argument));
+  return [];
+}
+
+/** The variable an assignment's target writes to or into: `x` for `x = 1`, `x.a = 1` and `x[k] = 1`. */
+const rootOf = (n) => (n?.type === "MemberExpression" ? rootOf(n.object) : n?.type === "Identifier" ? n.name : "");
+
+/** What one node does to `name`: gives it a new value, writes into it, or declares another of the same name. */
+function rewritesAt(n, name, top) {
+  if (n.type === "AssignmentExpression") return rootOf(n.left) === name || patternNames(n.left).includes(name);
+  if (n.type === "UpdateExpression") return rootOf(n.argument) === name;
+  if (n.type === "VariableDeclarator") return patternNames(n.id).includes(name);
+  if (n.type === "CallExpression" && n.callee.type === "MemberExpression") return rootOf(n.callee.object) === "Object" && rootOf(n.arguments[0]) === name;
+  return n !== top && /Function/.test(n.type) && n.params.some((q) => patternNames(q).includes(name));
+}
+
+/** Whether a function's body changes `name` anywhere: `reason = "skip_first"`, `props.view = ...`, `Object.assign(props, ...)`. */
+function rewrites(fn, name) {
+  let hit = false;
+  const visit = (n) => {
+    if (hit || !n || typeof n.type !== "string") return;
+    hit = rewritesAt(n, name, fn);
+    for (const v of Object.values(n)) {
+      if (Array.isArray(v)) v.forEach(visit);
+      else if (v && typeof v.type === "string") visit(v);
+    }
+  };
+  if (fn) visit(fn);
+  return hit;
 }
 
 /**
@@ -412,38 +585,47 @@ function frameOf(node, parent) {
  * function. `false` or `null` make no name (the template's function returns first on them: tour.js's end(false)
  * closes the tour without recording it). null when it cannot be told.
  */
-function valuesOf(arg, frame, callsTo, seen) {
+function valuesOf(arg, frame, ctx, seen) {
   if (arg?.type === "Literal") return literalValues(arg.value);
   if (arg?.type === "ConditionalExpression") {
-    const [a, b] = [valuesOf(arg.consequent, frame, callsTo, seen), valuesOf(arg.alternate, frame, callsTo, seen)];
+    const [a, b] = [valuesOf(arg.consequent, frame, ctx, seen), valuesOf(arg.alternate, frame, ctx, seen)];
     return a && b ? [...a, ...b] : null;
   }
   const i = arg?.type === "Identifier" ? frame.params.indexOf(arg.name) : -1;
-  return i >= 0 && frame.name && !seen.has(frame.name) ? paramValues(frame.name, i, callsTo, seen) : null;
+  if (i < 0 || !frame.name || seen.has(frame.name) || rewrites(frame.node, arg.name)) return null;
+  return paramValues(frame.name, i, ctx, seen);
 }
 
 const literalValues = (v) => (typeof v === "string" ? [v] : v === false || v === null ? [] : null);
 
-/** What the i-th parameter of `name` can be, through each of its calls; null if one cannot be told, or none is seen. */
-function paramValues(name, i, callsTo, seen) {
-  const calls = callsTo.get(name) || [];
+/** What the i-th parameter of `name` can be, through each of its calls; null if one cannot be told, none is seen, or the function escapes. */
+function paramValues(name, i, ctx, seen) {
+  const calls = ctx.callsTo.get(name) || [];
+  if (!calls.length || ctx.escaping.has(name)) return null;
   const out = [];
   for (const call of calls) {
-    const v = valuesOf(call.args[i], call.frame, callsTo, new Set([...seen, name]));
+    const v = valuesOf(call.args[i], call.frame, ctx, new Set([...seen, name]));
     if (!v) return null;
     out.push(...v);
   }
-  return calls.length ? [...new Set(out)] : null;
+  return [...new Set(out)];
 }
 
-function eventCall(node, owner, file, found, template) {
+/** Whether a relay passes on its own first two parameters as they came: `track(name, props)` or `track(name, props || {})`. */
+function passesOn(ev, props, frame) {
+  const own = (node, i) => node?.type === "Identifier" && frame.params[i] === node.name && !rewrites(frame.node, node.name);
+  const emptyOr = props?.type === "LogicalExpression" && props.operator === "||" && props.right.type === "ObjectExpression" && !props.right.properties.length;
+  return own(ev, 0) && (!props || own(emptyOr ? props.left : props, 1));
+}
+
+function eventCall(node, { owner, file, found, frame }, template) {
   const c = node.callee;
   const name = c.type === "MemberExpression" ? c.property.name : c.type === "Identifier" ? c.name : "";
   if (!TRACKERS.has(name)) return;
   const [ev, props] = node.arguments;
   const named = ev?.type === "Literal" || ev?.type === "TemplateLiteral";
   if (!named || (props && props.type !== "ObjectExpression")) {
-    found.relays.push(`${file} › ${owner}`);
+    found.relays.push(`${file} › ${owner}${passesOn(ev, props, frame) ? "" : " (changes what it passes on)"}`);
     return;
   }
   const keys = (props?.properties || []).map((p) => (p.type === "SpreadElement" ? "..." + (p.argument.callee?.name || "?") : (p.key.name ?? p.key.value)));
@@ -466,17 +648,27 @@ test("only the files that make a take hear the voice or read a take", () => {
   assert.deepEqual(found, VOICE_FILES);
 });
 
+/**
+ * The ways off the device a script's hearers lead to: "function › kind, reached by a > b". A function made in the
+ * same function as a hearer shares what it keeps (a take kept by Stop's handler, sent by the page's pagehide
+ * handler), so the functions a hearer is made in hear too, up to the file's top: a take kept at the file's own
+ * top level, or in a global, and sent from a function that never hears is a value handed through a variable,
+ * which this does not follow.
+ */
+function leaksIn(source) {
+  const fns = functionsOf(source);
+  const hearers = new Set(Object.keys(fns).filter((n) => Object.keys(fns[n].voice).length));
+  for (let n of [...hearers]) while ((n = fns[n].outer)) hearers.add(n);
+  const reach = reachable(fns, [...hearers]);
+  return Object.keys(sinksIn(source))
+    .filter((k) => NETWORK.test(k) && reach.has(k.split(" › ")[0]))
+    .map((k) => `${k}, reached by ${reach.get(k.split(" › ")[0]).join(" > ")}`);
+}
+
 test("in those files, nothing that hears the voice leads to anything that sends", () => {
   const leaks = [];
   for (const [file, source] of Object.entries(shippedScripts("."))) {
-    if (!VOICE_FILES[file]) continue;
-    const fns = functionsOf(source);
-    const hearers = Object.keys(fns).filter((n) => Object.keys(fns[n].voice).length);
-    const reach = reachable(fns, hearers);
-    for (const key of Object.keys(sinksIn(source)).filter((k) => NETWORK.test(k))) {
-      const fn = key.split(" › ")[0];
-      if (reach.has(fn)) leaks.push(`${file}: ${key}, reached by ${reach.get(fn).join(" > ")}`);
-    }
+    if (VOICE_FILES[file]) leaks.push(...leaksIn(source).map((l) => `${file}: ${l}`));
   }
   assert.deepEqual(leaks, []);
 });
@@ -492,7 +684,7 @@ test("Start, Stop, the routines, the rating, Next and '+30 s' never reach the sa
   assert.ok(reachable(fns, PRACTICE_ROOTS).size > 150, "control: the path covers the practice code, not a stub of it");
   const path = practicePath(source, PRACTICE_ROOTS);
   for (const [name, { uses, via }] of Object.entries(path)) {
-    assert.ok(!/openPricing|openAccount/.test(uses), `${name} opens the sale on the way to practice: ${via}`);
+    assert.ok(!/openPricing|openAccount|btn-pricing/.test(uses), `${name} opens the sale on the way to practice: ${via}`);
   }
   const found = Object.fromEntries(Object.entries(path).map(([n, { uses }]) => [n, uses]));
   const expected = Object.fromEntries(Object.entries(PLAN_READERS).map(([n, [uses]]) => [n, uses]));
@@ -507,20 +699,41 @@ test("the plan is read only in the files that sell, draw Pro or keep its extras"
   assert.deepEqual(Object.keys(acrossScripts(".", billingNamesIn)).sort(), Object.keys(PLAN_FILES).sort());
 });
 
+test("every function that reads the plan or opens the sale is written down, file by file, with why", () => {
+  const found = {};
+  for (const [file, source] of Object.entries(shippedScripts("."))) {
+    for (const [fn, uses] of Object.entries(usesByFunction(source))) found[`${file} :: ${fn}`] = uses;
+  }
+  const expected = flat(Object.fromEntries(Object.entries(PLAN_USES).map(([f, rows]) => [f, Object.fromEntries(Object.entries(rows).map(([k, [u]]) => [k, u]))])));
+  assert.ok(Object.keys(found).length > 40, "control: the plan's readers are found");
+  assert.deepEqual(diffCounts(found, expected), [], "the plan is read, or the sale opened, where it was not: write it down in PLAN_USES with why, and why it cannot stop practice");
+});
+
+test("every function that opens the sign-in is written down, file by file, with why", () => {
+  const found = {};
+  for (const [file, source] of Object.entries(shippedScripts("."))) {
+    for (const [fn, uses] of Object.entries(usesByFunction(source, "account"))) {
+      const opens = uses.split(" ").filter((u) => SIGN_IN_OPENER.test(u.slice(0, u.lastIndexOf(":"))));
+      if (opens.length) found[`${file} :: ${fn}`] = opens.join(" ");
+    }
+  }
+  const expected = flat(Object.fromEntries(Object.entries(SIGN_IN_OPENERS).map(([f, rows]) => [f, Object.fromEntries(Object.entries(rows).map(([k, [u]]) => [k, u]))])));
+  assert.deepEqual(diffCounts(found, expected), [], "the sign-in is opened where it was not: write it down in SIGN_IN_OPENERS with why, and why it cannot stand in front of practice");
+});
+
 test("every event carries only the props in the plan, and nothing passes one on but the listed relays", () => {
   const calls = [];
   const relays = [];
   const unresolved = [];
   for (const [file, source] of Object.entries(shippedScripts("."))) {
-    if (file === "js/analytics.js") continue;
     const found = eventsIn(source, file);
     calls.push(...found.calls);
     relays.push(...found.relays);
     unresolved.push(...found.unresolved);
   }
   assert.ok(calls.length > 50, "control: the call sites are found");
-  assert.ok(calls.some(([, n]) => n === "tour_skip") && calls.some(([, n]) => n === "mic_primer_decline"), "control: a name made from a template is found by each name it makes");
   assert.deepEqual(unresolved, [], "an event's name made from a template that cannot be told: write the name out");
+  assert.ok(calls.some(([, n]) => n === "tour_skip") && calls.some(([, n]) => n === "mic_primer_decline"), "control: a name made from a template is found by each name it makes");
   const off = calls.filter(([, name, keys]) => !TRACKING_PLAN[name] || keys.some((k) => !TRACKING_PLAN[name].includes(k)));
   assert.deepEqual(off, [], "an event or a prop not in TRACKING_PLAN: add it there, and say it is not derived from the voice");
   assert.deepEqual([...new Set(relays)].sort(), [...TRACK_RELAYS].sort());
@@ -555,6 +768,9 @@ test("every function of js/app.js that calls into practice is on the path, or wr
   assert.ok(callers.includes("bindRetention #wb-last") && callers.includes("init"), "control: click handlers and the page's start are found as callers");
   assert.deepEqual(callers.filter((n) => !reach.has(n) && !NOT_A_WAY_IN[n]), [], "a way into practice off the path: add it to PRACTICE_ROOTS");
   assert.deepEqual(Object.keys(NOT_A_WAY_IN).filter((n) => !callers.includes(n) || reach.has(n)), [], "control: each exception still calls into practice from off the path");
+  // An exception is off the path, so nothing else reads it: a cap written in its own body would pass.
+  const reads = Object.keys(NOT_A_WAY_IN).filter((n) => Object.keys(fns[n].billing).length || Object.keys(fns[n].account).length);
+  assert.deepEqual(reads, [], "a listed exception reads the plan, opens the sale or asks about the account: a way in hidden in it");
 });
 
 test("only the files listed use the account module or ask whether the visitor is signed in", () => {
@@ -672,6 +888,45 @@ test("control: a new prop on a known event, a new event and a new relay are each
   );
   assert.deepEqual(made.calls.map(([, n]) => n), ["tour_complete", "tour_skip", "tour_closed"]);
   assert.deepEqual(made.unresolved, ["x.js:5 `take_${}`"]);
+
+  // A relay that adds to what it passes on, or writes into it, is listed as changing it; one that passes its own
+  // two parameters on as they came is not.
+  const relayed = eventsIn(
+    `
+    function plain(n, p) { window.VTAnalytics?.track?.(n, p || {}); }
+    function adds(n, p) { window.VTAnalytics?.track?.(n, { ...p, view: state.view }); }
+    function writes(n, p) { p.heard = true; window.VTAnalytics?.track?.(n, p); }
+    function renames(n, p) { n = "x_" + n; window.VTAnalytics?.track?.(n, p); }
+  `,
+    "x.js"
+  );
+  assert.deepEqual(relayed.relays, ["x.js › plain", "x.js › adds (changes what it passes on)", "x.js › writes (changes what it passes on)", "x.js › renames (changes what it passes on)"]);
+  // A template's part given another value in its own function, or a function called by any spelling but its bare
+  // name (bound, or handed to another script), cannot be told from its calls here.
+  const tour = (inside, outside = "") =>
+    eventsIn(
+      `
+    function end(reason) { if (!reason) return; ${inside} window.VTAnalytics?.track?.(\`tour_\${reason}\`, { n: 1 }); }
+    function wire() { a.onclick = () => end("skip"); ${outside} }
+  `,
+      "x.js"
+    );
+  assert.deepEqual([tour("").calls.map(([, n]) => n), tour("").unresolved], [["tour_skip"], []]);
+  assert.deepEqual(
+    [
+      tour('if (reason === "skip" && i === 0) reason = "skip_first";'),
+      tour("", "b.addEventListener('click', end.bind(null, 'close'));"),
+      tour("", "window.VTTour = { end };"),
+      tour("", "window.VTTour = { end: (r) => end(r ? 'dismiss' : false) };")
+    ].map((r) => [r.calls.map(([, n]) => n), r.unresolved]),
+    [
+      [[], ["x.js:2 `tour_${}`"]],
+      [[], ["x.js:2 `tour_${}`"]],
+      [[], ["x.js:2 `tour_${}`"]],
+      [["tour_skip", "tour_dismiss"], []]
+    ],
+    "reassigned, bound and exported are each unresolved; a wrapper that can pass only a known name is not"
+  );
 });
 
 test("control: the review's spellings of a way off the device are each found, and a module's own open or a test of beacon support is not", () => {
@@ -751,6 +1006,15 @@ test("control: the review's ways to hear the voice or read a take, and to ask ab
   assert.deepEqual(practicePath(account, ["save"], "account"), {
     save: { uses: "VTAccount:2 getState().account:1 signInWithGoogle:1", via: "save" }
   });
+  // The sale and the sign-in opened by their buttons' ids, and the plan read from its own key, with no name in sight;
+  // a dialog's own id is not the sale (closing it is everywhere).
+  const handles = `
+    function a() { $("#btn-pricing").click(); }
+    function b() { document.getElementById("btn-account")?.click(); }
+    function c() { return JSON.parse(localStorage.getItem("vt_billing_v1") || "{}").plan; }
+    function d() { $("#pricing-modal").hidden = true; }
+  `;
+  assert.deepEqual([usesByFunction(handles), usesByFunction(handles, "account")], [{ a: "#btn-pricing:1", c: "vt_billing_v1:1" }, { b: "btn-account:1" }]);
 });
 
 test("control: a cap in a callback set on a property, in a method called on this, and a hearer's method that sends are caught", () => {
@@ -789,12 +1053,66 @@ test("control: a cap in a callback set on a property, in a method called on this
   assert.deepEqual({ ...sinksIn(fields) }, { "constructor.send › sendBeacon": 1, "upload › fetch": 1 });
 });
 
+test("control: a hearer's sibling, a store's own method, a private method, a held element's handler and a function handed another are followed", () => {
+  // Stop's handler keeps the take; the page's pagehide handler, made beside it, sends it.
+  const sibling = `
+    function bindTakeTools() {
+      let last = null;
+      $("#btn-rec-stop").addEventListener("click", async () => { last = await VTStorage.getRecordingBlob(id); });
+      window.addEventListener("pagehide", () => { if (last) navigator.sendBeacon("/api/backup", last); });
+    }
+    function report() { fetch("/api/report", { method: "POST" }); }
+  `;
+  assert.deepEqual(leaksIn(sibling), ["bindTakeTools window › sendBeacon, reached by bindTakeTools > bindTakeTools window"]);
+  assert.deepEqual(leaksIn(sibling.replace("navigator.sendBeacon(\"/api/backup\", last)", "console.log(last)")), [], "a sibling that keeps the take on the device is not a leak, and a function made elsewhere that sends is not reached");
+  // The store's own method, named for what it reads, and a class's private method called on this.
+  const store = `const VTStorage = { getRecordingBlob(id) { const r = tx.get(id); r.onsuccess = () => navigator.sendBeacon("/b", r.result); } };`;
+  assert.deepEqual(leaksIn(store), ["getRecordingBlob.onsuccess › sendBeacon, reached by getRecordingBlob > getRecordingBlob.onsuccess"]);
+  const engine = `class Engine { stop() { this.recorder = new MediaRecorder(s); this.recorder.onstop = () => this.#archive(this.recBlob); } #archive(b) { fetch("/a", { body: b }); } #draw() { fetch("/x"); } }`;
+  assert.deepEqual(leaksIn(engine), ["#archive › fetch, reached by stop.onstop > #archive"], "the private method called is reached; one that is not called is not");
+  // A handler on an element kept in a variable is its own function, named by the element's selector; one on the
+  // document by the document. A function handed another as an argument reaches it.
+  const app = `
+    function bindRetention() {
+      const again = $("#wb-again");
+      again?.addEventListener("click", () => { if (!window.VTBilling?.isPro?.()) return openPricing(); startMicroSession(); });
+      document.addEventListener("visibilitychange", () => renderNextStepCard());
+    }
+    function init() { VTLoop.bind({ startDaily: proOnly(startDaily) }); }
+    function proOnly(fn) { return (...a) => (window.VTBilling?.isPro?.() ? fn(...a) : openPricing()); }
+    function startDaily() {}
+  `;
+  const fns = functionsOf(app);
+  const called = (n) => ["bindRetention #wb-again", "bindRetention document", "openPricing", "startMicroSession", "renderNextStepCard"].filter((r) => fns[n].refs.has(r));
+  assert.deepEqual(
+    Object.fromEntries(["bindRetention", "bindRetention #wb-again", "bindRetention document"].map((n) => [n, [called(n), fns[n].billing]])),
+    {
+      bindRetention: [["bindRetention #wb-again", "bindRetention document"], {}],
+      "bindRetention #wb-again": [["openPricing", "startMicroSession"], { VTBilling: 1, isPro: 1, openPricing: 1 }],
+      "bindRetention document": [["renderNextStepCard"], {}]
+    }
+  );
+  assert.ok(fns.proOnly.refs.has("startDaily") && !fns.startDaily.refs.has("proOnly"), "proOnly(startDaily) makes proOnly a caller of startDaily, not the other way");
+});
+
 test("control: an aliased push to AdSense's queue is found, and a page's JSON-LD or speculation rules do not break the scan", async () => {
   assert.deepEqual(adPushes("const q = (window.adsbygoogle = window.adsbygoogle || []); q.push({ google_ad_client: 'ca-pub-1', enable_page_level_ads: true }); (adsbygoogle = adsbygoogle || []).push({});"), ["2", "0"]);
   // By its name in brackets, through a helper that returns the queue, and through an alias of an alias of an alias.
   assert.deepEqual(adPushes("window['adsbygoogle'].push({ google_ad_client: 'ca-pub-1', enable_page_level_ads: true });"), ["2"]);
   assert.deepEqual(adPushes("adQueue().push({ a: 1 }); function adQueue() { return (window.adsbygoogle = window.adsbygoogle || []); }"), ["1"]);
   assert.deepEqual(adPushes("const a = window.adsbygoogle; const b = a; const c = b; c.push({ x: 1, y: 2, z: 3 }); [].push({ q: 1 });"), ["3"]);
+  // Taken out of an object (with a default or not), as a default parameter, and as a class field pushed on this.
+  const PAGE_ADS = "({ google_ad_client: 'ca-pub-1', enable_page_level_ads: true })";
+  assert.deepEqual(
+    [
+      `const { adsbygoogle: q } = window; q.push${PAGE_ADS};`,
+      `const { adsbygoogle: q = [] } = window; q.push${PAGE_ADS};`,
+      `function f(q = window.adsbygoogle) { q.push${PAGE_ADS}; }`,
+      `class Ads { queue = window.adsbygoogle; show() { this.queue.push${PAGE_ADS}; } }`
+    ].map(adPushes),
+    [["2"], ["2"], ["2"], ["2"]]
+  );
+  assert.deepEqual(adPushes("const { other: q } = window; q.push({ a: 1 }); function f(q = []) { q.push({ b: 1 }); }"), [], "a holder of anything else is not the queue");
   const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const root = mkdtempSync(tmpdir() + "/vt-scan-");

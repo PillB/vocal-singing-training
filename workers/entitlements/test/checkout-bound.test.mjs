@@ -387,7 +387,12 @@ test("CK12 references are swept 30 days after the checkout opened; the link they
   await openCheckout(env, services, token, { plan: "pro_monthly" }, NOW + 5);
   const ref = services.calls[0].body.request_id;
   await deliver(env, "evt_1", "checkout.completed", completedCheckout("ch_1", ref, NOW + 20), NOW + 20);
-  await openCheckout(env, services, token, { plan: "pro_yearly" }, NOW + 20 * DAY);
+  // The later checkouts are another account's: this one now has an open
+  // subscription, and a second checkout for it is refused (409
+  // subscription_open, rt2-open-subscription.test.mjs).
+  const other = await signIn(env, services, "other@example.test", NOW + 10);
+  const younger = await openCheckout(env, services, other, { plan: "pro_yearly" }, NOW + 20 * DAY);
+  assert.equal(younger.status, 200, JSON.stringify(younger.body));
   const report = await sweepExpired(env.DB, NOW + 31 * DAY);
   assert.equal(report.deleted.checkout_refs, 1, "only the one older than 30 days");
   const left = await env.DB.prepare("SELECT plan FROM checkout_refs").all();
@@ -399,8 +404,8 @@ test("CK12 references are swept 30 days after the checkout opened; the link they
   // Rows one well inside and one well outside passed with any TTL from 11 to
   // 31 days.
   const at = NOW + 60 * DAY;
-  await openCheckout(env, services, token, { plan: "pro_monthly" }, at - 30 * DAY + 1);
-  await openCheckout(env, services, token, { plan: "pro_yearly" }, at - 30 * DAY - 1);
+  await openCheckout(env, services, other, { plan: "pro_monthly" }, at - 30 * DAY + 1);
+  await openCheckout(env, services, other, { plan: "pro_yearly" }, at - 30 * DAY - 1);
   const edge = await sweepExpired(env.DB, at);
   const kept = await env.DB.prepare("SELECT created_at FROM checkout_refs").all();
   assert.deepEqual(kept.results.map((r) => Number(r.created_at)), [at - 30 * DAY + 1], JSON.stringify(edge.deleted));

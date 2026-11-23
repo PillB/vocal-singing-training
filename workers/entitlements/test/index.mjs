@@ -105,3 +105,13 @@ import "./mp-paid-first.test.mjs";
 // Euros for the European Union, dollars elsewhere (VG-85): the currency a
 // checkout is charged in, and the euro products in the allow-list and health.
 import "./checkout-currency.test.mjs";
+
+// Red team round 2 on the worker: Creem's subscription.expired is a renewal
+// being retried, not an ending (truth-1), and one test of an open subscription
+// behind both the checkout guard and /v1/me's billingRails (money-3, states-1,
+// money-7).
+import "./rt2-creem-expired.test.mjs";
+import "./rt2-open-subscription.test.mjs";
+// A refund or chargeback that embeds a subscription Creem already cancelled
+// ends it here too (verification of money-3).
+import "./rt2-creem-reversal.test.mjs";

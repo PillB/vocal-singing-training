@@ -86,6 +86,11 @@ customer's Pro for good.
 
 - `suspended` (Stripe `unpaid` or `paused`): paying the open invoice, or
   resuming, makes it active again;
+- `past_due` once its paid period is over: a renewal in dunning that the
+  provider is still retrying. Creem's `subscription.expired` is this ("Payment
+  retries can happen at this stage"), and when a retry goes through,
+  `subscription.paid` gives Pro back to the same browser (red team rt2,
+  truth-1);
 - a delayed payment that failed, with nothing paid since: Stripe keeps the
   subscription and its invoice can still be paid (`/v1/claim` answers 402 too,
   so the site keeps the checkout and claims it again on each visit for a week,
@@ -94,8 +99,20 @@ customer's Pro for good.
   charge's money went back (a refund or a chargeback): it charges again.
 
 403 for everything else that is refused: a deleted Stripe subscription, a
-paused or cancelled Mercado Pago one, a one-off payment that failed, was never
-paid or was refunded, a setup session, and a period that ran out.
+cancelled Creem one, a paused or cancelled Mercado Pago one, a one-off payment
+that failed, was never paid or was refunded, a setup session, and a period
+that ran out while the subscription still reads `active`.
+
+That last one has a known gap on Creem. A renewal that failed still reads
+`active` from its period end until Creem's daily check sends
+`subscription.expired` ("Creem checks once a day for subscriptions whose
+`current_period_end_date` fell on the previous day"), so for up to about a
+day it answers 403, and a browser without an account that asks in that
+window forgets its licence. A cancellation the customer scheduled looks the
+same until its `subscription.canceled` arrives, and no payment undoes that
+one, so the record alone cannot tell the two apart. Creem's
+`subscription.past_due` would close the window; this worker does not handle
+it yet.
 
 **What a suspended customer keeps.** No new token is issued, but the site's
 client keeps the token it already holds until that token expires: at most
@@ -127,9 +144,9 @@ routes above are untouched):
 | POST | `/v1/auth/email/verify` | `{email, code}` → `{token, account, entitlement, licenseToken}`. |
 | POST | `/v1/auth/google` | `{credential}` — a Google ID token, verified against Google's JWKS. |
 | POST | `/v1/auth/logout` | Drops the bearer session. |
-| GET | `/v1/me` | The account, its entitlement, and a fresh license token when entitled. |
+| GET | `/v1/me` | The account, its entitlement, and a fresh license token when entitled. `billingRails` names each rail on which the account has an open subscription that is not waiting for its first charge (`isManagedSubscription` in `src/license.js`): a renewal being retried after the paid period is there, so the page can offer "Manage or cancel"; a one-off payment, a preapproval nobody authorized and a cancelled subscription are not. |
 | POST | `/v1/me/link` | `{provider, sessionId}` — attaches a checkout the visitor paid for anonymously. |
-| POST | `/v1/me/checkout` | `{plan, returnPath}` → `{url}`. Opens a Creem checkout for the signed-in account: a random `request_id` (`vtr_` + 22 base64url characters) is stored in D1 `checkout_refs` for 30 days, and the `checkout.completed` webhook binds the licence to that account (VG-83). `503 checkout_unconfigured` until `CREEM_API_KEY`, the webhook secret and a product id are set. |
+| POST | `/v1/me/checkout` | `{plan, returnPath}` → `{url}`. Opens a Creem checkout for the signed-in account: a random `request_id` (`vtr_` + 22 base64url characters) is stored in D1 `checkout_refs` for 30 days, and the `checkout.completed` webhook binds the licence to that account (VG-83). `503 checkout_unconfigured` until `CREEM_API_KEY`, the webhook secret and a product id are set. `409 {ok:false, reason:"subscription_open", provider}` while the account already has an open subscription on any rail (`isOpenSubscription` in `src/license.js`, the same test as `billingRails`, plus one whose first charge is on its way), so the worker does not open a second subscription that would charge beside the first. A plan change goes through the provider's own pages. A refunded or charged-back Creem subscription is open until Creem says it is cancelled, in `subscription.canceled` or in the subscription the refund or dispute embeds. Not covered: a static payment link, which never reaches the worker, and two checkouts opened before either is paid. |
 | POST | `/v1/me/billing-portal` | → `{url}`. Creem's customer portal for the account's own Creem customer, where a subscriber manages or cancels (VG-86). `503 portal_unconfigured` without `CREEM_API_KEY`. |
 | POST | `/v1/me/trial` | Starts the one free trial. `409 {reason:"trial_used"}` the second time. |
 | POST | `/v1/me/redeem` | `{code}` — redeems a gift code. |
@@ -632,10 +649,10 @@ Subscribe exactly these events:
 | `subscription.trialing` | A Creem-side trial. Entitles, like Stripe's `trialing` |
 | `subscription.update` | The subscription's own answer for its period, so a downgrade shortens it |
 | `subscription.paused` | Nothing is being charged: suspended until a payment brings it back |
-| `subscription.canceled` | Cancelled. The period already paid for is kept |
-| `subscription.expired` | Over. Terminal: Creem gives a new purchase a new subscription id |
-| `refund.created` | Money going back. A **full** refund ends the access its transaction bought |
-| `dispute.created` | A chargeback. Ends access the day it is raised |
+| `subscription.canceled` | Cancelled, and terminal: nothing after it reopens the subscription. The period already paid for is kept. Creem: "the subscription status will be terminal only when status is changed to `canceled`" |
+| `subscription.expired` | The paid period ended without a payment, and Creem may still retry the card ("Payment retries can happen at this stage", docs.creem.io/code/webhooks). Not terminal: no Pro after the period end, the subscription stays open (named in `billingRails`, no second checkout, `/v1/license` answers 402 so a browser without an account keeps its licence), and a later `subscription.paid` brings Pro back. A snapshot that still says active is read as `past_due`. One that says `scheduled_cancel` is the cancellation the customer asked for taking effect ("after which it transitions to `canceled`"), so it is read as cancelled and terminal |
+| `refund.created` | Money going back. A **full** refund ends the access its transaction bought. When the subscription it embeds says `canceled` (as in Creem's own example), the subscription is cancelled here too, terminal, so the customer can subscribe again without waiting for `subscription.canceled`. A refund that is not full is not read at all, so its cancellation comes through `subscription.canceled` |
+| `dispute.created` | A chargeback. Ends access the day it is raised. An embedded subscription that says `canceled` cancels it here too; one that says active (Creem's example) stays open, because it may still charge |
 
 Then create **four products**: monthly and yearly, because Creem has no single
 link that offers both, each in US dollars (everywhere outside the European

@@ -417,7 +417,6 @@ function checkoutPaid(checkout) {
  */
 function mapSubscription(subscription, env, eventType) {
   const paid = eventType === "subscription.paid";
-  const expired = eventType === "subscription.expired";
   const { plan, planSource, unlisted } = planForProduct(subscriptionProduct(subscription), env);
   const endedAt = isoSeconds(subscription && subscription.canceled_at);
   const status = subscriptionEventStatus(subscription, eventType);
@@ -451,15 +450,37 @@ function mapSubscription(subscription, env, eventType) {
     // of the error. Treating the answer as current risks locking a paying
     // subscriber out of a month they paid for. Treating it as a floor risks
     // leaving a provider-side downward correction unapplied for at most one
-    // period, after which a cancellation, an expiry or a refund ends access
+    // period, after which access stops unless a renewal is paid, and a
+    // cancellation of an unpaid subscription or a refund ends it sooner
     // through its own path, none of which reads this field. Everywhere else in
     // this worker the same tie-break goes the same way.
     periodEndIsFloor: true,
     endedAt: status === "canceled" ? endedAt : undefined,
-    // Creem does not bring an expired subscription back: a new purchase is a
-    // new subscription with a new id. A cancellation is not terminal, because
-    // the expiry that follows it still has something to say.
-    terminal: expired
+    // Only a cancellation ends a Creem subscription for good: the event, an
+    // expiry whose snapshot says canceled or scheduled_cancel
+    // (`subscriptionEventStatus`), or money going back whose subscription says
+    // canceled (`reversalEnding`). Creem's docs:
+    // "the subscription status will be terminal only when status is changed
+    // to `canceled`", and `subscription.canceled` "also fires when a
+    // scheduled cancellation takes effect at the end of the period"
+    // (docs.creem.io/code/webhooks; the creem-api skill's WEBHOOKS page:
+    // "Only act on subscription.canceled for terminal state", both read 23
+    // November 2026). So nothing after it (a late expiry, a stray payment)
+    // reopens it. What it leaves is the period its own snapshot names: Creem's
+    // example of the event carries `current_period_end_date`, and a period
+    // only ever lengthens (`periodEndIsFloor`), so a renewal paid before the
+    // cancellation keeps its month. The cost, measured rather than assumed: a
+    // cancellation whose snapshot names no period end, processed before the
+    // renewal it followed, leaves that renewal's month unrestored, because
+    // store.js `restoreDeletedPeriod` only gives back the period of a
+    // subscription that was not paid up when it ended.
+    //
+    // `subscription.expired` used to be the terminal one, on the unsourced
+    // belief that Creem never brings an expired subscription back. Creem says
+    // the opposite (see `subscriptionEventStatus`), and the belief cost a
+    // subscriber in dunning their Manage button and, once the retry charged
+    // the card, the Pro they had paid for (red team rt2, truth-1).
+    terminal: status === "canceled"
   };
 }
 
@@ -469,11 +490,47 @@ function subscriptionProduct(subscription) {
   return (subscription && subscription.product) || (item && item.product_id);
 }
 
-/** Our status for a subscription event: an expiry or a cancellation ends it, any other event reads the subscription's own status. */
+/**
+ * Our status for a subscription event: a cancellation ends it whatever its
+ * snapshot says, an expiry is a renewal being retried, and any other event
+ * reads the subscription's own status.
+ *
+ * `subscription.expired` is not an ending. Creem: "The subscription was
+ * expired, given that the `current_period_end_date` has been reached without
+ * a new payment. Payment retries can happen at this stage", "The event
+ * doesn't change the subscription, and `status` shows its current value"
+ * (docs.creem.io/code/webhooks), and "Status remains 'active' during retry
+ * period" (the creem-api skill's WEBHOOKS page), both read 23 November 2026.
+ * So an expiry whose snapshot still says active is our "past_due": the
+ * period is over and gives no Pro (`isTokenIssuable` reads the period end),
+ * the subscription is still open and charging (`isOpenSubscription`), and a
+ * `subscription.paid` from a retry that goes through brings Pro back. An
+ * expiry whose snapshot says anything else keeps what it says: a cancelled
+ * one stays cancelled, a paused one suspended.
+ *
+ * The exception is read from Creem's own status, before it is mapped: an
+ * expiry whose snapshot says `scheduled_cancel` is a cancellation the
+ * customer asked for taking effect, and so "canceled". `STATUS_MAP` reads
+ * `scheduled_cancel` as active, which is right while its period runs, but
+ * Creem says such a subscription "remains active until
+ * `current_period_end_date`, after which it transitions to `canceled`", and
+ * nothing retries it. Read as dunning, it told a customer who chose to
+ * cancel that a payment had failed, and refused them a new checkout until
+ * `subscription.canceled` arrived (red team rt2, verification of truth-1).
+ * @param {Object} subscription Creem subscription object.
+ * @param {string} eventType The event's type.
+ * @returns {string} Our status.
+ */
 function subscriptionEventStatus(subscription, eventType) {
-  const expired = eventType === "subscription.expired";
-  const canceled = eventType === "subscription.canceled";
-  return expired || canceled ? "canceled" : mapCreemStatus(subscription && subscription.status);
+  if (eventType === "subscription.canceled") {
+    return "canceled";
+  }
+  const raw = subscription && subscription.status;
+  if (eventType === "subscription.expired" && raw === "scheduled_cancel") {
+    return "canceled";
+  }
+  const status = mapCreemStatus(raw);
+  return eventType === "subscription.expired" && status === "active" ? "past_due" : status;
 }
 
 /**
@@ -538,6 +595,9 @@ function transactionAmountPaid(transaction) {
  * `reverseLatestCharge` is the fallback for a record that never recorded a
  * transaction id, and never mints anything — `requireExisting` is what keeps
  * money going back from creating a license.
+ *
+ * When the subscription it embeds already says it was cancelled, the
+ * cancellation applies too (`reversalEnding`).
  * @param {Object} object Creem refund or dispute object.
  * @returns {Object} Entitlement update descriptor.
  */
@@ -553,8 +613,42 @@ function mapReversal(object) {
     paymentId: transactionIdOf(object),
     requireExisting: true,
     isReversal: true,
-    reverseLatestCharge: true
+    reverseLatestCharge: true,
+    ...reversalEnding(object)
   };
+}
+
+/**
+ * The cancellation a refund or a dispute carries, when the subscription it
+ * embeds says it is over: `{status: "canceled", terminal: true, endedAt}`,
+ * else nothing.
+ *
+ * Creem's own example of `refund.created` embeds the subscription with
+ * `status: "canceled"` and its `canceled_at` (docs.creem.io/code/webhooks,
+ * read 23 November 2026): refunding a subscription's charge there usually
+ * cancels it. Left unread, the refunded customer's record stayed an open
+ * subscription, so `/v1/me/checkout` refused them a new one (409
+ * `subscription_open`) and `/v1/me` offered a subscription to manage that
+ * Creem had already ended, unless a separate `subscription.canceled` came
+ * (red team rt2, verification of money-3). A snapshot is safe to apply in
+ * any order when it says "canceled", because on Creem that is terminal: no
+ * later state can follow it.
+ *
+ * Only an ending is read here. A snapshot that says active (Creem's example
+ * of `dispute.created`) changes nothing, because the subscription may still
+ * charge, and a refund that is not full is not mapped at all
+ * (`isFullCreemRefund`): its cancellation, if any, comes through
+ * `subscription.canceled`.
+ * @param {Object} object Creem refund or dispute object.
+ * @returns {Object} The fields to add, or an empty object.
+ */
+function reversalEnding(object) {
+  const subscription = object && object.subscription;
+  if (!subscription || typeof subscription !== "object"
+    || mapCreemStatus(subscription.status) !== "canceled") {
+    return {};
+  }
+  return { status: "canceled", terminal: true, endedAt: isoSeconds(subscription.canceled_at) };
 }
 
 /**

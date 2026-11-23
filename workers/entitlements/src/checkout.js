@@ -42,7 +42,7 @@
 
 import { deadlineMs } from "./deadline.js";
 import { CHECKOUT_REF_TTL_SECONDS, ensureSchema, hitRateLimit, mintId, nowSec } from "./db.js";
-import { linkLicense, listLinkedLicenses } from "./grants.js";
+import { findOpenSubscription, linkLicense, listLinkedLicenses } from "./grants.js";
 import { ledgerReader } from "./ledger.js";
 import { getEntitlement } from "./store.js";
 
@@ -380,6 +380,22 @@ async function recordCheckoutRef(db, row, at) {
  * currency?: "USD"|"EUR"}` (no currency is "USD"). Answers `{ok: true, url}`
  * with the Creem page to send the buyer to; 409 `currency_unavailable` for a
  * currency with no product for that plan, 400 `invalid_currency` for any other.
+ *
+ * Refuses with 409 `{ok: false, reason: "subscription_open", provider}` while
+ * the account already has an open subscription on any rail (license.js
+ * `isOpenSubscription`, the same test `/v1/me`'s `billingRails` reads), and
+ * names that rail so the page can send them to its Manage route instead. A
+ * second subscription would charge every month beside the first: a renewal
+ * being retried after the paid period charges again the day the card
+ * recovers, and a first charge on its way is taken all the same (red team
+ * rt2, money-3 and states-1). Creem's own route back from a failed renewal is
+ * the old subscription: "If a retry succeeds, the subscription transitions
+ * back to `active`", and "Customers can update their payment method through
+ * the Customer Portal" (docs.creem.io, webhooks and Managing Subscriptions,
+ * read 23 November 2026).
+ * The price of the rule, stated: a subscriber who wants to change plan does it
+ * on the provider's own pages (Creem's portal, or the upgrade Creem's API
+ * offers the operator), not here.
  * @param {Request} request Incoming request.
  * @param {Object} env Worker env bindings.
  * @param {Object} deps `{json, cors, now, fetchImpl, timeoutMs, requireSession, readJsonBody}`.
@@ -397,6 +413,10 @@ export async function handleCreateCheckout(request, env, deps) {
   const asked = parsed.ok ? checkoutRequest(parsed.body, env) : { reason: parsed.reason, status: 400 };
   if (asked.reason) {
     return deps.json({ ok: false, reason: asked.reason }, asked.status, deps.cors);
+  }
+  const open = await findOpenSubscription(env.DB, ledgerReader(env), gate.account.id);
+  if (open) {
+    return deps.json({ ok: false, reason: "subscription_open", provider: open.provider }, 409, deps.cors);
   }
   const ref = mintId("vtr", 16);
   const answer = await callCreem(env, "/v1/checkouts", {

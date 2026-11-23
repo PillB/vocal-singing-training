@@ -415,7 +415,7 @@ test("a trialing subscription entitles and a paused one does not", async () => {
   assert.equal(await claim(env, "ch_6", 5), 402, "suspended: a payment could still bring it back");
 });
 
-test("a cancelled subscription keeps the period it paid for, and an expired one does not come back", async () => {
+test("a cancelled subscription keeps the period it paid for, and nothing after the cancellation reopens it", async () => {
   const env = freshEnv();
   await deliver(env, "evt_1", "checkout.completed", 0, checkout("ch_7", "sub_7"));
   await deliver(env, "evt_2", "subscription.paid", 0, paid("sub_7", "tran_1", 31, 0));
@@ -427,10 +427,12 @@ test("a cancelled subscription keeps the period it paid for, and an expired one 
     canceled_at: iso(31)
   }));
   assert.equal(await claim(env, "ch_7", 33), 403);
-  // Creem does not revive an expired subscription: a new purchase is a new
-  // subscription with a new id, so nothing after this may lift it.
+  // A cancellation is terminal: "the subscription status will be terminal
+  // only when status is changed to `canceled`" (docs.creem.io/code/webhooks).
+  // The expiry that followed it changes nothing, and nothing after it may
+  // lift it. (An expiry on its own is not an ending: rt2-creem-expired.test.mjs.)
   await deliver(env, "evt_5", "subscription.paid", 33, paid("sub_7", "tran_2", 62, 33));
-  assert.equal(await claim(env, "ch_7", 40), 403, "an expired subscription stays expired");
+  assert.equal(await claim(env, "ch_7", 40), 403, "a cancelled subscription stays cancelled");
 });
 
 /* ---------------------------------------------------------- money going back */

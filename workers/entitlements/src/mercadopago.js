@@ -133,6 +133,65 @@ export function normalizeTimestampSeconds(value) {
 }
 
 /**
+ * A resource id as a notification may carry it: a non-empty string, or a
+ * finite number. Anything else JSON can hold is no id. An object in particular
+ * is refused rather than converted, because `{"toString":1}` has no string
+ * value and `String()` throws on it, before the signature is checked.
+ * @param {unknown} value Candidate id.
+ * @returns {string|null} The id as a string, or null.
+ */
+function idValue(value) {
+  if (typeof value === "string") {
+    return value ? value : null;
+  }
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : null;
+}
+
+/**
+ * The `data.id` of a notification body, read only from an object: a falsy
+ * `data` (`{"data":0}`) is no container, and must not stand in as the id
+ * itself, as `body.data && body.data.id` let it.
+ * @param {Object} body Parsed notification body.
+ * @returns {string|null} The id, or null.
+ */
+function bodyDataId(body) {
+  const data = body && body.data;
+  return data && typeof data === "object" ? idValue(data.id) : null;
+}
+
+/**
+ * The resource id a notification names, which is also the id its signature
+ * covers. Mercado Pago signs `id:[data.id_url]`, and "los parámetros con el
+ * sufijo _url provienen de query params" (Webhooks, "Validar origen de la
+ * notificación"), so the query string's `data.id` comes first and the body's
+ * only stands in when the query has none. The legacy IPN shape names the
+ * resource as a bare `id`, in the query or the body.
+ * @param {Object} body Parsed notification body.
+ * @param {URLSearchParams|null} query Request query.
+ * @returns {string|null} Resource id.
+ */
+function notificationResourceId(body, query) {
+  return idValue(query && query.get("data.id"))
+    || bodyDataId(body)
+    || idValue(query && query.get("id"))
+    || idValue(body && body.id);
+}
+
+/**
+ * The kind of resource a notification names: its `type` (or legacy `topic`),
+ * in the body or else the query.
+ * @param {Object} body Parsed notification body.
+ * @param {URLSearchParams|null} query Request query.
+ * @returns {string|null} Kind.
+ */
+function notificationKind(body, query) {
+  const raw = (body && (body.type || body.topic))
+    || (query && (query.get("type") || query.get("topic")))
+    || null;
+  return typeof raw === "string" ? raw.trim() : null;
+}
+
+/**
  * Work out which API resource a notification points at.
  * @param {Object} body Parsed notification body.
  * @param {URL} [url] Request URL (Mercado Pago also passes topic/id as query params).
@@ -140,16 +199,12 @@ export function normalizeTimestampSeconds(value) {
  */
 export function resolveNotificationTarget(body, url) {
   const query = url && url.searchParams ? url.searchParams : null;
-  const rawKind = (body && (body.type || body.topic))
-    || (query && (query.get("type") || query.get("topic")))
-    || null;
-  const kind = typeof rawKind === "string" ? rawKind.trim() : null;
-  const rawId = (body && body.data && body.data.id)
-    || (query && (query.get("data.id") || query.get("id")))
-    || (body && body.id)
-    || null;
-  const id = rawId === null || rawId === undefined ? null : String(rawId);
-  const eventIdSource = (body && (body.id || (body.data && body.data.id))) || id;
+  const kind = notificationKind(body, query);
+  const id = notificationResourceId(body, query);
+  // The notification's own id when it has one, else the resource's: both
+  // checked like the id itself, since a template literal throws on the same
+  // values `String()` does.
+  const eventIdSource = idValue(body && body.id) || bodyDataId(body) || id;
   const action = body && typeof body.action === "string" ? body.action : kind;
   const eventId = eventIdSource ? `${action || "event"}:${eventIdSource}` : null;
   return { kind, id, eventId };
@@ -432,13 +487,9 @@ export function resourceOccurredAt(resource) {
  * @returns {Object} Entitlement update descriptor.
  */
 export function mapPaymentResource(payment, env) {
-  const metadata = (payment && payment.metadata) || {};
-  const byText = planFromText(payment && payment.external_reference)
-    || planFromText(metadata.plan)
-    || planFromText(payment && payment.description);
-  const subscriptionId = (payment && (payment.preapproval_id || metadata.preapproval_id)) || null;
-  const approved = String(payment && payment.status) === "approved";
-  const reversed = isReversedPayment(payment && payment.status);
+  const p = payment || {};
+  const subscriptionId = p.preapproval_id || (p.metadata && p.metadata.preapproval_id) || null;
+  const approved = String(p.status) === "approved";
   const occurredAt = resourceOccurredAt(payment);
   // A subscription's charge that has not gone through says nothing new about
   // the subscription: Mercado Pago retries it, and the preapproval and
@@ -447,29 +498,64 @@ export function mapPaymentResource(payment, env) {
   // back says nothing about the subscription's state either: the reversal
   // below ends the period it paid for, without moving the subscription's clock.
   const silent = Boolean(subscriptionId) && !approved;
-  // Checkout Pro / payment links have no subscription lifecycle behind them, so
-  // nothing would ever expire this record. Entitle for one plan interval from
-  // the approval instead; a renewal payment extends it. Only money that arrived
-  // buys time: an unpaid voucher or a turned-down card gets none.
-  const chargedAt = approved
-    ? (isoToUnixSeconds(payment && payment.date_approved) || isoToUnixSeconds(payment && payment.date_created))
-    : null;
-  // A subscription's charge does not say which plan the subscription is on, so
-  // only explicit text may set it; the monthly default would downgrade a
-  // yearly subscription.
-  const plan = subscriptionId ? (byText || undefined) : (byText || "pro_monthly");
+  const named = silent ? {} : paymentPlan(p, subscriptionId);
   return {
     provider: "mercadopago",
-    claimId: payment && payment.id !== undefined && payment.id !== null ? String(payment.id) : null,
+    // A payment's id is Mercado Pago's operation number: sequential, and
+    // printed on the payer's receipt. A subscription's charge is never filed
+    // under it, or holding a receipt (or walking the numbers near one) claimed
+    // the subscription, and linking by it took the subscription from its payer
+    // for good. A subscription is claimed by its preapproval id, the 32-hex id
+    // the payer's browser comes back with. Only a one-off payment, which comes
+    // back with nothing but its number, is filed under it, and claims by such
+    // a number are throttled (MP_CLAIM_IP_LIMIT).
+    claimId: subscriptionId ? null : idValue(p.id),
     subscriptionId: subscriptionId ? String(subscriptionId) : null,
-    customerId: payment && payment.payer && payment.payer.id ? String(payment.payer.id) : null,
-    plan: silent ? undefined : plan,
-    planSource: silent || !plan ? undefined : (byText ? "payment_text" : "default(payment)"),
-    status: silent ? undefined : mapOneOffPaymentStatus(payment && payment.status),
+    customerId: p.payer && p.payer.id ? String(p.payer.id) : null,
+    plan: named.plan,
+    planSource: named.planSource,
+    status: silent ? undefined : mapOneOffPaymentStatus(p.status),
     // `date_of_expiration` is the voucher's or payment's deadline, not a
     // paid-through date, so it never becomes the period end.
     periodEnd: undefined,
-    periodEndFromCharge: chargedAt,
+    // Checkout Pro / payment links have no subscription lifecycle behind them,
+    // so nothing would ever expire this record. Entitle for one plan interval
+    // from the approval instead; a renewal payment extends it. Only money that
+    // arrived buys time: an unpaid voucher or a turned-down card gets none.
+    periodEndFromCharge: approved ? chargeTime(p, null) : null,
+    ...paymentReversal(p, subscriptionId, occurredAt),
+    occurredAt: silent ? null : occurredAt
+  };
+}
+
+/**
+ * The plan a payment names, and how. A subscription's charge does not say
+ * which plan the subscription is on, so only explicit text may set it; the
+ * monthly default would downgrade a yearly subscription. A one-off payment
+ * with no text is a month.
+ * @param {Object} payment Payment resource.
+ * @param {string|null} subscriptionId The preapproval it belongs to, if any.
+ * @returns {{plan: string|undefined, planSource: string|undefined}} Plan and source.
+ */
+function paymentPlan(payment, subscriptionId) {
+  const byText = planFromText(payment.external_reference)
+    || planFromText(payment.metadata && payment.metadata.plan)
+    || planFromText(payment.description);
+  const plan = byText || (subscriptionId ? undefined : "pro_monthly");
+  return { plan, planSource: plan ? (byText ? "payment_text" : "default(payment)") : undefined };
+}
+
+/**
+ * What a payment says about money going back, or a subscription's charge
+ * turned down.
+ * @param {Object} payment Payment resource.
+ * @param {string|null} subscriptionId The preapproval it belongs to, if any.
+ * @param {number|null} occurredAt When the payment was last updated.
+ * @returns {{reversedAt: number|undefined, reversedChargeAt: number|undefined, declinedAt: number|undefined}} Fields.
+ */
+function paymentReversal(payment, subscriptionId, occurredAt) {
+  const reversed = isReversedPayment(payment.status);
+  return {
     // Money given back (a refund, a chargeback) takes the access it paid for
     // with it, from the moment it left, whether the payment stood alone or was
     // a subscription's charge. When the charge went through tells the store
@@ -478,10 +564,7 @@ export function mapPaymentResource(payment, env) {
     reversedChargeAt: reversed ? chargeTime(payment, occurredAt) : undefined,
     // A subscription's charge that was turned down: the store ends the period
     // when the subscription stops, unless a charge has gone through since.
-    declinedAt: subscriptionId && isDeclinedPayment(payment && payment.status)
-      ? chargeTime(payment, occurredAt)
-      : undefined,
-    occurredAt: silent ? null : occurredAt
+    declinedAt: subscriptionId && isDeclinedPayment(payment.status) ? chargeTime(payment, occurredAt) : undefined
   };
 }
 
@@ -537,39 +620,30 @@ export function mapPreapprovalResource(preapproval, env) {
  * @returns {Object} Entitlement update descriptor.
  */
 export function mapAuthorizedPaymentResource(authorized, env) {
-  const paymentStatus = authorized && authorized.payment && authorized.payment.status;
+  const a = authorized || {};
+  const payment = a.payment || {};
   // Only a charge whose money arrived says anything new. One still in flight
   // or turned down (an uncaptured "authorized" hold included) leaves the
   // subscription as it was, as on the payment topic: Mercado Pago retries it,
   // and the preapproval notifications carry the subscription's state and
   // period. It does not move the clock either, or the subscription's own,
   // older notification would be refused as stale.
-  const approved = paymentStatus
-    ? String(paymentStatus) === "approved"
-    : String(authorized && authorized.status) === "processed";
-  const subscriptionId = authorized && authorized.preapproval_id ? String(authorized.preapproval_id) : null;
-  const payment = (authorized && authorized.payment) || {};
+  const approved = payment.status
+    ? String(payment.status) === "approved"
+    : String(a.status) === "processed";
   const occurredAt = resourceOccurredAt(authorized);
   // A refunded or charged-back charge ends the period it paid for, as on the
   // payment topic, and likewise leaves the subscription's state and clock to
   // the subscription's own notifications.
-  const reversed = isReversedPayment(paymentStatus);
-  const dueAt = isoToUnixSeconds(authorized && authorized.debit_date)
-    || isoToUnixSeconds(authorized && authorized.date_created)
-    || occurredAt;
-  // A recurring charge extends the period by one interval of whatever plan the
-  // license already holds (the store knows it; this resource does not).
-  const chargedAt = approved
-    ? (isoToUnixSeconds(payment.date_approved)
-      || isoToUnixSeconds(authorized && authorized.debit_date)
-      || isoToUnixSeconds(authorized && authorized.date_created))
-    : null;
+  const reversed = isReversedPayment(payment.status);
+  const dueAt = chargeDueAt(a, occurredAt);
   return {
     provider: "mercadopago",
-    claimId: authorized && authorized.id !== undefined && authorized.id !== null
-      ? String(authorized.id)
-      : null,
-    subscriptionId,
+    // A recurring charge's id is a number like a payment's (see
+    // mapPaymentResource), and the charge belongs to the subscription: it is
+    // found through `subscriptionId`, and claimed by the preapproval id alone.
+    claimId: null,
+    subscriptionId: a.preapproval_id ? String(a.preapproval_id) : null,
     customerId: null,
     plan: undefined,
     planSource: undefined,
@@ -577,20 +651,29 @@ export function mapAuthorizedPaymentResource(authorized, env) {
     // `next_retry_date` is a dunning date, not a paid-through date: never let it
     // become the period end.
     periodEnd: undefined,
-    periodEndFromCharge: chargedAt,
+    // A recurring charge extends the period by one interval of whatever plan the
+    // license already holds (the store knows it; this resource does not).
+    periodEndFromCharge: approved ? (isoToUnixSeconds(payment.date_approved) || chargeDueAt(a, null)) : null,
     reversedAt: reversed ? occurredAt : undefined,
-    reversedChargeAt: reversed
-      ? chargeTime(payment, isoToUnixSeconds(authorized && authorized.debit_date)
-        || isoToUnixSeconds(authorized && authorized.date_created)
-        || occurredAt)
-      : undefined,
+    reversedChargeAt: reversed ? chargeTime(payment, dueAt) : undefined,
     // A charge that was turned down, as on the payment topic. Dated by when it
     // was due, so a retry that goes through later is the newer of the two. One
     // not yet due when it was last updated was called off (stopping the
     // subscription does that to its next charge), not turned down.
-    declinedAt: isDeclinedPayment(paymentStatus) && !(dueAt > occurredAt) ? dueAt : undefined,
+    declinedAt: isDeclinedPayment(payment.status) && !(dueAt > occurredAt) ? dueAt : undefined,
     occurredAt: approved ? occurredAt : null
   };
+}
+
+/**
+ * When a recurring charge was due: its debit date, else when it was created,
+ * else `fallback`.
+ * @param {Object} authorized Authorized payment resource.
+ * @param {number|null} fallback Unix seconds to use when it says nothing.
+ * @returns {number|null} Unix seconds or null.
+ */
+function chargeDueAt(authorized, fallback) {
+  return isoToUnixSeconds(authorized.debit_date) || isoToUnixSeconds(authorized.date_created) || fallback;
 }
 
 /**

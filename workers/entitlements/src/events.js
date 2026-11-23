@@ -40,7 +40,7 @@
 
 "use strict";
 
-import { callerIp, ensureSchema, hitRateLimit, hmacSha256Hex, nowSec, peekRateLimit } from "./db.js";
+import { addressBlock, callerIp, ensureSchema, hitRateLimit, hmacSha256Hex, nowSec, peekRateLimit } from "./db.js";
 import { compareMeans, compareRates, homogeneity, meanFromSums, sampleRatioMismatch, wilson } from "./stats.js";
 import { handleLayouts, LAYOUT_EVENTS } from "./layouts.js";
 
@@ -98,7 +98,8 @@ export const EXPOSURE_IP_CAP = [100, 86400];
  * rolling window.
  *
  * `EVENTS_DAILY_CAP` in the environment overrides it, which is what a deploy on
- * the $5 plan wants: there the same ceiling is 500 times higher.
+ * the $5 plan wants: there D1 has no daily limit (50 million rows written a
+ * month are included, then $1.00 a million).
  */
 export const EVENTS_DAILY_CAP = [10000, 86400];
 
@@ -703,7 +704,27 @@ export function ipKeyConfigured(env) {
  * @returns {Promise<string>} 24 hex characters.
  */
 export async function ipBucketKey(env, request, at, scope = "events") {
-  return (await hmacSha256Hex(ipSecret(env), `${scope}:${callerIp(request)}:${Math.floor(at / DAY)}`)).slice(0, 24);
+  return addressKey(env, callerIp(request), at, scope);
+}
+
+/**
+ * The rate-limit bucket for the block of addresses the caller holds
+ * (`addressBlock`: the IPv4 address, or the IPv6 /56), pseudonymised the same
+ * way as ipBucketKey. For a limit that moving to the next address must not
+ * reset; an IPv4 caller gets the same key from either.
+ * @param {Object} env Worker env bindings.
+ * @param {Request} request Incoming request.
+ * @param {number} at Unix seconds.
+ * @param {string} scope The route the bucket belongs to.
+ * @returns {Promise<string>} 24 hex characters.
+ */
+export async function addressBlockKey(env, request, at, scope) {
+  return addressKey(env, addressBlock(callerIp(request)), at, scope);
+}
+
+/** The keyed, per-day, per-scope pseudonym of an address or block. */
+async function addressKey(env, address, at, scope) {
+  return (await hmacSha256Hex(ipSecret(env), `${scope}:${address}:${Math.floor(at / DAY)}`)).slice(0, 24);
 }
 
 /**

@@ -1634,24 +1634,6 @@
       "name": "Async function 'verifyLicenseToken'"
     },
     {
-      "file": "workers/entitlements/src/mercadopago.js",
-      "sha": "1214b0c1bd5464fa96ad51a3bedc29015bdb2b403f0562d9b41d41a90d8a4732",
-      "complexity": 31,
-      "name": "Function 'mapAuthorizedPaymentResource'"
-    },
-    {
-      "file": "workers/entitlements/src/mercadopago.js",
-      "sha": "f042f25583e645e532905d272959bd34297272df3c1f2b0de2a3b0a6e58fef37",
-      "complexity": 39,
-      "name": "Function 'mapPaymentResource'"
-    },
-    {
-      "file": "workers/entitlements/src/mercadopago.js",
-      "sha": "522dfe9f13f3894baa07a4ba9acb371be9bf5554bc7ad46bbd8da4b975372c93",
-      "complexity": 28,
-      "name": "Function 'resolveNotificationTarget'"
-    },
-    {
       "file": "workers/entitlements/test/d1-fake.mjs",
       "sha": "435dcee10759efb20ca088e49445a61dd8a3381f65da97677d10db441aa8ea60",
       "complexity": 24,

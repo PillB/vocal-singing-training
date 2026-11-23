@@ -45,7 +45,7 @@
 
 "use strict";
 
-import { readJsonBody, requireSession, routeAccountApi, authMethods, requireAdmin } from "./api.js";
+import { readJsonBody, requireSession, routeAccountApi, authMethods, requireAdmin, lookUpClaimId } from "./api.js";
 import { asksFirst, callerCountry, routeEventsApi } from "./events.js";
 import {
   ensureSchema,
@@ -73,7 +73,6 @@ import { confirmAndMapNotification, resolveNotificationTarget, verifyMercadoPago
 import {
   clearEventSeen,
   getEntitlement,
-  getLicenseIdForClaim,
   markEventSeen,
   noteRefusal,
   toPublicEntitlement,
@@ -209,7 +208,16 @@ function clockSeconds(options) {
 }
 
 /**
- * Run a webhook and, if it fails for any reason, leave a row saying so.
+ * Run a verified webhook's work and, if it fails for any reason, leave a row
+ * saying so.
+ *
+ * Only what runs after the signature has verified is wrapped. The recorder
+ * used to wrap whole handlers, so anything that threw before verification
+ * raised the alarm as well: an unsigned POST whose `data.id` was
+ * `{"toString":1}`, or a body stream that broke half way, turned
+ * `/v1/health?probe=1` red for an hour, and replaced the detail of a real
+ * failure recorded in that hour. Nobody can be allowed to raise the one alarm
+ * that says purchases may be going unrecorded.
  *
  * The row is in D1, which is a different service and a different daily budget
  * from KV, and that is the whole point: KV meters writes separately from reads,
@@ -222,8 +230,9 @@ function clockSeconds(options) {
  * @param {Object} env Worker env bindings.
  * @param {string} rail Provider name, a fixed string from this module.
  * @param {{now?: number}} [options] Router options.
- * @param {Function} run The handler.
- * @returns {Promise<Response>} Whatever the handler returned.
+ * @param {Function} run The verified work: the ledger transaction, which
+ *   writes the event's idempotency marker first.
+ * @returns {Promise<Response>} Whatever the work returned.
  */
 async function recordingFailure(env, rail, options, run) {
   try {
@@ -259,7 +268,8 @@ async function handleStripeWebhook(request, env, options) {
   if (!event || typeof event.id !== "string") {
     return json({ ok: false, reason: "malformed_event" }, 400);
   }
-  return runLedgerTransaction(env, (kv) => applyStripeEvent(kv, event, env, options), ledgerOptions(options));
+  return recordingFailure(env, "stripe", options,
+    () => runLedgerTransaction(env, (kv) => applyStripeEvent(kv, event, env, options), ledgerOptions(options)));
 }
 
 /**
@@ -368,7 +378,8 @@ async function handleCreemWebhook(request, env, options) {
   if (!event || typeof event.id !== "string") {
     return json({ ok: false, reason: "malformed_event" }, 400);
   }
-  return runLedgerTransaction(env, (kv) => applyCreemEvent(kv, event, env, options), ledgerOptions(options));
+  return recordingFailure(env, "creem", options,
+    () => runLedgerTransaction(env, (kv) => applyCreemEvent(kv, event, env, options), ledgerOptions(options)));
 }
 
 /**
@@ -458,7 +469,8 @@ async function handleMercadoPagoWebhook(request, env, url, options) {
   if (!target.kind || !target.id) {
     return json({ ok: true, reason: "missing_target" }, 200);
   }
-  return runLedgerTransaction(env, (kv) => applyMercadoPagoNotification(kv, target, env, options), ledgerOptions(options));
+  return recordingFailure(env, "mercadopago", options,
+    () => runLedgerTransaction(env, (kv) => applyMercadoPagoNotification(kv, target, env, options), ledgerOptions(options)));
 }
 
 /**
@@ -497,9 +509,10 @@ async function applyMercadoPagoNotification(kv, target, env, options) {
  * @param {Request} request Incoming request.
  * @param {Object} env Worker env bindings.
  * @param {Object} cors CORS headers.
+ * @param {{now?: number}} [options] Injectable clock, for tests.
  * @returns {Promise<Response>} Response.
  */
-async function handleClaim(request, env, cors) {
+async function handleClaim(request, env, cors, options) {
   const body = await readRawBody(request);
   if (!body.ok) {
     return json({ ok: false, reason: body.reason }, 413, cors);
@@ -513,13 +526,15 @@ async function handleClaim(request, env, cors) {
   if (typeof sessionId !== "string" || !sessionId || sessionId.length > MAX_SESSION_ID_LENGTH) {
     return json({ ok: false, reason: "bad_request" }, 400, cors);
   }
-  const ledger = ledgerReader(env);
-  const licenseId = await getLicenseIdForClaim(ledger, provider, sessionId);
-  if (!licenseId) {
+  const found = await lookUpClaimId(env, request, provider, sessionId, clockSeconds(options));
+  if (found.refused) {
+    return json({ ok: false, reason: "rate_limited", retryAfter: found.refused.retryAfter }, 429, cors);
+  }
+  if (!found.licenseId) {
     // The webhook may simply not have landed yet; the client retries on 202.
     return json({ ok: false, reason: "pending" }, 202, cors);
   }
-  const record = await getEntitlement(ledger, licenseId);
+  const record = await getEntitlement(ledgerReader(env), found.licenseId);
   if (!record) {
     return json({ ok: false, reason: "not_found" }, 404, cors);
   }
@@ -710,23 +725,26 @@ function handleGeo(request, cors) {
   return json({ ok: true, country: country || null, placed: !!country, askFirst: asksFirst(request) }, 200, cors);
 }
 
-/** POST /v1/webhooks/*: refuse any other method, then run the rail's handler inside `recordingFailure`. */
+/**
+ * POST /v1/webhooks/*: refuse any other method, then run the rail's handler.
+ *
+ * Each handler wraps its own verified work in `recordingFailure`, from the
+ * ledger transaction on. That still covers the write most likely to fail —
+ * `markEventSeen`, the idempotency marker, is the transaction's first — and
+ * everything after it: a refused write, a refused read, a bug. What it no
+ * longer covers is the work before the signature, which anybody can make
+ * throw (see `recordingFailure`).
+ */
 function routeWebhook(request, env, url, path, options) {
   if (request.method !== "POST") {
     return json({ ok: false, reason: "method_not_allowed" }, 405, { allow: "POST" });
   }
-  // Wrapped here rather than inside each handler, because the first thing
-  // every one of them does is a KV write — `markEventSeen`, the idempotency
-  // marker — and that one is outside their own try blocks. Which makes it the
-  // single most likely place for the day's 1,000th KV write to throw, and the
-  // place whose failure the read-only health probe could not see at all. At
-  // this level nothing can escape: a refused write, a refused read, a bug.
   if (path === "/v1/webhooks/stripe") {
-    return recordingFailure(env, "stripe", options, () => handleStripeWebhook(request, env, options));
+    return handleStripeWebhook(request, env, options);
   }
   return path === "/v1/webhooks/creem"
-    ? recordingFailure(env, "creem", options, () => handleCreemWebhook(request, env, options))
-    : recordingFailure(env, "mercadopago", options, () => handleMercadoPagoWebhook(request, env, url, options));
+    ? handleCreemWebhook(request, env, options)
+    : handleMercadoPagoWebhook(request, env, url, options);
 }
 
 /** GET /v1/jwks: the published signing key, cacheable because it is public. */
@@ -751,7 +769,7 @@ function routeOwnPaths(request, env, url, path, cors, options) {
     if (request.method !== "POST") {
       return json({ ok: false, reason: "method_not_allowed" }, 405, { ...cors, allow: "POST" });
     }
-    return path === "/v1/claim" ? handleClaim(request, env, cors) : handleLicense(request, env, cors);
+    return path === "/v1/claim" ? handleClaim(request, env, cors, options) : handleLicense(request, env, cors);
   }
 
   if (path === "/v1/jwks") {

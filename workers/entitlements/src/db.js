@@ -343,7 +343,7 @@ export async function hitRateLimit(db, bucket, limit, windowSeconds, now, cost) 
     .bind(bucket, room.windowStart, step)
     .run();
   if (changedRows(started) > 0) {
-    return { ok: true, count: step, retryAfter: 0 };
+    return { ok: true, count: step, retryAfter: 0, windowStart: room.windowStart };
   }
   // Already in this window: the increment carries the limit, so the row moves
   // only while there is room for this call's cost.
@@ -358,7 +358,123 @@ export async function hitRateLimit(db, bucket, limit, windowSeconds, now, cost) 
     // Somebody else took the room between the read above and this write.
     return { ok: false, count: limit, retryAfter: room.retryAfter };
   }
-  return { ok: true, count: room.count + step, retryAfter: 0 };
+  return { ok: true, count: room.count + step, retryAfter: 0, windowStart: room.windowStart };
+}
+
+/**
+ * Take one hit from each of several limits, all or none: `[bucket, limit,
+ * windowSeconds]` in order, every bucket a different one. Every limit is read
+ * first, so a caller already held back by one writes nothing (QA-40), and
+ * then all are taken by ONE guarded statement: it writes every row or none,
+ * so a caller that loses a race for a budget's last try writes nothing either.
+ * Taking them one by one and giving back the ones taken when a later one was
+ * lost wrote two rows for every loser, and a burst from many address blocks
+ * at the deployment's ceiling wrote thousands an hour (fifth review of the
+ * Mercado Pago claim throttle, 18 November 2026).
+ *
+ * The guard is a NOT EXISTS over the rows as they stand before the statement
+ * writes any (SQLite reads the SELECT that feeds an INSERT to the end before
+ * inserting, because it reads the table written; an uncorrelated EXISTS is
+ * evaluated once besides). It refuses a bucket that is full in its window,
+ * or whose stored window is newer than the one read: a straggler is refused
+ * rather than allowed to drag a bucket back to an older window.
+ *
+ * For a check that must be counted BEFORE the work it guards and may be given
+ * back after it: the work cannot run more often than the limits allow, however
+ * many requests arrive together, because each one holds its hit while it works.
+ * A peek, the work, and then a hit only for some outcomes let every request
+ * that peeked before the first hit landed do the work (review of the Mercado
+ * Pago claim throttle, 18 November 2026).
+ * @param {Object} db D1 binding.
+ * @param {Array<[string, number, number]>} limits Buckets and their limits.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{ok: boolean, held: Array<[string, number]>, retryAfter?: number, refusedAt?: number}>}
+ *   Whether every hit was taken, the hits held (bucket and window) to hand to
+ *   releaseRateLimits, and when to retry if not; `refusedAt` is the index of
+ *   the limit that was found full, when one was.
+ */
+export async function reserveRateLimits(db, limits, at) {
+  for (let attempt = 0; ; attempt += 1) {
+    const read = await readRooms(db, limits, at);
+    if (!read.ok) {
+      return read;
+    }
+    if (await takeEvery(db, limits, read.windows)) {
+      return { ok: true, held: limits.map(([bucket], i) => [bucket, read.windows[i]]) };
+    }
+    // Lost to a racing caller. Read again: a budget that is now full refuses
+    // with its own wait, and a window that turned under this caller (another
+    // request opened the next hour between the read and the write) is adopted
+    // and taken once more, so the turn of the hour refuses nobody with room.
+    if (attempt >= 1) {
+      return { ok: false, held: [], retryAfter: 1 };
+    }
+  }
+}
+
+/**
+ * Read every limit's room: the windows to take them in, or the first one that
+ * refuses, with its wait and its index in `limits`.
+ * @param {Object} db D1 binding.
+ * @param {Array<[string, number, number]>} limits Buckets and their limits.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{ok: true, windows: number[]}|{ok: false, held: [], retryAfter: number, refusedAt: number}>}
+ *   The windows, or the refusal.
+ */
+async function readRooms(db, limits, at) {
+  const windows = [];
+  for (const [i, [bucket, limit, windowSeconds]] of limits.entries()) {
+    const room = await peekRateLimit(db, bucket, limit, windowSeconds, at);
+    if (!room.ok) {
+      return { ok: false, held: [], retryAfter: room.retryAfter, refusedAt: i };
+    }
+    windows.push(room.windowStart);
+  }
+  return { ok: true, windows };
+}
+
+/**
+ * Take one hit from every limit in its window with one statement, all or
+ * none (see reserveRateLimits).
+ * @param {Object} db D1 binding.
+ * @param {Array<[string, number, number]>} limits Buckets and their limits.
+ * @param {number[]} windows Each bucket's window, as read.
+ * @returns {Promise<boolean>} Whether every hit was taken.
+ */
+async function takeEvery(db, limits, windows) {
+  const rows = limits.map((_, i) => `(?${3 * i + 1}, ?${3 * i + 2}, ?${3 * i + 3})`).join(", ");
+  const full = limits.map((_, i) =>
+    `(bucket = ?${3 * i + 1} AND (window_start > ?${3 * i + 2} OR (window_start = ?${3 * i + 2} AND count >= ?${3 * i + 3})))`
+  ).join(" OR ");
+  const taken = await db
+    .prepare(
+      `INSERT INTO rate_limits (bucket, count, window_start)
+       SELECT column1, 1, column2 FROM (VALUES ${rows})
+       WHERE NOT EXISTS (SELECT 1 FROM rate_limits WHERE ${full})
+       ON CONFLICT(bucket) DO UPDATE SET
+         count = CASE WHEN rate_limits.window_start = excluded.window_start THEN rate_limits.count + 1 ELSE 1 END,
+         window_start = excluded.window_start`
+    )
+    .bind(...limits.flatMap(([bucket, limit], i) => [bucket, windows[i], limit]))
+    .run();
+  return changedRows(taken) === limits.length;
+}
+
+/**
+ * Give back hits reserveRateLimits took. Each goes back to the window it was
+ * taken in and never below zero, so a window that has since turned over is
+ * left alone rather than handed an extra try.
+ * @param {Object} db D1 binding.
+ * @param {Array<[string, number]>} held Buckets and the windows their hits were taken in.
+ * @returns {Promise<void>} Resolves when written.
+ */
+export async function releaseRateLimits(db, held) {
+  for (const [bucket, windowStart] of held) {
+    await db
+      .prepare("UPDATE rate_limits SET count = count - 1 WHERE bucket = ?1 AND window_start = ?2 AND count > 0")
+      .bind(bucket, windowStart)
+      .run();
+  }
 }
 
 /**
@@ -374,6 +490,79 @@ export function callerIp(request) {
   } catch {
     return "unknown";
   }
+}
+
+/**
+ * The block of addresses one caller can be expected to hold, for a limit that
+ * a caller must not reset by moving to the next address: an IPv4 address is
+ * itself, an IPv6 address is its /56.
+ *
+ * One IPv6 subscriber holds a whole prefix, a /64 at the least, and RFC 6177
+ * has ISPs hand a home a /56 or a /48, so a per-address bucket gives one
+ * attacker 2^64 fresh allowances (review of the WH-1 throttle, 18 November
+ * 2026). /56 is express-rate-limit's default (`ipv6Subnet`). An IPv4-mapped
+ * address (`::ffff:192.0.2.1`) is the IPv4 address it maps and never a /56,
+ * because every such address shares one /56 and masking them put every IPv4
+ * client in a single bucket (express-rate-limit, CVE-2026-30827).
+ * Anything that does not parse as IPv6 is kept whole.
+ * @param {string} ip An address as `callerIp` returns it.
+ * @returns {string} The address, or its block.
+ */
+export function addressBlock(ip) {
+  const groups = ipv6Groups(ip);
+  if (!groups) {
+    return ip;
+  }
+  if (groups.slice(0, 5).every((g) => g === 0) && groups[5] === 0xffff) {
+    return [groups[6] >> 8, groups[6] & 255, groups[7] >> 8, groups[7] & 255].join(".");
+  }
+  const hex = (g) => g.toString(16);
+  return `${hex(groups[0])}:${hex(groups[1])}:${hex(groups[2])}:${hex(groups[3] & 0xff00)}::/56`;
+}
+
+/**
+ * An IPv6 address as its eight 16-bit groups, or null when it is not one.
+ * Takes the compressed (`::`) form, either case, a zone (`%eth0`, dropped)
+ * and a dotted IPv4 tail.
+ * @param {unknown} ip Candidate address.
+ * @returns {number[]|null} Eight groups, or null.
+ */
+function ipv6Groups(ip) {
+  if (typeof ip !== "string" || !ip.includes(":")) {
+    return null;
+  }
+  const text = dottedTailToHex(ip.trim().toLowerCase().split("%")[0]);
+  const halves = text === null ? [] : text.split("::");
+  if (halves.length < 1 || halves.length > 2) {
+    return null;
+  }
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const missing = 8 - head.length - tail.length;
+  if (halves.length === 2 ? missing < 1 : missing !== 0) {
+    return null;
+  }
+  const groups = [...head, ...new Array(halves.length === 2 ? missing : 0).fill("0"), ...tail];
+  return groups.every((g) => /^[0-9a-f]{1,4}$/.test(g)) ? groups.map((g) => parseInt(g, 16)) : null;
+}
+
+/**
+ * An IPv6 address's dotted IPv4 tail (`::ffff:192.0.2.1`) as its two hex
+ * groups, so the rest of the parse sees groups only.
+ * @param {string} text Lowercased address.
+ * @returns {string|null} The address with a hex tail, or null for a bad octet.
+ */
+function dottedTailToHex(text) {
+  const dotted = /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(text);
+  if (!dotted) {
+    return text;
+  }
+  const octets = dotted.slice(1).map(Number);
+  if (octets.some((o) => o > 255)) {
+    return null;
+  }
+  const pair = (a, b) => ((a << 8) | b).toString(16);
+  return `${text.slice(0, dotted.index)}${pair(octets[0], octets[1])}:${pair(octets[2], octets[3])}`;
 }
 
 /** Rows one sweep statement deletes at most. */

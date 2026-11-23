@@ -81,6 +81,14 @@ import "./sign-in-edges.test.mjs";
 // Housekeeping: what the sweep keeps, how much one run does, the schema memo,
 // and the deadline each call out really gets.
 import "./housekeeping-edges.test.mjs";
+// The red-team round of 18 November 2026 on the payment rails: an unsigned
+// webhook that raised the write alarm, Mercado Pago receipt numbers that were
+// claim keys, Creem metadata and Stripe checkouts that named a plan they had
+// no right to, and the Mercado Pago manifest's own data.id.
+import "./payment-rails-redteam.test.mjs";
+// The block of addresses a throttle counts one caller by: IPv4 itself, IPv6
+// by /56, and an IPv4-mapped address as the IPv4 address it maps.
+import "./address-block.test.mjs";
 // Which account a sign-in reaches (Google's sub before the email), a switched-
 // off account refused before any session or licence, and nosniff on every
 // answer (red team 2026-11-18, AUTHN-1/2/7).

@@ -843,20 +843,40 @@ for (const viewport of [{ width: 360, height: 740 }, { width: 844, height: 390 }
   });
 }
 
-/** What the up "sound paused" banner covers, and whether its button is on screen. */
-function bannerView() {
-  const banner = document.getElementById("sound-blocked");
-  const b = banner.getBoundingClientRect();
-  const covered = [...document.querySelectorAll("button, input, select, textarea, label, a[href], [role='button']")]
-    .filter((c) => !banner.contains(c))
-    .map((c) => ({ id: c.id || String(c.className).slice(0, 30) || c.tagName, r: c.getBoundingClientRect() }))
-    .filter(({ r }) => r.width > 0 && r.height > 0)
-    .map(({ id, r }) => ({ id, w: Math.min(b.right, r.right) - Math.max(b.left, r.left), h: Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) }))
-    .filter((o) => o.w > 0.5 && o.h > 0.5)
-    .map((o) => o.id);
-  const btn = document.getElementById("btn-sound-resume").getBoundingClientRect();
-  return { covered, top: b.top, inView: btn.top >= 0 && btn.bottom <= innerHeight && btn.left >= 0 && btn.right <= innerWidth,
-    said: banner.textContent.replace(/\s+/g, " ").trim() };
+/**
+ * What the up "sound paused" banner covers, and whether its button is on screen.
+ * With `maxFrames`, it looks again on each animation frame until the banner
+ * covers no control or that many frames have passed, and says in `frame` which
+ * frame it last looked in (0: at once).
+ */
+function bannerView(maxFrames) {
+  const look = () => {
+    const banner = document.getElementById("sound-blocked");
+    const b = banner.getBoundingClientRect();
+    const covered = [...document.querySelectorAll("button, input, select, textarea, label, a[href], [role='button']")]
+      .filter((c) => !banner.contains(c))
+      .map((c) => ({ id: c.id || String(c.className).slice(0, 30) || c.tagName, r: c.getBoundingClientRect() }))
+      .filter(({ r }) => r.width > 0 && r.height > 0)
+      .map(({ id, r }) => ({ id, w: Math.min(b.right, r.right) - Math.max(b.left, r.left), h: Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) }))
+      .filter((o) => o.w > 0.5 && o.h > 0.5)
+      .map((o) => o.id);
+    const btn = document.getElementById("btn-sound-resume").getBoundingClientRect();
+    return { covered, top: b.top, inView: btn.top >= 0 && btn.bottom <= innerHeight && btn.left >= 0 && btn.right <= innerWidth,
+      said: banner.textContent.replace(/\s+/g, " ").trim() };
+  };
+  if (!maxFrames) return look();
+  return new Promise((done) => {
+    let frame = 0;
+    // A page that stops drawing answers with what it shows (and says so), not with the test's timeout
+    setTimeout(() => done({ ...look(), frame, stalled: true }), 10000);
+    const again = () => {
+      const view = look();
+      if (!view.covered.length || frame >= maxFrames) return done({ ...view, frame });
+      frame++;
+      requestAnimationFrame(again);
+    };
+    again();
+  });
 }
 
 async function raiseSoundBanner(page) {
@@ -952,7 +972,17 @@ test("the sound-paused banner moves off the controls a rail brings up under it",
       under: now.top < still.bottom && now.bottom > still.top };
   });
   expect(change.under, `the corner's change put the selects under the banner as it stood (${JSON.stringify(change)})`).toBe(true);
-  await expect.poll(async () => (await page.evaluate(bannerView)).covered, { timeout: 2000 }).toEqual([]);
+  // The rail watch answers in frames, not seconds: the frame that lays the
+  // taller rail out notes it (ResizeObserver) and asks for the next one, which
+  // places the banner; looked at in a frame's callbacks, it is free by the
+  // third. A 2 s poll judged the CI machine instead: in run 44863358369 the
+  // WebKit page took up to 304 ms to answer one look, the banner moved 1.1 to
+  // 1.4 s after the change, and the poll had stopped looking at 1.4 s (it gives
+  // up before a wait that would end past its timeout). A wider window would
+  // also let a slower path place the banner for the rail watch.
+  const moved = await page.evaluate(bannerView, 12);
+  expect(moved.covered, `the banner left the controls (looked at in frame ${moved.frame}${moved.stalled ? ", the page stopped drawing" : ""})`).toEqual([]);
+  expect(moved.frame, "within four frames of the rail's change (three by the event loop's order, one spare)").toBeLessThanOrEqual(4);
   expect(await page.evaluate(() => scrollY), "no scroll moved the banner: only the rail's change did").toBe(pinned);
 });
 

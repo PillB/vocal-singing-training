@@ -137,6 +137,29 @@
         <button type="button" id="coach-play" hidden>▶ Escuchar ejemplo</button>
       </div>
       <p class="status muted" id="coach-audio-status" role="status">Las demostraciones son visuales; el sonido es opcional.</p>
+      <section class="coach-pattern" id="coach-pattern" aria-label="Compara dónde colocar una respiración" hidden>
+        <h4>Compara los dos fraseos: ¿dónde entra el aire?</h4>
+        <div class="coach-pattern-compare">
+          <div class="coach-pattern-card coach-pattern-fragmented">
+            <strong>Frase cortada · no imitar</strong>
+            <p aria-label="Aire; cuento; aire; mi; aire; historia">Aire <span aria-hidden="true">/</span> cuento <span aria-hidden="true">/</span> mi <span aria-hidden="true">/</span> historia</p>
+            <small>Respirar tras cada palabra interrumpe la idea.</small>
+          </div>
+          <div class="coach-pattern-card coach-pattern-connected">
+            <strong>Frase con intención · opción adaptable</strong>
+            <p aria-label="Aire; cuento mi historia; pausa; y sigo">Aire <span aria-hidden="true">→</span> cuento mi historia <span aria-hidden="true">|</span> y sigo</p>
+            <small>El silencio acompaña la idea. Si necesitas aire antes, adapta.</small>
+          </div>
+        </div>
+        <fieldset class="coach-checks">
+          <legend>¿Qué pausa usarías para mantener la intención?</legend>
+          <div class="coach-actions" role="group" aria-label="Elige el lugar del aire">
+            <button type="button" id="coach-pattern-word" aria-pressed="false">Después de cada palabra</button>
+            <button type="button" id="coach-pattern-phrase" aria-pressed="false">En una pausa entre ideas</button>
+          </div>
+          <p class="coach-note" id="coach-pattern-feedback" role="status">Compara antes de elegir. No se evalúa cuánto tiempo aguantas sin respirar.</p>
+        </fieldset>
+      </section>
       <fieldset id="coach-checks" class="coach-checks" hidden>
         <legend>Antes de hablar, compruébalo en tu cuerpo</legend>
         <label class="check"><input type="checkbox" id="coach-check-shoulders"><span>Mis hombros y mi cuello están cómodos, sin elevarlos adrede.</span></label>

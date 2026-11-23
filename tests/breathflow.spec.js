@@ -61,7 +61,7 @@ test("first-use lesson teaches body and mouth before enabling Start", async ({ p
   await expect(page.locator("#coach-pattern-feedback")).toContainText("Respirar después de cada palabra");
   await expect(page.locator("#coach-finish")).toBeDisabled();
   await page.locator("#coach-pattern-phrase").click();
-  await expect(page.locator("#coach-pattern-feedback")).toContainText("entre ideas");
+  await expect(page.locator("#coach-pattern-feedback")).toContainText("pausa útil");
   await expect(page.locator("#coach-finish")).toBeDisabled();
   await page.locator("#coach-choice-force").click();
   await expect(page.locator("#coach-choice-feedback")).toContainText("Aguantar con tensión no es el objetivo");

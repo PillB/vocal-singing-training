@@ -42,3 +42,13 @@
 @keyframes coach-timeline{0%,15%{transform:translateX(0)}80%,100%{transform:translateX(155px)}}
 @media(max-width:420px){#flow-coach .coach-show{padding:6px}#flow-coach .coach-figure{max-height:255px}#flow-coach .coach-actions button{flex:1 1 100%}}
 @media(prefers-reduced-motion:reduce){#flow-coach .coach-figure *{animation:none!important;transform:none!important}}
+
+/* Phrase-flow comparison is an actual visual lesson, not breath-duration scoring. */
+#flow-coach .coach-pattern{margin-top:14px}
+#flow-coach .coach-pattern-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+#flow-coach .coach-pattern-card{border:2px solid #8ba9b6;border-radius:12px;padding:12px;min-width:0;overflow-wrap:anywhere}
+#flow-coach .coach-pattern-card p{font-size:1.02rem;font-weight:650;line-height:1.55}
+#flow-coach .coach-pattern-fragmented{background:#fff5e9;border-color:#a66b37}
+#flow-coach .coach-pattern-connected{background:#eaf8f2;border-color:#257462}
+#flow-coach .coach-pattern button[aria-pressed="true"]{outline:3px solid #24618d;outline-offset:2px}
+@media(max-width:540px){#flow-coach .coach-pattern-compare{grid-template-columns:minmax(0,1fr)}}

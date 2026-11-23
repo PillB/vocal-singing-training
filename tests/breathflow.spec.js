@@ -514,9 +514,10 @@ test("microphone tap cancels guide playback before requesting capture", async ({
   });
   await page.locator("#coach-play").click();
   await expect(page.locator("#coach-audio-status")).toContainText("sintética");
+  expect(await page.evaluate(() => window.__guideContexts.map((ctx) => ctx.state))).toEqual(["running"]);
   await page.locator("#flow-mic").click();
-  // Existing page.clock freezes the guide's scheduled audio ending; capture
-  // must see its real context closed, not just a mocked stop function called.
+  // The fixture extends the real source lifetime. Capture must see its
+  // context closed, not just a mocked stop function called.
   await expect.poll(() => page.evaluate(() => window.__captureAudio)).toEqual(["closed"]);
 });
 

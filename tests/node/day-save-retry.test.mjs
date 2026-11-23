@@ -7,6 +7,10 @@ function page() {
   const refused = new Set();
   const win = { console, CustomEvent: class {}, document: { documentElement: { dataset: {} } }, dispatchEvent: () => {}, addEventListener: () => {} };
   win.window = win;
+  win.Date = class extends Date {
+    constructor(...args) { super(...(args.length ? args : ["2026-11-22T15:00:00Z"])); }
+    static now() { return Date.parse("2026-11-22T15:00:00Z"); }
+  };
   win.localStorage = {
     getItem: (key) => values.get(key) || null,
     setItem: (key, value) => { if (refused.has(key)) throw Error("quota"); values.set(key, value); },

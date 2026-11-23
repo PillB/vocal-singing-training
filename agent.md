@@ -27,10 +27,11 @@ For each task, every iteration and red-team round, enforce the following:
    profile switch, denied/late audio, mobile, VoiceOver, reduced motion and
    state across all main tabs. Fail with explicit diagnostics and issue IDs,
    not a passing test that skipped the action.
-7. **Four adversarial rounds minimum**, plus the repository's stricter
+7. **Rendered cross-view oracle after each meaningful step**: never validate only the shared store or API. Observe and assert each affected *visible* Home / History / Plan / daily / weekly / monthly result after setup, Save, profile changes, rollover, navigation and second-tab writes. Add a targeted mutation that breaks the renderer but leaves storage correct; the test **must fail**. Log unvisited combinations as unverified, not as a passed exhaustive simulation.
+8. **Four adversarial rounds minimum**, plus the repository's stricter
    five-round / four-aesthetic-pass standard; log attacks, actual executions,
    evidence and remaining blocked cases. No "verified" without execution.
-8. **Release** only with same-SHA CI, compatible integration PRs, deployed
+9. **Release** only with same-SHA CI, compatible integration PRs, deployed
    SHA parity, hardware microphone/assistive-tech checks and actual pedagogy
    observations. Never call a draft PR deployed.
 

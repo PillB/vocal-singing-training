@@ -116,6 +116,18 @@ test("phrase contrast fits narrow mobile and enlarged type without clipping", as
   const clip = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
   expect(clip).toBe(false);
 });
+test("legacy v1 completion does not bypass new phrase-boundary teaching", async ({ page }) => {
+  await page.goto(BASE + "/breathflow.html");
+  const profile = await page.evaluate(() => window.VTStorage?.getActiveProfileId?.() || "default");
+  await page.evaluate(id => localStorage.setItem("vt_breathflow_lesson_v1_" + id, "verified"), profile);
+  await page.reload();
+  await expect(page.locator("#coach-stage")).toContainText("Hombros");
+  await expect(page.locator("#flow-start")).toBeDisabled();
+  await expect(page.locator("#coach-pattern")).toBeHidden();
+  // Deliberate fast path remains for an experienced returning learner.
+  await page.locator("#coach-skip").click();
+  await expect(page.locator("#flow-start")).toBeEnabled();
+});
 test("teaching stage does not save any day, ask for a microphone or invent measured checkpoints", async ({ page }) => {
   await open(page, { teach: true });
   const initial = await page.evaluate(() => JSON.stringify(window.VTDays.read().days));

@@ -18,6 +18,10 @@
  *   (tests/pricing-euro.spec.js has the rest of the Union).
  * - truth-6: the busy toast for the worker's hourly checkout limit said to wait
  *   "a few minutes", where the clock-aligned window can have 59 of them left.
+ * - money-6 (round two): every Spanish locale with no market of its own
+ *   (Uruguay, Ecuador, ...) was put in Peru by a catch-all and told
+ *   "Tu región: Perú" in soles, and the Mercado Pago button was drawn for every
+ *   market, one press from a Peruvian plan a buyer elsewhere cannot pay.
  * - And the privacy notice said the account's email is never shared, a few
  *   paragraphs above one saying the worker passes it to Creem to open a card
  *   checkout.
@@ -59,12 +63,14 @@ const BOTH_ON_SALE = { ...CREEM_ON_SALE, links: { mercadopago: { pro_monthly: MP
 /**
  * Patch VT_BILLING_CONFIG as billing-config.js assigns it, before any other
  * script reads it; the page freezes it straight after (QA-05). Copied from
- * tests/helpers/billing.js and trimmed to the two keys this file uses, each set
+ * tests/helpers/billing.js and trimmed to the keys this file uses, each set
  * on rails that exist: `links: { rail: { plan: url } }` and
- * `rails: { rail: { key: value } }`. A rail the config does not have throws,
- * so a typo fails the page's config rather than testing nothing.
+ * `rails: { rail: { key: value } }`; and `marketsFirst: [market]`, markets
+ * put before the shipped list (the first market for a region is its own).
+ * A rail the config does not have throws, so a typo fails the page's config
+ * rather than testing nothing.
  * @param {import('@playwright/test').Page} page Page.
- * @param {{links?: object, rails?: object}} patch What to set.
+ * @param {{links?: object, rails?: object, marketsFirst?: object[]}} patch What to set.
  */
 async function patchBillingConfig(page, patch) {
   await page.addInitScript((p) => {
@@ -87,6 +93,7 @@ async function patchBillingConfig(page, patch) {
           provider.links = Object.assign({}, provider.links, byPlan);
         }
         for (const [rail, keys] of Object.entries(p.rails || {})) Object.assign(railOf(rail), keys);
+        if (p.marketsFirst) value.markets = [...p.marketsFirst, ...(value.markets || [])];
       }
     });
   }, patch || {});
@@ -257,29 +264,43 @@ async function termsPrices(page) {
   return { es: { peru: pair(es, 1), elsewhere: pair(es, 3) }, en: { peru: pair(en, 1), elsewhere: pair(en, 3) } };
 }
 
-// truth-3: the three Latin American markets that used to name Mercado Pago.
+// truth-3: the three Latin American markets that used to name Mercado Pago;
+// money-6: and the Spanish-speaking ones with no market of their own, which a
+// catch-all used to put in Peru. Every one buys on Creem, in US dollars, and
+// is not offered the Peruvian Mercado Pago plan at all.
 for (const market of [
-  { code: "AR", name: "Argentina", locale: "es-AR", timezoneId: "America/Argentina/Buenos_Aires" },
-  { code: "CL", name: "Chile", locale: "es-CL", timezoneId: "America/Santiago" },
-  { code: "CO", name: "Colombia", locale: "es-CO", timezoneId: "America/Bogota" }
+  { label: "Argentina", code: "AR", name: "Argentina", locale: "es-AR", timezoneId: "America/Argentina/Buenos_Aires" },
+  { label: "Chile", code: "CL", name: "Chile", locale: "es-CL", timezoneId: "America/Santiago" },
+  { label: "Colombia", code: "CO", name: "Colombia", locale: "es-CO", timezoneId: "America/Bogota" },
+  // No market of their own: the worldwide market, by the name the config
+  // gives it in Spanish (its `nameEs`, where it has one), read rather than
+  // written here so this case does not hold its English name in place.
+  { label: "Uruguay", name: null, locale: "es-UY", timezoneId: "America/Montevideo" },
+  { label: "Ecuador", name: null, locale: "es-EC", timezoneId: "America/Guayaquil" }
 ]) {
-  test.describe(`truth-3: ${market.name} buys on Creem, in US dollars`, () => {
+  test.describe(`truth-3, money-6: ${market.label} buys on Creem, in US dollars`, () => {
     test.use({ locale: market.locale, timezoneId: market.timezoneId });
 
-    test(`${market.name} is put on the card rail with Mercado Pago live, shown US$ in US dollars, and Subscribe opens a Creem checkout`, async ({ page }) => {
+    test(`${market.label} is put on the card rail with Mercado Pago live, shown US$ in US dollars, no Peruvian plan to pick, and Subscribe opens a Creem checkout`, async ({ page }) => {
       const state = freshState();
       const { navigations } = await install(page, state, { config: BOTH_ON_SALE });
       await open(page);
       const cta = await openPricing(page);
-      // Mercado Pago is live and drawn (the control beside the claim: there was
-      // a choice to make, so the card rail being chosen is the market's, not the
-      // only rail there was), and its button says whose it is. Wrong (before):
-      // the market named Mercado Pago, so the dialog chose it first, under a
-      // dollar price, for a Peruvian plan that charges soles; and the button
-      // said "Perú / LATAM".
+      // Mercado Pago is live (the Peru control below, in this configuration,
+      // draws it and puts Peru on it), but its plans are a Peruvian seller
+      // account's: they charge soles to a Peruvian Mercado Pago account or
+      // card, so it is not offered here. Wrong (before): truth-3, the market
+      // named Mercado Pago, so the dialog chose it first under a dollar
+      // price; money-6, its button stayed one press away for every market,
+      // and Uruguay and Ecuador were told "Tu región: Perú" in soles, on it.
+      const name = market.name || (await page.evaluate(() => {
+        const ww = window.VTBilling.marketFor("WW");
+        return ww.nameEs || ww.name;
+      }));
+      expect(await page.evaluate(() => window.VTBilling.detectRegion()), "the market the locale puts the page in").toBe(market.name ? market.code : "WW");
       await expect.poll(() => dialogReads(page)).toEqual({
-        region: `Tu región: ${market.name} · ${DOLLARS_ES}`,
-        rails: [railShown(CARD_ES, true), railShown(MP_ES, false)],
+        region: `Tu región: ${name} · ${DOLLARS_ES}`,
+        rails: [railShown(CARD_ES, true)],
         monthly: "US$ 7.99",
         yearly: "US$ 49"
       });
@@ -289,27 +310,6 @@ for (const market of [
       await page.waitForURL(CHECKOUT_PAGE);
       expect(state.checkouts).toEqual([{ plan: "pro_monthly", provider: "creem", returnPath: "/index.html", currency: "USD" }]);
       expect(navigations, "nothing went to the Peruvian Mercado Pago plan").toEqual([CHECKOUT_PAGE]);
-    });
-
-    test(`${market.name}, picking the Mercado Pago (Perú) rail, is shown the soles its Peruvian plan charges`, async ({ page }) => {
-      // Second round: the card rail above was right, but one press on the
-      // other button showed "US$ 7.99" over a Peruvian plan that charges
-      // S/ 19.90, because any rail but the market's own was priced in dollars.
-      const state = freshState();
-      const { navigations } = await install(page, state, { config: BOTH_ON_SALE });
-      await open(page);
-      const cta = await openPricing(page);
-      await page.locator('#pricing-rails [data-rail="mercadopago"]').click();
-      await expect.poll(() => dialogReads(page)).toEqual({
-        region: `Tu región: ${market.name} · ${SOLES_ES}`,
-        rails: [railShown(CARD_ES, false), railShown(MP_ES, true)],
-        monthly: "S/ 19.90",
-        yearly: "S/ 119.90"
-      });
-      // What the press charges is what was shown: the Peruvian plan.
-      await cta.click();
-      await expect.poll(() => navigations.map((u) => new URL(u).host)).toEqual([MP_HOST]);
-      expect(state.checkouts, "and no Creem checkout was opened").toEqual([]);
     });
   });
 }
@@ -347,6 +347,32 @@ test.describe("truth-3 control: Peru buys on Mercado Pago, in soles", () => {
     await expect.poll(() => navigations.map((u) => new URL(u).host)).toEqual([MP_HOST]);
     expect(new URL(navigations[0]).searchParams.get("preapproval_plan_id")).toBe("markets_monthly");
     expect(state.checkouts, "Mercado Pago is a pasted link, not a worker checkout").toEqual([]);
+  });
+
+  test("truth-3, second round: with Peru's own rail set to the card and Mercado Pago kept beside it, picking Mercado Pago shows the soles its plan charges", async ({ page }) => {
+    // An operator's list that sells Peru on Creem first and keeps Mercado
+    // Pago as Peru's second rail: two rows for Peru, the first its own. Here
+    // Mercado Pago is not the region's own rail, so its price comes from the
+    // rail's own country (its config `regions`, ["PE"]), not from the region.
+    const state = freshState();
+    const config = { ...BOTH_ON_SALE, marketsFirst: [{ code: "PE", name: "Perú", currency: "PEN", rail: "creem", priority: 1 }] };
+    const { navigations } = await install(page, state, { config });
+    await open(page);
+    const cta = await openPricing(page);
+    expect((await dialogReads(page)).rails, "precondition: the card rail is Peru's own, Mercado Pago the second").toEqual([railShown(CARD_ES, true), railShown(MP_ES, false)]);
+    await page.locator('#pricing-rails [data-rail="mercadopago"]').click();
+    // Wrong: "US$ 7.99" over a Peruvian plan that charges S/ 19.90, because
+    // any rail but the region's own was priced at the worldwide dollar price.
+    await expect.poll(() => dialogReads(page)).toEqual({
+      region: `Tu región: Perú · ${SOLES_ES}`,
+      rails: [railShown(CARD_ES, false), railShown(MP_ES, true)],
+      monthly: "S/ 19.90",
+      yearly: "S/ 119.90"
+    });
+    // What the press charges is what was shown: the Peruvian plan.
+    await cta.click();
+    await expect.poll(() => navigations.map((u) => new URL(u).host)).toEqual([MP_HOST]);
+    expect(state.checkouts, "and no Creem checkout was opened").toEqual([]);
   });
 
   test("the terms' Peru price is the price the Peruvian dialog shows", async ({ page }) => {

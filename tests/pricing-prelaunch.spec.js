@@ -320,6 +320,8 @@ test.describe("Pro dialog benefits in plain language", () => {
 });
 
 test.describe("Pro dialog once checkout is live", () => {
+  // In Peru, where both rails sell (money-6: Mercado Pago's plans are drawn only there).
+  test.use({ locale: "es-PE", timezoneId: "America/Lima" });
   test("is the usual dialog: payment choice, Subscribe, trial in the foot", async ({ page }) => {
     await makeCheckoutLive(page);
     await boot(page);

@@ -339,9 +339,16 @@ async function closePricing(page) {
   await expect(page.locator("#pricing-modal")).toBeHidden();
 }
 
-/** The pending link as stored, or null. */
+/**
+ * The pending link as stored, or null. The page keeps a list of them (red
+ * team states-2); these cases make one at most, so that one entry comes back,
+ * and a list of several comes back whole, which no single reference matches.
+ */
 function pendingNow(page) {
-  return page.evaluate(() => JSON.parse(localStorage.getItem("vt_pending_link_v1") || "null"));
+  return page.evaluate(() => {
+    const kept = JSON.parse(localStorage.getItem("vt_pending_links_v2") || "null");
+    return Array.isArray(kept) && kept.length === 1 ? kept[0] : kept;
+  });
 }
 
 /** Whether this browser still has a checkout waiting for its licence. */

@@ -1164,25 +1164,29 @@ test.describe("What the split of the account panel and the Pro dialog must keep"
     await expect(page.locator("#pricing-status")).toHaveText("Plan gratis");
   });
 
-  test("SP16 the payment rails are named in the page's language, from the config's own wording", async ({ page }) => {
-    const license = await mintLicense({ origin: BASE });
-    await patchBillingConfig(page, LIVE_LINKS);
-    await install(page, {}, license);
-    await boot(page);
-    await page.click("#btn-pricing");
-    // The card rail is Creem's: no market sells on Stripe since #26.
-    const card = page.locator('#pricing-rails [data-rail="creem"]');
-    const mp = page.locator('#pricing-rails [data-rail="mercadopago"]');
-    await expect(page.locator('#pricing-rails [data-rail="stripe"]')).toHaveCount(0);
-    await expect(card).toHaveText("Tarjeta internacional");
-    await expect(mp).toHaveText("Mercado Pago (Perú)");
-    await page.keyboard.press("Escape");
-    await expect(page.locator("#pricing-modal")).toBeHidden();
-    await page.click("#btn-lang");
-    await expect(page.locator("html")).toHaveAttribute("lang", "en");
-    await page.click("#btn-pricing");
-    await expect(card).toHaveText("International card");
-    await expect(mp).toHaveText("Mercado Pago");
+  test.describe("SP16 in Peru, where both rails sell", () => {
+    // money-6: Mercado Pago's plans are a Peruvian account's, drawn only there.
+    test.use({ locale: "es-PE", timezoneId: "America/Lima" });
+    test("SP16 the payment rails are named in the page's language, from the config's own wording", async ({ page }) => {
+      const license = await mintLicense({ origin: BASE });
+      await patchBillingConfig(page, LIVE_LINKS);
+      await install(page, {}, license);
+      await boot(page);
+      await page.click("#btn-pricing");
+      // The card rail is Creem's: no market sells on Stripe since #26.
+      const card = page.locator('#pricing-rails [data-rail="creem"]');
+      const mp = page.locator('#pricing-rails [data-rail="mercadopago"]');
+      await expect(page.locator('#pricing-rails [data-rail="stripe"]')).toHaveCount(0);
+      await expect(card).toHaveText("Tarjeta internacional");
+      await expect(mp).toHaveText("Mercado Pago (Perú)");
+      await page.keyboard.press("Escape");
+      await expect(page.locator("#pricing-modal")).toBeHidden();
+      await page.click("#btn-lang");
+      await expect(page.locator("html")).toHaveAttribute("lang", "en");
+      await page.click("#btn-pricing");
+      await expect(card).toHaveText("International card");
+      await expect(mp).toHaveText("Mercado Pago");
+    });
   });
 
   test("SP14 the header door shows the given name of a full Google name, and is named by it", async ({ page }) => {

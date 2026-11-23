@@ -9366,14 +9366,54 @@
     if (busy) followOpening(busy, opening.done, true);
   }
 
-  /** Busy while the worker opens the checkout; back, and answered unless quiet, if it does not navigate away. */
+  /**
+   * Busy while the worker opens the checkout, with the other plans and the
+   * payment rails held; all back, and answered unless quiet, if it does not
+   * navigate away. A redirect that never happens (Stop, a cancelled leave)
+   * and a return through the back/forward cache are js/billing.js's to see:
+   * it tells the page, which draws the dialog again with every button idle.
+   */
   function followOpening(btn, done, quiet) {
+    const held = holdOtherChoices(btn);
     setPlanButtonBusy(btn, true);
     done.then((out) => {
       if (out?.mode === "redirect") return; // navigating away
       setPlanButtonBusy(btn, false);
-      if (!quiet) answerCheckout(out || { mode: "checkout_failed" });
+      held.forEach((b) => holdChoice(b, false));
+      // Answered after the person who pressed signed out: nothing is said to
+      // whoever is here now about a press they did not make (authz-2).
+      if (!quiet && out?.mode !== "signed_out") answerCheckout(out || { mode: "checkout_failed" });
     });
+  }
+
+  /**
+   * While one plan's checkout opens, every other plan button and rail button
+   * in the dialog is drawn disabled: the other plan used to look pressable
+   * and do nothing, which reads as a broken page (red team states-6). Only
+   * controls that were enabled are held, so a "Current plan" stays as it was.
+   * @param {HTMLButtonElement} btn The button pressed.
+   * @returns {HTMLButtonElement[]} The controls held, to give back.
+   */
+  function holdOtherChoices(btn) {
+    const dialog = btn.closest("#pricing-modal") || document;
+    const others = $$(".plan-cta, .rail-btn", dialog).filter((b) => b !== btn && !b.disabled);
+    others.forEach((b) => holdChoice(b, true));
+    return others;
+  }
+
+  /**
+   * Hold a control of the Pro dialog, or give it back. The plan buttons are
+   * .btn, which the stylesheet dims when disabled; the rail buttons are not,
+   * so they are dimmed here, or a held rail would look pressable.
+   * @param {HTMLButtonElement} b The control.
+   * @param {boolean} held Whether to hold it.
+   */
+  function holdChoice(b, held) {
+    b.disabled = held;
+    if (held) b.setAttribute("aria-disabled", "true");
+    else b.removeAttribute("aria-disabled");
+    b.style.opacity = held ? "0.5" : "";
+    b.style.cursor = held ? "not-allowed" : "";
   }
 
   /**
@@ -11286,9 +11326,15 @@
     if (btn?.getAttribute("aria-busy") === "true") return;
     btn?.setAttribute("aria-busy", "true");
     toast(tt("pricing.toast.portalOpened"));
+    const asker = window.VTAccount.getSessionToken?.() || null;
     window.VTAccount.openBillingPortal()
       .then((res) => {
         btn?.removeAttribute("aria-busy");
+        // Answered after the person who pressed signed out: their portal is
+        // not opened for whoever is here now, and nothing is said (authz-2).
+        // A refusal keeps its reason: a 401 has just signed them out here.
+        const moved = res?.ok && (window.VTAccount.getSessionToken?.() || null) !== asker;
+        if (moved || res?.reason === "signed_out") return;
         const target = res?.ok ? window.VTBilling.validateCheckoutUrl(res.url) : null;
         if (target?.ok) {
           window.location.assign(target.url);

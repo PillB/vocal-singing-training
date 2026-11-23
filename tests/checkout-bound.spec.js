@@ -254,7 +254,7 @@ test.describe("VG-83: a purchase made while signed in reaches the account howeve
     // 1.5 s in) is the sign the webhook has, and the retry is 4 s after the
     // first try, about 2.5 s after it. The account shows Pro while they look.
     expect(state.linkedAt - state.landedAt).toBeLessThan(1500);
-    await expect.poll(() => page.evaluate(() => localStorage.getItem("vt_pending_link_v1"))).toBeNull();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("vt_pending_links_v2"))).toBeNull();
 
     await open(page, "");
     await expect.poll(() => licenceNow(page)).toEqual({ pro: true, provider: "creem", accountId: ACCOUNT.id });
@@ -276,8 +276,9 @@ test.describe("VG-83: a purchase made while signed in reaches the account howeve
     // Off for the next visit, which should link at once.
     Object.assign(state, { meWaitsForLink: false, linkDelayMs: 0 });
     expect(state.links).toHaveLength(1);
-    const kept = await page.evaluate(() => JSON.parse(localStorage.getItem("vt_pending_link_v1") || "null"));
-    expect(kept).toMatchObject({ provider: "creem", sessionId: "ch_1" });
+    const kept = await page.evaluate(() => JSON.parse(localStorage.getItem("vt_pending_links_v2") || "null"));
+    // Kept as the list of pending links, which here holds this one reference.
+    expect(kept).toEqual([expect.objectContaining({ provider: "creem", sessionId: "ch_1" })]);
 
     // The webhook lands while nobody is looking; the next visit links it.
     state.landed = true;
@@ -292,7 +293,9 @@ test.describe("VG-83: a purchase made while signed in reaches the account howeve
     const state = freshState({ landed: true });
     await install(page, state, license, { pending: { provider: "creem", sessionId: "ch_old", at: Date.now() - 8 * DAY * 1000 } });
     await open(page, "");
-    await expect.poll(() => page.evaluate(() => localStorage.getItem("vt_pending_link_v1"))).toBeNull();
+    // Seeded as the shipped page kept it (one object under the old key): read,
+    // found a week old, and dropped from both keys.
+    await expect.poll(() => page.evaluate(() => [localStorage.getItem("vt_pending_links_v2"), localStorage.getItem("vt_pending_link_v1")])).toEqual([null, null]);
     expect(state.links).toEqual([]);
   });
 });

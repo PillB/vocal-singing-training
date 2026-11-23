@@ -445,7 +445,9 @@ test.describe("the Pro dialog's choice of how to pay, outside Peru", () => {
   test("offers the rails the markets sell on, marks the region's own, and its card button reaches Creem", async ({ page }) => {
     const { navigations } = await liveRails(page);
     expect(await page.evaluate(() => window.VTBilling.preferredRail(window.VTBilling.detectRegion()))).toBe("creem");
-    expect(await railRow(page)).toEqual(["creem*", "mercadopago"]);
+    // Mercado Pago's plans are a Peruvian seller account's, so outside Peru
+    // its button is not drawn (red team money-6): the card rail is the one.
+    expect(await railRow(page)).toEqual(["creem*"]);
     await page.locator('#pricing-rails [data-rail="creem"]').click();
     await page.locator('#pricing-modal .plan-cta[data-plan="pro_monthly"]').click();
     await expect.poll(() => navigations.join(" ")).toContain("checkout.creem.io");
@@ -472,6 +474,21 @@ test.describe("the Pro dialog's choice of how to pay, in Peru", () => {
     await expect(page.locator("#pricing-region-label")).not.toContainText("soles");
     await page.locator('#pricing-modal .plan-cta[data-plan="pro_monthly"]').click();
     await expect.poll(() => navigations.join(" ")).toContain("checkout.creem.io");
+  });
+
+  test("Peru's own rail is drawn first even when the card rail's market is listed before Peru's", async ({ page }) => {
+    // The shipped list happens to name Peru first, so the order above could
+    // come from the list rather than from the region. An operator's list
+    // need not: here the worldwide market comes first. Wrong: the card rail
+    // leads, and is the one a Peruvian lands on.
+    await patchBillingConfig(page, {
+      markets: [
+        { code: "WW", name: "Worldwide", currency: "USD", rail: "creem", priority: 3 },
+        { code: "PE", name: "Perú", currency: "PEN", rail: "mercadopago", priority: 1 }
+      ]
+    });
+    await liveRails(page);
+    expect(await railRow(page)).toEqual(["mercadopago*", "creem"]);
   });
 
   test("control: with Mercado Pago not linked yet, the one rail that can sell is the one offered and used", async ({ page }) => {

@@ -171,12 +171,22 @@
     try {
       const lang = (navigator.language || "en").toLowerCase();
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      // A Peruvian locale is Peru wherever the device is, before the Union's
+      // time zones: it is a setting somebody chose, and Peru is the market
+      // whose buyers must be shown soles (Ley 29571 art. 6) and can pay with
+      // Mercado Pago. The price of it: a Peruvian living in Madrid who kept
+      // es-PE is offered soles first, and the card rail in US$, not euros.
+      if (lang.endsWith("-pe")) return "PE";
       const eu = euRegion(lang, tz);
       if (eu) return eu;
       const sign = REGION_SIGNS.find(([, zones, suffixes]) =>
         zones.some((zone) => tz.includes(zone)) || suffixes.some((suffix) => lang.endsWith(suffix)));
       if (sign) return sign[0];
-      if (lang.startsWith("es")) return "PE";
+      // Anything else is the worldwide market, Spanish locales too: Peru is
+      // the Lima time zone or a Peruvian locale, never a whole language. The
+      // catch-all that sent every other Spanish speaker to Peru told a buyer
+      // in Montevideo or Quito "Tu región: Perú" and sold them the Peruvian
+      // Mercado Pago plan by default (red team money-6).
       return "WW";
     } catch {
       return "WW";
@@ -239,12 +249,30 @@
    */
   function checkoutRails(region) {
     const c = cfg();
-    const named = (c.markets || []).map((m) => m.rail).filter((r) => CHECKOUT_RAILS.has(r));
+    const named = (c.markets || []).map((m) => m.rail).filter((r) => CHECKOUT_RAILS.has(r) && railSellsIn(r, region));
     const paid = paidPlanIds();
     return [...new Set([preferredRail(region), ...named])].map((rail) => ({
       rail,
       sellable: apiCheckoutEnabled(rail) || paid.some((id) => !!checkoutUrl(id, rail))
     }));
+  }
+
+  /**
+   * Whether a rail is offered to a buyer in `region` beside the region's own.
+   * A rail whose provider lists the regions it sells in, without "WW"
+   * (worldwide), sells only there: Mercado Pago's plans are a Peruvian seller
+   * account's, in soles, paid with a Peruvian account or card, so its button
+   * drawn for an Argentine offered a plan they could not pay (money-6). A
+   * provider listing none, or "WW", sells everywhere; Creem's list names
+   * where it is recommended first, and "WW".
+   * @param {string} rail Provider id.
+   * @param {string} region Two-letter region code.
+   * @returns {boolean}
+   */
+  function railSellsIn(rail, region) {
+    const regions = ((cfg().providers || {})[rail] || {}).regions;
+    if (!Array.isArray(regions) || !regions.length || regions.includes("WW")) return true;
+    return regions.includes(region);
   }
 
   function nowMs() {
@@ -856,31 +884,134 @@
       return { ok: false, mode: "provider_unavailable", plan: planId, provider: rail };
     }
     // One checkout at a time: a press while one is opening (the pricing panel
-    // redrawn under the busy button, a second tab of the same page) joins it
-    // rather than asking the worker for a second checkout.
-    if (!workerOpening) {
-      const done = openWorkerCheckout(planId, rail);
-      workerOpening = { plan: planId, provider: rail, done };
-      done.then((out) => {
-        // Navigating away keeps it set; anything else frees the next press.
-        if (!out || out.mode !== "redirect") workerOpening = null;
-      });
-    }
+    // redrawn under the busy button) joins it rather than asking the worker
+    // for a second checkout. In this page only (another tab has its own), and
+    // for this sign-in only: one asked for by somebody who has since signed
+    // out is not the next person's to join (red team authz-2).
+    if (!checkoutOpening()) beginOpening(planId, rail);
     return { ok: true, mode: "opening", plan: workerOpening.plan, provider: workerOpening.provider, done: workerOpening.done };
   }
 
-  /** The checkout the worker is opening for this page, if any: {plan, provider, done}. */
+  /**
+   * Ask the worker for the checkout, or go back to the one this page last
+   * opened for the same choice, and hold every other press until it answers
+   * or the page has had time to leave.
+   */
+  function beginOpening(planId, rail) {
+    const done = reopenLastCheckout(planId, rail) || openWorkerCheckout(planId, rail);
+    const entry = { plan: planId, provider: rail, done };
+    workerOpening = entry;
+    openingSession = sessionNow();
+    done.then((out) => {
+      // Navigating away holds it until the page has gone; anything else frees
+      // the next press at once (the pressed button's own handler redraws it).
+      if (out && out.mode === "redirect") holdWhileLeaving(entry);
+      else releaseOpening(entry, false);
+    });
+  }
+
+  /**
+   * How long a page that was sent to the checkout may still be here before
+   * the navigation counts as not having happened: Stop or Esc while the
+   * checkout page loads on a slow phone, "Stay" on the page's own leave
+   * prompt, an in-app browser that refuses the move. The page never learns of
+   * any of those, and holding the plans until a reload left every Subscribe
+   * dead (red team money-4, states-5). Generous, because the other mistake is
+   * milder: a checkout slower than this gets its buttons back while it is
+   * still loading, and a second press opens a second, unpaid checkout.
+   */
+  const LEAVE_GRACE_MS = 8000;
+
+  /** After `location.assign`: let the hold go if the page is still here once LEAVE_GRACE_MS has passed. */
+  function holdWhileLeaving(entry) {
+    // pagehide is the page really leaving (or going into the back/forward
+    // cache, which pageshow below answers): from then on nothing is let go.
+    const left = () => clearTimeout(timer);
+    const timer = setTimeout(() => {
+      global.removeEventListener?.("pagehide", left);
+      releaseOpening(entry, true);
+    }, LEAVE_GRACE_MS);
+    global.addEventListener?.("pagehide", left, { once: true });
+  }
+
+  /**
+   * Free the next press. With `repaint`, tell the page, which draws the open
+   * Pro dialog again with every plan button idle: the button that was pressed
+   * still read "Opening secure checkout…" and stayed disabled.
+   * @param {Object|null} entry The opening to let go; null for whichever there is.
+   * @param {boolean} repaint Whether the page has to draw its buttons again.
+   */
+  function releaseOpening(entry, repaint) {
+    if (!workerOpening || (entry && workerOpening !== entry)) return;
+    workerOpening = null;
+    if (repaint) emit();
+  }
+
+  /**
+   * The checkout the worker is opening for this page and this sign-in, if
+   * any: {plan, provider, done}. Keyed to the session that asked for it
+   * rather than cleared by the sign-out code, so it ends the moment that
+   * session does: on a sign-out, and on a session lost to a 401, which never
+   * goes through sign-out. The next person to sign in neither joins it nor
+   * waits on it (red team authz-2).
+   */
   function checkoutOpening() {
-    return workerOpening;
+    return workerOpening && openingSession === sessionNow() ? workerOpening : null;
+  }
+
+  /** The session signed in now, to tell one sign-in's checkout from the next one's. */
+  function sessionNow() {
+    try {
+      return global.VTAccount?.getSessionToken?.() || null;
+    } catch {
+      return null;
+    }
   }
 
   /** The worker checkout this page is opening, so a second press cannot open another. */
   let workerOpening = null;
+  /** The session it was asked for under. */
+  let openingSession = null;
+  /**
+   * The checkout the worker last sent this page to, as
+   * {plan, provider, session, url, at}, until it is gone back to once.
+   */
+  let lastRedirect = null;
+
+  /**
+   * How long after the worker opened a checkout a press of the same plan goes
+   * back to it. Creem documents an "expired" status for a checkout but not
+   * its lifetime; Stripe's checkout sessions last 30 minutes at the least and
+   * 24 hours by default, so this stays at that floor. A checkout that has
+   * expired sooner costs one wasted trip, because each is gone back to once.
+   */
+  const REOPEN_CHECKOUT_MS = 30 * 60000;
+
+  /**
+   * Back to the checkout the worker last opened for this page, when it is for
+   * this plan, this rail and this sign-in, and was opened less than
+   * REOPEN_CHECKOUT_MS ago; else null, and the worker is asked. After Stop on
+   * a slow load, or back from the checkout page, the next press of the same
+   * plan asked the worker for a second Creem checkout, which spent one of the
+   * account's twelve an hour and left two open (red team money-4).
+   * @returns {Promise<Object>|null} The redirect, in startCheckout's shape.
+   */
+  function reopenLastCheckout(planId, rail) {
+    const last = lastRedirect;
+    if (!last || last.plan !== planId || last.provider !== rail) return null;
+    lastRedirect = null;
+    if (last.session !== sessionNow() || nowMs() - last.at >= REOPEN_CHECKOUT_MS) return null;
+    rememberCheckoutIntent(planId, rail);
+    window.location.assign(last.url);
+    return Promise.resolve({ ok: true, mode: "redirect", url: last.url, plan: planId, provider: rail });
+  }
+
   try {
     // Back from the checkout through the back/forward cache: the page that
-    // navigated away is not opening anything any more.
+    // navigated away is not opening anything any more, and the dialog it
+    // kept still shows the pressed plan busy, so it is drawn again.
     global.addEventListener?.("pageshow", (e) => {
-      if (e && e.persisted) workerOpening = null;
+      if (e && e.persisted) releaseOpening(null, true);
     });
   } catch {
     /* ignore */
@@ -892,6 +1023,9 @@
     session_expired: "signin_required",
     invalid_session: "signin_required",
     rate_limited: "rate_limited",
+    // Answered after the person who asked signed out: nobody is told anything,
+    // and nobody is sent to that checkout.
+    signed_out: "signed_out",
     // An open subscription (paid, or a renewal being retried): a second
     // checkout would charge twice, so the page sends them to Manage instead.
     subscription_open: "subscription_open",
@@ -914,21 +1048,38 @@
     if (typeof ask !== "function") {
       return Promise.resolve({ ok: false, mode: "provider_unavailable", plan: planId, provider: rail });
     }
+    const asker = sessionNow();
     return ask({ plan: planId, provider: rail, returnPath: returnPathHere(), currency: checkoutCurrency(planId, rail) })
-      .then((res) => {
-        const target = res && res.ok ? validateCheckoutUrl(res.url) : null;
-        if (target && target.ok) {
-          rememberCheckoutIntent(planId, rail);
-          window.location.assign(target.url);
-          return { ok: true, mode: "redirect", url: target.url, plan: planId, provider: rail };
-        }
-        const mode = WORKER_CHECKOUT_REFUSALS[res && res.reason] || "checkout_failed";
-        const out = { ok: false, mode, plan: planId, provider: rail, reason: (res && res.reason) || "error" };
-        if (res && res.provider) out.openProvider = res.provider;
-        if (res && res.retryAfter) out.retryAfter = res.retryAfter;
-        return out;
-      })
+      .then((answer) => followWorkerAnswer(answerForAsker(answer, asker), planId, rail))
       .catch(() => ({ ok: false, mode: "checkout_failed", plan: planId, provider: rail, reason: "error" }));
+  }
+
+  /**
+   * The worker's answer, unless it is a checkout and whoever asked for it has
+   * signed out since: a checkout is bound to the account that asked, and the
+   * next person on this browser is never sent to it (red team authz-2). A
+   * refusal keeps its own reason (a 401 has just signed the asker out, and
+   * they are asked to sign in again).
+   */
+  function answerForAsker(answer, asker) {
+    if (answer && answer.ok && sessionNow() !== asker) return { ok: false, reason: "signed_out" };
+    return answer;
+  }
+
+  /** Go to the checkout the worker opened, or say why there is none, in startCheckout's shape. */
+  function followWorkerAnswer(res, planId, rail) {
+    const target = res && res.ok ? validateCheckoutUrl(res.url) : null;
+    if (target && target.ok) {
+      rememberCheckoutIntent(planId, rail);
+      lastRedirect = { plan: planId, provider: rail, session: sessionNow(), url: target.url, at: nowMs() };
+      window.location.assign(target.url);
+      return { ok: true, mode: "redirect", url: target.url, plan: planId, provider: rail };
+    }
+    const mode = WORKER_CHECKOUT_REFUSALS[res && res.reason] || "checkout_failed";
+    const out = { ok: false, mode, plan: planId, provider: rail, reason: (res && res.reason) || "error" };
+    if (res && res.provider) out.openProvider = res.provider;
+    if (res && res.retryAfter) out.retryAfter = res.retryAfter;
+    return out;
   }
 
   /** This page's path, which is where the checkout sends the buyer back to (the worker adds the rest). */

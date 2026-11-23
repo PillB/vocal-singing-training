@@ -61,8 +61,29 @@
    * load, and a few times while the page stays open, until the worker answers
    * for it or a week has passed.
    */
-  const LS_PENDING_LINK_KEY = "vt_pending_link_v1";
+  const LS_PENDING_LINK_KEY = "vt_pending_links_v2";
+  /**
+   * Where the page kept one pending link, as one object, before it kept a
+   * list. Read, merged into the list and removed; never written. The list has
+   * a key of its own because a tab opened before the list shipped still runs
+   * the old code: under the old key it read the list as nothing pending,
+   * wrote its one object over everybody's entries, and removed the key on a
+   * link (red team round two). Under its own key, an old tab only ever
+   * touches the old one, and the next read here takes what it wrote.
+   */
+  const LS_LEGACY_PENDING_LINK_KEY = "vt_pending_link_v1";
   const PENDING_LINK_MAX_AGE_MS = 7 * 86400000;
+  /**
+   * How many pending links one browser keeps, each naming who asked for it.
+   * A list, because a shared browser can hold more than one person's
+   * purchase: with one slot, the next account's checkout overwrote the only
+   * record of the last one's (red team states-2). Short, because the
+   * signed-in person's own entries are each sent on every load and on the
+   * in-page schedule; other people's are only kept. Past it, the writer's own
+   * oldest entry goes first and somebody else's only when the writer has none
+   * left to give up (writePendingLink).
+   */
+  const PENDING_LINK_MAX = 4;
   /** In-page retries after a 202; past the last one, the next load tries again. */
   const LINK_RETRY_DELAYS_MS = [4000, 12000, 30000, 90000];
   /** Answers after which retrying cannot help: malformed, unknown, or somebody else's. */
@@ -418,9 +439,15 @@
     // adopted): keep it until the answer settles it.
     if (linkAsking.has(licenseId)) return true;
     const res = await linkLicence(licenseId);
+    // Linked, and the account's answer grants nothing (the licence's record
+    // was refunded or has run out): that answer is the account's truth, so
+    // the licence goes now, not on the next refresh (red team tests-3).
+    if (res.ok && !res.granted) return false;
     // Dropped only on an answer that settles it (malformed, unknown, or
     // another account's); offline, throttled or failing, the signature stands
     // and the link is tried again (it is pending until the worker answers).
+    // An answer that came after a sign-out is none of these, and leaves the
+    // next person's licence alone.
     return res.ok || !LINK_FINAL_STATUSES.has(res.status);
   }
 
@@ -859,17 +886,25 @@
     return linksInFlight.get(key);
   }
 
-  /** One `/v1/me/link` request, and what its answer does to the pending reference. */
+  /**
+   * One `/v1/me/link` request, and what its answer does to the pending
+   * reference. `granted` is whether the account's answer carries a licence.
+   */
   async function sendLink(body, persist) {
+    const token = session?.token;
     const res = await request("POST", "/v1/me/link", body, { timeoutMs: LINK_TIMEOUT_MS });
+    // Sent with the session of somebody who has since signed out: the answer
+    // is about them, so it is not adopted for whoever is here now, and their
+    // pending link stays for them to retry (red team authz-2).
+    if (session?.token !== token) return answeredTooLate();
     // Only the account's own answer is a link. A 202 is fetch's "ok" too, and
     // its body ({ok: false, reason: "pending"}) is the webhook not having
     // landed: taken for a link, it cleared the reference and replaced the
     // account snapshot with a body that has no account in it (VG-83).
     if (res.ok && res.data?.ok === true) {
-      if (persist || samePendingLink(body)) writePendingLink(null);
+      dropPendingLink(body);
       await adopt(res.data);
-      return { ok: true, status: res.status };
+      return { ok: true, status: res.status, granted: !!res.data.token };
     }
     settlePendingLink(body, res.status, persist);
     return { ok: false, status: res.status, reason: res.data?.reason || (res.status === 0 ? "offline" : "error") };
@@ -891,15 +926,37 @@
    * again, offline and 5xx alike.
    */
   function settlePendingLink(body, status, persist) {
-    if (LINK_FINAL_STATUSES.has(status) && samePendingLink(body)) {
-      writePendingLink(null);
+    if (LINK_FINAL_STATUSES.has(status)) {
+      dropPendingLink(body);
     } else if (persist) {
       scheduleLinkRetry();
     }
   }
 
-  /** The checkout reference still waiting to be linked, or null; a week-old one is dropped. */
-  function readPendingLink() {
+  /** What a request answered after a sign-out comes to: nothing, for nobody. */
+  function answeredTooLate() {
+    return { ok: false, reason: "signed_out" };
+  }
+
+  /**
+   * The checkout references still waiting to be linked, each naming who
+   * asked; week-old ones are dropped. What the page kept under the old key
+   * (one object, from a tab still running the code before the list) is
+   * merged in, and the old key removed once the list holding it is stored.
+   * @returns {object[]} Entries, as stored.
+   */
+  function readPendingLinks() {
+    const kept = storedPendingLinks();
+    const legacy = legacyPendingLinks();
+    const added = (legacy || []).filter((rec) => !kept.some((k) => samePendingEntry(k, rec)));
+    const live = [...kept, ...added].filter(livePendingLink);
+    const changed = live.length !== kept.length || legacy !== null;
+    if (changed && storePendingLinks(live)) forgetLegacyPendingLink();
+    return live;
+  }
+
+  /** The list as stored, or as this page holds it when storage refused it. */
+  function storedPendingLinks() {
     let rec = null;
     try {
       const raw = localStorage.getItem(LS_PENDING_LINK_KEY);
@@ -907,44 +964,120 @@
     } catch {
       rec = pendingMem;
     }
-    if (!rec || typeof rec !== "object" || !(rec.sessionId || rec.licenseId)) return null;
-    if (!(Date.now() - Number(rec.at) < PENDING_LINK_MAX_AGE_MS)) {
-      writePendingLink(null);
-      return null;
-    }
-    return rec;
+    return listOf(rec);
   }
 
   /**
-   * Keep (or, with null, forget) the reference to link; keeps the first time
-   * it was asked for, and names who asked: the account when it is known, and
-   * a tag of the session, so on a shared browser the next person to sign in
-   * does not link somebody else's purchase to themselves.
+   * What is under the old key: one object as the shipped page wrote it, or a
+   * list; null when the key is not there (or storage cannot be read).
+   * @returns {object[]|null}
    */
-  function writePendingLink(body) {
-    if (!body) {
-      pendingMem = null;
-      pendingMemOnly = false;
-      try {
-        localStorage.removeItem(LS_PENDING_LINK_KEY);
-      } catch {
-        /* ignore */
-      }
-      return;
-    }
-    const prev = readPendingLink();
-    const at = samePendingLink(body, prev) ? prev.at : Date.now();
-    pendingMem = { ...body, at, acct: snapshot?.account?.id || null, sess: sessionTag() };
+  function legacyPendingLinks() {
+    let raw = null;
     try {
-      localStorage.setItem(LS_PENDING_LINK_KEY, JSON.stringify(pendingMem));
+      raw = localStorage.getItem(LS_LEGACY_PENDING_LINK_KEY);
+    } catch {
+      return null;
+    }
+    if (raw === null) return null;
+    try {
+      return listOf(JSON.parse(raw));
+    } catch {
+      return [];
+    }
+  }
+
+  /** Remove the old key, once what it held is in the list. */
+  function forgetLegacyPendingLink() {
+    try {
+      localStorage.removeItem(LS_LEGACY_PENDING_LINK_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** A stored value as a list of entries. */
+  function listOf(rec) {
+    if (Array.isArray(rec)) return rec;
+    return rec ? [rec] : [];
+  }
+
+  /** Whether two entries are one: the same reference, asked for by the same person. */
+  function samePendingEntry(a, b) {
+    if (!samePendingLink(a, b) || (a.acct || null) !== (b.acct || null)) return false;
+    return !!a.acct || a.sess === b.sess;
+  }
+
+  /** An entry that names a reference and was first asked about less than a week ago. */
+  function livePendingLink(rec) {
+    if (!rec || typeof rec !== "object" || !(rec.sessionId || rec.licenseId)) return false;
+    return Date.now() - Number(rec.at) < PENDING_LINK_MAX_AGE_MS;
+  }
+
+  /**
+   * Store the list, or forget it when it is empty.
+   * @returns {boolean} Whether storage took it (else only this page holds it).
+   */
+  function storePendingLinks(list) {
+    pendingMem = list.length ? list : null;
+    try {
+      if (list.length) localStorage.setItem(LS_PENDING_LINK_KEY, JSON.stringify(list));
+      else localStorage.removeItem(LS_PENDING_LINK_KEY);
       pendingMemOnly = false;
     } catch {
       // Quota or blocked site data: the in-page retries read pendingMem.
       pendingMemOnly = true;
     }
+    return !pendingMemOnly;
   }
 
-  /** Whether the pending reference was written by whoever is signed in now. */
+  /**
+   * Keep the reference to link, naming who asked: the account when it is
+   * known, and a tag of the session, so on a shared browser the next person
+   * to sign in does not link somebody else's purchase to themselves. Only
+   * this person's entry for the same reference is replaced, and it keeps the
+   * first time it was asked about; everybody else's entries stay, up to the
+   * cap (roomBeside).
+   */
+  function writePendingLink(body) {
+    const list = readPendingLinks();
+    const prev = list.find((rec) => samePendingLink(body, rec) && ownsPending(rec));
+    const at = prev ? prev.at : Date.now();
+    // An entry written before the account answered keeps the account it named.
+    const entry = { ...body, at, acct: snapshot?.account?.id || prev?.acct || null, sess: sessionTag() };
+    const rest = list.filter((rec) => rec !== prev);
+    storePendingLinks([...roomBeside(rest), entry]);
+  }
+
+  /**
+   * The entries kept beside a new one, oldest first. Past the cap the
+   * writer's own oldest goes first, and the oldest of somebody else's only
+   * when the writer has none left: their entry is their only way back to a
+   * purchase on this browser, and the one writing is here to retry theirs.
+   * So one person's checkouts, or return addresses naming other references,
+   * cannot push another person's purchase out. The stored order is not age
+   * order (an entry written again moves to the end and keeps its first
+   * date), so it is sorted first.
+   * @param {object[]} list Entries other than the one being written.
+   * @returns {object[]}
+   */
+  function roomBeside(list) {
+    const kept = [...list].sort((a, b) => Number(a.at) - Number(b.at));
+    while (kept.length >= PENDING_LINK_MAX) {
+      const own = kept.findIndex(ownsPending);
+      kept.splice(own >= 0 ? own : 0, 1);
+    }
+    return kept;
+  }
+
+  /** Forget this person's entry for the reference, once the worker has answered for it for good. */
+  function dropPendingLink(body) {
+    const list = readPendingLinks();
+    const rest = list.filter((rec) => !(samePendingLink(body, rec) && ownsPending(rec)));
+    if (rest.length !== list.length) storePendingLinks(rest);
+  }
+
+  /** Whether a pending entry was written by whoever is signed in now. */
   function ownsPending(rec) {
     const acct = snapshot?.account?.id;
     if (rec.acct && acct) return rec.acct === acct;
@@ -963,9 +1096,8 @@
     return h.toString(16);
   }
 
-  /** Whether a link body names the pending reference. */
-  function samePendingLink(body, pending) {
-    const rec = pending === undefined ? readPendingLink() : pending;
+  /** Whether a link body names the reference of a pending entry. */
+  function samePendingLink(body, rec) {
     if (!rec || !body) return false;
     return (!!body.sessionId && body.sessionId === rec.sessionId && body.provider === rec.provider)
       || (!!body.licenseId && body.licenseId === rec.licenseId);
@@ -983,12 +1115,23 @@
   }
 
   /**
-   * Link the pending checkout now, if there is one and somebody is signed in:
-   * on every load, after a sign-in, and on the in-page schedule.
-   * @returns {Promise<{ok: boolean, reason?: string}|null>} The answer, or null with nothing pending.
+   * Link the pending checkouts of whoever is signed in, now: on every load,
+   * after a sign-in, and on the in-page schedule. Only their own entries go,
+   * one at a time, so a list is not a burst against the worker's limit.
+   * @returns {Promise<{ok: boolean, reason?: string}|null>} An answer that
+   *   linked one, else the first answer; null with nothing of theirs pending.
    */
-  function retryPendingLink() {
-    const rec = readPendingLink();
+  async function retryPendingLink() {
+    let out = null;
+    for (const rec of readPendingLinks()) {
+      const res = await retryOne(rec);
+      if (res && (!out || res.ok)) out = res;
+    }
+    return out;
+  }
+
+  /** One pending entry, sent when it is the signed-in person's; null when it is not. */
+  function retryOne(rec) {
     if (!rec || !session?.token || !ownsPending(rec)) return Promise.resolve(null);
     const { at, acct, sess, ...body } = rec;
     return linkCheckout(body, { persist: true });
@@ -1002,7 +1145,11 @@
    */
   async function openCheckout(input) {
     if (!session?.token) return { ok: false, reason: "no_session" };
+    const token = session.token;
     const res = await request("POST", "/v1/me/checkout", checkoutBody(input), { timeoutMs: 20000 });
+    // A checkout for whoever asked: never one to send the next person to,
+    // and a 401 for their ended session is not a reason to sign out whoever is here now.
+    if (session?.token !== token) return answeredTooLate();
     if (res.ok && res.data?.url) return { ok: true, url: String(res.data.url) };
     if (res.status === 401) return lostSession();
     return refusalOf(res);
@@ -1052,7 +1199,10 @@
    */
   async function openBillingPortal() {
     if (!session?.token) return { ok: false, reason: "no_session" };
+    const token = session.token;
     const res = await request("POST", "/v1/me/billing-portal", {}, { timeoutMs: 15000 });
+    // The portal of whoever asked, as for a checkout above.
+    if (session?.token !== token) return answeredTooLate();
     if (res.ok && res.data?.url) return { ok: true, url: String(res.data.url) };
     if (res.status === 401) return lostSession();
     return {

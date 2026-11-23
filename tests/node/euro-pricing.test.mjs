@@ -159,7 +159,9 @@ test("the time zone outranks the language; the language's region decides only wh
   const cases = [
     // The zone names a member state: that state, whatever the language.
     ["en-US", "Europe/Warsaw", "PL"], ["de-DE", "Europe/Vienna", "AT"], ["es-CO", "Europe/Madrid", "ES"],
-    ["es-PE", "Europe/Madrid", "ES"], ["pt-BR", "Europe/Lisbon", "PT"],
+    ["pt-BR", "Europe/Lisbon", "PT"],
+    // The one exception: a Peruvian locale is Peru wherever the device is (the market shown soles by law).
+    ["es-PE", "Europe/Madrid", "PE"], ["qu-PE", "Europe/Berlin", "PE"],
     // The zone names no place (a hardened browser's UTC, "CET", none): the language's region subtag.
     ["pl-PL", "UTC", "PL"], ["de-AT", "", "AT"], ["en-IE", "Etc/UTC", "IE"], ["fr-BE", "CET", "BE"],
     ["sr-Latn-HR", "Etc/GMT-1", "HR"], ["sv_SE", "UTC", "SE"],

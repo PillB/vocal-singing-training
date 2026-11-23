@@ -56,8 +56,8 @@
     "sha": "98dbdc26303ebce0"
   },
   "js/account.js": {
-    "v": "20261123a",
-    "sha": "ece75327b367d0b1"
+    "v": "20261123b",
+    "sha": "3aa78fccede55b36"
   },
   "js/admin-layouts.js": {
     "v": "20261111a",
@@ -80,8 +80,8 @@
     "sha": "319fd17f4fbb6fd1"
   },
   "js/app.js": {
-    "v": "20261123b",
-    "sha": "88ef2a884181b07f"
+    "v": "20261123c",
+    "sha": "329e866a3ef87090"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -100,8 +100,8 @@
     "sha": "0e22af339ac3e711"
   },
   "js/billing.js": {
-    "v": "20261123a",
-    "sha": "9fd804ca59c1cc45"
+    "v": "20261123b",
+    "sha": "dfb9a80844bc103c"
   },
   "js/boot-head.js": {
     "v": "20261118a",

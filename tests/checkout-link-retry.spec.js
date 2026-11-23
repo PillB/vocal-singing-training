@@ -8,7 +8,8 @@
  *
  * The oracle is what the stand-in worker is asked and ends up holding (was
  * the purchase linked to the account, which requests reached it, when) and
- * what the page keeps in `vt_pending_link_v1`, never which function ran.
+ * what the page keeps in `vt_pending_links_v2` (seeded under the old key,
+ * `vt_pending_link_v1`, as the shipped page kept it), never which function ran.
  * Each claim has its control beside it: the state the defect would leave is
  * shown to be reachable and distinguishable (a reference kept while the
  * webhook is late, a reload that does send a kept reference, a record another
@@ -286,9 +287,17 @@ function licenceNow(page) {
   });
 }
 
-/** The stored pending link, as the page left it in localStorage. */
+/**
+ * The stored pending link, as the page left it in localStorage. The page
+ * keeps a list of them (red team states-2); these cases make one at most, so
+ * that one entry comes back, and a list of several comes back whole, which no
+ * single reference matches.
+ */
 function pendingRecord(page) {
-  return page.evaluate(() => JSON.parse(localStorage.getItem("vt_pending_link_v1") || "null"));
+  return page.evaluate(() => {
+    const kept = JSON.parse(localStorage.getItem("vt_pending_links_v2") || "null");
+    return Array.isArray(kept) && kept.length === 1 ? kept[0] : kept;
+  });
 }
 
 /** Answered link requests by status, in the order they reached the worker. */
@@ -555,7 +564,7 @@ test.describe("storage that refuses the reference does not stop the link", () =>
     const blockedAt = Date.now();
     const read = await page.evaluate(() => {
       try {
-        localStorage.getItem("vt_pending_link_v1");
+        localStorage.getItem("vt_pending_links_v2");
         return "read";
       } catch (err) {
         return err.name;

@@ -125,3 +125,10 @@ actual refit while reading below the stage for speaking and singing; its mutant
 restores the unwanted title jump. Existing panel/language preservation remains
 an independent check. This trades automatic stage recentering during resize for
 preserving reading intent; initial navigation and visible-control tests remain.
+
+The remaining unique41 pointer-reachability utility and covered-control /
+below-fold / short-screen regressions are retained in the focused integration
+job and full browser gate. Newer main's nightly split, current clickablePoint
+helper and scaled failure budgets are preserved;41's old whole tree would
+regress those. A mutant removes the pointer's scrolling trial and must fail on
+actual expanded-metrics state, allowing41 to close once this tree passes.

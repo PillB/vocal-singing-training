@@ -415,7 +415,35 @@ test.describe("Tu camino", () => {
     await expect(page.locator("#path-card .path-share-status")).toContainText("No se pudo compartir. Este es el texto: Esta semana canté 2 días");
   });
 
-  test("the arm without it shows nothing, stores nothing, and is still counted as exposed", async ({ page }) => {
+  test("warming up before the song is heard from the takes as they are sung, not from a row's order", async ({ page }) => {
+    // Two exercises sung through the exercise screen, the way a singer does: the order is judged when the
+    // song's take is recorded. A backfilled row listing trills before the song (today, before any take) is
+    // no evidence on its own.
+    test.setTimeout(120000);
+    const days = { ...FIVE_DAYS, days: { ...FIVE_DAYS.days, "2026-11-17": row(["s4-lip-trills", "s3-song-stanzas"]) } };
+    await boot(page, { days, flags: RETURNING });
+    expect(await page.evaluate(() => VTPath.earned())).not.toContain("warmfirst");
+    const sing = async (id) => {
+      await page.evaluate((x) => window.VTApp.openExercise(x), id);
+      await page.clock.runFor(400);
+      await page.locator("#btn-practice-start").click();
+      // Fifty seconds jumped over, not ticked through (see ab-events.spec.js).
+      await page.clock.fastForward(50000);
+      await page.clock.runFor(500);
+      // Stop, and save from the rating card the stop opens.
+      await page.locator("#btn-practice-stop").click();
+      await page.clock.runFor(800);
+      await page.locator("#btn-complete").click();
+      await page.clock.runFor(1500);
+    };
+    await sing("s4-lip-trills");
+    expect((await flags(page))["g:ev:warmfirst"], "control: trills alone are no evidence").toBeUndefined();
+    await sing("s3-song-stanzas");
+    expect((await flags(page))["g:ev:warmfirst"]).toBe(true);
+    expect(await page.evaluate(() => VTPath.earned())).toContain("warmfirst");
+  });
+
+  test("the arm without it shows nothing, earns nothing, and is still counted as exposed", async ({ page }) => {
     await boot(page, { days: FIVE_DAYS, arm: "none" });
     await expect(page.locator("#path-home-btn")).toBeHidden();
     await page.locator("#btn-history").click();

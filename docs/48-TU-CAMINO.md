@@ -33,8 +33,8 @@ four weeks, twelve weeks within the weekly goal's range, not necessarily in a
 row; the same weekday four weeks running), Volver (a comeback; a rest day
 used), Rutina (basics finished on 7 and 30 days; an Esencial or a Clase),
 Explorar (every singing area; every speaking area; both voices; a goal set
-finished), Cuidar la voz (a cool-down or recovery; a warm-up before the
-song), Escucharte (a rated take; a recording listened back). None is listed
+finished), Cuidar la voz (a cool-down or recovery; a warm-up recorded
+before a take of the song in the same tab, §10), Escucharte (a rated take; a recording listened back). None is listed
 before it is earned, none has a counter, and none is ever taken back. Each
 says, in one sentence, why the behaviour matters, with no claim the sources
 do not make.
@@ -232,8 +232,9 @@ seen once the card is on screen, not when it is drawn.
   "delete"; the note under it says days stay; (5) the experiment cannot see
   who hides it except through `path_hide`.
 - **Tests:** browser "Ocultar hides it everywhere, keeps every logro, and
-  stays hidden after a reload"; Node "hidden: no news saved up"; mutants
-  VP6, VP23, VU8.
+  stays hidden after a reload"; Node "hidden: no news saved up" and the
+  hidden-filing tests of §10; mutants VP6, VP23, VP24 to VP27, VP36, VP39,
+  VP40, VU8.
 
 ### D8 · Sharing is one sentence, sent by the singer
 
@@ -273,7 +274,7 @@ first home or Historial drawn after a practice day, in both arms.
   Historial, diluting the effect; (5) the "none" arm loses the old grid too.
 - **Tests:** ab-events.spec.js runs both arms through two Mínimos, a save and
   a refused microphone and requires every metric event in equal numbers;
-  browser "the arm without it shows nothing, stores nothing, and is still
+  browser "the arm without it shows nothing, earns nothing, and is still
   counted as exposed"; worker tests check the preset; mutants VP17, VU12.
 
 ### D10 · One design for 60-year-olds and 20-year-olds
@@ -411,3 +412,213 @@ Not verified: Safari and Firefox, real phones, real users.
 - Ask the browser to keep storage (`navigator.storage.persist`): the flags
   live in localStorage, which a browser may clear.
 - Remove the unused `pro.ach.*` strings once the marketing branch has merged.
+
+## 10. After review (2026-11-21)
+
+Codex reviewed the pull request and raised two findings (both P2). Both were
+real. Each fix was then reviewed by three independent reviewers, with every
+finding sent to a skeptic who tried to refute it. Round one confirmed four
+more gaps, round two three more (plus one trade-off kept on purpose),
+round three three more and round four three more (two reviewers found the
+first two each), and the skeptics refuted none. Round five put two
+skeptics on each finding: eleven were confirmed by both, two split and one
+refuted. All are fixed below, or kept on purpose and said so.
+
+**A · Logros earned while hidden were announced once shown again.** Every
+path that evaluates (Historial's card, the home button, the completion
+card) returned early while hidden, so nothing was filed, and the first
+evaluation after showing announced the hidden weeks as news. The rule was
+already that hidden, everything is filed as seen (quietNow). Now every path
+files while hidden: setHidden(false) files first, before the switch turns.
+So do the card, the home button and the completion card, every take this
+tab records (the ledger's `vt:practice-recorded`), and a finished set. The
+last two came from the review. A second take of the day on the exercise
+screen draws nothing afterwards, so without filing at the moment, another
+device that showed the layer again would pull that take in as news.
+Stages reached while hidden had no test; they do now. Round two found that
+a device in the experiment's other arm (arms are per device) filed nothing
+while the profile was hidden, so its morning's practice was news on the
+device that showed the layer again. Hidden, that arm now files quietly too;
+it still shows nothing either way. Trade-off, kept on purpose and confirmed
+by round two: a device that has not yet pulled an un-hide from elsewhere
+still files its takes quietly, so a logro earned there in that window is
+never marked "Nuevo". It stays earned and listed. That errs towards no
+news, never towards false news, and closing it would need a time on each
+quiet filing, which the synced flags (true or absent) cannot carry.
+
+**B · "Calentar antes de cantar" read a row's order as a timeline.**
+Backfill lists a day's exercises in the order the history was stored, and a
+sync puts one device's list before the other's. The first fix judged the
+order when the song's take was recorded, from today's row. The review broke
+that: a take is recorded when it is rated or left, not at Stop, so a song
+stopped in one tab and rated after trills recorded in another tab, or on
+another device and synced, still counted. The rule now trusts only this
+tab's own takes. The ledger tells this tab each take it records, and the
+layer keeps today's takes in order in sessionStorage (`vt_path_takes_v1`),
+so a reload keeps them and a new tab starts empty. In one tab a take is
+recorded or dropped before the next exercise can start: leaving records it,
+and a routine records each step. So this order is the order they were sung.
+A new take of the song after a warm-up or breath exercise from the same tab
+is the evidence, kept as `g:ev:warmfirst`, which syncs like the other flags.
+Round two found two holes in "the same tab". The list was not tied to a
+person, so in one tab Ana's trills warmed up Luis's song after a profile
+switch, or the next account's after a sign-in. It now belongs to the
+account and the profile. And a page brought back from the back-forward
+cache read takes that other pages of the tab had recorded meanwhile,
+perhaps after its own pending song. A page now reads the stored list once,
+at load, and adds only its own takes. Round three found two more. The
+account's id arrives only when the server answers, so a singer whose page
+loaded offline became a different practiser halfway through. The person
+is now the sign-in, known from the first moment: a short one-way
+fingerprint of the session token, never the token itself. And the stored
+list held one practiser at a time, so one take by another profile wiped
+the first one's warm-up for the next page. It now keeps an entry per
+practiser and take. Round four found that the page's own list still grew
+by every record, a rating's extra seconds included, so about forty
+exercises in one page could push the morning's trills out of it, where a
+reload would have kept them. Both lists now keep one entry per practiser
+and exercise for today, and only whether a warm-up is in them is asked.
+
+- **Beat:** timestamps from the saved history (only rated takes have them,
+  and another device's history is not on this one); a time per exercise in
+  the ledger (a schema change to synced data for one logro); a snapshot of
+  today's row at Start (needs edits inside `recordPracticeIfDue`, whose
+  complexity of 20 the lint keeps frozen).
+- **Could be wrong:** (1) a warm-up on the laptop and the song on the phone
+  is genuine but not counted (it abstains); (2) a warm-up and a song in two
+  tabs never count; (3) a duplicated tab copies sessionStorage and with it
+  the takes, which is still the same sequence; (4) history from before this
+  release never earns it; (5) the logro's text says "before your song", and
+  a second song later the same day counts, which is still true.
+- **Tests:** Node "warming up before the song is judged when the song's
+  take is recorded, through the ledger", "a row's order is not a
+  timeline…", "a song stopped here, trills recorded in another tab, then the
+  song rated…", "a reload keeps the tab's order of takes…", "only a new
+  take of the song…", "the ledger says when a take only adds seconds…";
+  browser "warming up before the song is heard from the takes as they are
+  sung…", "a tab's takes belong to whoever practised them…", "a page
+  brought back from the back-forward cache…", "one sign-in stays one
+  practiser…", "the tab keeps every practiser's takes…", "a long day in
+  one page does not push the warm-up out…"; mutants VP21, VP28 to VP33,
+  VP37, VP38, VP41 to VP45, VP47, VP48, VP62, VU16, VU17.
+
+**C · The other arm of the experiment.** Gating the set and the warm-up
+evidence on the arm, as the first fix did, would have lost for good the
+only record of a finished goal set or a warm-up order. Nothing can rebuild
+them if the layer later reaches that arm, and arms are per browser, so one
+account can be in both. They are facts of practice now, kept in every arm.
+The "none" arm still earns, marks and shows nothing while the layer is
+shown (Node "the experiment's other arm earns and shows nothing…", mutants
+VP17, VP34, VP35). While the profile is hidden, it files quietly, as above
+(Node "hidden, a device in the other arm files quietly too…", VP46).
+
+**D · A handover that waits for an answer.** When another account signs
+in on a browser that holds someone else's practice, sync asks whose it is,
+and until then it keeps the flags with the practice from before (the
+split goes by take time, and flags carry none). Round three showed that a
+warm-up evidence written in that window went to the earlier owner, who
+then held a logro they never earned, and the newcomer lost it. While the
+question waits, Tu camino now writes nothing: no evidence, no set, no
+logro, no first run (Node "while a handover question waits…", VP49 to
+VP51). What is practised then still counts as days, and the logros that
+follow from days are earned once the answer is given; a finished set or a
+warm-up order from that window is not kept.
+
+Round four found two more holes in the wait. Sync could only say "other"
+once the server had said who is signed in. After a reload that takes until
+`/v1/me` answers, and all page long offline, so the first home render
+filed the newcomer's practice for the earlier owner again. Sync now
+reports `handoverWaiting`: true while the question waits, and also while
+the account's id is not known yet and a handover from the owner on file is
+on record. The record outlives a reload; an answer (the owner on file
+changes) or a sign-out ends it, and the owner reloading their own page has
+none. And while the question waited, the completion card, the home button
+and Historial still told the newcomer the earlier owner's unseen logros as
+new, and marked them seen in the earlier owner's bag, so that owner never
+saw them as new. Now nothing is news and nothing is marked seen while it
+waits. When the answer comes, or the account turns out to own the
+practice, the home button and the card draw what waited on the same page.
+
+- **Beat:** asking sync to keep the account's id across reloads (a stale
+  id is worse than none: it would say "mine" for an account that left);
+  gating the home render in app.js (Tu camino would still file from the
+  completion cards and takes); hiding Tu camino entirely while it waits
+  (the earned list is the browser's practice, as the rest of Historial is
+  until the answer).
+- **Could be wrong:** (1) offline for a whole visit, the newcomer's sets
+  and warm-up order from it are not kept, as in round three; (2) the earned
+  list still shows the earlier owner's logros, not as new, like
+  Historial's calendar; (3) a handover recorded before the account had
+  said who it is would hold the owner back offline (no sign-in in this
+  build announces itself before its account, so none is written); (4) an
+  answer that changes the owner without telling sync's listeners would be
+  drawn on the next page (both answers tell them); (5) account.js does not
+  follow a sign-in made in another tab, so that tab is judged as signed in
+  as it was, as before.
+- **Tests:** Node "after a reload, the handover still waits until the
+  account says who it is…" (the real `js/sync.js`, with controls for the
+  owner's own reload and an answered handover), "…Ana's unseen logros are
+  not told to Bea as new, nor marked seen", "…Historial's card shows
+  nothing as new…", "once the handover is answered, or the account turns
+  out to own the practice…", "…Historial's card on screen is drawn again
+  with the news; one off screen waits"; mutants VP52 to VP61, VP63, VP64.
+
+Round five found the wait's edges. (1) The record of a handover outlived a
+sign-in made on admin.html, which loads the account without sync, so the
+browser's real owner was held back on every load until the server
+answered, and all visit long offline. Sign-outs there also set her own
+practice aside for the newcomer. The record now names the sign-in it was
+noted for (a one-way fingerprint of the session token, as above), the wait
+and the sign-out's split apply to that sign-in only, and once the owner is
+known the record nobody waits on is cleared. A record from before this
+build names no sign-in and still counts, until it is cleared that way.
+(2) A wait that began on the page (another account signing in from the
+account panel) left the home button telling the newcomer the earlier
+owner's news until home was drawn again. Tu camino is now drawn again
+whenever the wait began or ended since it last drew, and only then: sync
+tells its listeners on every write, and a redraw would close the logro
+the reader had opened. (3) The card's lingering "Nuevo" labels belonged to
+the profile, so the next sign-in saw them, during the wait and after the
+answer. They now belong to the sign-in and the profile. (4) Showing the
+layer again during the wait turned the earlier owner's switch with nothing
+filed first, so the hidden weeks came out as news once the wait ended. The
+switch is the earlier owner's setting (it lives in the loop's memory,
+which sync keeps with them), so it is not offered while the question
+waits; the hidden card says it can be shown once the question is answered.
+(5) A comeback the loop's card welcomed during the wait was announced
+again by Tu camino after the answer; what a card says in its own words is
+now remembered on the page and counted as said when the wait ends.
+(6) While the question waited, every status read each profile's whole
+record twice; it reads it once now, and Tu camino uses the status sync
+hands its listeners. The review also showed that five branches of the
+round-four code could break with every test still green; each has a test
+and a mutant now.
+
+Kept on purpose: when the answer comes on a later day than the practice,
+the logros that practice earned are filed quietly, as any logro is on a
+day with no practice (news is about today's practice); they stay earned
+and listed. And on admin.html's path the leftover practice of a newcomer
+who left unseen stays with the owner rather than taking hers with it: the
+time they left is unknown, and the person present keeps what she did.
+
+- **Tests:** Node "a handover is waited on for the sign-in it was noted
+  for…" and "once the account is known, only another account's practice
+  here waits; signed out, nothing does" (both over the real `js/sync.js`),
+  "sync looks at whose the practice is once per status…", "when a wait
+  begins under the page…", "a card's 'Nuevo' labels stay with whoever saw
+  them…", "while a handover waits, a card drawn on screen keeps nothing to
+  label new…", "while a handover waits, the hide switch is not offered…",
+  "a comeback the loop's card said during the wait…", the long day with a
+  reload; sync "the handover is waited on after a reload before the
+  account answers, for the sign-in it was noted for only" and "Ana signing
+  out after a sign-in sync never saw…" (both against the real account
+  worker); mutants VP65 to VP75 and SY47 to SY54.
+
+Verification after round four's fixes: `npm run test:core` (lint and
+every Node test) 1,300 pass, 0 fail, 2 todo; `tests/node/voice-path.test.mjs`
+54 of 54; `node qa/mutate.mjs path` 64 of 64 killed; `node qa/mutate.mjs
+pathui` 17 of 17 killed; browser voice-path, daily-loop, session sets,
+sync, shared-browser sync, synced-doc injection, accounts, ab-events,
+pro-features, home-design, home-choices, account-pro-states and
+redteam-accounts-profiles 331 of 331 pass.
+

@@ -224,3 +224,48 @@ heavy headed sweeps are excluded. Mutation BF-M9 temporarily removes
 BreathFlow from desktop WebKit's selector and must make this test fail.
 The test runs in `npm run test:core` as well as the focused workflow.
 This does not imply a speaker test or true iOS physical compatibility.
+
+
+## Follow-up QA: observable UI vs storage, mutant oracle (2026-11-22)
+
+**Finding TCH-12 / root cause.** The BF-M9 source-drift mutant correctly caused the Node
+WebKit-selection contract to fail, but the mutation harness judged it *alive*.
+The intended error message contained the diagnostic words `No tests found`;
+a broad `log.includes("No tests found")` check rejected the actual assertion.
+At commit `841c3a3`, the no-tests guard now applies only to Playwright browser
+mutants. A Node mutant still needs a named, failing assertion and no
+syntax error. Correct and incorrect log examples were checked before the patch.
+A passing same-SHA CI run is still required.
+
+**Finding TCH-13 / root cause.** The shared-ledger navigation spec clicked main
+History, Plan and Home, but checked only `VTDays.read()` afterward. A broken
+renderer could pass because the underlying state was unchanged. The enhanced
+spec now checks the **visible** History calendar count (one day), activates
+the existing 12-week Plan in the same day, checks its **visible** day count,
+and returns Home without losing the ledger. BF-M10 hides the rendered History
+calendar; BF-M11 feeds a false zero into Plan. Both must turn that same
+behavioral spec red. This narrows an important false-green route; it does
+**not** exhaustively test every main-app tab at every lesson step or a cloud
+account on a second physical device.
+
+**Red-team evidence and limits.**
+
+1. Falsifiability: BF-M9 expected-assertion/fatal-runner ambiguity reproduced
+   in Actions log `45087132974` and fixed in code; full rerun pending.
+2. UI/store divergence: main navigation spec previously used a shared-store
+   self-oracle; independent rendered-data assertions and two targeted source
+   mutations added; CI pending.
+3. Accessibility/mobility: existing CI WebKit and emulated iPhone teaching
+   tests passed at an earlier SHA, but physical iPhone/VoiceOver/200% zoom
+   remain unverified on the current candidate.
+4. Integration and release: five open PRs (#41, #47, #48, #50, #51).
+   #41/#47/#50 reported non-mergeable, and #48/#51 overlap broad integration
+   surfaces. Do not force-merge, conflate synthetic personas with interviewed
+   users, or deploy BreathFlow on the strength of an older commit.
+
+**Future-drift probes:** alter the real History renderer, active-plan counter,
+WebKit test-match pattern, storage revision, clock boundary or permission
+epoch in isolation; each must produce a specific, explainable failing
+observable rather than an unrelated runner crash. Keep competing PR heads,
+their CI SHAs, and the production GitHub Pages commit separate in the release
+ledger.

@@ -4535,6 +4535,18 @@
     }
   }
 
+  /**
+   * Start on a paused routine's own step resumes the routine: the visitor is practising it again. Left paused,
+   * its steps were taken one after another while History drew an ad between them, because a paused routine is
+   * not practice to the ad gate (js/ads.js routineUnderWay; docs/48 section 11, third red team).
+   */
+  function resumeRoutineOnStart() {
+    if (!state.structured || VTSession.get()?.status !== "paused") return;
+    if (VTSession.currentExerciseId() !== state.exercise?.id) return;
+    VTSession.resume();
+    updateSessionBanner();
+  }
+
   async function startPractice() {
     const ex = state.exercise;
     if (!ex || state.practiceLive || state.practiceStarting) return;
@@ -4551,6 +4563,7 @@
 
       startNewTakeAfterSave();
       clearPostSessionAd();
+      resumeRoutineOnStart();
       state.practiceStarting = true;
       setPracticeUI(false); // hides/disables Start while bootstrapping
       trackPracticeStart(ex, profile);

@@ -41,6 +41,9 @@ Current architecture and FSM ledger:
 [`docs/49-BREATHFLOW-AND-STATE-MACHINES.md`](./docs/49-BREATHFLOW-AND-STATE-MACHINES.md).
 Visual teaching research and red-team ledger:
 [`docs/50-TEACHING-VISUAL-PEDAGOGY.md`](./docs/50-TEACHING-VISUAL-PEDAGOGY.md).
+Progression of missing voice skills, explicit transfer checks and evidence boundaries:
+[`docs/51-VOICE-SKILLS-PROGRESSION.md`](./docs/51-VOICE-SKILLS-PROGRESSION.md).
+A checkmark or passed browser test must not be reported as verified singing technique.
 
 Run (or explicitly mark blocked):
 ```sh

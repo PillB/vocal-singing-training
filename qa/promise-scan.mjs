@@ -96,26 +96,52 @@ const nameOf = (node) => {
 const propName = (member) => (member.computed && member.property.type !== "Literal" ? "" : nameOf(member.property));
 const objName = (member) => (member.object.type === "MemberExpression" ? propName(member.object) : nameOf(member.object));
 
+/** A class's methods and fields: named by their own key, for `this.method()`. */
+const CLASS_MEMBERS = new Set(["MethodDefinition", "PropertyDefinition"]);
+
 /** The key a function is set under: the property it is assigned to, or its key in an object or class. */
 function keyOf(parent) {
   if (parent.type === "AssignmentExpression") return propName(parent.left);
-  return parent.type === "Property" || parent.type === "MethodDefinition" ? nameOf(parent.key) : "";
+  return parent.type === "Property" || CLASS_MEMBERS.has(parent.type) ? nameOf(parent.key) : "";
+}
+
+/** The selector of the element a listener is added to: `$("#wb-last")?.addEventListener(...)` gives "#wb-last". */
+function selectorOf(expr) {
+  if (expr?.type === "ChainExpression") return selectorOf(expr.expression);
+  if (expr?.type === "MemberExpression") return selectorOf(expr.object);
+  if (expr?.type !== "CallExpression") return "";
+  const arg = expr.arguments[0];
+  return arg?.type === "Literal" && typeof arg.value === "string" ? arg.value : selectorOf(expr.callee);
+}
+
+/** " #wb-last" for a callback handed to `addEventListener` on an element found by its selector, or "". */
+function listenerKey(node, parent) {
+  const c = parent.type === "CallExpression" && parent.arguments.includes(node) ? parent.callee : null;
+  if (c?.type !== "MemberExpression" || propName(c) !== "addEventListener") return "";
+  const sel = selectorOf(c.object);
+  return sel ? " " + sel : "";
 }
 
 /**
- * The name a function is known by: its own, the variable it is assigned to, or its key. A callback set on a
- * property or in an object inside a named function (`btn.onclick = () => ...` in renderNextStepCard) is named
- * after both, "renderNextStepCard.onclick", so a file's many onclicks are not merged into one. A class's
- * methods keep their own names, for `this.method()`.
+ * The name a function is known by: its own, the variable it is assigned to, its key, or the element it listens
+ * on. A callback set on a property or in an object inside a named function (`btn.onclick = () => ...` in
+ * renderNextStepCard) is named after both, "renderNextStepCard.onclick", so a file's many onclicks are not
+ * merged into one; a listener on an element found by its selector, "bindRetention #wb-last", so each button's
+ * handler can be a way into practice of its own. A class's methods and fields keep their own names.
  */
 function functionName(node, parent, owner) {
   if (node.id?.name) return node.id.name;
   if (!parent) return "";
   if (parent.type === "VariableDeclarator") return nameOf(parent.id);
   if (parent.type === "AssignmentExpression" && parent.left.type !== "MemberExpression") return nameOf(parent.left);
+  const listener = listenerKey(node, parent);
+  if (listener) return owner + listener;
   const key = keyOf(parent);
-  return key && owner !== "(top)" && parent.type !== "MethodDefinition" ? `${owner}.${key}` : key;
+  return key && owner !== "(top)" && !CLASS_MEMBERS.has(parent.type) ? `${owner}.${key}` : key;
 }
+
+/** A class field that holds a value, not a function (`send = fetch`): named by its key, as a method would be. */
+const fieldName = (node) => (node.type === "PropertyDefinition" && node.value && !isFunction(node.value) ? nameOf(node.key) : "");
 
 const isFunction = (n) => n.type === "FunctionDeclaration" || n.type === "FunctionExpression" || n.type === "ArrowFunctionExpression";
 
@@ -143,7 +169,7 @@ function walk(source, fn) {
   const visit = (node, owner) => {
     if (!node || typeof node.type !== "string") return;
     const parent = up.at(-1) || null;
-    const here = isFunction(node) ? functionName(node, parent, owner) || owner : owner;
+    const here = isFunction(node) ? functionName(node, parent, owner) || owner : fieldName(node) || owner;
     fn(node, parent, here, here !== owner ? owner : null, up);
     up.push(node);
     for (const v of Object.values(node)) {
@@ -167,8 +193,6 @@ const NAMED_CALLS = new Map([
 ]);
 /** Functions that send when called bare. */
 const BARE_CALLS = new Set(["fetch", "fetchLater", "importScripts"]);
-/** A script that has its own `open`, so a bare `open(` there is not the window's. */
-const OWN_OPEN = /\bfunction\s+open\s*\(|\b(?:const|let|var)\s+open\b/;
 
 /** Methods that send only on one object, as `object.method`, and the sink each makes. */
 const OWNED_CALLS = new Map([
@@ -192,7 +216,7 @@ function sinkValue(node) {
 /** The sink a call makes, or "". */
 function callSink(node, ctx) {
   const c = node.callee;
-  if (c.type === "Identifier") return BARE_CALLS.has(c.name) ? c.name : c.name === "open" && !ctx.ownOpen ? "window.open" : "";
+  if (c.type === "Identifier") return BARE_CALLS.has(c.name) ? c.name : c.name === "open" && !ctx.ownsOpen() ? "window.open" : "";
   if (c.type !== "MemberExpression") return "";
   const prop = propName(c);
   if (BOUND.has(prop)) return sinkValue(c.object);
@@ -267,7 +291,9 @@ const HOLDS = {
   CallExpression: (p, c) => p.arguments.includes(c),
   NewExpression: (p, c) => p.arguments.includes(c),
   ReturnStatement: () => true,
-  ArrowFunctionExpression: (p, c) => p.body === c
+  ArrowFunctionExpression: (p, c) => p.body === c,
+  AssignmentPattern: (p, c) => p.right === c,
+  PropertyDefinition: (p, c) => p.value === c
 };
 
 /** Whether `node` is handed on as a value (`const f = fetch`, `go(fetch)`), rather than called or only tested. */
@@ -302,7 +328,10 @@ const NODE_SINKS = {
   ImportExpression: () => "import()",
   ImportDeclaration: () => "import",
   ExportAllDeclaration: () => "import",
-  ExportNamedDeclaration: (n) => (n.source ? "import" : "")
+  ExportNamedDeclaration: (n) => (n.source ? "import" : ""),
+  // `const { fetch: send } = window` or `const { sendBeacon } = navigator`: the sink taken out of an object. A
+  // bare `{ fetch }` is already its own value, found as an identifier handed on.
+  Property: (n, up) => (up.at(-1)?.type === "ObjectPattern" && !(n.shorthand && BARE_CALLS.has(nameOf(n.key))) ? NAMED_CALLS.get(nameOf(n.key)) || "" : "")
 };
 
 const bump = (bag, key) => {
@@ -316,12 +345,26 @@ const bump = (bag, key) => {
  */
 export function sinksIn(source) {
   const found = Object.create(null);
-  const ctx = { ownOpen: OWN_OPEN.test(source) };
+  const own = ownOpens(source);
+  const ctx = { owner: "(top)", ownsOpen: () => own.has(ctx.owner) || own.has("(top)") };
   walk(source, (node, _parent, owner, _outer, up) => {
+    ctx.owner = owner;
     const kind = NODE_SINKS[node.type]?.(node, up, ctx);
     if (kind) bump(found, `${owner} › ${kind}`);
   });
   return found;
+}
+
+/** The functions that have an `open` of their own (a variable, a parameter or a function), so a bare `open(` there is not the window's. */
+function ownOpens(source) {
+  const own = new Set();
+  walk(source, (node, _parent, owner, outer) => {
+    if (node.type === "VariableDeclarator" && nameOf(node.id) === "open") own.add(owner);
+    if (!isFunction(node)) return;
+    if (node.id?.name === "open") own.add(outer || owner);
+    if (node.params.some((p) => nameOf(p) === "open")) own.add(owner);
+  });
+  return own;
 }
 
 /** The name a node uses from `names`: an identifier or property, a bracketed key (`m["getUserMedia"]`), or one of `literals` anywhere. */
@@ -369,18 +412,42 @@ function tally(fn, node, parent) {
   if (account) bump(fn.account, account);
 }
 
+/** Marks a method called on `this`, resolved once every function is known. */
+const THIS = "this.";
+
 /** The function a node refers to: a name that is not a property, or a method called on `this`. */
 function refOf(node, parent) {
   if (node.type !== "Identifier") return "";
   const isProperty = parent?.type === "MemberExpression" && parent.property === node && !parent.computed;
-  return !isProperty || parent.object.type === "ThisExpression" ? node.name : "";
+  if (!isProperty) return node.name;
+  return parent.object.type === "ThisExpression" ? THIS + node.name : "";
+}
+
+/**
+ * `this.x()` reaches every function of the file known by the key x: a method or field `x`, and a callback set as
+ * `this.x = ...` inside a constructor or an object ("constructor.x"). Which object `this` is cannot be told from
+ * the text, so all of them, which can only add paths.
+ */
+function resolveThis(fns) {
+  const byKey = new Map();
+  for (const name of Object.keys(fns)) {
+    const key = name.slice(name.lastIndexOf(".") + 1);
+    byKey.set(key, [...(byKey.get(key) || []), name]);
+  }
+  for (const fn of Object.values(fns)) {
+    for (const ref of [...fn.refs].filter((r) => r.startsWith(THIS))) {
+      fn.refs.delete(ref);
+      for (const name of byKey.get(ref.slice(THIS.length)) || []) fn.refs.add(name);
+    }
+  }
 }
 
 /**
  * Each named function of a script: the names it refers to (a call, a function handed on as a callback, a method
  * called on `this`, and every named function made inside it, such as a callback it sets on a property), and the
- * billing names, voice sources and sign-in checks it uses. Functions that share a name are merged, which can
- * only add paths.
+ * billing names, voice sources and sign-in checks it uses. Functions that share a name are merged, and a
+ * function reaches everything made inside it, which can only add paths. What it cannot follow is a call through
+ * a computed name, a function kept in a variable or another object and called from there, or another file.
  */
 export function functionsOf(source) {
   const fns = Object.create(null);
@@ -395,6 +462,7 @@ export function functionsOf(source) {
     const ref = refOf(node, parent);
     if (ref) fns[owner].refs.add(ref);
   });
+  resolveThis(fns);
   return fns;
 }
 
@@ -469,11 +537,13 @@ export function acrossScripts(root, scan) {
   return out;
 }
 
-/** Names an expression uses, as identifiers or properties. */
+/** Whether an expression uses one of `names`, as an identifier, a property or a bracketed key (`window["adsbygoogle"]`). */
 function mentions(node, names) {
   let hit = false;
   walkNode(node, (n) => {
     if (n.type === "Identifier" && names.has(n.name)) hit = true;
+    if (n.type === "Literal" && names.has(n.value)) hit = true;
+    if (n.type === "TemplateLiteral" && n.quasis.some((q) => names.has(q.value.cooked))) hit = true;
   });
   return hit;
 }
@@ -487,23 +557,35 @@ function walkNode(node, fn) {
   }
 }
 
-/** A variable made from AdSense's queue: `const q = (window.adsbygoogle = window.adsbygoogle || [])`. */
-function queueAlias(node, queues) {
+/**
+ * A name made from AdSense's queue: a variable (`const q = (window.adsbygoogle = window.adsbygoogle || [])`) or a
+ * function that returns it (`function adQueue() { return window.adsbygoogle; }`, called as `adQueue().push`).
+ */
+function queueAlias(node, queues, owner) {
   if (node.type === "VariableDeclarator" && node.init && mentions(node.init, queues)) return nameOf(node.id);
   if (node.type === "AssignmentExpression" && node.left.type === "Identifier" && mentions(node.right, queues)) return node.left.name;
+  if (node.type === "ReturnStatement" && node.argument && owner !== "(top)" && mentions(node.argument, queues)) return owner;
   return "";
 }
 
 /**
- * Every push to AdSense's queue, by its name or by a variable made from it, as the number of keys in each
- * object pushed ("?" for anything else). `{}` asks for the unit the page drew, and nothing more.
+ * Every push to AdSense's queue, by its name or by a variable or function made from it, as the number of keys in
+ * each object pushed ("?" for anything else). `{}` asks for the unit the page drew, and nothing more.
  */
 export function adPushes(source) {
   const queues = new Set(["adsbygoogle"]);
+  // Until no new name turns up: a helper may be written below the push that uses it, and an alias may be made
+  // from another alias, any number deep.
+  let known = 0;
+  while (queues.size > known) {
+    known = queues.size;
+    walk(source, (node, _parent, owner) => {
+      const alias = queueAlias(node, queues, owner);
+      if (alias) queues.add(alias);
+    });
+  }
   const pushes = [];
   walk(source, (node) => {
-    const alias = queueAlias(node, queues);
-    if (alias) queues.add(alias);
     const c = node.type === "CallExpression" ? node.callee : null;
     if (c?.type !== "MemberExpression" || propName(c) !== "push" || !mentions(c.object, queues)) return;
     pushes.push(node.arguments.map((a) => (a.type === "ObjectExpression" ? a.properties.length : "?")).join(","));

@@ -15,22 +15,34 @@ import vm from "node:vm";
 import { parse } from "espree";
 import { EVENT_NAMES, sanitizeProps } from "../../workers/entitlements/src/events.js";
 
-/** The names in js/analytics.js's WIRE_NAMES, read from the source rather than asked of the filter. */
+/**
+ * The names in js/analytics.js's WIRE_NAMES, read from the source rather than asked of the filter, and every other
+ * use of the list ("has", or what else touches it): a `.add(...)` elsewhere would send a name the literal lacks.
+ */
 function wireNames(source) {
   const names = [];
-  const visit = (node) => {
-    if (!node || typeof node.type !== "string") return;
+  const uses = [];
+  walkTree(parse(source, { ecmaVersion: "latest", sourceType: "script" }), (node, parent) => {
     if (node.type === "VariableDeclarator" && node.id.name === "WIRE_NAMES") {
-      const list = node.init?.arguments?.[0]?.elements || [];
-      for (const el of list) names.push(el.type === "Literal" ? el.value : `<${el.type}>`);
+      for (const el of node.init?.arguments?.[0]?.elements || []) names.push(el.type === "Literal" ? el.value : `<${el.type}>`);
+    } else if (isWireUse(node, parent)) {
+      uses.push(parent.type === "MemberExpression" && parent.object === node ? parent.property.name || "[]" : parent.type);
     }
-    for (const v of Object.values(node)) {
-      if (Array.isArray(v)) v.forEach(visit);
-      else if (v && typeof v.type === "string") visit(v);
-    }
-  };
-  visit(parse(source, { ecmaVersion: "latest", sourceType: "script" }));
+  });
+  names.uses = uses;
   return names;
+}
+
+/** WIRE_NAMES used, not declared. */
+const isWireUse = (node, parent) => node.type === "Identifier" && node.name === "WIRE_NAMES" && !(parent.type === "VariableDeclarator" && parent.id === node);
+
+function walkTree(node, fn, parent = null) {
+  if (!node || typeof node.type !== "string") return;
+  fn(node, parent);
+  for (const v of Object.values(node)) {
+    if (Array.isArray(v)) v.forEach((c) => walkTree(c, fn, node));
+    else if (v && typeof v.type === "string") walkTree(v, fn, node);
+  }
 }
 
 /**
@@ -134,6 +146,9 @@ test("the browser sends only the events the worker keeps, every one of them", ()
   const names = wireNames(readFileSync("js/analytics.js", "utf8"));
   assert.ok(names.length > 40, "control: the list is read from the source");
   assert.equal(new Set(names).size, names.length, "no name twice");
+  // Read once, by the filter, and changed nowhere: the literal is the whole list.
+  assert.deepEqual(names.uses, ["has"]);
+  assert.deepEqual(wireNames("const WIRE_NAMES = new Set(['a']); WIRE_NAMES.add('take_shape'); const s = WIRE_NAMES; f(s.has(n));").uses, ["add", "VariableDeclarator"], "control: a name added elsewhere, or the list handed on, is seen");
   assert.deepEqual([...names].sort(), [...EVENT_NAMES].sort());
   // And the filter uses that list: every name passes, and names that are not on it do not.
   const { A } = loadAnalytics();

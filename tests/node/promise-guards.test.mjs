@@ -61,7 +61,7 @@ export const EGRESS = {
   },
   "js/admin.js": { "api › VTAccount.request": [1, "the admin window's calls, for the owner's account only"] },
   "js/ads.js": {
-    "renderNativeCard › window.open": [1, "a house ad's link, opened when it is clicked"],
+    "renderNativeCard [data-ad-cta] › window.open": [1, "a house ad's link, opened when it is clicked"],
     "renderAdSensePlaceholder › createElement:script": [1, "AdSense's script, outside practice and never for Pro"],
     "renderAdSensePlaceholder › set:src": [1, "the same script's fixed address"]
   },
@@ -80,7 +80,8 @@ export const EGRESS = {
     "bindHistoryList › createElement:audio": [1, "a saved take played back, on the device"],
     "bindHistoryList › set:src": [1, "its blob: address"],
     "bindHistoryList › html:audio": [2, "the saved takes' players"],
-    "bindAccount › VTAccount.request": [2, "the owner's grants and gift codes, admin only"],
+    "bindAccount #gift-grant-form › VTAccount.request": [1, "the owner's grants, admin only"],
+    "bindAccount #gift-code-form › VTAccount.request": [1, "the owner's gift codes, admin only"],
     "renderGiftCodes › VTAccount.request": [1, "the owner's gift codes (GET), admin only"],
     "renderFunnel › VTAccount.request": [1, "the owner's funnel (GET), admin only"],
     "renderAbResults › VTAccount.request": [2, "the owner's A/B results (GET), admin only"],
@@ -139,9 +140,9 @@ const NETWORK = /› (fetch|fetchLater|sendBeacon|postMessage|window\.open|navig
  * Where practice starts, goes on and ends, and where a take is saved and looked back at: the binders and what they
  * call. The routine's banner (pause, continue, end), the take's own record and stop (bindTakeTools) and the
  * welcome-back and reminder starts (startMicroSession) are wired in binders that also open other things, so their
- * practice handlers are roots by name.
+ * practice handlers are roots by name: a click handler is a function of its own, "binder #selector".
  */
-export const PRACTICE_ROOTS = [
+const PRACTICE_CORE = [
   "bindPracticeButtons",
   "bindTakeTools",
   "bindRating",
@@ -175,6 +176,41 @@ export const PRACTICE_ROOTS = [
   "startMicroSession"
 ];
 
+/**
+ * And every other function that calls one of those, so that a cap ahead of the call is on the path too: each is
+ * here, or in NOT_A_WAY_IN with why it is not a way in (the test "every function of js/app.js that calls...").
+ */
+export const PRACTICE_ROOTS = [
+  ...PRACTICE_CORE,
+  // Everything the page binds on load: the practice screen's own controls, the piano among them, and what keeps a
+  // take when the page hides.
+  "bind",
+  // The welcome-back card and the reminder's "start now": each starts a short session from its click.
+  "bindRetention #wb-micro",
+  "bindRetention #wb-last",
+  "bindRetention #rd-start",
+  // A link that opens an exercise or the history, the tour's steps, the pitch view's own start, the daily loop's and
+  // the goal sets' starts, and the redraws after a profile switch, a synced record or a new day.
+  "reopenRoutedExercise",
+  "applyInitialRoute",
+  "tourShow",
+  "startPitchViz",
+  "init.startRoutine",
+  "init.startSet",
+  "init.refresh",
+  "showActiveProfile",
+  "showSyncedRecord",
+  "catchUpDay"
+];
+
+/** The functions of js/app.js that call into practice and are not on its path, and why each is not a way in. */
+export const NOT_A_WAY_IN = {
+  init: "the page's start: it hands startDaily to the daily loop and to the page's own hooks, and calls neither",
+  "init.onChange": "the redraw after the language changes: it draws the price dialog too, and starts nothing",
+  bindRetention: "binds the reminders card, whose second time is Pro's; its three ways into practice are roots above",
+  "bindAuth #admin-clear-progress": "the owner's admin button: it clears the progress and redraws the history"
+};
+
 /** The functions on that path that read the plan, what they read, and why: each draws, none stops practice. */
 export const PLAN_READERS = {
   renderValuePulse: ["VTBilling:1 getEntitlement:1 trialDaysLeft:1", "the progress board's Pro panel and trial line"],
@@ -189,7 +225,10 @@ export const PLAN_READERS = {
 };
 
 /** The one function on that way that touches the account module or asks whether the visitor is signed in, and why. */
-export const SIGN_IN_READERS = { headerPlanState: ["VTAccount:1 signedIn:1", "the header's plan label: Pro, trial, or signed in"] };
+export const SIGN_IN_READERS = {
+  headerPlanState: ["VTAccount:1 signedIn:1", "the header's plan label: Pro, trial, or signed in"],
+  bindPageLifecycle: ["VTSync:2", "when the page hides, after the take is kept here, a signed-in visitor's copy is sent; a guest's is nothing"]
+};
 
 /** The files that use the account module or ask whether the visitor is signed in, and why. */
 export const SIGN_IN_FILES = {
@@ -270,8 +309,9 @@ export const TRACKING_PLAN = {
   loop_remind_click: [],
   loop_tier_pick: ["tier"],
   mic_blocked: ["canRun", "exerciseId"],
-  "mic_primer_*": [],
   mic_primer_accept: [],
+  mic_primer_decline: [],
+  mic_primer_dismiss: [],
   mic_primer_show: [],
   milestone: ["n"],
   practice_day: ["n", "source", "structured"],
@@ -291,10 +331,12 @@ export const TRACKING_PLAN = {
   step_done_choice: ["choice", "exerciseId"],
   step_done_shown: ["exerciseId", "mic"],
   surprise_shown: ["id", "kind", "reason"],
-  "tour_*": ["lastStepId", "n", "pack", "total"],
+  tour_complete: ["lastStepId", "n", "pack", "total"],
+  tour_dismiss: ["lastStepId", "n", "pack", "total"],
   tour_guide_open: ["pack", "stepId"],
   tour_invite_accept: [],
   tour_invite_dismiss: [],
+  tour_skip: ["lastStepId", "n", "pack", "total"],
   tour_start: ["authored", "fromButton", "pack", "steps", "variant"],
   tour_step: ["n", "pack", "stepId", "total"],
   trial_click: ["where"],
@@ -320,35 +362,93 @@ function diffCounts(found, expected) {
 
 const flat = (bag) => Object.fromEntries(Object.entries(bag).flatMap(([file, rows]) => Object.entries(rows).map(([k, v]) => [`${file} :: ${k}`, v])));
 
-/** The events a script raises: [where, name, props keys] for a literal call, and the relays that pass one on. */
+/**
+ * The events a script raises: [where, name, props keys] for each call, and the relays that pass one on. A name
+ * made from a template (`tour_${reason}`) is each name the template can make: its one part must be a parameter of
+ * the function it is in, and every call of that function must pass a literal, a choice of two, or a parameter of
+ * its own that resolves the same way. One that cannot be resolved is listed, so no name is guessed by its prefix.
+ */
 export function eventsIn(source, file) {
-  const found = { calls: [], relays: [] };
+  const found = { calls: [], relays: [], unresolved: [] };
   const ast = parse(source, { ecmaVersion: "latest", sourceType: "script", loc: true });
-  const visit = (node, owner) => {
+  const callsTo = new Map();
+  const templates = [];
+  const visit = (node, owner, frame, parent) => {
     if (!node || typeof node.type !== "string") return;
     const here = /Function/.test(node.type) && node.id?.name ? node.id.name : owner;
-    if (node.type === "CallExpression") eventCall(node, here, file, found);
+    const inner = frameOf(node, parent) || frame;
+    if (node.type === "CallExpression") {
+      const callee = node.callee.type === "Identifier" ? node.callee.name : "";
+      if (callee) callsTo.set(callee, [...(callsTo.get(callee) || []), { args: node.arguments, frame: inner }]);
+      eventCall(node, here, file, found, (ev, keys) => templates.push({ ev, keys, frame: inner, where: `${file}:${node.loc.start.line}` }));
+    }
     for (const v of Object.values(node)) {
-      if (Array.isArray(v)) v.forEach((c) => visit(c, here));
-      else if (v && typeof v.type === "string") visit(v, here);
+      if (Array.isArray(v)) v.forEach((c) => visit(c, here, inner, node));
+      else if (v && typeof v.type === "string") visit(v, here, inner, node);
     }
   };
-  visit(ast, "(top)");
+  visit(ast, "(top)", { name: "", params: [] }, null);
+  for (const { ev, keys, frame, where } of templates) {
+    const [head, tail] = ev.quasis.map((q) => q.value.cooked);
+    const part = ev.expressions.length === 1 ? ev.expressions[0] : null;
+    const values = part ? valuesOf(part, frame, callsTo, new Set()) : null;
+    if (!values) found.unresolved.push(`${where} \`${ev.quasis.map((q) => q.value.raw).join("${}")}\``);
+    else for (const v of values) found.calls.push([where, head + v + tail, keys]);
+  }
   return found;
 }
 
-function eventCall(node, owner, file, found) {
+const paramName = (p) => (p.type === "AssignmentPattern" ? p.left.name : p.name) || "";
+
+/** A function's name (its own, or the variable it is kept in) and its parameters, or null for any other node. */
+function frameOf(node, parent) {
+  if (!/Function/.test(node.type)) return null;
+  const name = node.id?.name || (parent?.type === "VariableDeclarator" ? parent.id.name : "");
+  return { name, params: node.params.map(paramName) };
+}
+
+/**
+ * The strings an argument can be: a literal, either side of a choice, or a parameter, through every call of its
+ * function. `false` or `null` make no name (the template's function returns first on them: tour.js's end(false)
+ * closes the tour without recording it). null when it cannot be told.
+ */
+function valuesOf(arg, frame, callsTo, seen) {
+  if (arg?.type === "Literal") return literalValues(arg.value);
+  if (arg?.type === "ConditionalExpression") {
+    const [a, b] = [valuesOf(arg.consequent, frame, callsTo, seen), valuesOf(arg.alternate, frame, callsTo, seen)];
+    return a && b ? [...a, ...b] : null;
+  }
+  const i = arg?.type === "Identifier" ? frame.params.indexOf(arg.name) : -1;
+  return i >= 0 && frame.name && !seen.has(frame.name) ? paramValues(frame.name, i, callsTo, seen) : null;
+}
+
+const literalValues = (v) => (typeof v === "string" ? [v] : v === false || v === null ? [] : null);
+
+/** What the i-th parameter of `name` can be, through each of its calls; null if one cannot be told, or none is seen. */
+function paramValues(name, i, callsTo, seen) {
+  const calls = callsTo.get(name) || [];
+  const out = [];
+  for (const call of calls) {
+    const v = valuesOf(call.args[i], call.frame, callsTo, new Set([...seen, name]));
+    if (!v) return null;
+    out.push(...v);
+  }
+  return calls.length ? [...new Set(out)] : null;
+}
+
+function eventCall(node, owner, file, found, template) {
   const c = node.callee;
   const name = c.type === "MemberExpression" ? c.property.name : c.type === "Identifier" ? c.name : "";
   if (!TRACKERS.has(name)) return;
   const [ev, props] = node.arguments;
-  const literal = ev?.type === "Literal" ? ev.value : ev?.type === "TemplateLiteral" ? ev.quasis[0].value.cooked + "*" : null;
-  if (literal === null || (props && props.type !== "ObjectExpression")) {
+  const named = ev?.type === "Literal" || ev?.type === "TemplateLiteral";
+  if (!named || (props && props.type !== "ObjectExpression")) {
     found.relays.push(`${file} › ${owner}`);
     return;
   }
   const keys = (props?.properties || []).map((p) => (p.type === "SpreadElement" ? "..." + (p.argument.callee?.name || "?") : (p.key.name ?? p.key.value)));
-  found.calls.push([`${file}:${node.loc.start.line}`, literal, keys]);
+  if (ev.type === "TemplateLiteral") template(ev, keys);
+  else found.calls.push([`${file}:${node.loc.start.line}`, ev.value, keys]);
 }
 
 test("every way off the device is written down, function by function, with why it is there", () => {
@@ -410,13 +510,17 @@ test("the plan is read only in the files that sell, draw Pro or keep its extras"
 test("every event carries only the props in the plan, and nothing passes one on but the listed relays", () => {
   const calls = [];
   const relays = [];
+  const unresolved = [];
   for (const [file, source] of Object.entries(shippedScripts("."))) {
     if (file === "js/analytics.js") continue;
     const found = eventsIn(source, file);
     calls.push(...found.calls);
     relays.push(...found.relays);
+    unresolved.push(...found.unresolved);
   }
   assert.ok(calls.length > 50, "control: the call sites are found");
+  assert.ok(calls.some(([, n]) => n === "tour_skip") && calls.some(([, n]) => n === "mic_primer_decline"), "control: a name made from a template is found by each name it makes");
+  assert.deepEqual(unresolved, [], "an event's name made from a template that cannot be told: write the name out");
   const off = calls.filter(([, name, keys]) => !TRACKING_PLAN[name] || keys.some((k) => !TRACKING_PLAN[name].includes(k)));
   assert.deepEqual(off, [], "an event or a prop not in TRACKING_PLAN: add it there, and say it is not derived from the voice");
   assert.deepEqual([...new Set(relays)].sort(), [...TRACK_RELAYS].sort());
@@ -428,8 +532,7 @@ test("every event in the plan is one the worker keeps, with props it keeps: the 
   const { EVENT_NAMES, sanitizeProps } = await import("../../workers/entitlements/src/events.js");
   const missing = [];
   for (const [name, keys] of Object.entries(TRACKING_PLAN)) {
-    const known = name.endsWith("*") ? [...EVENT_NAMES].some((n) => n.startsWith(name.slice(0, -1))) : EVENT_NAMES.has(name);
-    if (!known) missing.push(name);
+    if (!EVENT_NAMES.has(name)) missing.push(name);
     for (const k of keys.filter((k) => !k.startsWith("..."))) if (!Object.hasOwn(sanitizeProps({ [k]: "x" }), k)) missing.push(`${name}.${k}`);
   }
   assert.deepEqual(missing, [], "an event or a prop the worker drops: add it to workers/entitlements/src/events.js and js/analytics.js's WIRE_NAMES together");
@@ -440,6 +543,18 @@ test("nothing on the way to practising, saving, rating or the history asks wheth
   const found = Object.fromEntries(Object.entries(path).map(([n, { uses }]) => [n, uses]));
   const expected = Object.fromEntries(Object.entries(SIGN_IN_READERS).map(([n, [uses]]) => [n, uses]));
   assert.deepEqual(diffCounts(found, expected), [], `asked on the way: ${JSON.stringify(path, null, 1)}`);
+});
+
+test("every function of js/app.js that calls into practice is on the path, or written down with why it is not a way in", () => {
+  // A cap in a click handler, ahead of the call into practice ("if (!isPro()) return openPricing(); startMicroSession()"),
+  // is checked only if the handler is on the path: here every caller of a root is, or is listed.
+  const fns = functionsOf(readFileSync("js/app.js", "utf8"));
+  const reach = reachable(fns, PRACTICE_ROOTS);
+  const core = new Set(PRACTICE_CORE);
+  const callers = Object.keys(fns).filter((n) => [...fns[n].refs].some((r) => r !== n && core.has(r)));
+  assert.ok(callers.includes("bindRetention #wb-last") && callers.includes("init"), "control: click handlers and the page's start are found as callers");
+  assert.deepEqual(callers.filter((n) => !reach.has(n) && !NOT_A_WAY_IN[n]), [], "a way into practice off the path: add it to PRACTICE_ROOTS");
+  assert.deepEqual(Object.keys(NOT_A_WAY_IN).filter((n) => !callers.includes(n) || reach.has(n)), [], "control: each exception still calls into practice from off the path");
 });
 
 test("only the files listed use the account module or ask whether the visitor is signed in", () => {
@@ -543,6 +658,20 @@ test("control: a new prop on a known event, a new event and a new relay are each
     ]
   );
   assert.deepEqual(relays, ["x.js › relay"]);
+
+  // A name made from a template is each name its calls can make, through a parameter passed on; one that cannot be
+  // told is listed rather than passed by its prefix.
+  const made = eventsIn(
+    `
+    function end(reason) { if (active) finish(reason); }
+    function finish(why) { if (!why) return; window.VTAnalytics?.track?.(\`tour_\${why}\`, { n: 1 }); }
+    function wire(x) { a.onclick = () => end(x ? "complete" : "skip"); b.onclick = () => end(false); c.onclick = () => end("closed"); }
+    function shape(contour) { window.VTAnalytics?.track?.(\`take_\${contour}\`, {}); }
+  `,
+    "x.js"
+  );
+  assert.deepEqual(made.calls.map(([, n]) => n), ["tour_complete", "tour_skip", "tour_closed"]);
+  assert.deepEqual(made.unresolved, ["x.js:5 `take_${}`"]);
 });
 
 test("control: the review's spellings of a way off the device are each found, and a module's own open or a test of beacon support is not", () => {
@@ -563,6 +692,9 @@ test("control: the review's spellings of a way off the device are each found, an
     function worker() { self.importScripts("/w.js"); }
     function popup(u) { open(u); }
     function tested() { if (navigator.sendBeacon && ok) go(); }
+    function param(b, send = fetch) { return send("/p", { body: b }); }
+    function picked(b) { const { sendBeacon } = navigator; const { fetch: get } = window; sendBeacon("/v", b); get("/g"); }
+    class Uploader { send = fetch; post = (b) => this.send("/c", { body: b }); }
   `;
   assert.deepEqual({ ...sinksIn(src) }, {
     "speak › speech-recognition": 2,
@@ -581,9 +713,19 @@ test("control: the review's spellings of a way off the device are each found, an
     "search › navigate": 1,
     "nav › navigate": 1,
     "worker › importScripts": 1,
-    "popup › window.open": 1
+    "popup › window.open": 1,
+    "param › fetch": 1,
+    "picked › sendBeacon": 1,
+    "picked › fetch": 1,
+    "send › fetch": 1
   });
   assert.deepEqual({ ...sinksIn("function open(o) {} function wire() { open({ kind: 'bug' }); }") }, {}, "a module's own open() is not the window's");
+  // A name is the module's own only where it is declared: a sibling's `let open` leaves the window's open() as it was.
+  assert.deepEqual(
+    { ...sinksIn("function list() { let open = false; open = !open; } function leave(u) { open(u); }") },
+    { "leave › window.open": 1 },
+    "a sibling's own open does not hide the window's"
+  );
 });
 
 test("control: the review's ways to hear the voice or read a take, and to ask about an account, are each found", () => {
@@ -632,10 +774,27 @@ test("control: a cap in a callback set on a property, in a method called on this
   const fns = functionsOf(engine);
   const reach = reachable(fns, Object.keys(fns).filter((n) => Object.keys(fns[n].voice).length));
   assert.deepEqual(reach.get("_report"), ["start.onstop", "_report"], "the hearer that holds the take reaches the method it calls on this");
+
+  // A callback set on this in the constructor, and a class field that holds an arrow, are reached by `this.x()` too.
+  const fields = `
+    class Engine {
+      constructor() { this.send = (b) => navigator.sendBeacon("/v", b); }
+      upload = (b) => fetch("/u", { body: b });
+      stop() { this.recorder = new MediaRecorder(s); this.recorder.ondataavailable = (e) => { this.send(e.data); this.upload(e.data); }; }
+    }
+  `;
+  const held = functionsOf(fields);
+  const heard = reachable(held, Object.keys(held).filter((n) => Object.keys(held[n].voice).length));
+  assert.deepEqual([heard.get("constructor.send")?.at(-1), heard.get("upload")?.at(-1)], ["constructor.send", "upload"]);
+  assert.deepEqual({ ...sinksIn(fields) }, { "constructor.send › sendBeacon": 1, "upload › fetch": 1 });
 });
 
 test("control: an aliased push to AdSense's queue is found, and a page's JSON-LD or speculation rules do not break the scan", async () => {
   assert.deepEqual(adPushes("const q = (window.adsbygoogle = window.adsbygoogle || []); q.push({ google_ad_client: 'ca-pub-1', enable_page_level_ads: true }); (adsbygoogle = adsbygoogle || []).push({});"), ["2", "0"]);
+  // By its name in brackets, through a helper that returns the queue, and through an alias of an alias of an alias.
+  assert.deepEqual(adPushes("window['adsbygoogle'].push({ google_ad_client: 'ca-pub-1', enable_page_level_ads: true });"), ["2"]);
+  assert.deepEqual(adPushes("adQueue().push({ a: 1 }); function adQueue() { return (window.adsbygoogle = window.adsbygoogle || []); }"), ["1"]);
+  assert.deepEqual(adPushes("const a = window.adsbygoogle; const b = a; const c = b; c.push({ x: 1, y: 2, z: 3 }); [].push({ q: 1 });"), ["3"]);
   const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
   const root = mkdtempSync(tmpdir() + "/vt-scan-");

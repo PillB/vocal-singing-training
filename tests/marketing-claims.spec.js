@@ -31,11 +31,12 @@
  *    continued, or paused with its step taken anyway, is practice again. Each check has a control that draws an
  *    ad in the same way when practice is over, so none of them passes because nothing could be drawn.
  *
- * Each has planted defects in qa/mutate.mjs (the "promises" and "promises-account-ads" sets: MK3, MK19 to MK22,
- * MK26 to MK46, MK49 to MK75) that turn it red. MK26 to MK29 are what Codex's review showed the first version let
- * through; MK30 to MK46 are what the second red team showed the second version let through; MK49 to MK70 are the
- * third red team's, on paths the third version walks now, and MK71 to MK75 the review of that round's: silent
- * takes and a send on a third tick (docs/48 section 11). What no scenario can walk is held
+ * Each has planted defects in qa/mutate.mjs (the "promises", "promises-voice" and "promises-account-ads" sets:
+ * MK3, MK19 to MK22, MK26 to MK46, MK49 to MK77) that turn it red. MK26 to MK29 are what Codex's review showed the
+ * first version let through; MK30 to MK46 are what the second red team showed the second version let through;
+ * MK49 to MK70 are the third red team's, on paths the third version walks now; MK71 to MK75 the review of that
+ * round's: silent takes and a send on an interval's later tick; MK76 and MK77 the review of those fixes: a cap
+ * after the level meter, and a piano booked but not heard (docs/48 section 11). What no scenario can walk is held
  * in the code itself by tests/node/promise-guards.test.mjs ("guards" set).
  */
 const { test, expect } = require("@playwright/test");
@@ -213,30 +214,53 @@ const secondsLeft = (page) => page.evaluate(() => (window.VTApp.getState().timer
 
 /**
  * The live take hears and plays: the microphone is open and its frames reach the take (the level meter, set to
- * zero here, moves again within half a second, and the analysis is not paused), and the reference piano sounds
- * where its box is ticked. The third red team showed a take could be live and counted while it heard nothing and
- * played nothing; the review of that round showed that an open microphone alone (`running`) stays true while
- * every frame is dropped, and that a piano checked only at the start could fall silent after it.
+ * zero here, moves again within half a second, the exercise's own mode is handed the microphone's frames in that
+ * time, and the analysis is not paused), and the reference piano is heard where its box is ticked: its notes are
+ * booked and its output carries sound. The third red team showed a take could be live and counted while it heard
+ * nothing and played nothing; the review of that round showed that an open microphone alone (`running`) stays
+ * true while every frame is dropped, that a piano checked only at the start could fall silent after it; the
+ * review of the fix, that the meter is only the first thing a frame feeds (a cap after it would drop the rest),
+ * and that a piano's books are not its sound.
  */
 async function hears(page, label, { mic = true } = {}) {
   const now = await heard(page);
-  if (now.pianoOn) expect(now.piano, `${label}: the reference piano sounds, as its tick says`).toBe(true);
+  if (now.pianoOn) {
+    expect(now.piano, `${label}: the reference piano's notes are booked, as its tick says`).toBe(true);
+    // Its output, as the piano's own monitor on the master bus reads it, in real time: the audio clock is not the
+    // page's, so this waits rather than jumps. Silence reads 0, the unlock blips about 0.001, a note 0.2 to 0.9.
+    await expect
+      .poll(() => page.evaluate(() => window.VTPiano.outputPeak()), { message: `${label}: the reference piano is heard: its output carries sound`, timeout: 3000, intervals: [100] })
+      .toBeGreaterThan(0.01);
+  }
   if (!mic) return;
   expect(now.mic, `${label}: the microphone is listening`).toBe(true);
   const meter = await page.evaluate(() => {
     const el = document.querySelector("#level-fill");
-    if (!el?.getClientRects().length) return false;
+    const mode = window.VTApp.getState().modeInstance;
+    // Count the microphone's frames the exercise's mode is handed (the no-microphone ticker's are marked noMic).
+    window.__vtModeFrames = 0;
+    if (mode && !mode.__vtCounted) {
+      const onFrame = mode.onFrame;
+      mode.onFrame = function (frame) {
+        if (!frame?.noMic) window.__vtModeFrames++;
+        return onFrame.apply(this, arguments);
+      };
+      mode.__vtCounted = true;
+    }
+    if (!el?.getClientRects().length) return { shown: false, mode: !!mode };
     el.style.width = "0%";
-    return true;
+    return { shown: true, mode: !!mode };
   });
   await page.clock.runFor(500);
   const after = await page.evaluate(() => ({
     width: parseFloat(document.querySelector("#level-fill")?.style.width) || 0,
+    frames: window.__vtModeFrames,
     paused: !!window.VTApp.getState().practice?._analysisPaused
   }));
   expect(after.paused, `${label}: the microphone's analysis is not paused`).toBe(false);
-  expect(meter, `control: ${label}: the level meter is on screen, so frames that stop would show`).toBe(true);
+  expect(meter, `control: ${label}: the level meter is on screen and a mode takes the frames, so frames that stop would show`).toEqual({ shown: true, mode: true });
   expect(after.width, `${label}: the microphone's frames reach the take (the level meter moves)`).toBeGreaterThan(0);
+  expect(after.frames, `${label}: the microphone's frames reach the exercise itself (its mode is handed them)`).toBeGreaterThan(0);
 }
 
 /**
@@ -757,8 +781,9 @@ test("your voice stays on your device: recording, saving, rating, a second take 
   await page.locator("#btn-save-rec").click();
   await expect(page.locator("#btn-save-rec"), "control: the second save finished").toBeDisabled();
   // Three minutes on, in ten-second steps. One jump fires each timer once at most (an interval ticks once, and a
-  // timer set during the jump waits past its end), so a send on an interval's third tick, or at the end of a
-  // chain of timeouts, needs the steps (the review of the third round sent the takes on a third tick, unseen).
+  // timer set during the jump waits past its end), so a send on an interval's later tick, or at the end of a
+  // chain of timeouts, needs the steps: MK71 sends the takes on a minute interval's fourth tick, four minutes
+  // after the page opens, which the single jump of 57a6f2c's version of this test never fired.
   for (let i = 0; i < 18; i++) await page.clock.fastForward(10000);
   await page.clock.runFor(2000);
   await page.evaluate(() => {

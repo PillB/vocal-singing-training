@@ -523,6 +523,37 @@ each finding. It confirmed 25, all now closed:
   checks" (three did not), when the second tab opens, two mutant counts and a
   mutant's name. All are corrected.
 
+A skeptic then went over those fixes with the same three lenses and confirmed
+16 more, all now closed:
+
+- **The guards still had gaps.** A click handler written inline in a binder
+  that also opens other things (the welcome-back card's three starts, the
+  routine's "end" answer, today's basics) was merged into its binder, which
+  was not on the path, so a cap there before the call into practice passed.
+  Each handler is now a function of its own, named by its selector, and every
+  function of `js/app.js` that calls into practice must be on the path or be
+  listed with why it is not (four are: the page's start, the redraw after a
+  language change, the reminders card's binder and an admin button). A fetch
+  held by a default parameter, a class field or a destructuring, a callback
+  set on `this` in a constructor, a window `open()` hidden by another
+  function's own `open`, and an AdSense push through `window["adsbygoogle"]`
+  or a helper that returns the queue all got past. So did an event named from
+  a template (`tour_${reason}`), which the check against the worker passed by
+  its prefix, and a name added to the browser's wire list outside its
+  literal. Ten planted defects (PX15 to PX24) stay green on the old guards and
+  fail on the new ones.
+- **The spec's new checks were thinner than they read.** The level meter is
+  only the first thing a frame feeds, so a cap right after it would drop the
+  rest unseen; the exercise's own mode must now be handed the microphone's
+  frames (MK76). "The piano sounds" read the piano's bookkeeping; its output
+  must now carry sound (MK77). MK71, the send on an interval's third tick, was
+  already caught by the earlier spec through a minute it spent elsewhere, so it
+  showed nothing; it now sends on the fourth tick, which the earlier spec
+  misses and this one catches. MK76 and MK77 pass the earlier spec too.
+- **The record**: the pull request's description was a round behind, the
+  Safari bug report was read wrongly (below), "never a miss" was not true of
+  the call graph, and the spec's time was out of date. All are corrected.
+
 Trade-offs:
 
 - The guards read names as they are spelled. A computed name
@@ -530,8 +561,24 @@ Trade-offs:
   sink's own name, or a value handed between files through a variable gets
   past them. They are tripwires backed by the browser scenarios, not proofs.
 - The call graph merges functions that share a name and joins every callback
-  made inside a function to that function. That can only add paths, so it
-  errs towards a false alarm, never a miss.
+  made inside a function to that function; that much can only add paths. It
+  can still miss one: a function kept in an array or a map and called from
+  there, one passed to another file, `this.x()` where `x` is named nowhere in
+  the file, or a call made by a name the scanner does not resolve. The path is
+  walked in `js/app.js` only; other files are held by the lists of files that
+  may read the plan or the account at all.
+- Only callers of the core practice functions must be on the path. A function
+  that calls one of those callers (a Pro profile switch that redraws the
+  history, say) is not checked unless it is listed.
+- An event named from a template is resolved through the calls of the
+  function it is in. A `false` or `null` passed there makes no name, on the
+  reading that the function returns first (tour.js's `end(false)` does). A
+  template with more than one part, or one whose part cannot be traced, fails
+  the check and must be written out.
+- The piano's output is read from its own monitor on its master bus, so a
+  mute placed after that bus (on the compressor or the speakers) would not
+  show. The audio clock runs in real time, not on the test's clock, so the
+  check waits for sound for up to three seconds rather than jumping.
 - One jump of the clock runs a take of minutes in about a second of frames.
   A cap counted in heard audio, in frames or in a timer's ticks is therefore
   not reached by the browser spec; playing each take in real frames would cost
@@ -552,7 +599,7 @@ Trade-offs:
   visitor chose to stop.
 - Signed-in visitors' progress scores still sync, as the privacy page says.
   Their voice does not.
-- The browser spec now takes about 2.2 minutes with two workers.
+- The browser spec now takes about 1.7 minutes with two workers; the piano check waits for real sound, up to three seconds a take.
 - **Still open (section 13):** Safari can clear everything a site's scripts
   stored after seven days of Safari use without user interaction on the site,
   that is a tap, click or keypress there (WebKit's "7-day cap on
@@ -562,8 +609,12 @@ Trade-offs:
   is not part of Safari, keeps its own count of days of use, and is not
   expected to lose its data. Since iOS 26 any site added to the Home Screen
   opens as a web app by default, with or without a manifest (WebKit, Safari 26
-  beta, 2025). A 2022 WebKit bug report (237350) says a Home Screen app's
-  cookies were cleared after seven days all the same. The app never asks for
+  beta, 2025). A 2022 WebKit bug report (237350), earlier cited here as a Home
+  Screen app losing its data, is about a login cookie set by script, whose
+  expiry WebKit caps at seven days; WebKit's reply there says server-set
+  cookies and HTML storage "should not be deleted" for a Home Screen web app's
+  main domain. This app keeps a guest's progress in that storage, not in
+  cookies. The app never asks for
   persistent storage (`navigator.storage.persist()`). WebKit's storage-policy
   post says a persistent origin "might be excluded from eviction" but not
   whether that lifts the seven-day cap. Two questions are left for a real
@@ -575,8 +626,8 @@ Trade-offs:
 | Guard | What it catches | Mutants |
 |---|---|---|
 | `tests/node/marketing-copy.test.mjs` | Banned words in any selling string, every inflection of an age label included, and any promise that practice stays free for ever; an English twin missing or in Spanish; jargon that confused the personas, the catalog describing a track differently from the first visit, a bare "no account" line, the "das la nota" idiom; a lesson comparison without the city its price is from, or one that does not hold; a trial end that implies progress is lost; the guide's hoarseness advice without its age warning or with different weeks per language; the line in the code, terms or privacy page behind each claim (a drift guard) | MK1, MK2, MK4–MK18, MK23–MK25, MK47, MK48 (`node qa/mutate.mjs claims`) |
-| `tests/marketing-claims.spec.js` | By what the product does (section 11, second round): full-length takes start, run out and are counted with no Pro or account window for three visitors (a first day past an hour; ten years on, a Sunday at a month's end, in English, heavy in both records, from the catalog and a routine; one who first came 45 days ago); a take recorded, saved, left and come back to sends nothing the size of it by any request, header, cookie, WebSocket, worker or WebRTC connection, for a visitor whose analytics are on, with nine controls; two takes and a rating survive a new tab and a restart a month on; with ads on, no ad of any form at any moment of a routine in any of four modes, nor while a take starts or is live, each check with its own control, and the end-of-task card goes as a take or a routine starts. Third round: the longest exercise, a drill with no microphone, "+30 s", Next and the daily class, a phone in Madrid; a rating, a natural end, a second save, three minutes and two more visits; a second tab and restarts 31 and 32 days on; a paused routine continued or its step taken anyway. The review of that round: the microphone's frames and the piano at both ends of a take, "+30 s" and Start right after Stop heard too, three minutes in ten-second steps | MK3, MK19–MK22, MK26–MK46, MK49–MK75, in two sets so that neither outgrows a CI job's 30 minutes: `node qa/mutate.mjs promises` (time limit and voice) and `promises-account-ads`, each a job in CI's mutation matrix. MK41 now also removes the wire filter, since with the filter in place its event never leaves |
-| `tests/node/promise-guards.test.mjs`, `tests/node/analytics-wire.test.mjs`, `tests/node/ads-gate.test.mjs` | Section 11, third round: a new send, voice read or event prop; the plan, the sale or a sign-in question on the way to practice; a guest store that names the account or keeps anything for the tab only; the ad config read outside the ad files; an event or prop the worker would drop leaving the browser; a routine under way not counted as practice in any state. The review of that round: callbacks set on a property, methods on `this`, the banner, record and welcome-back entry points, speech recognition and the other send spellings, a take read by its store's name, the account module and Google's sign-in, an aliased AdSense push, the browser's event list against the worker's both ways, and a planned event the worker was never told of | PT1–PT15, PV1–PV13, PW1–PW7, PA1–PA7, PN1–PN7, PX1–PX14 (`node qa/mutate.mjs guards`) |
+| `tests/marketing-claims.spec.js` | By what the product does (section 11, second round): full-length takes start, run out and are counted with no Pro or account window for three visitors (a first day past an hour; ten years on, a Sunday at a month's end, in English, heavy in both records, from the catalog and a routine; one who first came 45 days ago); a take recorded, saved, left and come back to sends nothing the size of it by any request, header, cookie, WebSocket, worker or WebRTC connection, for a visitor whose analytics are on, with nine controls; two takes and a rating survive a new tab and a restart a month on; with ads on, no ad of any form at any moment of a routine in any of four modes, nor while a take starts or is live, each check with its own control, and the end-of-task card goes as a take or a routine starts. Third round: the longest exercise, a drill with no microphone, "+30 s", Next and the daily class, a phone in Madrid; a rating, a natural end, a second save, three minutes and two more visits; a second tab and restarts 31 and 32 days on; a paused routine continued or its step taken anyway. The review of that round: the microphone's frames and the piano at both ends of a take, "+30 s" and Start right after Stop heard too, three minutes in ten-second steps. The skeptic's pass: the exercise's own mode handed the microphone's frames, and the piano's output carrying sound | MK3, MK19–MK22, MK26–MK46, MK49–MK77, in three sets so that none outgrows a CI job's 30 minutes (the time limit's and the voice's together took 25): `node qa/mutate.mjs promises` (time limit), `promises-voice` and `promises-account-ads`, each a job in CI's mutation matrix. MK41 now also removes the wire filter, since with the filter in place its event never leaves |
+| `tests/node/promise-guards.test.mjs`, `tests/node/analytics-wire.test.mjs`, `tests/node/ads-gate.test.mjs` | Section 11, third round: a new send, voice read or event prop; the plan, the sale or a sign-in question on the way to practice; a guest store that names the account or keeps anything for the tab only; the ad config read outside the ad files; an event or prop the worker would drop leaving the browser; a routine under way not counted as practice in any state. The review of that round: callbacks set on a property, methods on `this`, the banner, record and welcome-back entry points, speech recognition and the other send spellings, a take read by its store's name, the account module and Google's sign-in, an aliased AdSense push, the browser's event list against the worker's both ways, and a planned event the worker was never told of. The skeptic's pass: every caller of practice in `js/app.js` on the path or listed, inline click handlers as functions of their own, fetch held by a default parameter, class field or destructuring, a sibling's `open`, AdSense by brackets or a helper, event names made from templates resolved at their calls, and the wire list read only by its filter | PT1–PT15, PV1–PV13, PW1–PW7, PA1–PA7, PN1–PN7, PX1–PX24 (`node qa/mutate.mjs guards`) |
 | `tests/marketing-copy.spec.js` | On a real page at 360 and 390 px, both languages: the kicker stays one line, no choice is cut or over three lines, no sideways scroll, the layout control fits one row; the tab title and description follow the language; Open Graph stays Spanish | DS20–DS23 (DS23: the kicker set larger on phones). CI's runner has no Inter and draws in DejaVu Sans, which is wider, so the kicker's tracking is 0.06em under 400 px; reproduce with a fontconfig that maps Inter to DejaVu |
 | `qa/customer-research/test_rules.py` | Answers matched to the wrong round's batch; split-half reported for three cards, or unbounded for four; reliability that comes from the bad offer alone; "not worse" judged on the point estimate; a verdict on a question that failed its checks; "better" while any gate failed | 7 rule mutants plus 6 scoring mutants in `mutate_ssr.py`, all killed |
 
@@ -600,7 +651,7 @@ Trade-offs:
 | PEN, "Gratis 0", "pagos no públicos" beside the trial button, ad-free as Pro's lead benefit | 5, 7 and 7 of 9; ads the top objection | Subscriptions thread, fixed there |
 | Hoarseness: 4 weeks (AAO-HNS) or 3 (NIDCD's consumer page) | C-older memo | The age warning is added; the weeks are the voice-science owner's (docs/44) |
 | CI's intermittent `stage-design` failure ("paused" phase, scrollY 20 to 26 against at least 43) | Traced by the stability pass: the rating card's smooth reveal (`revealRating`, one frame after Stop) races the test's scroll to the top; slowed by 40 ms locally it fails 9 of 12 | The thread that owns `tests/stage-design.spec.js`: wait for the reveal before scrolling to the top, or skip a reveal the page was scrolled away from (a guard in `revealRating`, probed: 12 of 12 with the delay) |
-| "No necesitas cuenta" on Safari | Safari can clear what a site's scripts stored after seven days of Safari use without user interaction on the site (WebKit, 2020). WebKit says a Home Screen web app keeps its own count and is not expected to lose its data, and since iOS 26 any site added to the Home Screen opens as one (WebKit, Safari 26 beta); a 2022 WebKit bug report says such an app lost its cookies anyway. The app never calls `navigator.storage.persist()`, and whether that lifts the cap is undocumented (WebKit, "Updates to Storage Policy") | Owner decision: on a real iPhone and Mac, test `persist()` in Safari and a Home Screen launch on iOS 26 past seven days; if neither holds, qualify the line on Safari or offer an export |
+| "No necesitas cuenta" on Safari | Safari can clear what a site's scripts stored after seven days of Safari use without user interaction on the site (WebKit, 2020). WebKit says a Home Screen web app keeps its own count and is not expected to lose its data, and since iOS 26 any site added to the Home Screen opens as one (WebKit, Safari 26 beta); a 2022 WebKit bug report about such an app losing a login was a script-set cookie, whose expiry is capped at seven days, and WebKit replied there that HTML storage should not be deleted. The app never calls `navigator.storage.persist()`, and whether that lifts the cap is undocumented (WebKit, "Updates to Storage Policy") | Owner decision: on a real iPhone and Mac, test `persist()` in Safari and a Home Screen launch on iOS 26 past seven days; if neither holds, qualify the line on Safari or offer an export |
 
 Merging with the subscriptions branch (`claude/project-thread-nrj90h`): that
 branch carries the filter that hides "no ads" in the Pro window while ads are
@@ -647,8 +698,9 @@ halves, and settle the asset-stamp conflicts with `npm run assets:bump`.
 | MR-31 | High | `js/analytics.js` | A pitch contour on an analytics event left the device; the worker dropped it only after it arrived | The worker's rules ran on the server alone | Fixed: the same rules in the browser before sending, tested against the worker's own code; PW1–PW7, MK41 |
 | MR-32 | Test | promise tests | 47 of 48 changes on paths no visitor walked kept the promise tests green (section 11, third round) | Behaviour tests walk chosen paths only | Fixed: code-level guards, a wire filter and wider scenarios; PT, PV, PA and PN mutants, MK49–MK70 |
 | MR-33 | Test | `marketing-claims.spec.js` | Seven time caps were reported as a bare timeout | Start's poll carried no message and did not look for a window | Fixed: Start names what it saw |
-| MR-34 | Open | storage | Safari can clear a site's script-written storage after seven days of Safari use without user interaction on the site | Nothing asks for persistent storage, and whether asking helps is undocumented; a Home Screen web app keeps its own count by WebKit's account, against one bug report | Section 13 |
+| MR-34 | Open | storage | Safari can clear a site's script-written storage after seven days of Safari use without user interaction on the site | Nothing asks for persistent storage, and whether asking helps is undocumented; a Home Screen web app keeps its own count and its HTML storage by WebKit's account, untested here | Section 13 |
 | MR-35 | Test | `marketing-claims.spec.js` | A take sent five seconds after the page was hidden, takes pruned three seconds after it opened, and routine steps planned shorter all passed; the spec also sent analytics to the production worker | No clock ran after the hide or the restarts; the routine's expected length came from the code under test; no route for the worker's host | Fixed; MK68–MK70 |
 | MR-36 | Test | `qa/promise-scan.mjs`, `promise-guards.test.mjs` | Fourteen ways round the guards (review of the third round): callbacks set on a property, methods on `this`, entry points not listed, speech recognition and other send spellings, a take read by its store's name, other sign-in spellings, an aliased AdSense push | The scanner named callbacks after their property alone and added no edge to them; the lists were written from the red team's own spellings | Fixed; PX1–PX11, PX13 |
-| MR-37 | Test | `js/analytics.js`, two browser specs | The wire filter dropped an unknown event without a trace, and the checks of what the worker keeps read the filtered wire | The drift signal lived on the server, after the filter | Fixed: the plan checked against the worker's list in CI, the specs read events as raised; PX12, PX14 |
-| MR-38 | Test | `marketing-claims.spec.js` | A take that drops every frame, a piano that stops part way, a silent "+30 s" or restart, and a send on a third tick all passed | "Listening" read only whether the microphone was open, once; three takes were not heard at all; one jump fires an interval once | Fixed; MK71–MK75 |
+| MR-37 | Test | `js/analytics.js`, two browser specs | The wire filter dropped an unknown event without a trace, and the checks of what the worker keeps read the filtered wire | The drift signal lived on the server, after the filter | Fixed: the plan checked against the worker's list in CI, the specs read events as raised; PX12, PX14, DS24, DS25 |
+| MR-38 | Test | `marketing-claims.spec.js` | A take that drops every frame, a piano that stops part way, a silent "+30 s" or restart, and a send on an interval's later tick all passed | "Listening" read only whether the microphone was open, once; three takes were not heard at all; one jump fires an interval once | Fixed; MK71–MK75 |
+| MR-39 | Test | `qa/promise-scan.mjs`, guards, spec | Sixteen gaps in those fixes (a skeptic's pass): inline click handlers off the path, fetch held by a default parameter, class field or destructuring, a sibling's `open`, AdSense by brackets or a helper, templated event names passed by prefix, the wire list changed outside its literal, a cap after the level meter, a piano booked but silent, a mutant the old spec already caught | Handlers were merged into their binders; the scanner knew fewer places a value is held; the spec read the first consumer and the piano's books | Fixed; PX15–PX24, MK76, MK77, MK71 moved to the fourth tick |

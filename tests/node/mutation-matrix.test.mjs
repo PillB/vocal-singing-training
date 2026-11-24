@@ -38,7 +38,8 @@ export function usageSets(source) {
 }
 
 test("the harness's usage line names every browser set CI runs, so the documented command skips none", () => {
-  // The fifth red team found the line a round behind: copied, it skipped the time limit's second half (13 mutants).
+  // The fifth red team found the line a round behind: copied, it skipped five sets CI runs (syncing, inject, learner,
+  // authwall and the time limit's second half), 99 mutants at the time.
   const usage = usageSets(fs.readFileSync(new URL("../../qa/mutate.mjs", import.meta.url), "utf8"));
   assert.ok(usage.includes("stage"), `control: the usage line is read (${usage.join(" ")})`);
   assert.deepEqual([...usage].sort(), [...matrixSets(workflow)].sort());

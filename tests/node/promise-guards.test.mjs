@@ -17,14 +17,16 @@
 //    callbacks handed on, functions handed another (`proOnly(startDaily)`), callbacks set on a property (a
 //    button's onclick, the engine's onFrame), each handler on its own element (one found by a computed
 //    selector is named by its fixed text), and methods called on `this`. Each function on the path that reads
-//    the plan, and each that uses one's answer, is pinned by its code: a change to what it does with the answer
-//    fails until somebody reads it again and writes down that it still only draws.
+//    the plan, each that uses one's answer, and each one is handed to, is pinned by its code: a change to what
+//    it does with the answer fails until somebody reads it again and writes down that it still only draws.
 // 4. The plan is read only in the files listed, and in them only by the functions written down with why, as is
-//    every function that opens the sale or the sign-in: a cap need not be on the path (a page-wide capture
-//    listener swallows a Start and calls nothing in practice), and needs a plan read or a window to open. The
-//    sale and the sign-in are known by their openers' names, by every element bound to open them (derived from
-//    the code, so a new Pro button joins on its own), by their dialogs shown by their own ids, by the plan's
-//    marks on the header button, and by the keys they keep.
+//    every function that asks about the account or opens the sign-in: a cap need not be on the path (a
+//    page-wide capture listener swallows a Start and calls nothing in practice), and needs a plan or account
+//    read or a window to open. The sale and the sign-in are known by their openers' names, the licence's, every
+//    element bound to open them (derived from the code, through what a handler calls, and by a class only it
+//    has on the page, so a new Pro button joins on its own), their dialogs shown by id or class, the marks the
+//    readers paint (derived from what they write), and the keys they keep (derived from their files). A string
+//    is read as a selector, so a mark or a door inside a compound selector counts.
 // 5. Every event's props are the ones in the plan below: js/analytics.js sends only what the worker keeps
 //    (tests/node/analytics-wire.test.mjs), and this keeps a new prop on a known event from riding out.
 // 6. No account needed: nothing on the way to practising, saving a take, rating it or looking back at the
@@ -32,14 +34,17 @@
 //    in, but headerPlanState (the header's label, the board's tag, the trial funnel) and the page's way out;
 //    the code that keeps a guest's
 //    progress never asks, never keeps it for the tab only, and keeps it under the names it always has.
-// 7. No ad during practice: only js/ads.js reads the ad config, so no toast or card elsewhere can carry an ad
-//    past its practice gate, and it asks Google for nothing but the units it draws. Google's Auto ads (anchor
+// 7. No ad during practice: only the two ad files read the ad config, so no toast or card elsewhere can carry
+//    an ad past its practice gate, and they ask Google for nothing but the units the page draws (no push, seed
+//    or other array method puts anything else on its queue). Google's Auto ads (anchor
 //    and vignette overlays) are not asked for by the page: they are a switch in the AdSense account, which no
 //    test can see, so the go-live checklist keeps it off (docs/40 step 9c).
 //
 // What these do not do: see a sink spelt through a computed name, follow a value handed through a variable
-// (between files, or kept at a file's top level), follow the plan's answer kept in state and read elsewhere, or
-// see a cap that reads no plan and opens no window. They are tripwires for honest changes, which is how the 27
+// (between files, or kept at a file's top level), follow the plan's answer kept in state and read elsewhere,
+// read the plan off an element's hidden state or label, know a door by a selector it shares with others, or
+// see a cap that reads no plan and opens no window. The browser visitors walk every way into practice for
+// those (tests/marketing-claims.spec.js). They are tripwires for honest changes, which is how the 27
 // were written; the browser visitors and review are the rest.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -48,9 +53,17 @@ import { createHash } from "node:crypto";
 import { parse } from "espree";
 import { analyze } from "eslint-scope";
 import {
+  ACCOUNT_HANDLES,
+  ACCOUNT_KEYS,
   ACCOUNT_LITERALS,
+  ACCOUNT_MARKS,
   ACCOUNT_NAMES,
+  BILLING_HANDLES,
+  BILLING_KEYS,
   BILLING_LITERALS,
+  BILLING_MARKS,
+  BILLING_NAMES,
+  DIALOGS,
   accountNamesIn,
   acrossScripts,
   adPushes,
@@ -60,6 +73,7 @@ import {
   openerHandles,
   practicePath,
   reachable,
+  selectorWords,
   shippedScripts,
   sinksIn,
   usesByFunction,
@@ -242,7 +256,7 @@ export const PLAN_READERS = {
   showValueMoment: ["VTBilling:1", "the note about the trial after a long hold, a saved or rated take, or opening the history"],
   putAwayValueBanner: ["#btn-profile-add:1 #btn-value-pro:1", "puts that note away, and hands the focus it held to the board's next control (Pro's button among them)"],
   valueMomentFor: ["getEntitlement:1 trialDaysLeft:2", "which note that is"],
-  showValueBanner: ["trialDaysLeft:1", "the trial's days left on that note"],
+  showValueBanner: ["dataset.momentId:1 trialDaysLeft:1", "the trial's days left on that note, and which note it is"],
   progressionKeysFor: ["VTBilling:1", "Pro's extra piano progressions, an extra on top of the exercise"]
 };
 
@@ -255,23 +269,35 @@ export const SIGN_IN_READERS = {
 
 /**
  * The functions on that path whose code is pinned, and why each only draws: every one that reads the plan or asks
- * about the account, and every one that uses the answer of one of those (a call whose value it keeps, tests or
- * returns), any number deep. A count of names cannot see what a function does with an answer it already holds:
- * `restQuickStarts(ent.pro)` in showValueMoment disables the routine's Continue past an hour with no new name, and
- * `if (headerPlanState().kind === "free") return` in resumeStructured stops it with none. So a change to one of
+ * about the account, every one that uses the answer of one of those (a call whose value it keeps, tests or
+ * returns), any number deep, and every one such a function hands an answer to (renderValuePulse hands
+ * renderProStudio whether this is Pro), any number deep. A count of names cannot see what a function does with an
+ * answer it already holds: `restQuickStarts(ent.pro)` in showValueMoment disables the routine's Continue past an
+ * hour with no new name, `if (headerPlanState().kind === "free") return` in resumeStructured stops it with none,
+ * and the same gate in renderProStudio, which is handed the answer, needs no call at all. So a change to one of
  * these, or a new one, fails until somebody reads it, checks it still only draws, and writes its new hash here.
  * The hash is of the code's tree, so a comment or the layout can change freely. The cost is a hash to bump with
- * each change to these sixteen functions, renderExercise among them.
+ * each change to these 28 functions, renderExercise and the translator among them.
  */
 export const REVIEWED = {
+  accountDate: ["e115090f7375", "handed the plan's end: words it as a date"],
+  accountPlanState: ["04ad386e9bd4", "handed the account's plan: names its kind, days left and end for the header"],
   "bindPageLifecycle document": ["34f1aa01e16c", "when the tab is hidden, a signed-in visitor's progress is sent; it touches no take and no control"],
   "bindPageLifecycle window": ["98854a941fd2", "the same when the page closes, after the take is kept here"],
+  browserPlanState: ["a81248caa813", "handed the browser's plan: names its kind, days left and end for the header"],
+  fillProgressionSelect: ["427d041d4d03", "handed the progressions the piano offers, Pro's among them: fills their picker"],
   headerPlanState: ["3cba7ff4a921", "names the plan for the header, the board's tag and the trial funnel; it gates nothing"],
+  heldAccountPlan: ["f4f27ec0404a", "handed the plan and the account: which of the account's plans is held"],
   keysHaveProg: ["9ccada1cfbf8", "whether the exercise has piano progressions, Pro's among them"],
+  planDaysLeft: ["dedfdfc67cb4", "handed a plan's end: the days left to it"],
   progressionKeysFor: ["8915126b1c58", "which progressions the piano offers: Pro's extras on top of the exercise's own"],
   putAwayValueBanner: ["d9f498db7a17", "puts the trial note away and hands its focus on (focus only: it presses nothing)"],
   renderExercise: ["20b94e94ce5f", "the exercise screen: an exercise with progressions starts the piano on one note at a time"],
   renderPianoControls: ["e001cc0ae102", "draws a button for each progression the piano offers"],
+  renderProHoldTrend: ["77420a997edc", "handed whether this is Pro: the board's hold trend, or the line that unlocks it"],
+  renderProInsights: ["16e25d761cf8", "handed whether this is Pro: the board's insights panel, locked or open"],
+  renderProSpark: ["b70d065fe419", "handed whether this is Pro: the board's spark bars, dimmed or not"],
+  renderProStudio: ["281d758df8ff", "handed whether this is Pro: draws the board's Pro panels, and nothing else"],
   renderProGoalPicker: ["623363793da6", "Pro's goal picker, shown locked to a free visitor"],
   renderReminderSettings: ["ed9fb6c72da7", "the reminders card's second time field, Pro's"],
   renderRetentionChrome: ["7ad87c5e4427", "the reminders card: Pro's second reminder"],
@@ -279,7 +305,9 @@ export const REVIEWED = {
   showValueBanner: ["8a681379dce0", "the trial's days left on the note"],
   showValueMoment: ["d4d29b42fa1d", "the note about the trial: shown or put away, nothing else"],
   trackTrialFirstPractice: ["1662eabca5f5", "records trial_first_practice once for someone holding a trial; Start goes on either way"],
-  valueMomentFor: ["0d7af863dfb7", "which note that is, from the plan and the progress"]
+  tt: ["d75e0e6108f1", "the translator, handed the trial's days for the note's words"],
+  valueMomentFor: ["0d7af863dfb7", "which note that is, from the plan and the progress"],
+  valueMomentKey: ["b2f0d90d8d95", "handed the note and its days: the key of its words"]
 };
 
 /** The files that use the account module or ask whether the visitor is signed in, and why. */
@@ -290,8 +318,10 @@ export const SIGN_IN_FILES = {
   "js/app.js": "the account panel, the header and the checkout's need of an account",
   "js/auth.js": "the older sign-in itself: the owner's and testers' accounts, never asked of a visitor",
   "js/billing.js": "a purchase tied to an account",
+  "js/license.js": "the signed licence, whose claims name the account it was issued to",
   "js/reports.js": "a bug report's own list, for a signed-in reporter",
-  "js/sync.js": "the progress sync, which runs only for a signed-in visitor"
+  "js/sync.js": "the progress sync, which runs only for a signed-in visitor",
+  "js/tour.js": "the tour's step that points at the account button, which it does not press"
 };
 
 /** The files that keep a guest's progress: they never ask about an account and never keep anything for the tab only. */
@@ -325,10 +355,12 @@ const AD_NAMES = /\b(VT_ADS_CONFIG|adsbygoogle|nativeCards)\b/;
 
 /** The files that read the plan, and why. */
 export const PLAN_FILES = {
+  "js/account.js": "the licence an account's plan comes with, adopted and cleared, and the first paid plan's mark",
   "js/ads.js": "no ads for Pro",
   "js/app.js": "the pricing window, the account panel, the Pro panels and the readers above",
   "js/auth.js": "the QA unlock of a test account",
   "js/billing.js": "the plan itself",
+  "js/license.js": "the signed licence itself, the only proof of a paid plan billing trusts",
   "js/practice-days.js": "Pro's extra rest days for the streak",
   "js/reminders.js": "Pro's second reminder",
   "js/value-pulse.js": "the trial's days left on the progress board"
@@ -341,6 +373,14 @@ export const PLAN_FILES = {
  * somebody writes down why, as a new way off the device does in EGRESS. "(top)" is the file's own top level.
  */
 export const PLAN_USES = {
+  "js/account.js": {
+    adopt: ["VTLicense:4", "keeps the licence the worker signed for this account"],
+    forget: ["VTLicense:1", "clears the licence on signing out"],
+    refresh: ["VTLicense:1", "asks the worker for the account and its licence again"],
+    getState: ["VTLicense:1", "the account's state: Pro when the account holds a signed licence"],
+    init: ["VTLicense:1", "hands the licence its way to refresh itself"],
+    "(top)": ["vt_pro_paid_first_v1:1", "the key of the first paid plan's event, sent once"]
+  },
   "js/ads.js": {
     isProUser: ["VTBilling:1 isPro:1", "no ads for Pro"],
     renderNativeCard: ["[data-ad-cta]:1", "draws the house card that sells Pro, and binds its button"],
@@ -350,9 +390,9 @@ export const PLAN_USES = {
     progressionKeysFor: ["VTBilling:1", "Pro's extra piano progressions, an extra on top of the exercise"],
     isCheckoutPrelaunch: ["VTBilling:1", "whether checkout is open yet, for the pricing dialog's buttons"],
     headerPlanState: ["VTBilling:1 getEntitlement:1", "the header's plan label, the board's tag, and Start's trial funnel"],
-    planLabel: ["plan-ending:2 plan-gift:1 plan-paid:1 plan-trial:1", "the header's Pro button: the class for each plan"],
-    paintPlanButton: ["dataset.plan:1 plan-ending:1 plan-gift:1 plan-paid:1 plan-trial:1", "paints the header's Pro button with the plan it carries"],
-    paintPlanSideButtons: ["#btn-account-pricing:1", "the account panel's button to the plans, drawn for the plan"],
+    planLabel: ["btn-pro:1 plan-ending:2 plan-gift:1 plan-paid:1 plan-trial:1", "the header's Pro button: the class for each plan"],
+    paintPlanButton: ["btn-pro:1 dataset.plan:1 plan-ending:1 plan-gift:1 plan-paid:1 plan-trial:1", "paints the header's Pro button with the plan it carries"],
+    paintPlanSideButtons: ["#btn-account-pricing:1 #btn-export-progress:1", "the account panel's button to the plans, and the progress export, drawn for the plan"],
     trialSpent: ["VTBilling:1 trialStartedAt:1", "the pricing dialog's line on a trial already used"],
     updateBillingChrome: ["#btn-pricing:1 VTBilling:1 getEntitlement:1", "the header's Pro button's label"],
     renderValuePulse: ["VTBilling:1 getEntitlement:1 trialDaysLeft:1", "the progress board's Pro panel and trial line"],
@@ -366,10 +406,11 @@ export const PLAN_USES = {
     "bindProStudio #btn-profile-add": ["VTBilling:1 openPricing:1", "a second singer's profile is Pro's"],
     "bindProStudio #sel-week-goal": ["VTBilling:1 openPricing:1", "the weekly goal picker is Pro's"],
     valueMomentFor: ["getEntitlement:1 trialDaysLeft:2", "which note follows a rated take"],
-    showValueBanner: ["trialDaysLeft:1", "the trial's days left on that note"],
+    showValueBanner: ["dataset.momentId:1 trialDaysLeft:1", "the trial's days left on that note, and which note it is"],
     showValueMoment: ["VTBilling:1", "the note about the trial after a long hold, a saved or rated take, or opening the history"],
     putAwayValueBanner: ["#btn-profile-add:1 #btn-value-pro:1", "puts that note away, and hands its focus to the board's next control"],
-    relabelValueBanner: ["VTBilling:1 trialDaysLeft:1", "the same note, redrawn in the new language"],
+    relabelValueBanner: ["VTBilling:1 dataset.momentId:1 trialDaysLeft:1", "the same note, redrawn in the new language"],
+    hideValueBanner: ["dataset.momentId:1", "puts the note away, remembering which one was dismissed"],
     renderPricingModal: ["VTBilling:1 getEntitlement:2", "the pricing dialog itself"],
     "renderPricingModal btn": ["dataset.plan:1 openAccount:1", "a plan button pressed: the plan it names, and the account first for someone not signed in"],
     pricingStatusLine: ["trialDaysLeft:1", "the pricing dialog's status line"],
@@ -385,7 +426,7 @@ export const PLAN_USES = {
     openBillingPortal: ["VTBilling:2", "the customer portal, from the pricing dialog"],
     exportProgress: ["VTBilling:2 openPricing:1", "the progress export is Pro's: a free visitor is shown the plans"],
     bindBillingEvents: ["VTBilling:3", "redraws when the plan changes, and the return from a checkout"],
-    bindBilling: ["#btn-pricing:1 #btn-value-pro:1 #value-banner-cta:1 VTBilling:1 openPricing:2", "binds the header's Pro button, the progress board's and the trial note's"],
+    bindBilling: ["#btn-export-progress:1 #btn-pricing:1 #btn-value-pro:1 #value-banner-cta:1 VTBilling:1 openPricing:2", "binds the header's Pro button, the progress board's and the trial note's, and the progress export, Pro's"],
     "bindBilling #value-banner-cta": ["openPricing:1", "the trial note's button to the plans"],
     "bindBilling #btn-demo-pro": ["VTBilling:2", "the demo build's button that turns Pro on"],
     "(top)": ["openAccount:2 openPricing:2", "the page's exports of the two openers, for the other scripts"]
@@ -394,6 +435,14 @@ export const PLAN_USES = {
     login: ["VTBilling:3", "the QA unlock of a test account"]
   },
   "js/billing.js": {
+    verificationConfigured: ["VTLicense:1", "the plan itself: whether a licence can be checked here"],
+    licenseClaims: ["VTLicense:1", "the plan itself: the signed licence's claims"],
+    getLicenseStatus: ["VTLicense:1", "the plan itself: whether the licence is being checked"],
+    clearEntitlement: ["VTLicense:1", "the plan itself: clears it"],
+    rememberCheckoutIntent: ["vt_billing_intent:1", "remembers which plan a checkout was started for"],
+    claimLicense: ["VTLicense:1", "the plan itself: claims the licence a checkout paid for"],
+    returnedPlanAndProvider: ["vt_billing_intent:2", "the plan a returning checkout was for"],
+    refreshLicense: ["VTLicense:1", "the plan itself: asks the worker for the licence again"],
     trialStartedAt: ["trialStartedAt:1", "the plan itself: when the trial started"],
     ensureTrial: ["trialStartedAt:1", "the plan itself: the trial's start, once"],
     canStartTrial: ["trialStartedAt:1", "the plan itself: whether this browser still has its trial"],
@@ -406,9 +455,12 @@ export const PLAN_USES = {
     can: ["isPro:1", "the plan itself: Pro's feature flags"],
     exportProgressJson: ["getEntitlement:1", "the progress export, Pro's"],
     "(top)": [
-      "VTBilling:2 getEntitlement:2 isPro:2 trialActive:2 trialDaysLeft:2 trialStartedAt:2 vt_billing_trial_started_v1:1 vt_billing_v1:1",
+      "VTBilling:2 VTLicense:1 getEntitlement:2 isPro:2 trialActive:2 trialDaysLeft:2 trialStartedAt:2 vt_billing_trial_started_v1:1 vt_billing_v1:1",
       "the plan's storage keys and its exports"
     ]
+  },
+  "js/license.js": {
+    "(top)": ["VTLicense:2 vt_license_v1:1", "the licence's storage key and its export"]
   },
   "js/practice-days.js": {
     isPro: ["VTBilling:2 isPro:2", "Pro's extra rest days for the streak"],
@@ -424,39 +476,146 @@ export const PLAN_USES = {
 
 /** The functions that open the sign-in: the account panel's opener, Google's button and its sign-in, and an emailed code. */
 const SIGN_IN_NAMES = /^(openAccount|signInWithGoogle|startEmailSignIn|renderGoogleButton)$/;
+/**
+ * What a click opens, for finding the buttons that open the sale or the sign-in: the opener or its dialog shown.
+ * Google's button is drawn inside a panel already open (the owner's admin window draws it on any failed request,
+ * and the account panel after a sign-out), so drawing it is not a door of its own; its uses are written down below.
+ */
+const OPENS_SALE = /^(openPricing|#pricing-modal:open)$/;
+const OPENS_SIGN_IN = /^(openAccount|signInWithGoogle|startEmailSignIn|#account-modal:open)$/;
 /** What opens the sign-in: one of those, the account panel shown by its own id, or an element bound to open it (not the keys it keeps). */
-const opensSignIn = (use) => SIGN_IN_NAMES.test(use) || use === "#account-modal:open" || (ACCOUNT_LITERALS.has(use) && !use.startsWith("vt_"));
+const opensSignIn = (use) => SIGN_IN_NAMES.test(use) || use === "#account-modal:open" || ACCOUNT_HANDLES.has(use);
 
 /**
- * Every function that opens the sign-in, file by file, and why. A wall in front of practice can be the account as
- * well as the plans, and need not read the plan: so these are written down as the plan's readers are.
+ * Every function that asks whether the visitor is signed in, or opens the sign-in, file by file, with what it uses
+ * and why. A wall in front of practice can be the account as well as the plans, and it need not open anything or
+ * be on the way to practice: a page-wide capture listener that swallows a guest's rating, on the account's word,
+ * calls nothing in practice. So every reader is written down, as the plan's are, and a new one, anywhere, fails
+ * here until somebody writes down why it cannot stand in front of practice.
  */
-export const SIGN_IN_OPENERS = {
+export const ACCOUNT_USES = {
   "js/account.js": {
+    adopt: ["VTLicense:4", "the account itself: keeps the licence the worker signed for it"],
+    forget: ["VTLicense:1", "the account itself: signing out clears the licence"],
     startEmailSignIn: ["startEmailSignIn:1", "the account itself: the emailed code"],
     renderGoogleButton: ["renderGoogleButton:1", "the account itself: Google's button"],
     "renderGoogleButton.callback": ["signInWithGoogle:1", "what Google's button does when pressed"],
     signInWithGoogle: ["signInWithGoogle:1", "the account itself"],
-    "(top)": ["renderGoogleButton:2 signInWithGoogle:2 startEmailSignIn:2", "the account's exports"]
+    refresh: ["VTLicense:1", "the account itself: asks the worker for the account and its licence again"],
+    getState: ["VTLicense:1 signedIn:1", "the account itself: its state"],
+    getSessionToken: ["getSessionToken:1", "the account itself: its session"],
+    init: ["VTLicense:1", "the account itself: hands the licence its way to refresh"],
+    "(top)": ["VTAccount:1 getSessionToken:2 renderGoogleButton:2 signInWithGoogle:2 startEmailSignIn:2 vt_account_plan_v1:1 vt_account_session_v1:1", "the account's storage keys and its exports"]
+  },
+  "js/admin-layouts.js": {
+    load: ["VTAccount:2", "the owner's admin window: the layout counts, asked as the owner"],
+    loadGlance: ["VTAccount:3", "the same window's summary"]
   },
   "js/admin.js": {
-    drawSignIn: ["renderGoogleButton:1", "the owner's admin window asks its owner to sign in"]
+    api: ["VTAccount:1", "the owner's admin window: its requests, as the owner"],
+    failureText: ["VTAccount:1", "the same window's error line"],
+    drawSignIn: ["VTAccount:1 renderGoogleButton:1", "the owner's admin window asks its owner to sign in"],
+    boot: ["VTAccount:1 signedIn:2", "the owner's admin window starts: is the owner signed in"],
+    "bindSession #admin-signout": ["VTAccount:1", "the admin window's sign-out"],
+    "bindSession #gate-retry": ["VTAccount:1", "the admin window's 'try again' at its sign-in"]
   },
   "js/app.js": {
+    "bindPageLifecycle window": ["VTSync:1", "when the page hides, after the take is kept here, a signed-in visitor's copy is sent; a guest's is nothing"],
+    "bindPageLifecycle document": ["VTSync:1", "the same, when the tab is hidden rather than closed"],
+    headerPlanState: ["VTAccount:1 signedIn:1", "the header's plan label (Pro, trial, or signed in), the board's tag, and Start's trial funnel"],
+    trialSpent: ["VTAccount:1 signedIn:1", "the pricing dialog's line on a trial already used, across an account's browsers"],
+    updateBillingChrome: ["#btn-start-trial:1", "draws the pricing dialog's trial button"],
+    paintPricingTrial: ["VTAccount:1 signedIn:1", "the pricing dialog's trial button: offered, and the length it names"],
+    catchUpAccount: ["VTAccount:2 VTSync:1 signedIn:1", "the tab shown again, signed in: the account asked again and a sync at most once a minute"],
     "renderPricingModal btn": ["openAccount:1", "a plan button pressed by someone not signed in opens the account first"],
-    refreshAccountUI: ["#btn-account:1", "the header's account button's label"],
+    openPricing: ["VTAccount:2", "the pricing dialog asks the account for its sign-in methods as it opens"],
+    accountPanelState: ["VTAccount:1 signedIn:1", "what the account panel showed, for its own event"],
+    noteTrialArmExposure: ["VTAccount:1 signedIn:1", "the trial test's arm, counted for a signed-in account once"],
+    accountSyncLine: ["VTSync:1", "the account panel's line on when progress last synced"],
+    accountSignIn: ["VTAccount:1", "which sign-in methods the account panel may draw"],
+    accountInitialFocus: ["signedIn:2", "where the account panel puts the focus when it opens"],
+    refreshAccountUI: ["#btn-account:1 VTAccount:1 VTAuth:1 signedIn:5", "redraws the account panel and the header's account button"],
+    paintAccountLedes: ["signedIn:5", "the panel's lede, Start's step 3 and Historial's lede, worded for signed in or out"],
+    paintAccountDoor: ["door-avatar:1 door-name:1 is-signed-in:1 signedIn:2", "the header's account button: a name and its mark when signed in"],
+    accountDoorName: ["signedIn:1", "the name that button shows"],
     paintSignInControls: ["#account-email-form:1", "the account panel's email form, shown when the worker offers it"],
-    mountGoogleButton: ["renderGoogleButton:1", "Google's button inside the account panel"],
-    openAccount: ["#account-modal:open:1 openAccount:1", "the account panel's own opener"],
-    bindAuth: ["#btn-account:1 openAccount:1", "the header's account button"],
+    paintAccountOffer: ["signedIn:2", "what an account is for, above the button that makes one"],
+    paintAccountWho: ["signedIn:1", "who is signed in, inside the panel"],
+    paintAccountPlanAndSync: ["signedIn:2", "the signed-in account's plan line and last sync"],
+    paintOwnerQuestion: ["VTSync:1 signedIn:1", "the panel's question when this browser holds another account's practice"],
+    paintAccountTrial: ["signedIn:1", "the panel's trial button, for an account that never used it"],
+    paintAccountTools: ["signedIn:2", "the panel's redeem form and sync button, and the owner's gifting tools"],
+    mountGoogleButton: ["VTAccount:3 renderGoogleButton:1 signedIn:1", "Google's button inside the account panel"],
+    askWhoIsSignedIn: ["VTAccount:2 signedIn:1", "the panel opened: asks the worker who is signed in if it never answered"],
+    openAccount: ["#account-modal:open:1 VTAccount:2 VTAuth:1 openAccount:1 signedIn:3", "the account panel's own opener"],
+    bindAuth: ["#btn-account:1 VTAuth:1 openAccount:1", "the header's account button, and the owner's admin buttons"],
+    "bindAuth #btn-logout": ["VTAccount:1 VTAuth:1 VTSync:1", "the panel's sign-out"],
+    "bindAuth #account-retry": ["VTAccount:1", "the panel's 'try again' when Google's script did not load"],
+    "bindAuth #login-form": ["VTAuth:2", "the older sign-in's form, for the owner and testers"],
+    "bindAuth #admin-force-pro": ["VTAuth:1", "the owner's admin button that turns Pro on"],
+    "bindAuth #admin-clear-billing": ["VTAuth:1", "the owner's admin button that clears the plan"],
+    "bindAuth #admin-clear-progress": ["VTAuth:1", "the owner's admin button that clears the progress"],
     bindAccount: ["#account-code-form:1 #account-code-resend:1 #account-email-form:1", "binds the account panel's email and code steps"],
     showCodeStep: ["#account-code-form:1 #account-code-resend:1 #account-email-form:1", "the panel's step from the email to the code"],
     showEmailStep: ["#account-code-form:1 #account-code-resend:1 #account-email-form:1", "the panel's step back to the email"],
-    "bindAccount #account-email-form": ["startEmailSignIn:1", "the account panel's email form"],
-    "bindAccount #account-code-form": ["#account-code-form:1 #account-code-resend:1", "the code typed in: the sign-in's last step, inside the panel"],
-    "bindAccount #account-code-resend": ["#account-code-form:1 startEmailSignIn:1", "the account panel's 'send the code again'"],
-    startAccountTrial: ["openAccount:1", "the account's trial: someone not signed in is sent to the panel"],
-    "(top)": ["openAccount:2", "the page's export of the opener, for the other scripts"]
+    "bindAccount #account-email-form": ["VTAccount:1 startEmailSignIn:1", "the account panel's email form"],
+    "bindAccount #account-code-form": ["#account-code-form:1 #account-code-resend:1 VTAccount:1", "the code typed in: the sign-in's last step, inside the panel"],
+    "bindAccount #account-code-resend": ["#account-code-form:1 VTAccount:1 startEmailSignIn:1", "the account panel's 'send the code again'"],
+    "bindAccount #btn-owner-add": ["VTSync:1", "the panel's answer: add this browser's practice to the account"],
+    "bindAccount #btn-owner-mine": ["VTSync:1", "the panel's answer: keep it as this browser's own"],
+    "bindAccount #btn-account-trial": ["VTAccount:1", "the panel's trial button"],
+    "bindAccount #account-redeem-form": ["VTAccount:1", "the panel's form for a gift code"],
+    "bindAccount #btn-account-sync": ["VTSync:1", "the panel's 'sync now'"],
+    "bindAccount #gift-grant-form": ["VTAccount:1", "the owner's gifting tool in the panel"],
+    "bindAccount #gift-code-form": ["VTAccount:1", "the owner's gift-code tool in the panel"],
+    renderGiftCodes: ["VTAccount:1 VTAuth:1", "the owner's list of gift codes"],
+    renderFunnel: ["VTAccount:1 VTAuth:1", "the owner's funnel counts"],
+    renderAbResults: ["VTAccount:2 VTAuth:1", "the owner's A/B results"],
+    watchAccountChanges: ["VTAccount:1 VTSync:2", "redraws the panel, the header and the home card when the account or its record changes"],
+    startTrialFromPricing: ["VTAccount:2", "the pricing dialog's trial button: an account's trial, or the browser's own"],
+    startAccountTrial: ["VTAccount:1 openAccount:1 signedIn:1", "the account's trial: someone not signed in is sent to the panel"],
+    linkReturnedCheckout: ["VTAccount:1", "a checkout paid while signed in is tied to the account"],
+    bindBilling: ["#btn-start-trial:1", "binds the pricing dialog's trial button"],
+    "(top)": ["#btn-start-trial:1 openAccount:2", "the trial buttons each dialog holds, and the page's export of the opener"]
+  },
+  "js/auth.js": {
+    "(top)": ["VTAuth:1 vt_auth_session_v1:1", "the older sign-in itself, for the owner and testers: its key and its export"]
+  },
+  "js/billing.js": {
+    accountState: ["VTAccount:1", "a purchase tied to an account: who is buying"],
+    accountRails: ["VTAccount:1", "which ways to pay the account's worker offers"],
+    verificationConfigured: ["VTLicense:1", "the plan itself: whether a licence can be checked here"],
+    licenseClaims: ["VTLicense:1", "the plan itself: the signed licence's claims"],
+    getLicenseStatus: ["VTLicense:1", "the plan itself: whether the licence is being checked"],
+    clearEntitlement: ["VTLicense:1", "the plan itself: clears it"],
+    checkoutRefusal: ["signedIn:1", "why a checkout cannot start: it needs an account"],
+    claimLicense: ["VTLicense:1", "the plan itself: claims the licence a checkout paid for"],
+    refreshLicense: ["VTLicense:1", "the plan itself: asks the worker for the licence again"],
+    "(top)": ["VTLicense:1", "the plan's exports"]
+  },
+  "js/license.js": {
+    "(top)": ["VTLicense:2", "the signed licence itself: its export"]
+  },
+  "js/reports.js": {
+    environment: ["VTAccount:3 signedIn:2", "a bug report says whether its reporter was signed in"],
+    failureText: ["VTAccount:3", "a bug report's error line"],
+    signedInEmail: ["VTAccount:3", "a signed-in reporter's address, to answer them"],
+    "mineSection button": ["VTAccount:4 signedIn:1", "a signed-in reporter's own list of reports"],
+    send: ["VTAccount:4", "sends a report, with the reporter's session when signed in"]
+  },
+  "js/sync.js": {
+    isAvailable: ["VTAccount:1 getSessionToken:1", "the progress sync, which runs only for a signed-in visitor"],
+    sessionToken: ["VTAccount:1 getSessionToken:1", "the same: its session"],
+    accountId: ["VTAccount:1 getState().account:1", "the same: whose progress it is"],
+    noteOwner: ["VTAccount:1", "the same: which account this browser's practice belongs to"],
+    ownerStop: ["VTAccount:1", "the same: stops for another account's practice"],
+    readAccount: ["VTAccount:1", "the same: the account's copy"],
+    runCycle: ["VTAccount:1", "the same: one sync"],
+    flush: ["VTAccount:1", "the same, on the way out of the page"],
+    "(top)": ["VTAccount:3 VTSync:1 signedIn:2 vt_sync_aside_v1:1 vt_sync_handover_v1:1 vt_sync_owner_v1:1 vt_sync_rev_v1:1", "the sync's storage keys and its export"]
+  },
+  "js/tour.js": {
+    homeSteps: ["header-door:1", "the tour points at the account button; it does not press it"]
   }
 };
 
@@ -869,17 +1028,75 @@ function usesAnswer(body, fns, self) {
   return hit;
 }
 
-/** The functions on the path that read the plan or the account, and those that use one's answer, any number deep, each with its code's hash. */
-function planNeighbours(source, roots) {
+/** The plan's and the account's words, as names: a value made from one is an answer of the plan or the account. */
+const ANSWER_WORDS = new Set([...BILLING_NAMES, ...ACCOUNT_NAMES]);
+
+/** Whether an expression carries an answer: a name in `held`, a word of the plan or the account, or a call to one of `near`. */
+function carries(expr, held, near) {
+  let hit = false;
+  eachNode(expr, (x) => {
+    hit ||= (x.type === "Identifier" && (held.has(x.name) || ANSWER_WORDS.has(x.name))) || (x.type === "CallExpression" && x.callee.type === "Identifier" && near.has(x.callee.name));
+    return hit;
+  });
+  return hit;
+}
+
+/** The names in a function that hold an answer: the parameters it is handed one in, and each variable made from one, any number deep. */
+function heldIn(fn, given, near) {
+  const held = new Set(given);
+  for (let size = -1; held.size !== size; ) {
+    size = held.size;
+    eachNode(fn.body, (x) => {
+      const [target, value] = x.type === "VariableDeclarator" ? [x.id, x.init] : x.type === "AssignmentExpression" && x.left.type !== "MemberExpression" ? [x.left, x.right] : [];
+      if (value && carries(value, held, near)) patternNames(target).forEach((n) => held.add(n));
+    });
+  }
+  return held;
+}
+
+/** The calls in a function that hand an answer on (`renderProStudio(pulse, isProUser)`), each as the function called and its parameters that receive it. */
+function handsAnswer(fn, held, near, nodes, self) {
+  const out = [];
+  eachNode(fn.body, (x) => {
+    const g = x.type === "CallExpression" && x.callee.type === "Identifier" ? x.callee.name : "";
+    if (!g || g === self || !nodes[g]) return;
+    x.arguments.forEach((a, i) => carries(a, held, near) && out.push([g, nodes[g].flatMap((f) => patternNames(f.params[i]))]));
+  });
+  return out;
+}
+
+/**
+ * The functions on the path that read the plan or the account, and those that use one's answer (a call whose value
+ * they keep, test or return), any number deep; and the functions those hand an answer to (a parameter given it, or
+ * a value made from it), any number deep down. Each with its code's hash. A function handed an answer is not a
+ * reader in its own right: `tt` words the trial's days, and the hundreds of lines that word other things with it
+ * use nothing of the plan.
+ */
+function answerFlow(source, roots) {
   const fns = functionsOf(source);
   const nodes = functionNodes(source);
   const reach = reachable(fns, roots);
-  const near = new Set([...Object.keys(practicePath(source, roots)), ...Object.keys(practicePath(source, roots, "account"))]);
-  for (let size = -1; near.size !== size; ) {
-    size = near.size;
-    for (const n of reach.keys()) if (!near.has(n) && (nodes[n] || []).some((f) => usesAnswer(f.body, near, n))) near.add(n);
+  const readers = new Set([...Object.keys(practicePath(source, roots)), ...Object.keys(practicePath(source, roots, "account"))]);
+  const handed = new Map();
+  const weight = () => readers.size + [...handed.values()].reduce((n, given) => n + 1 + given.size, 0);
+  for (let w = -1; weight() !== w; ) {
+    w = weight();
+    for (const n of reach.keys()) if (!readers.has(n) && (nodes[n] || []).some((f) => usesAnswer(f.body, readers, n))) readers.add(n);
+    for (const n of new Set([...readers, ...handed.keys()])) {
+      for (const f of nodes[n] || []) {
+        for (const [g, params] of handsAnswer(f, heldIn(f, handed.get(n) || [], readers), readers, nodes, n)) {
+          if (reach.has(g) && !readers.has(g)) handed.set(g, new Set([...(handed.get(g) || []), ...params]));
+        }
+      }
+    }
   }
-  return Object.fromEntries([...near].sort().map((n) => [n, codeHash(nodes[n] || null)]));
+  return { readers, handed, nodes };
+}
+
+/** Those functions, each with its code's hash. */
+function planNeighbours(source, roots) {
+  const { readers, handed, nodes } = answerFlow(source, roots);
+  return Object.fromEntries([...readers, ...handed.keys()].sort().map((n) => [n, codeHash(nodes[n] || null)]));
 }
 
 test("the functions on the practice path that read the plan, or use what one answers, are the ones read and pinned: each only draws", () => {
@@ -898,8 +1115,8 @@ test("every element bound to open the sale or the sign-in is a handle the scanne
   const missing = [];
   for (const [file, source] of Object.entries(shippedScripts("."))) {
     for (const [what, opens, known] of [
-      ["the sale", /^openPricing$/, BILLING_LITERALS],
-      ["the sign-in", SIGN_IN_NAMES, ACCOUNT_LITERALS]
+      ["the sale", OPENS_SALE, BILLING_HANDLES],
+      ["the sign-in", OPENS_SIGN_IN, ACCOUNT_HANDLES]
     ]) {
       for (const sel of openerHandles(source, opens, known)) {
         found.push(sel);
@@ -909,7 +1126,141 @@ test("every element bound to open the sale or the sign-in is a handle the scanne
     }
   }
   assert.ok(["#btn-pricing", "#btn-value-pro", "#value-banner-cta", "#btn-account", "[data-ad-cta]"].every((h) => found.includes(h)), `control: the header's buttons, the board's, the trial note's and the house ad's are found (${found.join(" ")})`);
-  assert.deepEqual(missing, [], "an element opens the sale or the sign-in and is not a handle: add it, and its bare id, to BILLING_LITERALS or ACCOUNT_LITERALS in qa/promise-scan.mjs");
+  assert.deepEqual(missing, [], "an element opens the sale or the sign-in and is not a handle: add it, and its bare id, to BILLING_HANDLES or ACCOUNT_HANDLES in qa/promise-scan.mjs");
+});
+
+/**
+ * The classes and data attributes a reader of the plan or the account paints that are not marks of it, and why:
+ * a mark is one that says which plan, or whether someone is signed in, so reading it back reads the plan.
+ */
+export const NOT_MARKS = {
+  billing: {
+    "ad-slot": "the ad card's own class, drawn the same whatever the plan",
+    "ad-slot--native": "the same card's kind",
+    "btn-ghost": "a style a hundred buttons share; on the header button it is one plan's look, but read alone it names no plan, and the button's id or plan-* class is a mark",
+    "pricing-open": "set while the pricing dialog is open: it says the dialog is up, not which plan",
+    "account-open": "set while the account panel is open",
+    "pro-verb": "the span that holds the offer's verb on a phone",
+    "value-pulse-tag": "the board's tag's own class, the same whatever the plan",
+    "is-locked": "the board's insights panel, locked for a free visitor: read alone it names the panel's state, which the panel's own id would read too (see Trade-offs)",
+    "is-dim": "the board's spark bars, dimmed for a free visitor: the same"
+  },
+  account: {
+    "account-open": "set while the account panel is open: it says the panel is up, not who is signed in",
+    "pricing-open": "set while the pricing dialog is open",
+    "data-email": "the address typed at the code step, kept for its resend: someone signing in, not someone signed in",
+    "data-i18n": "the panel's trial button's words key",
+    "data-tone": "a bug report's message tone"
+  }
+};
+
+/** Every string in an expression, a template's fixed parts too. */
+function stringsIn(expr) {
+  const out = [];
+  eachNode(expr, (x) => {
+    const t = x.type === "Literal" && typeof x.value === "string" ? x.value : x.type === "TemplateElement" ? x.value.cooked : null;
+    if (t) out.push(t);
+  });
+  return out;
+}
+
+const propOf = (m) => (m.computed ? (m.property.type === "Literal" ? String(m.property.value) : "") : m.property.name || "");
+const kebab = (k) => "data-" + k.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
+const CLASS_CALLS = /^(add|toggle|replace|remove)$/;
+
+/** What an assignment paints: the classes of `el.className = ...`, or the attribute of `el.dataset.x = ...`. */
+function assignedMarks(x) {
+  const left = x.type === "AssignmentExpression" && x.left.type === "MemberExpression" ? x.left : null;
+  if (left && propOf(left) === "className") return stringsIn(x.right).flatMap((t) => t.split(/\s+/).filter(Boolean));
+  return left?.object.type === "MemberExpression" && propOf(left.object) === "dataset" ? [kebab(propOf(left))] : [];
+}
+
+/** What a call paints: the classes of `classList.add/toggle/remove/replace(...)`, or the attribute of `setAttribute("data-x", ...)`. */
+function calledMarks(x) {
+  const c = x.type === "CallExpression" && x.callee.type === "MemberExpression" ? x.callee : null;
+  if (c?.object.type === "MemberExpression" && propOf(c.object) === "classList" && CLASS_CALLS.test(propOf(c))) return x.arguments.flatMap(stringsIn);
+  return c && propOf(c) === "setAttribute" && /^data-/.test(x.arguments[0]?.value) ? [x.arguments[0].value] : [];
+}
+
+/** The classes and data attributes a function writes on an element. */
+function marksWritten(fnNode) {
+  const out = new Set();
+  eachNode(fnNode.body, (x) => [...assignedMarks(x), ...calledMarks(x)].forEach((m) => out.add(m)));
+  return out;
+}
+
+/** What the readers of `kind` write, across every file, with who writes it; for the plan, the functions on the practice path handed its answer too (renderProStudio's panels). */
+function marksOf(kind) {
+  const found = new Map();
+  const note = (file, name, nodes) => (nodes[name] || []).forEach((f) => marksWritten(f).forEach((m) => found.set(m, [...(found.get(m) || []), `${file} ${name}`])));
+  for (const [file, source] of Object.entries(shippedScripts("."))) {
+    const nodes = functionNodes(source);
+    for (const name of Object.keys(usesByFunction(source, kind))) note(file, name, nodes);
+    if (file === "js/app.js" && kind === "billing") for (const name of answerFlow(source, PRACTICE_ROOTS).handed.keys()) note(file, name, nodes);
+  }
+  return found;
+}
+
+test("every class or data attribute a reader of the plan or the account paints is a mark the scanner knows, or written down as none", () => {
+  for (const [kind, marks, control] of [
+    ["billing", BILLING_MARKS, "is-free"],
+    ["account", ACCOUNT_MARKS, "is-signed-in"]
+  ]) {
+    const found = marksOf(kind);
+    assert.ok(found.has(control) && found.has(kind === "billing" ? "data-plan" : "door-name"), `control: the ${kind} marks the board, the header button and the door paint are found`);
+    const unknown = [...found].filter(([m]) => !marks.has(m) && !NOT_MARKS[kind][m]).map(([m, who]) => `${m} (${[...new Set(who)].join(", ")})`);
+    assert.deepEqual(unknown, [], `a reader of the ${kind === "billing" ? "plan" : "account"} paints a class or data attribute that is not a mark: add it to ${kind === "billing" ? "BILLING_MARKS" : "ACCOUNT_MARKS"} in qa/promise-scan.mjs, or to NOT_MARKS with why it names no ${kind === "billing" ? "plan" : "sign-in"}`);
+    const stale = Object.keys(NOT_MARKS[kind]).filter((m) => !found.has(m));
+    assert.deepEqual(stale, [], "control: each mark written down as none is still painted by a reader");
+  }
+});
+
+/** The files that keep the plan's and the account's records, and which of the scanner's key sets each one's keys belong to. */
+const KEY_FILES = {
+  "js/billing.js": [BILLING_KEYS],
+  "js/license.js": [BILLING_KEYS],
+  "js/account.js": [ACCOUNT_KEYS, BILLING_KEYS],
+  "js/auth.js": [ACCOUNT_KEYS],
+  "js/sync.js": [ACCOUNT_KEYS]
+};
+
+test("every key the plan's and the account's files keep in storage is a word the scanner knows", () => {
+  const missing = [];
+  let seen = 0;
+  for (const [file, sets] of Object.entries(KEY_FILES)) {
+    const keys = new Set(stringsIn(parse(readFileSync(file, "utf8"), { ecmaVersion: "latest", sourceType: "script" })).filter((t) => /^vt_[a-z0-9_]+$/.test(t)));
+    seen += keys.size;
+    for (const k of keys) if (!sets.some((set) => set.has(k))) missing.push(`${file}: ${k}`);
+  }
+  assert.ok(seen >= 12, "control: the files' keys are found");
+  assert.deepEqual(missing, [], "a key the plan or the account keeps is not a word: reading it would read the plan or the sign-in unseen. Add it to BILLING_KEYS or ACCOUNT_KEYS in qa/promise-scan.mjs");
+});
+
+/** Each element of a page by id, with its classes, and how many elements of the page carry each class. */
+function pageElements(html) {
+  const byId = new Map();
+  const count = new Map();
+  for (const [tag] of html.matchAll(/<[a-zA-Z][^<>]*>/g)) {
+    const cls = (/\sclass="([^"]*)"/.exec(tag)?.[1] || "").split(/\s+/).filter(Boolean);
+    cls.forEach((c) => count.set(c, (count.get(c) || 0) + 1));
+    const id = /\sid="([^"]+)"/.exec(tag)?.[1];
+    if (id) byId.set(id, cls);
+  }
+  return { byId, count };
+}
+
+test("a class only a sale or sign-in door, or its dialog, has on the page is a word the scanner knows", () => {
+  const { byId, count } = pageElements(readFileSync("index.html", "utf8"));
+  const doors = [
+    ...[...BILLING_HANDLES].filter((h) => /^#[\w-]+$/.test(h)).map((h) => [h.slice(1), BILLING_LITERALS]),
+    ...[...ACCOUNT_HANDLES].filter((h) => /^#[\w-]+$/.test(h)).map((h) => [h.slice(1), ACCOUNT_LITERALS])
+  ];
+  const dialogs = [...new Set([...DIALOGS.values()].map(([, id]) => id))];
+  assert.ok(byId.has("btn-account") && byId.has("pricing-modal"), "control: the page's doors and dialogs are found");
+  const missing = [];
+  for (const [id, words] of doors) for (const c of byId.get(id) || []) if (count.get(c) === 1 && !words.has(c)) missing.push(`#${id} .${c}`);
+  for (const id of dialogs) for (const c of byId.get(id) || []) if (count.get(c) === 1 && !DIALOGS.has(c)) missing.push(`#${id} .${c} (a dialog)`);
+  assert.deepEqual(missing, [], "a class names a door or a dialog as well as its id does: add it to the handles or to DIALOGS in qa/promise-scan.mjs");
 });
 
 test("the plan is read only in the files that sell, draw Pro or keep its extras", () => {
@@ -926,16 +1277,14 @@ test("every function that reads the plan or opens the sale is written down, file
   assert.deepEqual(diffCounts(found, expected), [], "the plan is read, or the sale opened, where it was not: write it down in PLAN_USES with why, and why it cannot stop practice");
 });
 
-test("every function that opens the sign-in is written down, file by file, with why", () => {
+test("every function that asks whether the visitor is signed in, or opens the sign-in, is written down, file by file, with why", () => {
   const found = {};
   for (const [file, source] of Object.entries(shippedScripts("."))) {
-    for (const [fn, uses] of Object.entries(usesByFunction(source, "account"))) {
-      const opens = uses.split(" ").filter((u) => opensSignIn(u.slice(0, u.lastIndexOf(":"))));
-      if (opens.length) found[`${file} :: ${fn}`] = opens.join(" ");
-    }
+    for (const [fn, uses] of Object.entries(usesByFunction(source, "account"))) found[`${file} :: ${fn}`] = uses;
   }
-  const expected = flat(Object.fromEntries(Object.entries(SIGN_IN_OPENERS).map(([f, rows]) => [f, Object.fromEntries(Object.entries(rows).map(([k, [u]]) => [k, u]))])));
-  assert.deepEqual(diffCounts(found, expected), [], "the sign-in is opened where it was not: write it down in SIGN_IN_OPENERS with why, and why it cannot stand in front of practice");
+  const expected = flat(Object.fromEntries(Object.entries(ACCOUNT_USES).map(([f, rows]) => [f, Object.fromEntries(Object.entries(rows).map(([k, [u]]) => [k, u]))])));
+  assert.ok(Object.values(found).some((u) => u.split(" ").some((w) => opensSignIn(w.slice(0, w.lastIndexOf(":"))))), "control: the sign-in's openers are among them");
+  assert.deepEqual(diffCounts(found, expected), [], "the account is asked about, or the sign-in opened, where it was not: write it down in ACCOUNT_USES with why, and why it cannot stand in front of practice");
 });
 
 test("every event carries only the props in the plan, and nothing passes one on but the listed relays", () => {
@@ -1010,13 +1359,15 @@ test("a guest's progress is kept under the names it always was", () => {
   assert.deepEqual(keys, GUEST_KEYS);
 });
 
-test("only js/ads.js reads the ad config, and it asks AdSense for nothing but the units it draws", () => {
+test("only the ad files read the ad config, and they ask AdSense for nothing but the units the page draws", () => {
   const readers = Object.entries(shippedScripts("."))
     .filter(([, src]) => AD_NAMES.test(src))
     .map(([f]) => f)
     .sort();
   assert.deepEqual(readers, AD_FILES);
-  const pushes = adPushes(readFileSync("js/ads.js", "utf8"));
+  // Every file that may name the queue, not only the one that draws units: a push beside the ad config asks for
+  // page-level ads the same way.
+  const pushes = AD_FILES.flatMap((f) => adPushes(readFileSync(f, "utf8")));
   assert.ok(pushes.length >= 1, "control: the unit's own push is found");
   assert.deepEqual(
     [...new Set(pushes)],
@@ -1437,4 +1788,83 @@ test("control: an aliased push to AdSense's queue is found, and a page's JSON-LD
     "new-page.html#inline-2": { "(top) › hint": 1 },
     "new-page.html#inline-3": { "(top) › import": 1 }
   });
+});
+
+test("control: the sixth round's spellings of the plan, the sign-in and their doors are each found, and what names neither is not", () => {
+  const uses = (src, kind = "billing") => usesByFunction(src, kind);
+  // A selector read by its parts: a mark or a door inside a compound or descendant selector, or a template.
+  assert.deepEqual(
+    uses(`
+      function a() { return document.querySelector('[data-plan="free"]'); }
+      function b() { document.querySelector(".value-pulse-cta #btn-value-pro")?.click(); }
+      function c() { return !document.querySelector("#btn-pricing.plan-paid, #btn-pricing.plan-trial"); }
+      function d(k) { return document.querySelector(\`[data-plan="\${k}"]\`); }
+      function e(el) { return el.matches(".btn-pro"); }
+      function f() { return $("#value-pulse-tag")?.classList.contains("is-free"); }
+      function g() { return document.getElementById("banner")?.dataset.momentId; }
+      function h() { return window.VTLicense?.getClaims?.(); }
+      function i() { return localStorage.getItem("vt_license_v1"); }
+    `),
+    { a: "[data-plan]:1", b: "#btn-value-pro:1", c: "#btn-pricing:1", d: "[data-plan]:1", e: "btn-pro:1", f: "is-free:1", g: "dataset.momentId:1", h: "VTLicense:1", i: "vt_license_v1:1" }
+  );
+  assert.deepEqual(
+    uses(`
+      function a() { return !document.querySelector(".header-door.is-signed-in"); }
+      function b() { $(".header-door")?.click(); }
+      function c() { return window.VTLicense?.getClaims?.()?.accountId; }
+      function d() { return localStorage.getItem("vt_sync_owner_v1"); }
+    `, "account"),
+    { a: "header-door:1", b: "header-door:1", c: "VTLicense:1", d: "vt_sync_owner_v1:1" }
+  );
+  // A class many elements share names no door, and a word inside running text is not a selector.
+  assert.deepEqual(uses(`function a() { $(".btn-ghost").focus(); $(".modal-overlay").hidden = true; toast("Pro: is-free text"); }`), {});
+  // A dialog shown by its own class; a note inside it is not the dialog, and hiding it is not opening it.
+  assert.deepEqual(uses(`function a() { $(".account-overlay").hidden = false; }`, "account"), { a: "#account-modal:open:1" });
+  assert.deepEqual(uses(`function a() { document.querySelector(".pricing-overlay").showModal(); }`), { a: "#pricing-modal:open:1" });
+  assert.deepEqual(uses(`function a() { $("#pricing-modal .note").hidden = false; $(".pricing-overlay").hidden = true; }`), {});
+
+  // A door found through a handler of its own name, an inline handler that shows the dialog, or a helper it calls.
+  // A function that makes a listener which opens is not a door itself (the listener runs on its own click), and a
+  // handler that opens nothing is not one.
+  const app = `
+    function bind() {
+      $("#a")?.addEventListener("click", showPlans);
+      $("#b")?.addEventListener("click", () => { $("#pricing-modal").hidden = false; });
+      $("#c")?.addEventListener("click", () => later());
+      $("#d")?.addEventListener("click", wire);
+      $("#e")?.addEventListener("click", () => toast("hi"));
+    }
+    function showPlans() { note("plans"); openPricing(); }
+    function later() { showPlans(); }
+    function wire() { $("#f")?.addEventListener("click", () => openPricing()); }
+  `;
+  assert.deepEqual(openerHandles(app, OPENS_SALE, BILLING_HANDLES), ["#a", "#b", "#c", "#f"]);
+
+  // AdSense's queue seeded where it is made, or added to by any array method, a borrowed push or a whole array.
+  assert.deepEqual(
+    [
+      "window.adsbygoogle = window.adsbygoogle || [{ google_ad_client: c, enable_page_level_ads: true }];",
+      "(window.adsbygoogle ||= []).unshift({ enable_page_level_ads: true });",
+      "Array.prototype.push.call(window.adsbygoogle, { enable_page_level_ads: true });",
+      "Array.prototype.push.apply(window.adsbygoogle, [{ enable_page_level_ads: true }]);",
+      "window.adsbygoogle.splice(0, 0, { enable_page_level_ads: true });",
+      "window.adsbygoogle = window.adsbygoogle.concat([{ enable_page_level_ads: true }]);"
+    ].map(adPushes),
+    [["2"], ["1"], ["1"], ["1"], ["1"], ["1"]]
+  );
+  assert.deepEqual(adPushes("(window.adsbygoogle = window.adsbygoogle || []).push({}); const other = [{ a: 1 }]; other.push({ b: 2 });"), ["0"], "the empty unit's push, and nothing from another array");
+
+  // The plan's answer handed down: a helper given it is pinned, any number deep, and one given something else is not.
+  const flow = answerFlow(
+    `
+      function start() { const ent = VTBilling.getEntitlement(); draw(ent.pro); other(1, label); }
+      function draw(paid) { const locked = !paid; deeper(locked); }
+      function deeper(x) { if (x) $("#btn-session-resume").disabled = true; }
+      function other(n, s) {}
+      function label() {}
+    `,
+    ["start"]
+  );
+  assert.deepEqual([...flow.readers].sort(), ["start"]);
+  assert.deepEqual([...flow.handed.keys()].sort(), ["deeper", "draw"]);
 });

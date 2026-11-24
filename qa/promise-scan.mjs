@@ -81,40 +81,41 @@ export const VOICE_SOURCES = new Set([
 ]);
 /** The takes' own store, opened by its name rather than through js/storage.js. */
 const VOICE_LITERALS = new Set(["vt_recordings_db", "recordings"]);
-/** What reads the plan or opens the sale. */
-export const BILLING_NAMES = new Set(["VTBilling", "openPricing", "openAccount", "isPro", "trialActive", "trialStartedAt", "trialDaysLeft", "getEntitlement"]);
+/** What reads the plan or opens the sale: the signed licence (VTLicense) is the only proof of a paid plan billing trusts. */
+export const BILLING_NAMES = new Set(["VTBilling", "VTLicense", "openPricing", "openAccount", "isPro", "trialActive", "trialStartedAt", "trialDaysLeft", "getEntitlement"]);
 /** An element's id as a selector and as getElementById's argument: "#btn-pricing" and "btn-pricing". */
 const byId = (...ids) => ids.flatMap((id) => [id, "#" + id]);
 /**
- * The plan's handles that are not names:
- * - every element bound to a listener that opens the plans (`$("#btn-value-pro").click()` opens them with no name
- *   above in sight). tests/node/promise-guards.test.mjs derives these from the code (openerHandles) and fails when
- *   a new one is missing here.
- * - the marks the header's Pro button carries (`data-plan`, its plan-* classes), which read the plan off the page.
- * - the plan's own keys in storage, which read it with no call into billing.
- * A dialog of the sale shown by its own id is counted too ("#pricing-modal:open"; see dialogShown).
+ * The elements bound to a listener that opens the plans (`$("#btn-value-pro").click()` opens them with no name
+ * above in sight), by id, and by a class only that element has on the page. tests/node/promise-guards.test.mjs
+ * derives these from the code (openerHandles, following a named handler through what it calls) and from the
+ * page, and fails when a new one is missing here.
  */
-export const BILLING_LITERALS = new Set([
-  ...byId("btn-pricing", "btn-value-pro", "value-banner-cta", "btn-account-pricing", "btn-profile-add", "sel-week-goal", "rem-time-2"),
-  "[data-ad-cta]",
-  "[data-plan]",
-  "data-plan",
-  "plan-trial",
-  "plan-gift",
-  "plan-paid",
-  "plan-ending",
-  "vt_billing_v1",
-  "vt_billing_trial_started_v1"
+export const BILLING_HANDLES = new Set([
+  ...byId("btn-pricing", "btn-value-pro", "value-banner-cta", "btn-account-pricing", "btn-profile-add", "sel-week-goal", "rem-time-2", "btn-export-progress"),
+  "[data-ad-cta]"
 ]);
-/** What asks whether the visitor is signed in: the account and its sync, and the older sign-in (VTAuth) that app.js also trusts. */
-export const ACCOUNT_NAMES = new Set(["VTAccount", "VTSync", "VTAuth", "signedIn", "getSessionToken", "openAccount", "signInWithGoogle", "startEmailSignIn", "renderGoogleButton"]);
-/** The account's handles that are not names: every element bound to open the sign-in (derived and checked as the plan's are), and the sessions and plan it keeps. */
-export const ACCOUNT_LITERALS = new Set([
-  ...byId("btn-account", "account-email-form", "account-code-form", "account-code-resend"),
-  "vt_account_session_v1",
-  "vt_account_plan_v1",
-  "vt_auth_session_v1"
-]);
+/**
+ * The marks a reader of the plan paints on the page, which read the plan back off it: the header's Pro button's
+ * `data-plan` and its classes, the progress board's tag's classes, and the trial note's moment. Derived from the
+ * code and checked as the handles are (every class or data attribute a reader of the plan writes is here, or
+ * written down as no mark with why).
+ */
+export const BILLING_MARKS = new Set(["[data-plan]", "data-plan", "btn-pro", "plan-trial", "plan-gift", "plan-paid", "plan-ending", "is-free", "is-pro", "is-trial", "is-gift", "is-ending", "data-moment-id"]);
+/** The plan's own keys in storage, which read it with no call into billing: checked against every key the plan's files keep. */
+export const BILLING_KEYS = new Set(["vt_billing_v1", "vt_billing_trial_started_v1", "vt_billing_intent", "vt_license_v1", "vt_pro_paid_first_v1"]);
+/** The plan's handles that are not names. A dialog of the sale shown by its own id or class is counted too ("#pricing-modal:open"; see dialogShown). */
+export const BILLING_LITERALS = new Set([...BILLING_HANDLES, ...BILLING_MARKS, ...BILLING_KEYS]);
+/** What asks whether the visitor is signed in: the account and its sync, the older sign-in (VTAuth) that app.js also trusts, and the licence, whose claims name the account. */
+export const ACCOUNT_NAMES = new Set(["VTAccount", "VTSync", "VTAuth", "VTLicense", "signedIn", "getSessionToken", "openAccount", "signInWithGoogle", "startEmailSignIn", "renderGoogleButton"]);
+/** Every element bound to open the sign-in, by id and by a class only it has (derived and checked as the plan's are). */
+export const ACCOUNT_HANDLES = new Set([...byId("btn-account", "account-email-form", "account-code-form", "account-code-resend", "btn-start-trial"), "header-door"]);
+/** The marks the header's account door carries when someone is signed in, derived and checked as the plan's marks are. */
+export const ACCOUNT_MARKS = new Set(["is-signed-in", "door-avatar", "door-name"]);
+/** The sessions, the plan and the sync's own records the account keeps: checked against every key the account's files keep. */
+export const ACCOUNT_KEYS = new Set(["vt_account_session_v1", "vt_account_plan_v1", "vt_auth_session_v1", "vt_sync_aside_v1", "vt_sync_handover_v1", "vt_sync_owner_v1", "vt_sync_rev_v1"]);
+/** The account's handles that are not names. */
+export const ACCOUNT_LITERALS = new Set([...ACCOUNT_HANDLES, ...ACCOUNT_MARKS, ...ACCOUNT_KEYS]);
 /** What `VTAccount.getState()` says about the visitor: `.account` is who is signed in, `.entitlement` what they bought. */
 const ACCOUNT_STATE = new Set(["account", "entitlement"]);
 
@@ -221,8 +222,22 @@ const fieldName = (node) => (node.type === "PropertyDefinition" && node.value &&
 
 const isFunction = (n) => n.type === "FunctionDeclaration" || n.type === "FunctionExpression" || n.type === "ArrowFunctionExpression";
 
+/**
+ * Each script's tree, its held selectors and its functions, kept by its text: the guards read every shipped
+ * script a dozen ways, and each planted defect runs them all again in a process of its own. Nothing here changes
+ * a tree or a function table once it is made, so the copies are shared: a caller must not change them either.
+ */
+const TREES = new Map();
+const HELD = new WeakMap();
+const FUNCTIONS = new Map();
+
 /** A script, or a module when it imports or exports. */
 function parseScript(source) {
+  if (!TREES.has(source)) TREES.set(source, parseFresh(source));
+  return TREES.get(source);
+}
+
+function parseFresh(source) {
   try {
     return parse(source, { ecmaVersion: "latest", sourceType: "script" });
   } catch (err) {
@@ -243,7 +258,8 @@ function parseScript(source) {
 function walk(source, fn) {
   const up = [];
   const ast = parseScript(source);
-  const held = heldSelectors(ast);
+  if (!HELD.has(ast)) HELD.set(ast, heldSelectors(ast));
+  const held = HELD.get(ast);
   const local = new Map();
   // The selector an element was found by: in the expression, or a variable given one in this function (or, held
   // by one selector only, anywhere in the file). `const modal = $("#pricing-modal"); modal.hidden = false`.
@@ -453,12 +469,34 @@ function ownOpens(source) {
   return own;
 }
 
-/** The name a node uses from `names`: an identifier or property, a bracketed key (`m["getUserMedia"]`), or one of `literals` anywhere. */
-function nameUsed(node, parent, names, literals) {
+/**
+ * The words a string names as a selector: the string itself, each id (`#x`, and `x` as getElementById takes it),
+ * each attribute (`[x]` and `x`) and each class (`x`). So `'.value-pulse-cta #btn-value-pro'`,
+ * `'#btn-pricing.plan-paid'` and `'[data-plan="free"]'` each name a handle or a mark, as the bare id does.
+ */
+export function selectorWords(text) {
+  const words = [text];
+  for (const [, id] of text.matchAll(/#([\w-]+)/g)) words.push("#" + id, id);
+  for (const [, attr] of text.matchAll(/\[\s*([\w-]+)/g)) words.push(`[${attr}]`, attr);
+  for (const [, cls] of text.matchAll(/\.(-?[A-Za-z_][\w-]*)/g)) words.push(cls);
+  return words;
+}
+
+/** A string's text, a template's fixed part's too; null for anything else. */
+const stringText = (node) => (node.type === "Literal" && typeof node.value === "string" ? node.value : node.type === "TemplateElement" ? (node.value.cooked ?? node.value.raw) : null);
+
+/**
+ * The name a node uses from `names`: an identifier or property, a bracketed key (`m["getUserMedia"]`), or one of
+ * `literals` anywhere, in a string or a template's fixed part, as `wordsOf` reads it (the plan's and the
+ * account's words are read as selectors, so a compound selector naming a handle or a mark counts).
+ */
+function nameUsed(node, parent, names, literals, wordsOf = (t) => [t]) {
   if (node.type === "Identifier") return names.has(node.name) ? node.name : "";
-  if (node.type !== "Literal" || typeof node.value !== "string") return "";
-  if (literals?.has(node.value)) return node.value;
-  return parent?.type === "MemberExpression" && parent.computed && parent.property === node && names.has(node.value) ? node.value : "";
+  const text = stringText(node);
+  if (text === null) return "";
+  const word = literals && wordsOf(text).find((w) => literals.has(w));
+  if (word) return word;
+  return node.type === "Literal" && parent?.type === "MemberExpression" && parent.computed && parent.property === node && names.has(text) ? text : "";
 }
 
 /** `VTAccount.getState().account` (or `.entitlement`): who is signed in, read straight from the account module. */
@@ -468,13 +506,20 @@ function accountState(node) {
   return c?.type === "MemberExpression" && propName(c) === "getState" && objName(c) === "VTAccount" ? "getState()." + propName(node) : "";
 }
 
-/** `el.dataset.plan`: the plan read off the header's Pro button, which carries it. */
-const planMark = (node) => (node.type === "MemberExpression" && propName(node) === "plan" && node.object.type === "MemberExpression" && propName(node.object) === "dataset" ? "dataset.plan" : "");
+/** The data marks a reader of the plan paints, as `dataset` reads them: the header button's plan and the trial note's moment. */
+const DATASET_MARKS = new Set(["plan", "momentId"]);
+/** `el.dataset.plan` (or `.momentId`): the plan read off the element that carries it. */
+const planMark = (node) => (node.type === "MemberExpression" && DATASET_MARKS.has(propName(node)) && node.object.type === "MemberExpression" && propName(node.object) === "dataset" ? "dataset." + propName(node) : "");
 
-/** The dialogs of the sale and the sign-in, by id, and the bag their showing is counted in. */
-const DIALOGS = new Map([
-  ["pricing-modal", "billing"],
-  ["account-modal", "account"]
+/**
+ * The dialogs of the sale and the sign-in, by their id and by the class only each has on the page (checked
+ * against index.html), with the bag their showing is counted in and the id it is counted as.
+ */
+export const DIALOGS = new Map([
+  ["pricing-modal", ["billing", "pricing-modal"]],
+  ["pricing-overlay", ["billing", "pricing-modal"]],
+  ["account-modal", ["account", "account-modal"]],
+  ["account-overlay", ["account", "account-modal"]]
 ]);
 const isLiteral = (n, v) => n?.type === "Literal" && n.value === v;
 
@@ -512,16 +557,18 @@ function shownByCall(n) {
  */
 function dialogShown(node, elementOf, kind) {
   const el = node.type === "AssignmentExpression" ? shownBySetting(node) : node.type === "CallExpression" ? shownByCall(node) : null;
-  const id = el ? elementOf(el).replace(/^#/, "") : "";
-  return DIALOGS.get(id) === kind ? `#${id}:open` : "";
+  // The element is the selector's last part: `#pricing-modal .note` is a note inside the dialog.
+  const subject = el ? elementOf(el).trim().split(/\s*[\s>+~]\s*/).at(-1) : "";
+  const dialog = subject ? selectorWords(subject).map((w) => DIALOGS.get(w.replace(/^#/, ""))).find((d) => d?.[0] === kind) : null;
+  return dialog ? `#${dialog[1]}:open` : "";
 }
 
 /** What a node uses that reads the plan or opens the sale. */
-const billingUsed = (node, parent, elementOf) => nameUsed(node, parent, BILLING_NAMES, BILLING_LITERALS) || planMark(node) || dialogShown(node, elementOf, "billing");
+const billingUsed = (node, parent, elementOf) => nameUsed(node, parent, BILLING_NAMES, BILLING_LITERALS, selectorWords) || planMark(node) || dialogShown(node, elementOf, "billing");
 /** What a node uses that hears the voice or reads a take. */
 const voiceUsed = (node, parent) => nameUsed(node, parent, VOICE_SOURCES, VOICE_LITERALS);
 /** What a node uses that asks whether the visitor is signed in, or opens the sign-in. */
-const accountUsed = (node, parent, elementOf) => nameUsed(node, parent, ACCOUNT_NAMES, ACCOUNT_LITERALS) || accountState(node) || dialogShown(node, elementOf, "account");
+const accountUsed = (node, parent, elementOf) => nameUsed(node, parent, ACCOUNT_NAMES, ACCOUNT_LITERALS, selectorWords) || accountState(node) || dialogShown(node, elementOf, "account");
 
 /** Each name from `names` the script uses, with a count. */
 function namesIn(source, used) {
@@ -611,6 +658,11 @@ function handedTo(node) {
  * variable or another object and called from there, or another file.
  */
 export function functionsOf(source) {
+  if (!FUNCTIONS.has(source)) FUNCTIONS.set(source, functionsFresh(source));
+  return FUNCTIONS.get(source);
+}
+
+function functionsFresh(source) {
   const fns = Object.create(null);
   const entry = (name) => (fns[name] ||= { refs: new Set(), billing: {}, voice: {}, account: {}, outers: new Set() });
   const handed = [];
@@ -706,26 +758,52 @@ function listenerOf(node) {
   return l && /^on/.test(propName(l)) ? [l.object, node.right] : null;
 }
 
-/** Whether a callback opens what `opens` names: it is one of those functions, or its body calls one or names one of `handles`. */
+/** Whether a callback's own code opens what `opens` names: it is one of those functions, or its body calls one or names one of `handles`. */
 function callbackOpens(cb, opens, handles) {
   if (cb.type === "Identifier") return opens.test(cb.name);
   let hit = false;
-  if (isFunction(cb)) walkNode(cb.body, (n) => (hit ||= (n.type === "Identifier" && opens.test(n.name)) || (n.type === "Literal" && handles.has(n.value))));
+  if (isFunction(cb)) walkNode(cb.body, (n) => (hit ||= (n.type === "Identifier" && opens.test(n.name)) || (stringText(n) !== null && selectorWords(stringText(n)).some((w) => handles.has(w)))));
   return hit;
 }
 
 /**
- * The selectors of the elements a script binds to a listener that opens what `opens` names (the sale's opener, or
- * the sign-in's), or that presses one of `handles`: a click on any of them opens it with no opener's name in sight.
- * The guards hold BILLING_LITERALS and ACCOUNT_LITERALS to these, so a new Pro or sign-in button joins on its own.
+ * Whether a function, or anything it calls, uses a name or a dialog's opening that `opens` matches. A listener or
+ * a callback made inside a function runs on its own event, not when the function runs, so it is not followed.
+ */
+function reachesOpener(fns, start, opens) {
+  const seen = new Set();
+  const queue = fns[start] ? [start] : [];
+  while (queue.length) {
+    const name = queue.shift();
+    if (seen.has(name)) continue;
+    seen.add(name);
+    if ([...Object.keys(fns[name].billing), ...Object.keys(fns[name].account)].some((u) => opens.test(u))) return true;
+    for (const ref of fns[name].refs) if (fns[ref] && !/[ .]/.test(ref)) queue.push(ref);
+  }
+  return false;
+}
+
+/**
+ * The selectors of the elements a script binds to a listener that opens what `opens` names (the sale's opener and
+ * its dialog shown, or the sign-in's), by its own code or through any function it calls (`exportProgress` opens the
+ * plans for a free visitor), or that presses one of `handles`: a click on any of them opens it with no opener's
+ * name in sight. The guards hold BILLING_HANDLES and ACCOUNT_HANDLES to these, so a new Pro or sign-in button
+ * joins on its own, bound to the opener or to a function of the file that leads to it.
  */
 export function openerHandles(source, opens, handles = new Set()) {
-  const out = new Set();
-  walk(source, (node, _parent, _owner, _outer, _up, elementOf) => {
+  const fns = functionsOf(source);
+  const named = new Map();
+  const bound = [];
+  walk(source, (node, _parent, owner, outer, _up, elementOf) => {
+    if (outer !== null && isFunction(node)) named.set(node, owner);
     const [el, cb] = listenerOf(node) || [];
-    const sel = cb && callbackOpens(cb, opens, handles) ? elementOf(el) : "";
-    if (sel) out.add(sel);
+    if (cb) bound.push([elementOf(el), cb]);
   });
+  const out = new Set();
+  for (const [sel, cb] of bound) {
+    const start = cb.type === "Identifier" ? cb.name : named.get(cb);
+    if (sel && (callbackOpens(cb, opens, handles) || reachesOpener(fns, start, opens))) out.add(sel);
+  }
   return [...out].sort();
 }
 
@@ -837,9 +915,43 @@ export function adPushes(source) {
   }
   const pushes = [];
   walk(source, (node) => {
-    const c = node.type === "CallExpression" ? node.callee : null;
-    if (c?.type !== "MemberExpression" || propName(c) !== "push" || !mentions(c.object, queues)) return;
-    pushes.push(node.arguments.map((a) => (a.type === "ObjectExpression" ? a.properties.length : "?")).join(","));
+    const added = node.type === "CallExpression" ? queuedArgs(node, queues) : seeded(node, queues);
+    if (added?.length) pushes.push(added.map((a) => (a?.type === "ObjectExpression" ? a.properties.length : "?")).join(","));
   });
   return pushes;
+}
+
+/** The array methods that add to the queue, and the first argument each adds (`splice(i, n, ...added)`). */
+const QUEUE_METHODS = new Map([
+  ["push", 0],
+  ["unshift", 0],
+  ["splice", 2],
+  ["concat", 0]
+]);
+
+/** What a call adds to the queue: `q.push(a)`, `q.unshift(a)`, `q.splice(0, 0, a)`, `q.concat([a])`, `Array.prototype.push.call(q, a)` or `.apply(q, [a])`; null for any other call. */
+function queuedArgs(node, queues) {
+  const c = node.callee.type === "MemberExpression" ? node.callee : null;
+  const method = c && propName(c);
+  if (QUEUE_METHODS.has(method) && mentions(c.object, queues)) return spread(node.arguments.slice(QUEUE_METHODS.get(method)));
+  const borrowed = (method === "call" || method === "apply") && c.object.type === "MemberExpression" && QUEUE_METHODS.has(propName(c.object));
+  if (!borrowed || !node.arguments[0] || !mentions(node.arguments[0], queues)) return null;
+  return spread(node.arguments.slice(QUEUE_METHODS.get(propName(c.object)) + 1));
+}
+
+/** An array handed whole (`concat([a])`, `apply(q, [a])`) adds its elements. */
+const spread = (args) => args.flatMap((a) => (a.type === "ArrayExpression" ? a.elements : [a]));
+
+/** What the queue is seeded with where it is made: `window.adsbygoogle = window.adsbygoogle || [{ ... }]`, or a name made from it the same way. */
+function seeded(node, queues) {
+  const [target, value] = node.type === "AssignmentExpression" ? [node.left, node.right] : node.type === "VariableDeclarator" ? [node.id, node.init] : [];
+  return value && mentions(target, queues) ? arrayMade(value) : null;
+}
+
+/** The elements of an array a value is made as: the array itself, or either side of `||`, `??` or `? :`, or what a nested assignment gives. A call's argument is the call's business (queuedArgs). */
+function arrayMade(v) {
+  if (v.type === "ArrayExpression") return v.elements;
+  if (v.type === "LogicalExpression") return [...arrayMade(v.left), ...arrayMade(v.right)];
+  if (v.type === "ConditionalExpression") return [...arrayMade(v.consequent), ...arrayMade(v.alternate)];
+  return v.type === "AssignmentExpression" ? arrayMade(v.right) : [];
 }

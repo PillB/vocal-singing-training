@@ -87,7 +87,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        set: [stage, a11y, flows, regress, boot, billing, scoring, controls, audit, toast, designs, splits, syncing, inject, learner, authwall, promises, promises-time-2, promises-voice, promises-account-ads]
+        set: [stage, a11y, flows, regress, boot, billing, scoring, controls, audit, toast, designs, splits, syncing, inject, learner, authwall, promises, promises-time-2, promises-time-3, promises-voice, promises-account-ads]
     env:
       CI: '1'
       MIC_HELP: '0'

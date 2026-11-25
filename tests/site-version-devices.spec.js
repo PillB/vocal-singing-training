@@ -10,6 +10,7 @@
  * device and design, so a failure names both.
  */
 const { test, expect } = require("@playwright/test");
+const { stubAuthMethods } = require("./helpers/auth-methods");
 const { tapFloorLimit } = require("./helpers/tap-floor");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
@@ -156,6 +157,7 @@ for (const device of DEVICES) {
         timezoneId: "America/Lima"
       });
       const page = await context.newPage();
+      await stubAuthMethods(page);
       const errors = [];
       page.on("pageerror", (e) => errors.push(String(e)));
       await page.addInitScript((design) => {

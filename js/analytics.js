@@ -51,6 +51,81 @@
   /** Region reasons that mean "not yet", as opposed to "no". */
   const HELD_REASONS = ["eu_pending", "eu_unanswered"];
 
+  /**
+   * What the worker keeps of an event, applied here before it leaves (workers/entitlements/src/events.js,
+   * EVENT_NAMES and sanitizeProps): a name it knows, and at most WIRE_MAX_PROPS flat, short, id-like props.
+   * The worker drops everything else on arrival, so dropping it here loses nothing the funnel can read; what
+   * it adds is that nothing else can leave with an event at all, not a take, not a pitch contour, not free
+   * text a later change might put in props. The log kept on the device is not filtered.
+   * tests/node/analytics-wire.test.mjs holds these rules to the worker's, case by case.
+   */
+  const WIRE_NAMES = new Set([
+    "account_panel_open", "ad_click", "ad_dismiss", "ad_impression", "ad_suppressed_practice", "ad_suppressed_pro",
+    "ad_unfilled", "app_open", "audio_compare", "basics_complete", "basics_incomplete", "basics_start", "comeback",
+    "experiment_expose", "experiment_forced_view", "first_track_pick", "first_win", "first_win_micro",
+    "layout_session", "layout_switch", "layout_time", "loop_cards_open", "loop_goal_set", "loop_remind_click",
+    "loop_tier_pick", "mic_blocked", "mic_primer_accept", "mic_primer_decline", "mic_primer_dismiss",
+    "mic_primer_show", "milestone", "path_hide", "path_new", "path_open", "path_share", "practice_day", "practice_recorded", "practice_start", "pro_paid_first",
+    "remind_due_shown", "reminder_enable", "rest_used", "session_save", "set_complete", "set_start", "sets_open",
+    "signin_fail", "signin_start", "signin_success", "step_done_choice", "step_done_shown", "surprise_shown",
+    "tour_complete", "tour_dismiss", "tour_guide_open", "tour_invite_accept", "tour_invite_dismiss", "tour_skip",
+    "tour_start", "tour_step", "trial_click", "trial_cta_view", "trial_first_practice", "trial_result",
+    "trial_started"
+  ]);
+  const WIRE_KEY = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
+  const WIRE_STRING = /^[A-Za-z0-9_.:-]{0,64}$/;
+  const WIRE_MAX_PROPS = 12;
+
+  /**
+   * A prop's value as the worker keeps it, or undefined when it does not. A number is finite here: the props
+   * have been through JSON, which sends NaN and Infinity as null.
+   */
+  function wireValue(v) {
+    if (v === null || typeof v === "boolean") return v;
+    if (typeof v === "number") return Math.round(v * 1000) / 1000;
+    if (typeof v === "string" && WIRE_STRING.test(v)) return v;
+    return undefined;
+  }
+
+  /**
+   * The props as the worker keeps them, in the same order and with the same count. Read through JSON first,
+   * as the worker reads them, so a date, a NaN or a value with its own toJSON is judged as what would arrive.
+   */
+  function wireProps(props) {
+    const out = {};
+    let raw;
+    try {
+      raw = JSON.parse(JSON.stringify(props ?? null));
+    } catch {
+      return out;
+    }
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+    let kept = 0;
+    for (const key of Object.keys(raw)) {
+      if (kept >= WIRE_MAX_PROPS) break;
+      if (!WIRE_KEY.test(key)) continue;
+      const v = wireValue(raw[key]);
+      if (v === undefined) continue;
+      out[key] = v;
+      kept += 1;
+    }
+    return out;
+  }
+
+  /**
+   * The event as it may leave this browser, or null when the worker would not keep it.
+   * @returns {{name: string, props: Object} | null}
+   */
+  function wireEvent(name, props) {
+    return WIRE_NAMES.has(name) ? { name, props: wireProps(props) } : null;
+  }
+
+  /** Queue an event to send, as wireEvent() lets it leave. */
+  function queueWire(name, props, cid, day, tz) {
+    const e = wireEvent(name, props);
+    if (e) queue.push({ name: e.name, props: e.props, cid, day, tz });
+  }
+
   let queue = [];
   let timer = null;
   let bound = false;
@@ -248,7 +323,7 @@
       write(bag);
       // Then the worker, with the id minted only now.
       const cid = global.VTExperiments?.clientId?.() || null;
-      waiting.forEach((e) => queue.push({ name: e.name, props: e.props, cid, day: e.day, tz: e.tz }));
+      waiting.forEach((e) => queueWire(e.name, e.props, cid, e.day, e.tz));
       bindFlushOnHide();
       flush(false);
     });
@@ -266,13 +341,7 @@
     // answer an A/B question, so each one carries all three. The id is the
     // random one js/experiments.js already keeps; nothing personal. The clock
     // time is not sent: the worker records when the event arrived.
-    queue.push({
-      name,
-      props,
-      cid: global.VTExperiments?.clientId?.() || null,
-      day: global.VTDays?.dayKey?.(now) || null,
-      tz: -now.getTimezoneOffset()
-    });
+    queueWire(name, props, global.VTExperiments?.clientId?.() || null, global.VTDays?.dayKey?.(now) || null, -now.getTimezoneOffset());
     if (queue.length >= BATCH) flush(false);
     else if (!timer) timer = setTimeout(() => flush(false), FLUSH_MS);
   }
@@ -405,7 +474,7 @@
     return { sending: !reason, reason: reason || null, optedOut };
   }
 
-  global.VTAnalytics = { track, summary, clear, setOptOut, remoteState, flush, forget };
+  global.VTAnalytics = { track, summary, clear, setOptOut, remoteState, flush, forget, wireEvent };
 
   // So an answer given before any event is raised still releases the hold.
   watchRegion();

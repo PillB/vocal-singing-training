@@ -1,0 +1,677 @@
+[
+ {
+  "five_second": {
+   "what_it_is": "Una página para entrenar la voz, para cantar o para hablar. Decía 'Entrena tu voz 3 minutos al día'.",
+   "who_it_is_for": "Para gente que canta o que tiene que hablar en público, presentaciones. Más bien para jóvenes, me pareció por lo oscurito y moderno.",
+   "what_it_costs": "Decía GRATIS arriba, en letras celestes. Eso sí lo vi clarito.",
+   "feels_made_for_me": "partly",
+   "why": "Lo de 3 minutos al día me gustó, porque mi voz ya se cansa rápido y no voy a estar una hora. Pero estaba marcado 'Hablar' y no 'Cantar', y yo canto en el coro. Además el fondo negro con letras grises me cuesta leer, aunque tengo la letra grande en el celular."
+  },
+  "first_click": {
+   "target": "Primero tocaría el recuadro 'Cantar - canciones, afinación', porque eso es lo mío. Después el botón verde grande 'Empezar (3 min)'.",
+   "expectation": "Espero que al tocar 'Cantar' cambien los ejercicios de abajo a ejercicios de canto, de afinación. Y al darle a Empezar, que me pida permiso para el micrófono como hace WhatsApp para las notas de voz, y que suene el piano para que yo cante la nota. Ojalá no me pida registrarme ni poner correo antes."
+  },
+  "words_that_confused_me": [
+   {
+    "words": "Diseño del sitio · A · Clásico",
+    "what_i_thought": "No entendí qué es. Pensé que era algo para el que hizo la página, como una opción de computadora. No sé si tengo que cambiarlo o si se me desconfigura algo si lo toco."
+   },
+   {
+    "words": "Trinos de labios 1:15 → dicción 1:45",
+    "what_i_thought": "Al principio leí 1:15 como una hora, la una y cuarto. Luego entendí que eran minutos. Lo de trinos de labios supongo que es lo que en el coro llamamos hacer vibrar los labios, el 'brrr', pero no estoy segura."
+   },
+   {
+    "words": "Tu progreso se queda en este navegador",
+    "what_i_thought": "No sé bien qué es el navegador. ¿Es el Chrome? Me preocupa que si cambio de celular o mi hijo me borra algo, pierda todo. Eso se lo tendría que preguntar a él."
+   },
+   {
+    "words": "Entrar",
+    "what_i_thought": "Pensé que era para crear una cuenta y que me iba a pedir datos, contraseña, quizás tarjeta. No lo tocaría."
+   },
+   {
+    "words": "Plan (arriba, en el menú)",
+    "what_i_thought": "Pensé que era plan de pago, como plan del celular. Después en la otra pantalla vi 'Plan de 12 semanas' y recién entendí que puede ser plan de ejercicios."
+   },
+   {
+    "words": "Tus básicos",
+    "what_i_thought": "No me quedó claro. ¿Básicos de qué? Suena a ropa."
+   },
+   {
+    "words": "Ver el tour",
+    "what_i_thought": "Tour como de viaje. Me imagino que es un video que explica, pero hubiera preferido que diga 'Ver cómo funciona'."
+   },
+   {
+    "words": "TU REGIÓN: PERÚ · PEN",
+    "what_i_thought": "Perú sí, pero PEN no sé qué es. Luego vi S/ y supuse que son soles."
+   }
+  ],
+  "pricing": {
+   "free_gets": "Dice que todos los ejercicios, ver la afinación en vivo, cantar con un piano que se ajusta a la voz, grabarse y revisar cómo le fue a una, un plan de 12 semanas y ver el progreso en el Historial. Eso me parece bastante para ser gratis, y el piano que se ajusta a mi voz me interesa porque soy contralto y siempre los ejemplos están muy agudos.",
+   "pro_adds": "Por lo que se ve: 'sin anuncios ni recomendaciones patrocinadas' y algo de descargar el progreso en un archivo, pero eso está cortado y no se lee completo. Cuesta S/ 19.90 al mes.",
+   "would_try_pro": "No, por ahora no. Lo gratis ya me alcanza, y no veo nada en Pro que me ayude a cantar mejor. Además 19.90 al mes es como un menú en el mercado cada mes, y para quitar anuncios no vale la pena. Y el botón 'Probar Pro 7 días gratis' no lo tocaría sin preguntarle a mi hijo, porque siempre esas pruebas gratis después te cobran.",
+   "trust": "medium",
+   "trust_why": "Me da confianza que diga 'Practicar es gratis, siempre' y que el precio esté en soles, se ve que piensan en Perú. Pero me confunde que diga 'Los pagos aún no están públicos' y justo debajo un botón grande morado de 'Probar Pro 7 días gratis'. ¿Entonces se puede o no se puede? Eso me pone desconfiada. Y no dice en ningún lado si piden tarjeta.",
+   "unclear": "Si para probar los 7 días me piden tarjeta. Qué pasa al día 8, si me cobran solito. Si se puede pagar con Yape. Por qué dice 'sin anuncios' si yo no he visto anuncios. Qué es eso de 'Plan gratis' en una cajita vacía arriba. Y lo de descargar el archivo, que está cortado."
+  },
+  "would_leave_because": "Si al tocar Empezar o Probar Pro me pide número de tarjeta, cierro todo de inmediato. También si me pide crear cuenta con contraseña y correo antes de dejarme probar. Y si el micrófono no funciona a la primera, porque no sabría cómo arreglarlo sola.",
+  "one_change": "Que al lado del botón de 'Probar Pro 7 días gratis' diga bien clarito, en letra grande: 'No pedimos tarjeta y no se cobra nada automáticamente'. Así una no tiene miedo. (Y si se puede algo más: que el fondo sea más claro para leer mejor.)",
+  "think_aloud": "Ay, todo negro, a ver... 'Canto y oratoria, gratis', ya, eso me gusta. Tres minutos al día, eso sí puedo, porque ahora la voz se me cansa enseguida. Pero está marcado 'Hablar', yo quiero cantar, tengo que cambiarlo. 'Trinos de labios, 1:15'... ¿la una y cuarto? No, son minutos. Ah, debe ser el 'brrr' que hacemos en el coro antes de misa. Piano y afinador, qué bien, porque yo me bajo en las notas largas y nadie me avisa. 'Diseño del sitio A Clásico', eso no sé qué es, mejor no lo toco. 'Entrar', no, no quiero dar mis datos. Lo del navegador se lo pregunto a mi hijo. Luego lo de Pro: 19.90 soles al mes, ¿y para qué? Para quitar anuncios. No. Y dice que los pagos no están públicos, pero hay un botón para probar... raro. Me quedo con lo gratis y pruebo el piano.",
+  "key": "rosa"
+ },
+ {
+  "five_second": {
+   "what_it_is": "Una página para entrenar la voz. El título dice 'Entrenamiento vocal y de canto' y en grande 'Entrena tu voz 3 minutos al día'. Tiene un botón verde para empezar y te deja elegir entre cantar o hablar.",
+   "who_it_is_for": "Primero pensé que era para gente que canta, por el título y el piano. Luego vi 'Hablar: presentaciones, dicción', así que también sería para los que tenemos que hablar en público.",
+   "what_it_costs": "Arriba, en letras chiquitas, dice 'GRATIS'. Hay un botón dorado 'Probar Pro', así que supongo que hay una parte de pago, pero en esos cinco segundos no vi ningún precio.",
+   "feels_made_for_me": "partly",
+   "why": "Me gustó que 'Hablar: presentaciones, dicción' ya estaba marcado, eso es justo lo mío para los informes al consejo. Y tres minutos sí los tengo. Pero el título habla de canto, todo está oscurito como app de música o de jueguitos, y arriba hay un montón de botones. No me siento el público principal: siento que soy un extra que pusieron al costado de los cantantes."
+  },
+  "first_click": {
+   "target": "El botón verde 'Empezar (3 min)', dejando 'Hablar' marcado como ya estaba.",
+   "expectation": "Que me pida permiso para usar el micrófono y empiece de frente con el ejercicio, sin registrarme ni poner tarjeta. Primero lo de 'trinos de labios' y después un texto corto para leer en voz alta, como dice el recuadro. Al final espero que me diga algo concreto: si hablé muy rápido, si me comí las palabras, si bajé la voz. Si solo me pone una nota bonita sin explicarme nada, no me sirve."
+  },
+  "words_that_confused_me": [
+   {
+    "words": "Trinos de labios",
+    "what_i_thought": "No sé qué es. Me suena a pajaritos. Supongo que es hacer 'brrr' con los labios como caballito. Me daría vergüenza hacerlo en la oficina, y no veo qué tiene que ver con hablar más claro."
+   },
+   {
+    "words": "Diseño del sitio: A · Clásico / 'Dos formas de ordenar lo mismo'",
+    "what_i_thought": "Primero creí que era un tipo de plan o de versión, como Plan A, Plan B. No entiendo para qué me ofrecen cambiar el diseño. Me confunde y no lo tocaría."
+   },
+   {
+    "words": "Clase (filtro) y 'Ejercicios de la clase'",
+    "what_i_thought": "Pensé que era una clase con profesor, o algo de pago. ¿La clase de quién? Recién al leer la línea de abajo entendí que es un grupo de ejercicios."
+   },
+   {
+    "words": "conexión (en 'dicción, volumen, conexión y revisión')",
+    "what_i_thought": "¿Conexión a internet? ¿Conexión con el público? No queda claro."
+   },
+   {
+    "words": "El afinador (en 'El piano y el afinador te guían')",
+    "what_i_thought": "Un afinador es para la guitarra. Yo quiero hablar, no cantar afinado. Me hizo dudar si esto es para mí."
+   },
+   {
+    "words": "Entrar",
+    "what_i_thought": "¿Iniciar sesión? ¿Crear cuenta? ¿O entrar a la app? Si es para registrarme, no le doy todavía."
+   },
+   {
+    "words": "Probar Pro",
+    "what_i_thought": "Pro de qué. Suena a que después me van a cobrar."
+   },
+   {
+    "words": "Ver el tour",
+    "what_i_thought": "Lo entendí como un recorrido de la página. 'Tour' suena a viaje, pero ahí sí más o menos me di cuenta."
+   },
+   {
+    "words": "Hablar / Cantar repetido dos veces",
+    "what_i_thought": "Arriba elijo Hablar y abajo en el catálogo otra vez Hablar o Cantar. ¿Son la misma opción o son dos cosas distintas? Me hizo pensar que tenía que elegir dos veces."
+   },
+   {
+    "words": "sostenidos (en el plan Pro: 'cómo van tus sostenidos')",
+    "what_i_thought": "En música, sostenido es el símbolo de la nota. ¿O es sostener la voz? Para alguien que solo quiere hablar no se entiende."
+   },
+   {
+    "words": "Plan gratis (la cajita en la ventana de precios)",
+    "what_i_thought": "Parece un campo para escribir o un desplegable. No sé si es mi plan actual o si tengo que hacerle clic."
+   },
+   {
+    "words": "Recomendaciones patrocinadas",
+    "what_i_thought": "Si Pro las quita, quiere decir que el gratis tiene publicidad. En la página principal eso no lo dicen."
+   }
+  ],
+  "pricing": {
+   "free_gets": "Según la tabla, gratis y 'siempre': todos los ejercicios, ver la afinación en vivo y cantar con un piano que se ajusta a la voz, grabarme y revisar cómo me fue, un plan de 12 semanas y mi progreso en el Historial. Lo que no dice es que el gratis parece tener anuncios. Eso lo deduzco porque Pro promete 'sin anuncios'.",
+   "pro_adds": "Sin anuncios ni recomendaciones patrocinadas. Descargar todo el progreso en un archivo. Un resumen escrito para mandárselo a un profesor (que yo no tengo). Un gráfico de los últimos 28 días con 'qué practicar después'. Arriba también menciona 'más perfiles y consejos según tu práctica'. Cuesta S/ 19.90 al mes o S/ 119.90 al año, que es un solo cobro.",
+   "would_try_pro": "Ahorita no. Primero quiero ver si el gratis me sirve un mes. La mensual no, porque luego me olvido de cancelar y me siguen cobrando. Si algún día pago, sería la anual de S/ 119.90, que es un solo cobro y es plata razonable, pero solo si me dicen claramente que no se renueva sola o que me avisan antes. Los 7 días gratis los probaría solo si no me piden tarjeta.",
+   "trust": "medium",
+   "trust_why": "A favor: está en soles y detecta que estoy en Perú, el precio está a la vista sin letra chica, y dice claramente que practicar es gratis siempre. Hice la cuenta: 19.90 por 12 son S/ 238.80, y la mitad sería 119.40. O sea, el 'Ahorra 50%' está redondeado, pero casi cuadra, así que pasa. En contra: dice 'Los pagos aún no están públicos' y al lado hay un botón 'Probar Pro 7 días gratis'. Eso no me cuadra. No veo quién está detrás, ni una empresa, ni opiniones de usuarios. Que me cobren por descargar mi propio progreso me parece un poco feo. Y lo de '3 clases particulares en Lima'... yo estoy en Arequipa, no en Lima.",
+   "unclear": "¿Qué pasa el día 8 de la prueba? ¿Me piden tarjeta? ¿Se cobra solo? ¿La anual se renueva automáticamente? Si 'los pagos aún no están públicos', ¿qué estoy probando exactamente? ¿El gratis tiene anuncios, y cuántos? ¿Qué es la estrellita del Pro mensual? ¿Qué son 'más perfiles'? Y como el progreso 'se queda en este navegador', ¿si cambio de la laptop al celular pierdo todo?"
+  },
+  "would_leave_because": "Me iría si al darle a Empezar me pide crear cuenta o poner tarjeta antes de probar nada. También si me pide el micrófono sin decirme a dónde va mi grabación. Y si el ejercicio resulta ser todo de canto y piano, y no me ayuda con lo mío, que es hablar rápido y que no se me entienda. Lo mismo si, después de los tres minutos, no me dice nada concreto sobre mi forma de hablar.",
+  "one_change": "Que cuando elijo 'Hablar', el título grande me hable a mí y no a los cantantes. Algo como 'Habla más claro y más pausado: 3 minutos al día', diciendo que no hace falta cantar. El título actual, 'Entrenamiento vocal y de canto', casi me hace cerrar la página antes de ver que también era para hablar en público.",
+  "think_aloud": "Ya, 'Entrenamiento vocal y de canto'... pensé que era para cantantes y casi me voy. Luego vi 'Hablar: presentaciones, dicción' y ya estaba marcado, eso me gustó, como si me hubiera adivinado. Tres minutos al día, eso sí lo hago antes del informe al consejo. Pero ¿'trinos de labios'? ¿Hacer brrr como caballito? En la oficina me daría roche. Arriba hay demasiados botones: Entrar, Probar Pro, tour, guía, y un 'Diseño del sitio A · Clásico' que no sé para qué me sirve. En los precios, bien que estén en soles. Hice la cuenta: 19.90 por doce son 238.80, la mitad sería 119.40, así que el cincuenta por ciento está redondeado, pasa. Lo que no me cuadra es 'los pagos aún no están públicos' y al costado 'Probar Pro 7 días gratis'. ¿Me van a pedir tarjeta? ¿Y el día ocho qué pasa? Primero pruebo lo gratis, después vemos.",
+  "key": "jorge"
+ },
+ {
+  "five_second": {
+   "what_it_is": "Una aplicación del móvil para entrenar la voz unos 3 minutos al día, para cantar o para hablar.",
+   "who_it_is_for": "Me dio la impresión de que es más para gente que tiene que hablar en público, lo de las presentaciones y la oratoria, y además un poco para cantar.",
+   "what_it_costs": "Gratis. Ponía GRATIS arriba, en azul, y eso es lo primero que miré.",
+   "feels_made_for_me": "partly",
+   "why": "Me gusta que sea gratis, que sea cortito (tres minutos los tengo) y que haya un botón de 'Cantar'. Pero ya venía marcado 'Hablar, presentaciones', y yo no doy presentaciones. La pantalla es muy negra, como de chicos jóvenes, y tiene palabras raras ('Trinos de labios', 'Diseño del sitio'). Parece más para alguien que trabaja en una oficina que para una señora que canta coplas en las fiestas de la familia."
+  },
+  "first_click": {
+   "target": "El recuadro de 'Cantar' (canciones, afinación), arriba a la izquierda, porque venía marcado 'Hablar'. Después, el botón verde 'Empezar (3 min)'.",
+   "expectation": "Que al tocar 'Cantar' se marque con el redondelito y el cuadro de abajo cambie a ejercicios de cantar, a ser posible con alguna canción. Luego, al darle a 'Empezar', espero que me pida permiso para el micrófono (como hace WhatsApp con las notas de voz), suene el piano y me diga qué tengo que cantar. Lo que no quiero es que me pida registrarme ni el correo antes de probar."
+  },
+  "words_that_confused_me": [
+   {
+    "words": "Diseño del sitio · A · Clásico",
+    "what_i_thought": "Pensé que tenía que elegir algo antes de empezar, o que era un nivel, como 'nivel A, principiante'. No sé para qué sirve ni si tengo que tocarlo."
+   },
+   {
+    "words": "Trinos de labios",
+    "what_i_thought": "Trinos son los de los pájaros. ¿Hacer pedorretas con los labios, como los críos? No tengo ni idea de qué es."
+   },
+   {
+    "words": "Trinos de labios 1:15 → dicción 1:45",
+    "what_i_thought": "Con los números y la flecha parecía un horario o un marcador de fútbol. Luego imagino que es un minuto y quince segundos, pero a primera vista lío."
+   },
+   {
+    "words": "Tus básicos",
+    "what_i_thought": "¿Mis básicos de qué? Suena a ropa, a 'básicos de armario'."
+   },
+   {
+    "words": "Entrar",
+    "what_i_thought": "Que hay que registrarse o meter usuario y contraseña. No sé si hace falta para usarlo."
+   },
+   {
+    "words": "Plan",
+    "what_i_thought": "Pensé en un plan de pago, como la tarifa del móvil. Luego en lo de Pro vi 'Plan de 12 semanas' y entendí que puede ser de ejercicios, pero arriba confunde."
+   },
+   {
+    "words": "afinador",
+    "what_i_thought": "Eso es el aparatito para afinar la guitarra, ¿no? No sabía que servía para la voz."
+   },
+   {
+    "words": "Tu progreso se queda en este navegador",
+    "what_i_thought": "¿Navegador? ¿Safari? ¿Entonces, si cambio de móvil o borro algo, lo pierdo todo? Me dejó con la duda."
+   },
+   {
+    "words": "Ver el tour (1 min)",
+    "what_i_thought": "Tour es de viajes. Supongo que es un vídeo que te enseña cómo va, pero ¿por qué no lo ponen en español?"
+   },
+   {
+    "words": "Canto y oratoria",
+    "what_i_thought": "La oratoria me suena a abogados y políticos dando discursos. Me hizo pensar que esto no era para mí."
+   },
+   {
+    "words": "TU REGIÓN: PERÚ · PEN",
+    "what_i_thought": "¿Perú? Si yo estoy en Madrid. Y 'PEN' pensé que era un pendrive o algo en inglés. No sabía que eran los soles hasta ver el 'S/'."
+   },
+   {
+    "words": "Los pagos aún no están públicos",
+    "what_i_thought": "¿Públicos? ¿Que se ven mis pagos? Entiendo que todavía no cobran, pero dicho así suena raro."
+   },
+   {
+    "words": "recomendaciones patrocinadas",
+    "what_i_thought": "Publicidad disfrazada, como lo que te sale en Instagram. Entonces, ¿lo gratis tiene anuncios?"
+   },
+   {
+    "words": "Plan gratis (el recuadro de arriba)",
+    "what_i_thought": "Parece una casilla para escribir o un desplegable. No sé si hay que tocarlo."
+   }
+  ],
+  "pricing": {
+   "free_gets": "Según pone: todos los ejercicios ('la práctica siempre es gratis'), ver la afinación en vivo y cantar con un piano que se ajusta a tu voz, grabarte y ver cómo te fue en cada sesión, un plan de 12 semanas y ver tu progreso en el Historial. Pone '0', a secas, sin euros ni nada.",
+   "pro_adds": "Lo que veo es: todo lo del plan gratis, sin anuncios ni recomendaciones patrocinadas, y algo de descargar todo tu progreso en un archivo (la frase se corta y no la leo entera). Cuesta S/ 19.90 al mes, en soles de Perú, y no sé cuánto es en euros.",
+   "would_try_pro": "No. Lo gratis ya trae todo lo que yo usaría, y para qué quiero descargar mi progreso en un archivo. Además el precio no está en euros, y lo de 'Probar Pro 7 días gratis' me escama: si dice que los pagos todavía no están listos, ¿qué pruebo? Y si para la prueba me pide la tarjeta, ni de broma, que luego se te olvida y te cobran.",
+   "trust": "low",
+   "trust_why": "Lo de 'practicar es gratis, siempre' me parece honrado, y la lista de lo gratis es larga, eso me gusta. Pero me pone que mi región es Perú y el precio en soles estando yo en Madrid, y eso me hace pensar que la página no es de aquí o que algo falla. Y es contradictorio que diga que los pagos no están públicos y a la vez tenga un botón grande y morado para probar Pro. Con el dinero yo voy con cuidado, y eso me hace desconfiar.",
+   "unclear": "Por qué sale Perú y soles, y cuánto costaría en euros en España. Si la prueba de 7 días pide tarjeta y qué pasa el día 8, si me cobran solo. Si lo gratis lleva anuncios (Pro dice 'sin anuncios', pero en lo gratis no lo pone). Qué es el recuadro 'Plan gratis' de arriba. El '0' sin moneda. La última línea de Pro, que está cortada. Y cómo se cancela."
+  },
+  "would_leave_because": "Si al darle a Empezar me pide registrarme o la tarjeta antes de cantar ni una nota. Si resulta que todo es de hablar en público y lo de cantar es de relleno. Si me suelta 'desafinas' o algo así: ya me mandaron callar en el colegio y no lo necesito otra vez. Y si veo cobros en soles, de Perú, o cosas que no cuadran con el dinero, cierro sin pensarlo.",
+  "one_change": "Que el precio me salga en euros y para España, con una frase clara del tipo 'sin tarjeta, no te cobramos nada'. Si veo Perú y soles ya no me fío de nada de lo demás, aunque lo gratis parezca bueno. (Y de paso, que venga marcado 'Cantar' y no 'Hablar').",
+  "think_aloud": "Vale, a ver... 'Gratis', bien, eso lo primero. 'Entrena tu voz 3 minutos al día', pues eso me gusta, tres minutos los tengo. Pero me sale marcado 'Hablar, presentaciones'... yo no doy presentaciones, hija, yo quiero cantar, que en el colegio me mandaban mover los labios y todavía me escuece. Le daría a 'Cantar'. Lo de 'trinos de labios' no sé qué es, ¿hacer pedorretas como los niños? Y eso de 'Diseño del sitio A Clásico' arriba, ni idea, ¿tengo que elegir algo? Luego abro lo de Pro y me pone Perú y soles. ¿Perú? Si estoy en Madrid. Y dice que los pagos no están públicos pero me pone un botón de probar siete días gratis... a mí eso me da mala espina, que luego te cobran. Lo gratis parece que tiene bastante; me quedaría con lo gratis, si acaso.",
+  "key": "carmen"
+ },
+ {
+  "five_second": {
+   "what_it_is": "Some kind of voice practice app with a microphone. It's in Spanish, and as far as I could tell it does speaking and singing exercises, about three minutes a day.",
+   "who_it_is_for": "Spanish speakers. It looked mostly aimed at people who give presentations, because 'Hablar' (speaking) was already ticked. Singing seemed to come second.",
+   "what_it_costs": "Free. It said 'GRATIS' at the top and I didn't see a price.",
+   "feels_made_for_me": "no",
+   "why": "It's in Spanish and I'm in Manchester. I can pick out a few words from holidays but I can't use a whole website that way. It also had speaking and presentations ticked before I'd chosen anything, and I'm a choir singer. To be fair, it doesn't talk down to me. There's nothing about 'seniors' or 'golden years', the text is a good size, and three minutes a day is a sensible promise that I'd actually keep."
+  },
+  "first_click": {
+   "target": "The 'Cantar' box (the left one of the two choices, 'canciones, afinación'), and then the green 'Empezar (3 min)' button.",
+   "expectation": "I expect the tick to move from Hablar to Cantar, and the card underneath to change from the lip trill and diction routine to a singing warm-up, still three minutes. Then I expect Empezar to start it. It will probably ask to use my microphone and play a piano note for me to match. I'd also be hoping for an English option. I can't see a language button anywhere, so I might try 'Más' first to look for one. I would not tap 'Entrar', because I don't know if that means signing up or paying."
+  },
+  "words_that_confused_me": [
+   {
+    "words": "Trinos de labios",
+    "what_i_thought": "Something to do with lips. It might be the lip trill our choir director has us do, but 'trinos' made me think of trios or trains. I really wasn't sure."
+   },
+   {
+    "words": "Diseño del sitio / A · Clásico",
+    "what_i_thought": "I thought it was picking a style or level of course, like classical singing at level A. I'd never have guessed it changes how the website looks, so I'd have left it alone in case it changed my lessons."
+   },
+   {
+    "words": "Entrar",
+    "what_i_thought": "'Enter'. I couldn't tell if it means log in, register or pay, so I wouldn't touch it."
+   },
+   {
+    "words": "Plan (top tab)",
+    "what_i_thought": "I thought it meant a payment plan. The Pro window then uses 'Free plan' and '12-week plan' too, so 'plan' means two different things."
+   },
+   {
+    "words": "Tu progreso se queda en este navegador",
+    "what_i_thought": "I couldn't translate 'navegador' and thought it meant a navigator or sat-nav. If it means my progress only lives on this one iPad, I'd want that said plainly in English."
+   },
+   {
+    "words": "YOUR REGION: PERÚ · PEN",
+    "what_i_thought": "I didn't know PEN was a currency. I thought it was some code. Peru is wrong, I'm in the UK, so it felt like the site had mixed me up with someone else."
+   },
+   {
+    "words": "S/ 19.90",
+    "what_i_thought": "I didn't recognise 'S/' as money at all. It looked like a typo. I have no idea what that is in pounds."
+   },
+   {
+    "words": "Checkout isn't live yet ... Try Pro free for 7 days",
+    "what_i_thought": "The first part sounds like the shop isn't open. Then there's a big button telling me to try it. I didn't know whether pressing it would take my card details or do nothing."
+   },
+   {
+    "words": "Free plan (the box at the top)",
+    "what_i_thought": "It looks like a drop-down or a box to fill in. I couldn't tell if I'm meant to tap it or if it's just a heading."
+   },
+   {
+    "words": "No ads or sponsored tips",
+    "what_i_thought": "That suggests the free version has adverts and paid-for 'tips' in it. Nothing on the front page warned me about that."
+   },
+   {
+    "words": "Current plan / Free 0",
+    "what_i_thought": "I haven't signed up for anything, so I don't see how I have a 'plan'. And '0' with no £ sign looks like a number has gone missing."
+   }
+  ],
+  "pricing": {
+   "free_gets": "All the exercises ('practice is always free'). You can see your pitch live and sing along with a piano that adjusts to your voice, which would help me with my bad ear. You can record yourself and see how each session went. There's a 12-week plan, and your progress is shown in History.",
+   "pro_adds": "No adverts or sponsored tips, and you can download all your progress as a file to keep. There's another line under that but it's cut off at the bottom, so I can't read what it is. The only price I could see is 'S/ 19.90 / mo' for Pro Monthly.",
+   "would_try_pro": "Not now. The free list already covers what I want: exercises, the piano, and hearing how I'm getting on. I'd only think about it if the price were in pounds and it said clearly whether the 7-day trial takes my card, when it starts charging, and how to cancel. I also don't love paying just to download my own progress.",
+   "trust": "low",
+   "trust_why": "It says my region is Peru and charges in soles, but I'm in Manchester. It says checkout isn't live, then puts a big 'Try Pro free' button right under that. The front page was in Spanish and this window is in English, and the last Pro line is cut off. That's too many loose ends for me to put my card in. I did like 'Practice is free, always'. It's honest and reassuring, and the free list is generous.",
+   "unclear": "How much it is in pounds, and why it thinks I'm in Peru. Whether the 7-day trial needs my card and charges automatically afterwards, and how I'd cancel. Whether the free version really has adverts. What the cut-off last Pro bullet says. Whether there's a yearly option further down. Whether the 'Free plan' box at the top does anything when tapped."
+  },
+  "would_leave_because": "The front page is in Spanish and I can't find a way to switch it to English. If I got past that, a price in Peruvian money and a trial button sitting under 'checkout isn't live' would finish me off. I'm not giving my card to something that doesn't know which country I'm in.",
+  "one_change": "Show it to me in English from the very first screen, with prices in pounds, because it should know I'm in the UK. If there has to be a choice, put a clear language button at the top.",
+  "think_aloud": "Oh, it's in Spanish. I've got holiday Spanish, so I can manage 'Gratis', 'Cantar' and 'Hablar': free, sing, speak. Three minutes a day is sensible, and I like that it doesn't promise miracles. But why is 'Hablar' already ticked? I sing. I'd have expected singing to come first. 'Trinos de labios', lips something. Is that the lip trill our choir director makes us do? And 'Diseño del sitio, A Clásico', is that classical singing? I'd leave that well alone. White on dark navy reads fine with my reading glasses, which is a relief, though a few grey lines are fainter. Then the Pro window is suddenly in English, says my region is Peru and the price is S/ 19.90. I'm in Manchester. It says checkout isn't live, then offers a free trial button. I wouldn't put my card anywhere near that.",
+  "key": "margaret"
+ },
+ {
+  "five_second": {
+   "what_it_is": "Una app o web para entrenar la voz unos minutos al día, para canto y para hablar en público (oratoria). Tiene piano y afinador con micrófono.",
+   "who_it_is_for": "Para gente que quiere cantar mejor o hablar mejor, por ejemplo en exposiciones. Como está marcado 'Hablar', parece más pensada para presentaciones que para alguien que canta covers.",
+   "what_it_costs": "Arriba dice 'GRATIS'. En la portada no vi ningún precio de pago.",
+   "feels_made_for_me": "partly",
+   "why": "Me gusta que se vea moderna, oscurita y ordenada, y que diga gratis y 3 minutos, que es poquito y se puede hacer. Pero viene marcado 'Hablar' y el ejercicio de ejemplo es de dicción, y yo quiero cantar. Hay cosas raras como 'Diseño del sitio: A · Clásico' que no entiendo para qué me sirven. Siento que es medio para mí, pero tengo que acomodarlo."
+  },
+  "first_click": {
+   "target": "Primero toco la tarjeta 'Cantar (canciones, afinación)', porque viene marcado 'Hablar' y no me interesa. Después toco el botón verde 'Empezar (3 min)'.",
+   "expectation": "Al tocar 'Cantar' espero que la tarjeta 'Tus básicos' cambie a ejercicios de canto, con calentamiento y afinación en vez de 'dicción'. Al darle a 'Empezar' espero que me pida permiso para el micrófono y que arranque de frente, sin crearme cuenta, con el piano y el afinador en pantalla. Si me pide registrarme o una tarjeta antes, me molestaría."
+  },
+  "words_that_confused_me": [
+   {
+    "words": "Diseño del sitio · A · Clásico",
+    "what_i_thought": "Pensé que era para cambiar el tema o los colores de la página. No entiendo por qué es lo primero que aparece ni qué serían B o C. Parece algo de prueba que se olvidaron de quitar."
+   },
+   {
+    "words": "Trinos de labios",
+    "what_i_thought": "No tengo idea. Supongo que es eso de vibrar los labios haciendo 'brrr', pero no estoy segura. Suena muy técnico para alguien que recién empieza."
+   },
+   {
+    "words": "Tus básicos · 3 MIN",
+    "what_i_thought": "¿Básicos de qué? Creo que es la rutina básica del día, pero no lo dice claro."
+   },
+   {
+    "words": "Plan (en el menú de arriba)",
+    "what_i_thought": "Primero pensé que era el plan de pago o la suscripción. Luego en la ventana de Pro vi 'Plan de 12 semanas' y ahí entendí que podía ser un plan de entrenamiento. Se confunde con 'Plan gratis' y 'Plan actual'."
+   },
+   {
+    "words": "Oratoria",
+    "what_i_thought": "Sí la entiendo, es hablar en público, como en mis exposiciones de la u. Pero cuando aparece junto a canto no queda claro cuál es el fuerte de la app."
+   },
+   {
+    "words": "Tu progreso se queda en este navegador",
+    "what_i_thought": "Lo entiendo como que no se guarda en la nube: si cambio de celular o borro el historial, lo pierdo. Es honesto decirlo, pero me preocupa un poco."
+   },
+   {
+    "words": "Entrar",
+    "what_i_thought": "Creo que es iniciar sesión, pero no sé si es obligatorio para practicar o si es opcional."
+   },
+   {
+    "words": "Los pagos aún no están públicos + botón 'Probar Pro 7 días gratis'",
+    "what_i_thought": "Se contradicen. Si los pagos no están listos, ¿qué pruebo? ¿Me van a pedir tarjeta? ¿Me cobran solo después de los 7 días?"
+   },
+   {
+    "words": "Plan gratis (el recuadro de arriba en la ventana Pro)",
+    "what_i_thought": "Parece un campo para escribir o un selector, no sé si se puede tocar o si solo está informando."
+   },
+   {
+    "words": "Gratis 0",
+    "what_i_thought": "Un '0' solito se ve raro. Le falta 'S/' para que combine con el precio de Pro."
+   },
+   {
+    "words": "Sin anuncios ni recomendaciones patrocinadas",
+    "what_i_thought": "Si Pro es 'sin anuncios', entiendo que la versión gratis sí tiene anuncios, pero en la lista de Gratis no lo dice."
+   },
+   {
+    "words": "PEN",
+    "what_i_thought": "Sé que son soles porque lo veo en el banco, pero 'S/' solo ya bastaba. Igual me gustó que detectara Perú."
+   }
+  ],
+  "pricing": {
+   "free_gets": "Según la lista: todos los ejercicios ('la práctica siempre es gratis'), ver mi afinación en vivo y cantar con un piano que se ajusta a mi voz, grabarme y revisar cómo me fue en cada sesión, un plan de 12 semanas y ver mi progreso en el Historial. La verdad es bastante para ser gratis.",
+   "pro_adds": "Pro mensual cuesta S/ 19.90 al mes. Lo que llego a ver es 'Todo lo del plan Gratis', 'Sin anuncios ni recomendaciones patrocinadas' y algo de 'Descarga todo tu progreso en un archivo...', que se corta. No veo nada más, ni nada que me ayude con mi cover para TikTok.",
+   "would_try_pro": "Por ahora no. Lo gratis ya tiene lo que necesito: afinador, grabarme y un plan. Por S/ 19.90 solo veo 'sin anuncios' y descargar mi progreso, y eso no me vale más que mi Spotify de estudiante, que es lo único que pago. Probaría los 7 días gratis solo si no me piden tarjeta y si después se puede pagar con Yape, pero no dice nada de cómo se paga.",
+   "trust": "medium",
+   "trust_why": "A favor: me muestra el precio en soles sin esconderlo, detecta que estoy en Perú y dice claro 'Practicar es gratis, siempre'. Eso me parece honesto. En contra: dice que los pagos no están públicos y justo abajo hay un botón grande para probar Pro 7 días gratis, y eso me hace dudar. Además, lo de 'sin anuncios' en Pro me hace pensar que la versión gratis tiene anuncios que no me avisaron, y eso es justo lo que odio.",
+   "unclear": "Si los pagos no están listos, ¿qué hace el botón 'Probar Pro 7 días gratis'? ¿Me piden tarjeta? ¿Me cobran solos al día 8? La versión gratis, ¿tiene anuncios o no? ¿Cómo se paga, aceptan Yape? ¿Qué más trae Pro? El texto se corta y no sé si hay más beneficios. ¿Se puede cancelar fácil? Y el recuadro 'Plan gratis' de arriba no sé si es un botón o solo un título."
+  },
+  "would_leave_because": "Me iría si al darle a 'Empezar' me sale un ejercicio de dicción en vez de canto, o si me obligan a crear cuenta o poner tarjeta antes de probar. También si aparecen anuncios que interrumpen mientras canto, porque nadie me avisó que la versión gratis los tenía. Y si lo de 'Probar Pro 7 días gratis' termina pidiéndome datos de pago cuando ellos mismos dicen que los pagos no están listos, cierro y no vuelvo.",
+  "one_change": "Que la ventana de Pro sea coherente y transparente. Si los pagos no están listos, que no haya un botón de 'Probar Pro 7 días gratis'. Y que la columna Gratis diga claramente si tiene anuncios o no, y cómo se pagaría (ojalá con Yape). Si fuera lo de la portada, que no venga 'Hablar' marcado por defecto y que me pregunte primero.",
+  "think_aloud": "Ya, a ver... 'Entrena tu voz 3 minutos al día', gratis, se ve bonito, moderno, me gusta. Pero ¿por qué está marcado 'Hablar'? Yo quiero cantar, no hacer una exposición. Y ese 'Diseño del sitio A · Clásico' arriba no sé qué hace ahí, parece cosa de prueba. 'Trinos de labios'... ¿qué es eso? ¿el brrr con los labios? Bueno, tres minutos es poquito, eso sí me animaría a probar antes del karaoke del viernes. Lo del piano y el afinador suena bacán para mi cover. Luego abro lo de Pro: me gusta que diga el precio en soles y que practicar sea gratis siempre. Pero dice que los pagos no están listos y al toque me ofrece probar 7 días gratis... ¿en qué quedamos? Y si Pro es 'sin anuncios', entonces lo gratis tiene anuncios, y eso nadie me lo dijo. S/ 19.90 al mes, más que mi Spotify. Por ahora, no.",
+  "key": "valeria"
+ },
+ {
+  "five_second": {
+   "what_it_is": "Una página para entrenar la voz unos 3 minutos al día, para cantar o para hablar (dice 'Canto y oratoria'). Tiene un botón verde grande de Empezar.",
+   "who_it_is_for": "Para gente que quiere cantar mejor o hablar mejor en presentaciones. Vi que 'Hablar' ya venía marcado, con 'presentaciones, dicción'.",
+   "what_it_costs": "Gratis. Lo dice arriba en azul: 'GRATIS'. No vi ningún precio en la primera pantalla.",
+   "feels_made_for_me": "partly",
+   "why": "Lo de 'Hablar: presentaciones' es justo lo mío y lo de 3 minutos me late porque no tengo tiempo. Pero el logo es una notita musical y salen 'Cantar', 'trinos de labios', 'afinador' y 'piano', y eso suena a clase de canto, no a alguien con entrevistas de trabajo. No dice nada de los nervios, de que me tiembla la voz ni de dejar de decir 'este...'."
+  },
+  "first_click": {
+   "target": "El botón verde 'Empezar (3 min)', con 'Hablar' ya seleccionado como venía.",
+   "expectation": "Que me pida permiso para usar el micrófono y me explique o me enseñe primero qué son los 'trinos de labios' (no tengo idea). Después que salga un texto corto para leer en voz alta y que al final me diga algo de cómo sonó mi voz, por ejemplo si se me oyó firme o no. Espero que no me pida registrarme ni tarjeta antes de empezar."
+  },
+  "words_that_confused_me": [
+   {
+    "words": "Diseño del sitio · A · Clásico",
+    "what_i_thought": "Pensé que era una opción para programadores o que la página está en pruebas. ¿Tengo que escoger el diseño yo? No sé para qué me sirve ni qué pasa si lo cambio."
+   },
+   {
+    "words": "Trinos de labios",
+    "what_i_thought": "Ni idea. 'Trino' me suena a pajaritos. Supuse que es hacer 'brrrr' con la boca como caballito, y me daría pena hacerlo en la oficina o en el metro."
+   },
+   {
+    "words": "Tus básicos",
+    "what_i_thought": "Como que es mi rutina básica, pero ¿por qué 'mis'? Si apenas entré, ¿cómo ya sabe cuáles son mis básicos?"
+   },
+   {
+    "words": "Afinador",
+    "what_i_thought": "Algo para afinar una guitarra o para cantar entonado. No es lo mío, yo quiero hablar."
+   },
+   {
+    "words": "Oratoria",
+    "what_i_thought": "Lo entiendo, pero me suena a concurso de oratoria de la secundaria, muy formal. Yo no diría 'oratoria', diría 'hablar en público' o 'presentaciones'."
+   },
+   {
+    "words": "Plan (en el menú de arriba)",
+    "what_i_thought": "No supe si es un plan de pago o un plan de entrenamiento. En la pantalla de Pro vi 'Plan de 12 semanas', así que a lo mejor es eso."
+   },
+   {
+    "words": "Entrar / Tu progreso se queda en este navegador",
+    "what_i_thought": "'Entrar' es iniciar sesión, pero luego dice que el progreso se guarda en este navegador. ¿Entonces si cambio de cel o borro el historial lo pierdo? ¿Para qué es la cuenta?"
+   },
+   {
+    "words": "Tu región: Perú · PEN / S/ 19.90",
+    "what_i_thought": "Estoy en México. Pensé que la página es de Perú o que me detectó mal. Supongo que 'S/' son soles, pero no sé cuánto es en pesos."
+   },
+   {
+    "words": "Los pagos aún no están públicos",
+    "what_i_thought": "Que todavía no se puede pagar. Pero justo abajo está el botón 'Probar Pro 7 días gratis', ¿entonces sí se puede o no?"
+   },
+   {
+    "words": "Sin anuncios ni recomendaciones patrocinadas",
+    "what_i_thought": "Que la versión gratis trae anuncios. En la primera pantalla no vi ninguno, así que no sé qué tan molestos van a ser."
+   },
+   {
+    "words": "El recuadro 'Plan gratis' arriba en la ventana de Pro",
+    "what_i_thought": "No supe si es un botón, un menú para elegir plan o solo me dice en qué plan estoy."
+   }
+  ],
+  "pricing": {
+   "free_gets": "Según la lista: todos los ejercicios ('la práctica siempre es gratis'), ver mi afinación en vivo y cantar con un piano que se ajusta a mi voz, grabarme y revisar cómo me fue en cada sesión, un plan de 12 semanas y ver mi progreso en el Historial. Se ve bastante completo.",
+   "pro_adds": "Todo lo del gratis, más 'sin anuncios ni recomendaciones patrocinadas' y algo de descargar todo tu progreso en un archivo (se corta el texto y no lo pude leer completo). Arriba dice que Pro es para 'seguir y compartir tu avance'. Cuesta S/ 19.90 al mes, que según yo son soles.",
+   "would_try_pro": "Ahorita no. Lo que agrega Pro (quitar anuncios y descargar un archivo) no me sirve para mis entrevistas. A lo mejor le picaría a los 7 días gratis por curiosidad, pero solo si no me pide tarjeta, y como dice que los pagos todavía no están, no sé si ese botón sirve. Hoy pago Netflix y el gym porque sé qué me dan; aquí no veo por qué pagaría.",
+   "trust": "medium",
+   "trust_why": "Me da confianza que diga clarito que practicar es gratis siempre y que lo gratis traiga casi todo, y también que admitan que los pagos aún no están. Pero me sacó de onda que diga 'Perú' y soles estando yo en México: parece que no es para mí o que está mal hecho. Y que diga 'los pagos no están públicos' y justo abajo 'Probar Pro 7 días gratis' se siente como a medio terminar.",
+   "unclear": "Cuánto es en pesos mexicanos. Si el botón de prueba gratis funciona o no, y si me va a pedir tarjeta. Qué dice la última línea de Pro, que está cortada. Qué tantos anuncios trae lo gratis. Si al terminar los 7 días me cobra solo. Qué significa la estrellita en 'Pro mensual'."
+  },
+  "would_leave_because": "Si le pico a Empezar y siento que es clase de canto, haciendo ruiditos raros con la boca sin que me expliquen para qué me sirve en una entrevista, la cierro. También me iría si me pide tarjeta o cuenta antes de probar, o si sigo viendo precios en soles de Perú: ahí pensaría que la página no es para México o que está en pruebas.",
+  "one_change": "Que la opción 'Hablar' me hable de mi problema con palabras normales, algo como 'Que no te tiemble la voz en tu entrevista y deja de decir este...', y que me diga qué voy a lograr en esos 3 minutos. Ahorita el ejercicio de 'trinos de labios' suena a cantante. Y de paso, que quiten lo de 'Diseño del sitio A · Clásico', que no sé para qué está.",
+  "think_aloud": "A ver, ¿qué es esto? Canto y oratoria, gratis, 3 minutos al día. Eso sí me late, no tengo tiempo para más. Qué bueno que 'Hablar' ya venía marcado: presentaciones, justo lo mío. Pero luego dice 'trinos de labios'... ¿qué es eso? ¿Hacer como caballito con la boca? Qué oso hacerlo en la oficina. Y 'Diseño del sitio A · Clásico', ¿eso lo tengo que escoger yo? Parece que está en pruebas. Igual le picaría a Empezar, son tres minutos, no pierdo nada. Lo del afinador y el piano ya suena a clase de canto, no a alguien que va a una entrevista. Abro lo de Pro y dice Perú, soles... güey, estoy en México, ¿cuánto es eso en pesos? Dice que los pagos no están públicos, pero luego me pone 'Probar Pro 7 días gratis'. ¿Entonces sí o no? Lo gratis se ve muy completo, la neta no veo para qué pagaría.",
+  "key": "diego"
+ },
+ {
+  "five_second": {
+   "what_it_is": "Some kind of voice training app. There was a music note, a big green start button and '3 minutos', so I think it is short daily practice for singing ('Cantar') or speaking. But the whole page was in Spanish, I think.",
+   "who_it_is_for": "Spanish speakers who want to practise their voice. The box that was already ticked was the speaking one (presentations), so it seemed aimed more at talking than at singing.",
+   "what_it_costs": "Free. I saw 'GRATIS' at the top and nothing with a price on it.",
+   "feels_made_for_me": "no",
+   "why": "The language is the first thing I noticed. My phone is in English and I am in Lagos, but the page spoke Spanish to me. It had also already chosen 'Hablar' (speaking), and I came to sing. Some things did feel close to me: the 'free' word, the music note, and '3 minutes a day', which is small enough for my time and my data. So the idea fits me, but the page itself did not feel like it was talking to me."
+  },
+  "first_click": {
+   "target": "The left card, 'Cantar · canciones, afinación'. I am guessing Cantar means sing because of 'canto' and 'canciones'. After that I would press the green 'Empezar (3 min)' button with the play arrow. Before any of this I would quickly look under 'Más ▾' to see if English is hiding there.",
+   "expectation": "I expect the tick to move from 'Hablar' to 'Cantar' and the box under it to change to a 3-minute singing warm-up. Then the green button should ask for my microphone and start the exercise, with the piano and the tuner on screen like step 1 says. I hope it does not start downloading something heavy."
+  },
+  "words_that_confused_me": [
+   {
+    "words": "Diseño del sitio / A · Clásico (dropdown)",
+    "what_i_thought": "Some setting for the site, maybe a theme or the 'version A'. I did not know if I had to choose something here before I could start. It sits right at the top, so it looked important, but it means nothing to me."
+   },
+   {
+    "words": "Trinos de labios 1:15 → dicción 1:45",
+    "what_i_thought": "No idea what 'trinos de labios' is. The numbers look like times or maybe scores. 'Dicción' I guess is diction. Later I realised the first one is probably some lip exercise."
+   },
+   {
+    "words": "Hablar",
+    "what_i_thought": "I did not know this word. From 'presentaciones, dicción' under it I guessed it means speaking. It was already ticked, so I thought the site had decided I am a speaker, not a singer."
+   },
+   {
+    "words": "Entrar",
+    "what_i_thought": "Maybe 'enter', so log in or sign up? I would not tap it, because I don't want to make an account yet."
+   },
+   {
+    "words": "Más ▾",
+    "what_i_thought": "'More', I think. I hoped the language setting was in there."
+   },
+   {
+    "words": "Historial / Plan / Practicar",
+    "what_i_thought": "History, plan, practise. These I could guess because they look like English."
+   },
+   {
+    "words": "TUS BÁSICOS · 3 MIN",
+    "what_i_thought": "'Your basics', a 3-minute routine. Okay."
+   },
+   {
+    "words": "Tu progreso se queda en este navegador",
+    "what_i_thought": "'Navegador' like navigator? Maybe browser. So my progress stays on this phone and not online? If I clear my browser, do I lose everything? I was not sure."
+   },
+   {
+    "words": "Empezar",
+    "what_i_thought": "I guessed 'start' only because of the play arrow."
+   },
+   {
+    "words": "YOUR REGION: PERÚ · PEN",
+    "what_i_thought": "Peru? I am in Nigeria. At first I thought PEN was a typo or some code. Then I understood it is their money, not mine."
+   },
+   {
+    "words": "S/ 19.90 / mo",
+    "what_i_thought": "I don't know what 'S/' is. It is not naira and not dollars. I cannot tell if this is cheap or expensive for me."
+   },
+   {
+    "words": "Free plan (the bar near the top of the Pro window)",
+    "what_i_thought": "It looks like a button or a dropdown, but it just says 'Free plan'. Is it telling me my plan, or do I tap it?"
+   },
+   {
+    "words": "Checkout isn't live yet ... Try Pro free for 7 days",
+    "what_i_thought": "These contradict each other. First it says I cannot pay yet, and right under that is a big button to try Pro. Will that button ask for my card?"
+   },
+   {
+    "words": "Free 0",
+    "what_i_thought": "Zero of what? There is no currency next to it, but I understood it means free."
+   },
+   {
+    "words": "sponsored tips",
+    "what_i_thought": "Adverts dressed up as advice? So the free version has ads mixed into the lessons?"
+   }
+  ],
+  "pricing": {
+   "free_gets": "All the exercises ('practice is always free'). Seeing my pitch live and singing with a piano that adjusts to my voice. Recording myself and seeing how each session went. A 12-week plan. My progress in History. For someone who wants to lead a song in church, that is honestly most of what I need, and I like it.",
+   "pro_adds": "From what I can see: 'Everything in Free', 'No ads or sponsored tips', and 'Download all your progress as a file to keep'. There is another line at the bottom, but it is cut off and I could not read it. The price is S/ 19.90 a month, which I could not convert in my head.",
+   "would_try_pro": "No, not now. The free part already covers singing practice. 'No ads' and 'download a file' don't help me lead a song. The price is in Peruvian money, and the page itself says checkout isn't live. I might press 'Try Pro free for 7 days' only if it clearly said 'no card needed'. Otherwise I would leave it, because I am scared of a foreign charge appearing on my local card after the 7 days.",
+   "trust": "low",
+   "trust_why": "It thinks I am in Peru and shows soles, so I wonder what else it got wrong, and what currency my card would really be charged in, with bank fees on top. The home page was in Spanish and this window is in English, so it feels unfinished. 'Checkout isn't live yet' sitting right on top of a 'Try Pro' button looks like a mistake. Good points: 'Practice is free, always' is said clearly, and 'Current plan' on Free reassures me I am not being charged now.",
+   "unclear": "What the cut-off Pro features are. Whether the 7-day trial needs my card and charges me automatically when it ends. What S/ 19.90 is in naira, and whether there is a yearly or cheaper option further down. Whether I can change my region to Nigeria. What the 'Free plan' bar at the top does. Whether the free version shows ads that use my data. Whether my progress is lost if I clear my browser or change phones."
+  },
+  "would_leave_because": "I would leave if I tap around and cannot find English quickly. I would also leave if 'Empezar' starts loading something big and eats my data without warning. And I would be gone if the 'Try Pro' button asked for my card while the price is shown in Peruvian soles. A site that does not know which country I am in is not a site I give my card to.",
+  "one_change": "Get where I am right from the first screen: show the page in English, the language my phone is set to, and show prices in naira. If you can't do naira, at least say clearly what my card will be charged and in what currency. Spanish text and 'Region: Perú' made the whole thing feel like it was not meant for me, even though the free features are exactly what a choir singer needs.",
+  "think_aloud": "Music note, dark screen... wait, is this Spanish? My phone is in English. I can guess 'Cantar' from 'canto', and 'GRATIS' means free, so okay. Three minutes a day, I like that, I can do it before choir practice. But it already ticked 'Hablar' and I came to sing, so I'd switch. 'Trinos de labios' means nothing to me. The green button is clear. I'm also wondering how much data this will eat, and nothing says. Then the Pro window is suddenly English, but 'Your region: Perú' and S/ 19.90? I'm in Lagos. If they can't tell where I am, what will my card be charged in? It says checkout isn't live, yet there's a 'Try Pro free' button right under it. The free list is actually generous, pitch and piano and recording, exactly what I need. I'd stay free.",
+  "key": "aisha"
+ },
+ {
+  "five_second": {
+   "what_it_is": "Some kind of voice or singing training website, but the whole thing was in Spanish. I caught 'canto', 'voz', '3 minutos al dia' and a big green start button, so I guessed it's daily voice practice.",
+   "who_it_is_for": "Spanish speakers who want to sing better or speak better. The 'Hablar' option, which I think means speaking, was already selected, so in the first second it looked more like a public-speaking or diction tool than a singing one.",
+   "what_it_costs": "I think it said 'GRATIS' (free) in the small blue text at the top. There's also a 'Probar Pro' button, so I assume there's a paid version. I didn't see a price.",
+   "feels_made_for_me": "no",
+   "why": "The topic is close to what I need, but it opened in Spanish and defaulted to speaking, not singing. My gut reaction was that I'd ended up on the wrong country's version of the site. Nothing on it said anything like 'you can learn even if you think you're tone-deaf', which is the thing I'd need to hear."
+  },
+  "first_click": {
+   "target": "The 'English' button in the top bar, between 'Probar Pro' and 'Ver el tour'. After that I'd switch the 'Cantar' card on (I'm pretty sure cantar = sing), because 'Hablar' is the one that's selected. Then I'd hit the green 'Empezar (3 min)' button.",
+   "expectation": "Clicking 'English' should switch the whole page to English right away, with no reload into some other site and no account needed. Choosing 'Cantar' should change the routine in the 'TUS BASICOS' box to a singing one. 'Empezar' should ask for my microphone and start a 3-minute guided exercise with the piano and some kind of pitch meter showing me whether I'm on or off the note. If it asks me to sign up first, I'm less sure I'd stay."
+  },
+  "words_that_confused_me": [
+   {
+    "words": "The whole page is in Spanish (Entrenamiento vocal, Practicar, Historial, Entrar, etc.)",
+    "what_i_thought": "I'm in Chicago on an English laptop, so I figured I'd clicked a link meant for someone else. I can guess at cognates, but I can't really use the page like this."
+   },
+   {
+    "words": "Hablar (preselected) vs Cantar",
+    "what_i_thought": "I think hablar = speak and cantar = sing. I didn't get why speaking was already chosen for me, because I came here to sing."
+   },
+   {
+    "words": "Trinos de labios 1:15 -> diccion 1:45",
+    "what_i_thought": "No idea what 'trinos de labios' means. The 1:15 and 1:45 looked like timestamps in a song at first, not how long each exercise lasts."
+   },
+   {
+    "words": "Diseno del sitio: A · Clasico / 'Dos formas de ordenar lo mismo'",
+    "what_i_thought": "I think this is a site design or layout switcher. As a new user I don't know why I'd care, and it made me wonder whether I was seeing a test version."
+   },
+   {
+    "words": "Clase / Voz y expresion (filter chips)",
+    "what_i_thought": "I couldn't tell if 'Clase' means a lesson, a class I sign up for, or a category. I didn't know how it differs from 'Voz y expresion'."
+   },
+   {
+    "words": "Entrar",
+    "what_i_thought": "Probably 'log in' or 'sign in', but I wasn't sure. It could also just mean 'enter the app'."
+   },
+   {
+    "words": "afinador / afinacion",
+    "what_i_thought": "Guessing that's tuner and tuning, from the context with the piano. Not sure."
+   },
+   {
+    "words": "Tu progreso se queda en este navegador",
+    "what_i_thought": "I think it says my progress stays in this browser. That worries me a bit: if I clear my history or switch computers, do I lose four months of practice?"
+   },
+   {
+    "words": "YOUR REGION: PERU · PEN (on the Pro window)",
+    "what_i_thought": "I'm not in Peru. It made me think the site got my location wrong, or that it's a foreign site with no proper US version."
+   },
+   {
+    "words": "S/ 19.90",
+    "what_i_thought": "I didn't know what 'S/' is. I had to guess it's Peruvian money, and I have no idea what that is in dollars."
+   },
+   {
+    "words": "Free plan (the box under the subtitle)",
+    "what_i_thought": "It looked like a text field or a dropdown I'm supposed to click, not a label telling me which plan I'm on."
+   },
+   {
+    "words": "Checkout isn't live yet + 'Try Pro free for 7 days'",
+    "what_i_thought": "These contradict each other. Can I try Pro or can't I? If I start the trial, will it charge me later once checkout goes live?"
+   },
+   {
+    "words": "how your holds are going",
+    "what_i_thought": "No idea what a 'hold' is here. Maybe holding a note? It sounds like a bank hold or a climbing hold."
+   },
+   {
+    "words": "sponsored tips / more profiles",
+    "what_i_thought": "I didn't realize the free version has ads or sponsored stuff until I read what Pro removes. And 'more profiles': why would I need more than one profile?"
+   },
+   {
+    "words": "Star badge on Pro Monthly",
+    "what_i_thought": "I couldn't tell what the star means. Recommended? Most popular? It isn't labeled."
+   }
+  ],
+  "pricing": {
+   "free_gets": "Every exercise. A live pitch display and a piano that adjusts to my voice. Recording myself and seeing how each session went. A 12-week plan. Progress at a glance in History. The top says 'Practice is free, always' and that other apps cap you on minutes or levels and this one doesn't. Honestly, that free list covers what I'd need for the wedding.",
+   "pro_adds": "No ads or sponsored tips. Downloading my progress as a file. A written summary to send to a teacher. A chart of my last 28 days showing 'how your holds are going' and what to practice next. 'More profiles'. Plus '6 more benefits' hidden behind a link I'd have to click. The pitch for it is that a year costs less than three private lessons. Monthly is S/ 19.90, yearly is S/ 119.90 with 'SAVE 50%', which roughly checks out.",
+   "would_try_pro": "Not now. The free version already has the pitch feedback and the 12-week plan, which is what a tone-deaf guy with a four-month deadline actually needs. The Pro extras (teacher summary, file download, extra profiles) don't matter to me because I don't have a teacher. And checkout isn't even live, the price is in a currency I don't use, and I can't tell if the 7-day trial will charge me later. If after two or three weeks the free part actually kept me practicing, and the price were in dollars, I'd consider it for the 'what to practice next' part.",
+   "trust": "medium",
+   "trust_why": "I trust the free side more than I expected: no card, every exercise free, and they're upfront that checkout isn't ready. That's more honest than the two apps I quit. But it thinks I'm in Peru, charges in soles, the homepage opened in Spanish, and the 'Try Pro free' button sits right next to 'checkout isn't live'. Together that makes it feel unfinished or not meant for the US, so I'd hold back on Pro.",
+   "unclear": "What the price is in US dollars, and why it thinks I'm in Peru. Whether 'Try Pro free for 7 days' needs a card or auto-charges. What the hidden '6 more benefits' are. What 'holds' means. How bad the ads in the free version are. Whether my progress is safe if it only lives in this browser. Most of all, whether any of this works for someone who genuinely can't hear when he's off-key."
+  },
+  "would_leave_because": "If the 'English' button didn't switch everything over, or switched it halfway, I'd assume this isn't meant for me and close it. Same if hitting Empezar asks me to make an account before I've sung a note, or if the mic or pitch thing doesn't work on the first try. I've quit two apps already, so a broken first five minutes is enough. And if the free version turns out to be full of ads or 'sponsored tips' after all that 'free, always' talk, I'd leave.",
+  "one_change": "Show me the site in English, with prices in US dollars, from the very first second. Get my language and location right instead of Spanish and Peru. Then ask 'singing or speaking?' instead of picking speaking for me.",
+  "think_aloud": "Wait, it's in Spanish. Did I click the wrong link? I can pick out 'cantar', that's sing, and 'gratis', free, so okay, maybe. There's an English button up top, I'd hit that first. Three minutes a day sounds doable, honestly; the last two apps I quit felt like homework. But it's set to 'Hablar', speaking. I don't need to give a presentation, I need to not embarrass myself at my buddy's wedding. Seeing my pitch live, plus a piano that adjusts to my voice, is what I actually want, since I can't tell when I'm off. Then the Pro window says my region is Peru and the price is S/ 19.90. I'm in Chicago, what is that in dollars? And 'checkout isn't live yet' right next to 'Try Pro free for 7 days'? Feels half-built. I'd try the free part, not pay.",
+  "key": "tom"
+ },
+ {
+  "five_second": {
+   "what_it_is": "Una página para entrenar la voz, unos 3 minutos al día, para cantar o para hablar (canto y oratoria).",
+   "who_it_is_for": "Para gente que quiere hablar mejor en público o cantar mejor; vi que se escoge entre 'Cantar' y 'Hablar'.",
+   "what_it_costs": "Gratis, eso decía arriba en letras azules.",
+   "feels_made_for_me": "partly",
+   "why": "Lo de 3 minutos al día y gratis me sirve, porque tiempo no tengo. Y ya venía marcado 'Hablar'. Pero ahí dice 'presentaciones, dicción', y yo no hago presentaciones: lo mío es la voz cansada de dar clase todo el día y aprender a proyectar sin gritar. Eso no lo vi por ningún lado. Lo de cantar sí me llama para hacerlo con mi hija."
+  },
+  "first_click": {
+   "target": "El botón verde grande 'Empezar (3 min)', dejando marcado 'Hablar'.",
+   "expectation": "Que me pida permiso para el micrófono y arranque de una con el primer ejercicio, los 'trinos de labios', con una explicación o un ejemplo de cómo se hace. Después, que me muestre el texto corto para leer en voz alta. Espero que no me pida crear cuenta ni tarjeta. Me preocupa un poco si necesito estar en silencio, porque en el colegio casi nunca lo estoy."
+  },
+  "words_that_confused_me": [
+   {
+    "words": "Diseño del sitio · A · Clásico",
+    "what_i_thought": "Pensé que era algo para los que hicieron la página, una configuración. No sé para qué me sirve ni qué pasa si lo cambio."
+   },
+   {
+    "words": "Trinos de labios",
+    "what_i_thought": "Me imagino ese 'brrr' con los labios que hacen los cantantes, pero no estoy segura. Trino me suena a pájaro."
+   },
+   {
+    "words": "Trinos de labios 1:15 → dicción 1:45",
+    "what_i_thought": "Al principio no entendí los números; después caí en que son minutos y segundos de cada parte."
+   },
+   {
+    "words": "Entrar",
+    "what_i_thought": "No sé si es para iniciar sesión o para entrar a practicar. ¿Hay que tener cuenta?"
+   },
+   {
+    "words": "Plan (menú de arriba)",
+    "what_i_thought": "No sé si es el plan de pago o un plan de ejercicios. En la ventana de Pro aparece 'Plan gratis' y también 'Plan de 12 semanas', así que me enredé."
+   },
+   {
+    "words": "Tu progreso se queda en este navegador",
+    "what_i_thought": "Entiendo que se guarda solo en este celular. ¿Si borro el historial o cambio de teléfono lo pierdo?"
+   },
+   {
+    "words": "El piano y el afinador te guían",
+    "what_i_thought": "Para cantar lo entiendo, pero si escojo 'Hablar', ¿para qué el piano y el afinador?"
+   },
+   {
+    "words": "TU REGIÓN: PERÚ · PEN / S/ 19.90",
+    "what_i_thought": "Yo estoy en Bogotá, no en Perú. Supongo que S/ son soles, pero no sé cuánto es en pesos colombianos."
+   },
+   {
+    "words": "Los pagos aún no están públicos / Probar Pro 7 días gratis",
+    "what_i_thought": "Se contradicen: dice que todavía no se puede pagar, pero hay un botón para probar Pro. ¿Entonces qué pasa si lo toco?"
+   },
+   {
+    "words": "Sin anuncios ni recomendaciones patrocinadas",
+    "what_i_thought": "Entonces la versión gratis sí tiene anuncios. En la página no vi ninguno, y eso me hace dudar de qué me van a mostrar."
+   }
+  ],
+  "pricing": {
+   "free_gets": "Todos los ejercicios (dice que practicar siempre es gratis), ver la afinación en vivo y cantar con un piano que se ajusta a la voz, grabarse y revisar cómo le fue en cada sesión, un plan de 12 semanas y el progreso en el Historial.",
+   "pro_adds": "Lo que alcancé a ver: todo lo gratis, más 'sin anuncios ni recomendaciones patrocinadas' y algo de descargar todo el progreso en un archivo (el texto está cortado). Arriba dice que Pro es para 'seguir y compartir tu avance'. Cuesta S/ 19.90 al mes.",
+   "would_try_pro": "No, por ahora no. Lo gratis ya trae lo que necesito: ejercicios cortos y grabarme. Descargar el progreso en un archivo no me hace falta. Tal vez probaría los 7 días si me aseguran que no piden tarjeta y que no me cobran solo, pero como dice que los pagos aún no están, ni sé qué hace ese botón.",
+   "trust": "medium",
+   "trust_why": "Me da confianza que diga claro 'Practicar es gratis, siempre' y que lo gratis traiga casi todo. Me baja la confianza que diga Perú y soles cuando estoy en Colombia: parece que no saben dónde estoy. También el botón de probar Pro justo debajo de 'los pagos aún no están públicos', y lo de anuncios que no he visto.",
+   "unclear": "Por qué sale Perú y cuánto sería en pesos. Si la prueba de 7 días pide tarjeta y qué pasa el día 8. Qué hace el botón si los pagos no están activos. Si la versión gratis tiene anuncios. El resto de lo que trae Pro, porque el texto está cortado. Si con Pro mi progreso deja de quedarse solo en este navegador."
+  },
+  "would_leave_because": "Si al tocar Empezar me pide crear cuenta, correo o tarjeta antes de practicar. También si el primer ejercicio no se entiende (no sé qué son los trinos de labios) y me toca ir a leer una guía, porque tengo pocos minutos. Y si veo cobros raros en soles, me da desconfianza y me voy.",
+  "one_change": "Que en 'Hablar' haya una opción pensada para gente que habla todo el día: 'cuidar la voz / proyectar sin gritar' (profes, por ejemplo), y no solo 'presentaciones, dicción'. Con eso sentiría que es para mí.",
+  "think_aloud": "Uy, 'Entrena tu voz 3 minutos al día', gratis: eso sí me sirve, porque tiempo no tengo. Ya viene marcado 'Hablar', bien, aunque dice presentaciones y dicción, y lo mío es la voz cansada de dar clase todo el día. No veo nada de cuidar la voz ni de proyectar sin gritar. ¿'Trinos de labios'? Me imagino el 'brrr' de los cantantes, pero no sé. Igual le daría a Empezar de una. Lo de 'Diseño del sitio A · Clásico' no sé qué hace ahí. Lo de Cantar me gusta para hacerlo con mi hija. En la parte de Pro me confundí: dice Perú y soles, y yo estoy en Bogotá. Además dice que los pagos no están públicos, pero hay un botón de probar 7 días gratis... ¿entonces? Y si Pro es 'sin anuncios', ¿la gratis tiene? Por ahora me quedo con la gratis.",
+  "key": "lucia"
+ }
+]

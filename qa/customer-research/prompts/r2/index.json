@@ -1,0 +1,410 @@
+[
+ {
+  "batch_id": "C0-es-0",
+  "concept": "C0",
+  "lang": "es",
+  "ids": [
+   "R12",
+   "R49",
+   "R05",
+   "R16",
+   "R39",
+   "R59",
+   "R29"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0-es-0.txt"
+ },
+ {
+  "batch_id": "C0-es-1",
+  "concept": "C0",
+  "lang": "es",
+  "ids": [
+   "R52",
+   "R07",
+   "R20",
+   "R28",
+   "R03",
+   "R09",
+   "R04"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0-es-1.txt"
+ },
+ {
+  "batch_id": "C0-es-2",
+  "concept": "C0",
+  "lang": "es",
+  "ids": [
+   "R60",
+   "R24",
+   "R22",
+   "R46",
+   "R53",
+   "R13",
+   "R61"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0-es-2.txt"
+ },
+ {
+  "batch_id": "C0-es-3",
+  "concept": "C0",
+  "lang": "es",
+  "ids": [
+   "R51",
+   "R48",
+   "R38",
+   "R33",
+   "R44",
+   "R30",
+   "R27"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0-es-3.txt"
+ },
+ {
+  "batch_id": "C0-es-4",
+  "concept": "C0",
+  "lang": "es",
+  "ids": [
+   "R14",
+   "R62",
+   "R17",
+   "R50",
+   "R21",
+   "R31",
+   "R56"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0-es-4.txt"
+ },
+ {
+  "batch_id": "C0-es-5",
+  "concept": "C0",
+  "lang": "es",
+  "ids": [
+   "R15",
+   "R06",
+   "R40",
+   "R34",
+   "R43",
+   "R57"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0-es-5.txt"
+ },
+ {
+  "batch_id": "C0-en-0",
+  "concept": "C0",
+  "lang": "en",
+  "ids": [
+   "R63",
+   "R19",
+   "R25",
+   "R45",
+   "R47",
+   "R08",
+   "R36",
+   "R58"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0-en-0.txt"
+ },
+ {
+  "batch_id": "C0-en-1",
+  "concept": "C0",
+  "lang": "en",
+  "ids": [
+   "R64",
+   "R35",
+   "R18",
+   "R54",
+   "R10",
+   "R23",
+   "R55",
+   "R32"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0-en-1.txt"
+ },
+ {
+  "batch_id": "C0-en-2",
+  "concept": "C0",
+  "lang": "en",
+  "ids": [
+   "R41",
+   "R26",
+   "R11",
+   "R02",
+   "R01",
+   "R37",
+   "R42"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0-en-2.txt"
+ },
+ {
+  "batch_id": "C0p-es-0",
+  "concept": "C0p",
+  "lang": "es",
+  "ids": [
+   "R52",
+   "R16",
+   "R49",
+   "R38",
+   "R03",
+   "R20",
+   "R46"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0p-es-0.txt"
+ },
+ {
+  "batch_id": "C0p-es-1",
+  "concept": "C0p",
+  "lang": "es",
+  "ids": [
+   "R39",
+   "R13",
+   "R22",
+   "R57",
+   "R14",
+   "R12",
+   "R33"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0p-es-1.txt"
+ },
+ {
+  "batch_id": "C0p-es-2",
+  "concept": "C0p",
+  "lang": "es",
+  "ids": [
+   "R09",
+   "R29",
+   "R53",
+   "R44",
+   "R43",
+   "R24",
+   "R06"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0p-es-2.txt"
+ },
+ {
+  "batch_id": "C0p-es-3",
+  "concept": "C0p",
+  "lang": "es",
+  "ids": [
+   "R62",
+   "R15",
+   "R07",
+   "R21",
+   "R61",
+   "R40",
+   "R48"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0p-es-3.txt"
+ },
+ {
+  "batch_id": "C0p-es-4",
+  "concept": "C0p",
+  "lang": "es",
+  "ids": [
+   "R60",
+   "R51",
+   "R27",
+   "R31",
+   "R34",
+   "R05",
+   "R30"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0p-es-4.txt"
+ },
+ {
+  "batch_id": "C0p-es-5",
+  "concept": "C0p",
+  "lang": "es",
+  "ids": [
+   "R56",
+   "R17",
+   "R50",
+   "R59",
+   "R04",
+   "R28"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0p-es-5.txt"
+ },
+ {
+  "batch_id": "C0p-en-0",
+  "concept": "C0p",
+  "lang": "en",
+  "ids": [
+   "R32",
+   "R54",
+   "R23",
+   "R47",
+   "R64",
+   "R26",
+   "R01",
+   "R42"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0p-en-0.txt"
+ },
+ {
+  "batch_id": "C0p-en-1",
+  "concept": "C0p",
+  "lang": "en",
+  "ids": [
+   "R41",
+   "R18",
+   "R55",
+   "R37",
+   "R58",
+   "R19",
+   "R11",
+   "R02"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0p-en-1.txt"
+ },
+ {
+  "batch_id": "C0p-en-2",
+  "concept": "C0p",
+  "lang": "en",
+  "ids": [
+   "R35",
+   "R10",
+   "R08",
+   "R36",
+   "R25",
+   "R45",
+   "R63"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/C0p-en-2.txt"
+ },
+ {
+  "batch_id": "F-es-0",
+  "concept": "F",
+  "lang": "es",
+  "ids": [
+   "R28",
+   "R48",
+   "R31",
+   "R49",
+   "R34",
+   "R38",
+   "R39"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/F-es-0.txt"
+ },
+ {
+  "batch_id": "F-es-1",
+  "concept": "F",
+  "lang": "es",
+  "ids": [
+   "R04",
+   "R52",
+   "R53",
+   "R59",
+   "R21",
+   "R62",
+   "R40"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/F-es-1.txt"
+ },
+ {
+  "batch_id": "F-es-2",
+  "concept": "F",
+  "lang": "es",
+  "ids": [
+   "R03",
+   "R14",
+   "R33",
+   "R60",
+   "R12",
+   "R15",
+   "R50"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/F-es-2.txt"
+ },
+ {
+  "batch_id": "F-es-3",
+  "concept": "F",
+  "lang": "es",
+  "ids": [
+   "R20",
+   "R13",
+   "R06",
+   "R57",
+   "R61",
+   "R27",
+   "R43"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/F-es-3.txt"
+ },
+ {
+  "batch_id": "F-es-4",
+  "concept": "F",
+  "lang": "es",
+  "ids": [
+   "R46",
+   "R24",
+   "R09",
+   "R56",
+   "R44",
+   "R05",
+   "R17"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/F-es-4.txt"
+ },
+ {
+  "batch_id": "F-es-5",
+  "concept": "F",
+  "lang": "es",
+  "ids": [
+   "R16",
+   "R29",
+   "R22",
+   "R30",
+   "R07",
+   "R51"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/F-es-5.txt"
+ },
+ {
+  "batch_id": "F-en-0",
+  "concept": "F",
+  "lang": "en",
+  "ids": [
+   "R01",
+   "R23",
+   "R18",
+   "R45",
+   "R19",
+   "R37",
+   "R32",
+   "R10"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/F-en-0.txt"
+ },
+ {
+  "batch_id": "F-en-1",
+  "concept": "F",
+  "lang": "en",
+  "ids": [
+   "R42",
+   "R11",
+   "R26",
+   "R08",
+   "R58",
+   "R25",
+   "R63",
+   "R55"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/F-en-1.txt"
+ },
+ {
+  "batch_id": "F-en-2",
+  "concept": "F",
+  "lang": "en",
+  "ids": [
+   "R02",
+   "R54",
+   "R47",
+   "R36",
+   "R64",
+   "R35",
+   "R41"
+  ],
+  "path": "/home/user/vocal-singing-training/qa/customer-research/prompts/r2/F-en-2.txt"
+ }
+]

@@ -197,6 +197,60 @@ test("control: Ana signing out of her own laptop leaves her practice there", asy
   assert.deepEqual(takes(laptop.win.VTStorage.readSyncBag("default")), ["A-1", "A-2"], "nothing of hers is put aside");
 });
 
+test("Ana signing in again on her own laptop and out before any sync ran keeps her practice there", async () => {
+  // The first sync of a sign-in forgets a record of her own (ownerStop), so only a sign-out before it ran
+  // (offline, or at once) shows whether her own sign-in was noted as a handover.
+  const worker = createWorker();
+  const laptop = createBrowser(worker);
+  await laptop.signIn("ana@example.test");
+  laptop.take("A-1");
+  assert.equal((await laptop.win.VTSync.syncNow()).ok, true);
+  await laptop.win.VTAccount.signOut();
+  await nextMs();
+  await laptop.signIn("ana@example.test");
+  assert.equal(laptop.win.VTSync.getStatus().otherOwner, false, "control: it is her own practice");
+  await nextMs();
+  laptop.take("A-2");
+  await laptop.win.VTAccount.signOut();
+  assert.equal(laptop.store.has("vt_sync_aside_v1"), false, "nothing is put aside");
+  assert.deepEqual(takes(laptop.win.VTStorage.readSyncBag("default")), ["A-1", "A-2"], "and both takes stay here");
+});
+
+/**
+ * Ana signs in again on a page without sync (admin.html loads account.js alone): her session replaces Bruno's
+ * in storage and nothing tells sync. Then she opens the app: a page loaded over the same storage.
+ */
+async function anaOverBruno(worker, store) {
+  const ana = await worker.signIn("ana@example.test");
+  store.set("vt_account_session_v1", JSON.stringify({ token: ana.token }));
+  return { ana, laptop: createBrowser(worker, { store }) };
+}
+
+test("the handover is waited on after a reload before the account answers, for the sign-in it was noted for only", async () => {
+  // Tu camino writes nothing while it waits (js/voice-path.js): what it wrote would be kept as Ana's.
+  const { worker, store } = await brunoAfterAna();
+  const bruno = createBrowser(worker, { store }); // Bruno reloads; /v1/me has not answered yet
+  assert.equal(bruno.win.VTSync.getStatus().otherOwner, false, "control: sync cannot say whose without the id");
+  assert.equal(bruno.win.VTSync.getStatus().handoverWaiting, true, "but the question still waits for Bruno");
+  const { laptop } = await anaOverBruno(worker, store);
+  assert.equal(laptop.win.VTSync.getStatus().handoverWaiting, false, "Ana is not held back by Bruno's record");
+  await laptop.win.VTAccount.refresh();
+  assert.equal((await laptop.win.VTSync.syncNow()).ok, true);
+  assert.equal(store.has("vt_sync_handover_v1"), false, "and once Ana is known, the record nobody waits on is gone");
+});
+
+test("Ana signing out after a sign-in sync never saw puts none of her practice aside for Bruno", async () => {
+  const { worker, store } = await brunoAfterAna();
+  const { ana, laptop } = await anaOverBruno(worker, store);
+  await nextMs();
+  laptop.take("A-2", "ex-4"); // no sync has run on this page yet (offline, say)
+  await laptop.win.VTAccount.signOut();
+  const aside = JSON.parse(store.get("vt_sync_aside_v1") || "[]");
+  const forBruno = aside.filter((e) => e.owner !== ana.accountId).flatMap((e) => Object.values(e.bags).flatMap((b) => takes(b)));
+  assert.equal(forBruno.includes("A-2"), false, "Ana's take is not filed as Bruno's");
+  assert.ok(takes(laptop.win.VTStorage.readSyncBag("default")).includes("A-2"), "it stays here, with her practice");
+});
+
 test("control: answering at once keeps nothing of Ana's and sends Bruno nothing", async () => {
   const worker = createWorker();
   const laptop = createBrowser(worker);

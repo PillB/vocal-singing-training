@@ -16,6 +16,12 @@ export function matrixSets(yaml) {
   return list ? list[1].split(",").map((s) => s.trim()).filter(Boolean) : [];
 }
 
+/** macOS-only oracle must run on its supported OS, not the Linux matrix. */
+export function dedicatedSets(yaml) {
+  const job = jobText(yaml, "safari-layout");
+  return /runs-on: macos-latest/.test(job) && /run: bash qa\/check-safari-selector\.sh/.test(job) ? ["safari-layout"] : [];
+}
+
 /** The sets that run nowhere, and the matrix entries that name no set. */
 export function unrun(sets, defaults, matrix) {
   return {
@@ -25,10 +31,25 @@ export function unrun(sets, defaults, matrix) {
 }
 
 test("every mutation set runs in CI: the Node sets in one step, each browser set as a job of its own", () => {
-  const matrix = matrixSets(workflow);
+  const matrix = [...matrixSets(workflow), ...dedicatedSets(workflow)];
   assert.ok(matrix.includes("regress") && matrix.includes("boot"), `control: the matrix is read (${matrix.join(", ")})`);
   assert.deepEqual(unrun(Object.keys(MUTANTS), DEFAULT_SETS, matrix), { missing: [], unknown: [] });
   assert.equal(new Set(matrix).size, matrix.length, "no set runs twice");
+});
+
+/** The browser sets the harness's own usage line names, the command a developer copies to check a change locally. */
+export function usageSets(source) {
+  const line = source.split("\n").find((l) => /^\s*\*\s+node qa\/mutate\.mjs \S.*# browser sets/.test(l)) || "";
+  return line.replace(/#.*$/, "").replace(/^\s*\*\s+node qa\/mutate\.mjs/, "").trim().split(/\s+/).filter(Boolean);
+}
+
+test("the harness's usage line names every browser set CI runs, so the documented command skips none", () => {
+  // The fifth red team found the line a round behind: copied, it skipped five sets CI runs (syncing, inject, learner,
+  // authwall and the time limit's second half), 99 mutants at the time.
+  const usage = usageSets(fs.readFileSync(new URL("../../qa/mutate.mjs", import.meta.url), "utf8"));
+  assert.ok(usage.includes("stage"), `control: the usage line is read (${usage.join(" ")})`);
+  assert.deepEqual([...usage].sort(), [...matrixSets(workflow)].sort());
+  assert.deepEqual(usageSets(" *   node qa/mutate.mjs a b  # browser sets: x\n"), ["a", "b"], "control: a line that names two sets reads as two");
 });
 
 test("the check finds a set left out of the matrix, and a matrix entry that names no set", () => {
@@ -77,4 +98,10 @@ test("the check tells a job that keeps its traces from one that keeps none, or o
   assert.equal(keepsTraces(jobText(job(kept.replace("test-results/", "playwright-report/")), "mutation"), "set"), false, "not where the traces are");
   assert.equal(keepsTraces(jobText(job("") + "  other:\n    steps:\n" + kept, "mutation"), "set"), false, "another job's step is not this one's");
   assert.equal(keepsTraces(jobText(job(kept.replace("path: test-results/", "path: |\n            playwright-report/\n            test-results/")), "mutation"), "set"), true, "control: a list of paths with test-results/ in it");
+});
+
+test("a macOS-only mutation cannot silently lose its runner or invocation", () => {
+  assert.deepEqual(dedicatedSets(workflow), ["safari-layout"]);
+  assert.deepEqual(dedicatedSets(workflow.replace("runs-on: macos-latest", "runs-on: ubuntu-latest")), []);
+  assert.deepEqual(dedicatedSets(workflow.replace("run: bash qa/check-safari-selector.sh", "run: true")), []);
 });

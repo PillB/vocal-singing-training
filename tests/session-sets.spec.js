@@ -128,7 +128,7 @@ test.describe("Goal sets: the picker", () => {
     await expect(page.locator("#sets-title")).toHaveText("Rutinas por objetivo");
     await expect(page.locator("#sets-sub")).toContainText("al hablar");
     const names = await page.locator(".set-card h4").allTextContents();
-    expect(names).toEqual(["Antes de hablar", "Después de hablar mucho", "Que se te entienda", "Voz con expresión", "Pausas en vez de muletillas", "Voz en forma"]);
+    expect(names).toEqual(["Antes de hablar", "Después de hablar mucho", "Que se te entienda", "Voz con expresión", "Pausas en vez de muletillas", "Voz en forma", "Aire y pausas al hablar", "Texto, pausa e intención", "Escuchar dos versiones", "De sonido cómodo a mensaje"]);
     // Opening the picker starts nothing.
     await expect(page.locator("#view-home")).toHaveClass(/active/);
     expect(await session(page)).toBeNull();
@@ -149,7 +149,7 @@ test.describe("Goal sets: the picker", () => {
         start: c.querySelector(".set-start").textContent.trim()
       }))
     );
-    expect(cards.map((c) => c.id)).toEqual(["s-warmup", "s-pitch", "s-technique", "s-function", "s-range", "s-cooldown"]);
+    expect(cards.map((c) => c.id)).toEqual(["s-warmup", "s-pitch", "s-technique", "s-function", "s-range", "s-cooldown", "s-breath-phrases", "s-rhythm-phrasing", "s-onset-words", "s-song-listening"]);
     expect(cards[0].meta).toBe("8 min · 6 pasos");
     expect(cards[0].steps).toEqual(["soltar mandíbula", "respiración", "trinos", "sirenas", "hum", "escala de cinco notas"]);
     for (const c of cards) {
@@ -177,7 +177,7 @@ test.describe("Goal sets: the picker", () => {
     await expect(card.locator(".set-grade")).toHaveText("Respaldo moderado");
     expect((await why.locator("summary").boundingBox()).height).toBeGreaterThanOrEqual(tapFloorLimit(44));
     const text = await page.locator("#sets-list").innerText();
-    expect(text).not.toMatch(/previene|cura\b|garantiza|diagn/i);
+    expect(text).not.toMatch(/previene|cura\b|garantiza|diagnostica tu/i);
   });
 
   test("Escape closes it and gives the focus back; so does a press outside the card", async ({ page }) => {
@@ -601,4 +601,24 @@ test.describe("Goal sets: layout", () => {
       await page.locator("#set-done-close").click();
     }
   });
+});
+
+
+test("skill picker filters without starting a routine and a selected breath set uses its own timer", async ({ page }) => {
+  await boot(page, { tab: "singing" });
+  await openSheet(page);
+  const picker = page.locator("#sets-focus");
+  await expect(picker).toHaveAccessibleName("Habilidad que quieres practicar");
+  await picker.selectOption("breath");
+  await expect(page.locator(".set-card")).toHaveCount(1);
+  await expect(page.locator(".set-card h4")).toHaveText("Aire para una frase");
+  expect(await session(page)).toBeNull();
+  await picker.selectOption("pitch");
+  await expect(page.locator(".set-card")).toHaveCount(2);
+  await expect(page.locator('.set-card[data-set="s-pitch"]')).toBeVisible();
+  await picker.selectOption("breath");
+  await page.locator('[data-set-start="s-breath-phrases"]').click();
+  await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+  expect((await session(page)).order).toEqual(["s18-costal-breath", "s15-sh-air-ladder", "s3-song-stanzas"]);
+  expect((await session(page)).sec["s18-costal-breath"]).toBe(60);
 });

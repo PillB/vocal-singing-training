@@ -958,8 +958,8 @@
       autoPiano: true,
       autoArpeggio: true,
       autoRecord: true,
-      cue: "Finish each phrase without a mid-phrase pause. Each phrase is measured against the goal you pick; tap +1 per stanza.",
-      cueEs: "Termina cada frase sin pausa a mitad. Cada frase se mide contra la meta que eliges; marca +1 por estrofa.",
+      cue: "Choose comfortable breathing pauses; shorten the phrase if needed. Afterward, self-rate your chosen focus and tap +1 for each attempt.",
+      cueEs: "Elige pausas cómodas para respirar; acorta la frase si hace falta. Después, autoevalúa el foco elegido y marca +1 por cada intento.",
       metricHints: { repsFeel: "stanzaTaps", repsBetter: "stanzaTaps" }
     },
     "s15-sh-air-ladder": {

@@ -846,6 +846,118 @@
       "sha": "8ef966f44e91",
       "by": "two independent readers, final reading (facts against the abstracts; Spanish against English)",
       "date": "2026-11-12"
+    },
+    {
+      "id": "s-breath-phrases",
+      "lang": "es",
+      "sha": "d8f5d71dce93",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "s-breath-phrases",
+      "lang": "en",
+      "sha": "35d67f949490",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "s-rhythm-phrasing",
+      "lang": "es",
+      "sha": "2b67131aef07",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "s-rhythm-phrasing",
+      "lang": "en",
+      "sha": "466a28000a7a",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "s-onset-words",
+      "lang": "es",
+      "sha": "30b29a3efa32",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "s-onset-words",
+      "lang": "en",
+      "sha": "011ea8f94b9e",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "s-song-listening",
+      "lang": "es",
+      "sha": "9998acbc4bcc",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "s-song-listening",
+      "lang": "en",
+      "sha": "d2cb440c7228",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "v-breath-pauses",
+      "lang": "es",
+      "sha": "612b7d9c2e9d",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "v-breath-pauses",
+      "lang": "en",
+      "sha": "b271d4ba7c28",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "v-text-phrasing",
+      "lang": "es",
+      "sha": "3af2ba73e380",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "v-text-phrasing",
+      "lang": "en",
+      "sha": "ed4d7f4e060e",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "v-listen-contrast",
+      "lang": "es",
+      "sha": "3dbbb439c9e7",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "v-listen-contrast",
+      "lang": "en",
+      "sha": "1b6120db2d99",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "v-easy-message",
+      "lang": "es",
+      "sha": "a47bd17cd065",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
+    },
+    {
+      "id": "v-easy-message",
+      "lang": "en",
+      "sha": "cda9a3842446",
+      "by": "independent_qa agent; primary-source and bilingual suitability desk review",
+      "date": "2026-11-22"
     }
   ]
 }

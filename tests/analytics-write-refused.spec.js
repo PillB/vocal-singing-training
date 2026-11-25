@@ -40,19 +40,21 @@ async function boot(page, refuse) {
   return bodies;
 }
 
-const sentNames = (bodies) => bodies.flatMap((b) => ((b && b.events) || []).map((e) => e.name));
+/** The probe events that reached the worker. */
+const sentProbes = (bodies) => bodies.flatMap((b) => ((b && b.events) || []).filter((e) => e.name === "practice_start" && e.props?.exerciseId === "qa-r9-probe"));
 
 for (const [name, refuse] of [["control: the log accepts the write", false], ["the log's write is refused (quota full)", true]]) {
   test(`${name}: track() does not throw and the event is sent to the worker`, async ({ page }) => {
     const bodies = await boot(page, refuse);
     const r = await page.evaluate(() => {
       try {
-        window.VTAnalytics.track("qa_r9_probe", {});
+        // An event the worker keeps: since the wire filter (docs/48 section 11, third round) an unknown name never leaves.
+        window.VTAnalytics.track("practice_start", { exerciseId: "qa-r9-probe" });
         window.VTAnalytics.flush(false);
         return { ok: true };
       } catch (e) { return { ok: false, err: String(e.message) }; }
     });
     expect(r).toEqual({ ok: true });
-    await expect.poll(() => sentNames(bodies), { timeout: 5000 }).toContain("qa_r9_probe");
+    await expect.poll(() => sentProbes(bodies).length, { timeout: 5000 }).toBe(1);
   });
 }

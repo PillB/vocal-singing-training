@@ -544,9 +544,17 @@ test.describe("The account and trial funnel", () => {
     const sent = await boot(page, { endpoint: ENDPOINT, human: true });
     await page.click("#btn-account");
     await expect(page.locator("#account-modal")).toBeVisible();
-    await page.evaluate(() => window.VTAnalytics.flush());
     const names = () => sent.bodies.filter(Boolean).flatMap((b) => b.events || []);
-    await expect.poll(() => names().some((e) => e.name === "account_panel_open")).toBe(true);
+    // The page counts the open once the worker has said what it offers, or after its 1.5 s floor
+    // (js/app.js openAccount), so the event can be queued after any one flush. Each look sends
+    // the queue first: one flush right after the click raced it, and the queue's own 4 s timer
+    // then landed past the poll's 5 s (QA-73).
+    await expect
+      .poll(async () => {
+        await page.evaluate(() => window.VTAnalytics.flush());
+        return names().some((e) => e.name === "account_panel_open");
+      })
+      .toBe(true);
     const open = names().filter((e) => e.name === "account_panel_open");
     // Exactly one per open, and it carries accountSignIn()'s own answer. Which
     // answer depends on whether this run's worker is reachable, so assert the

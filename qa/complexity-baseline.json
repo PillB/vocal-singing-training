@@ -9,12 +9,6 @@
     },
     {
       "file": "js/ads.js",
-      "sha": "6208f27fdba0726d3c57031523d70c615b089695fbd739317cc7b8511982ce6f",
-      "complexity": 28,
-      "name": "Function 'isPracticeActive'"
-    },
-    {
-      "file": "js/ads.js",
       "sha": "671b47e7493e025fff812d1e5b2a5f8a432d400290d459f644b104ed72b5b83c",
       "complexity": 23,
       "name": "Function 'renderNativeCard'"

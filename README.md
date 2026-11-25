@@ -91,6 +91,7 @@ Vanilla HTML / CSS / JS — no build step. Web Audio API (piano), MediaRecorder 
 - [Admin guide](docs/ADMIN-GUIDE.md)
 - [Value gap registry: what is open, and why each open thing was left](docs/VALUE-GAP-REGISTRY.md)
 - [Goal sets and guided voice drills: what was built, the evidence, the trade-offs and what is not yet verified](docs/47-SESSION-SETS.md)
+- [Customer research and messaging: who would use and pay for this, the synthetic concept test and its red team, the copy that changed and how to check it with real people](docs/48-CUSTOMER-RESEARCH-AND-MESSAGING.md)
 
 ## Privacy
 

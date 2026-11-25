@@ -9,6 +9,7 @@
  * each defect and expects red.
  */
 const { test, expect } = require("@playwright/test");
+const { stubAuthMethods } = require("./helpers/auth-methods");
 // Events go to a fake host the page's Content Security Policy rightly refuses;
 // the policy has its own tests (tests/csp.spec.js) against the real worker.
 test.use({ bypassCSP: true, timezoneId: "America/Lima", locale: "es-PE" });
@@ -25,6 +26,7 @@ const LS_KEY = "vt_site_version_v1";
  * @returns {Promise<{bodies: object[]}>} What was posted.
  */
 async function boot(page, opts = {}) {
+  await stubAuthMethods(page);
   const sent = { bodies: [] };
   await page.route("https://events.test/**", async (route) => {
     try {
@@ -325,7 +327,10 @@ test.describe("What is sent: visits, time in use, and switches", () => {
     const src = path.join(__dirname, "..", "workers", "entitlements", "src");
     const { EVENT_NAMES, sanitizeProps } = await import(pathToFileURL(path.join(src, "events.js")).href);
     const { LAYOUT_VERSIONS } = await import(pathToFileURL(path.join(src, "layouts.js")).href);
-    const ours = events(sent).filter((e) => e.name.startsWith("layout_"));
+    // What the app raised, not what reached the wire: js/analytics.js applies the worker's rules before it
+    // sends (wireEvent), so the wire always agrees with them and a dropped prop would just be missing. The log
+    // on the device keeps events as raised, which is where a prop the worker would drop still shows.
+    const ours = (await page.evaluate(() => window.VTAnalytics.summary().recent)).filter((e) => e.name.startsWith("layout_"));
     expect(new Set(ours.map((e) => e.name))).toEqual(new Set(["layout_session", "layout_switch", "layout_time"]));
     for (const e of ours) {
       expect(EVENT_NAMES.has(e.name), e.name).toBe(true);
@@ -514,14 +519,21 @@ test.describe("Design B: the same things, regrouped", () => {
 test.describe("Design B on a touch screen", () => {
   test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
 
-  /** A one-finger flick across the page, as the browser reports it. */
+  /** Synthetic touch records exercise the listener; no OS gesture is claimed. */
   async function flick(page, fromX, toX, y = 500, toY = y) {
     await page.evaluate(
       ({ fromX, toX, y, toY }) => {
         const target = document.elementFromPoint(fromX, y) || document.body;
-        const touch = (x, at) => new Touch({ identifier: 1, target, clientX: x, clientY: at });
-        target.dispatchEvent(new TouchEvent("touchstart", { bubbles: true, touches: [touch(fromX, y)], changedTouches: [touch(fromX, y)] }));
-        target.dispatchEvent(new TouchEvent("touchend", { bubbles: true, touches: [], changedTouches: [touch(toX, toY)] }));
+        // Desktop WebKit exposes Touch but throws on its constructor. Supply
+        // the same listener inputs on a portable synthetic DOM event.
+        const touch = (x, at) => ({ identifier: 1, target, clientX: x, clientY: at });
+        const dispatch = (type, touches, changedTouches) => {
+          const event = new Event(type, { bubbles: true });
+          Object.defineProperties(event, { touches: { value: touches }, changedTouches: { value: changedTouches } });
+          target.dispatchEvent(event);
+        };
+        dispatch("touchstart", [touch(fromX, y)], [touch(fromX, y)]);
+        dispatch("touchend", [], [touch(toX, toY)]);
       },
       { fromX, toX, y, toY }
     );

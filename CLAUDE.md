@@ -21,3 +21,7 @@ The rules you will be held to, in short (AGENTS.md has the detail and code):
   others solved it before trying again.
 - Five red-team passes and four aesthetic passes per round; a blocked test
   is unverified, never passed.
+
+Before execution compare alternative routes; after each round record the
+observed root cause, shared-path regressions and simulated source drift, as
+required by [`AGENTS.md`](./AGENTS.md), repository path `vocal-singing-training/AGENTS.md`.

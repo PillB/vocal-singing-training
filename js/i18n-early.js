@@ -10,8 +10,10 @@
   try {
     window.VTI18n.init();
   } catch (e) {
-    /* the page stays as it was written, which is Spanish */
+    /* the page stays as it was written, which is Spanish, and so does its title (js/boot-head.js) */
     document.documentElement.lang = "es";
+    var title = document.querySelector("title[data-es]");
+    if (title) title.textContent = title.getAttribute("data-es");
   } finally {
     document.documentElement.classList.remove("vt-i18n-pending");
   }

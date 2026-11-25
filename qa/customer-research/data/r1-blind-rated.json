@@ -1,0 +1,2309 @@
+{
+"note": "A 1-5 rating of each intent answer (1 = certainly not, 5 = certainly yes) by raters who saw only the answer text, in mixed batches: the check of SSR the plan called for.",
+"rated": {
+"x001": {
+"trial": 4,
+"paid": 2
+},
+"x002": {
+"trial": 4,
+"paid": 1
+},
+"x003": {
+"trial": 4,
+"paid": 2
+},
+"x004": {
+"trial": 5,
+"paid": 2
+},
+"x005": {
+"trial": 3,
+"paid": 1
+},
+"x006": {
+"trial": 4,
+"paid": 2
+},
+"x007": {
+"trial": 3,
+"paid": 1
+},
+"x008": {
+"trial": 4,
+"paid": 3
+},
+"x009": {
+"trial": 4,
+"paid": 2
+},
+"x010": {
+"trial": 5,
+"paid": 2
+},
+"x011": {
+"trial": 4,
+"paid": 2
+},
+"x012": {
+"trial": 4,
+"paid": 2
+},
+"x013": {
+"trial": 4,
+"paid": 3
+},
+"x014": {
+"trial": 3,
+"paid": 1
+},
+"x015": {
+"trial": 5,
+"paid": 4
+},
+"x016": {
+"trial": 3,
+"paid": 2
+},
+"x017": {
+"trial": 4,
+"paid": 2
+},
+"x018": {
+"trial": 3,
+"paid": 1
+},
+"x019": {
+"trial": 4,
+"paid": 2
+},
+"x020": {
+"trial": 3,
+"paid": 1
+},
+"x021": {
+"trial": 5,
+"paid": 1
+},
+"x022": {
+"trial": 4,
+"paid": 3
+},
+"x023": {
+"trial": 3,
+"paid": 1
+},
+"x024": {
+"trial": 4,
+"paid": 3
+},
+"x025": {
+"trial": 4,
+"paid": 3
+},
+"x026": {
+"trial": 4,
+"paid": 2
+},
+"x027": {
+"trial": 4,
+"paid": 3
+},
+"x028": {
+"trial": 5,
+"paid": 4
+},
+"x029": {
+"trial": 4,
+"paid": 3
+},
+"x030": {
+"trial": 4,
+"paid": 2
+},
+"x031": {
+"trial": 4,
+"paid": 2
+},
+"x032": {
+"trial": 4,
+"paid": 3
+},
+"x033": {
+"trial": 5,
+"paid": 2
+},
+"x034": {
+"trial": 4,
+"paid": 3
+},
+"x035": {
+"trial": 4,
+"paid": 2
+},
+"x036": {
+"trial": 4,
+"paid": 2
+},
+"x037": {
+"trial": 4,
+"paid": 3
+},
+"x038": {
+"trial": 3,
+"paid": 1
+},
+"x039": {
+"trial": 4,
+"paid": 3
+},
+"x040": {
+"trial": 2,
+"paid": 1
+},
+"x041": {
+"trial": 5,
+"paid": 2
+},
+"x042": {
+"trial": 3,
+"paid": 2
+},
+"x043": {
+"trial": 4,
+"paid": 2
+},
+"x044": {
+"trial": 3,
+"paid": 3
+},
+"x045": {
+"trial": 2,
+"paid": 2
+},
+"x046": {
+"trial": 4,
+"paid": 3
+},
+"x047": {
+"trial": 3,
+"paid": 2
+},
+"x048": {
+"trial": 3,
+"paid": 1
+},
+"x049": {
+"trial": 4,
+"paid": 3
+},
+"x050": {
+"trial": 4,
+"paid": 2
+},
+"x051": {
+"trial": 4,
+"paid": 1
+},
+"x052": {
+"trial": 3,
+"paid": 1
+},
+"x053": {
+"trial": 4,
+"paid": 3
+},
+"x054": {
+"trial": 4,
+"paid": 2
+},
+"x055": {
+"trial": 4,
+"paid": 2
+},
+"x056": {
+"trial": 4,
+"paid": 2
+},
+"x057": {
+"trial": 4,
+"paid": 3
+},
+"x058": {
+"trial": 4,
+"paid": 2
+},
+"x059": {
+"trial": 3,
+"paid": 1
+},
+"x060": {
+"trial": 5,
+"paid": 3
+},
+"x061": {
+"trial": 4,
+"paid": 2
+},
+"x062": {
+"trial": 3,
+"paid": 3
+},
+"x063": {
+"trial": 4,
+"paid": 2
+},
+"x064": {
+"trial": 3,
+"paid": 2
+},
+"x065": {
+"trial": 4,
+"paid": 3
+},
+"x066": {
+"trial": 4,
+"paid": 3
+},
+"x067": {
+"trial": 3,
+"paid": 1
+},
+"x068": {
+"trial": 3,
+"paid": 1
+},
+"x069": {
+"trial": 5,
+"paid": 3
+},
+"x070": {
+"trial": 5,
+"paid": 2
+},
+"x071": {
+"trial": 4,
+"paid": 2
+},
+"x072": {
+"trial": 4,
+"paid": 2
+},
+"x073": {
+"trial": 4,
+"paid": 3
+},
+"x074": {
+"trial": 4,
+"paid": 1
+},
+"x075": {
+"trial": 3,
+"paid": 2
+},
+"x076": {
+"trial": 5,
+"paid": 3
+},
+"x077": {
+"trial": 4,
+"paid": 2
+},
+"x078": {
+"trial": 4,
+"paid": 3
+},
+"x079": {
+"trial": 4,
+"paid": 2
+},
+"x080": {
+"trial": 4,
+"paid": 3
+},
+"x081": {
+"trial": 3,
+"paid": 3
+},
+"x082": {
+"trial": 4,
+"paid": 1
+},
+"x083": {
+"trial": 4,
+"paid": 3
+},
+"x084": {
+"trial": 3,
+"paid": 1
+},
+"x085": {
+"trial": 4,
+"paid": 1
+},
+"x086": {
+"trial": 3,
+"paid": 2
+},
+"x087": {
+"trial": 3,
+"paid": 2
+},
+"x088": {
+"trial": 3,
+"paid": 1
+},
+"x089": {
+"trial": 4,
+"paid": 3
+},
+"x090": {
+"trial": 4,
+"paid": 2
+},
+"x091": {
+"trial": 4,
+"paid": 2
+},
+"x092": {
+"trial": 3,
+"paid": 2
+},
+"x093": {
+"trial": 2,
+"paid": 1
+},
+"x094": {
+"trial": 3,
+"paid": 1
+},
+"x095": {
+"trial": 4,
+"paid": 3
+},
+"x096": {
+"trial": 4,
+"paid": 1
+},
+"x097": {
+"trial": 3,
+"paid": 2
+},
+"x098": {
+"trial": 4,
+"paid": 3
+},
+"x099": {
+"trial": 3,
+"paid": 1
+},
+"x100": {
+"trial": 4,
+"paid": 3
+},
+"x101": {
+"trial": 2,
+"paid": 1
+},
+"x102": {
+"trial": 4,
+"paid": 3
+},
+"x103": {
+"trial": 4,
+"paid": 2
+},
+"x104": {
+"trial": 3,
+"paid": 3
+},
+"x105": {
+"trial": 4,
+"paid": 2
+},
+"x106": {
+"trial": 3,
+"paid": 2
+},
+"x107": {
+"trial": 4,
+"paid": 2
+},
+"x108": {
+"trial": 3,
+"paid": 3
+},
+"x109": {
+"trial": 5,
+"paid": 2
+},
+"x110": {
+"trial": 3,
+"paid": 3
+},
+"x111": {
+"trial": 4,
+"paid": 2
+},
+"x112": {
+"trial": 4,
+"paid": 3
+},
+"x113": {
+"trial": 4,
+"paid": 1
+},
+"x114": {
+"trial": 4,
+"paid": 2
+},
+"x115": {
+"trial": 4,
+"paid": 3
+},
+"x116": {
+"trial": 4,
+"paid": 2
+},
+"x117": {
+"trial": 4,
+"paid": 2
+},
+"x118": {
+"trial": 4,
+"paid": 2
+},
+"x119": {
+"trial": 3,
+"paid": 1
+},
+"x120": {
+"trial": 2,
+"paid": 1
+},
+"x121": {
+"trial": 4,
+"paid": 2
+},
+"x122": {
+"trial": 4,
+"paid": 1
+},
+"x123": {
+"trial": 2,
+"paid": 1
+},
+"x124": {
+"trial": 3,
+"paid": 2
+},
+"x125": {
+"trial": 4,
+"paid": 3
+},
+"x126": {
+"trial": 4,
+"paid": 2
+},
+"x127": {
+"trial": 3,
+"paid": 2
+},
+"x128": {
+"trial": 4,
+"paid": 3
+},
+"x129": {
+"trial": 3,
+"paid": 1
+},
+"x130": {
+"trial": 4,
+"paid": 1
+},
+"x131": {
+"trial": 4,
+"paid": 3
+},
+"x132": {
+"trial": 4,
+"paid": 3
+},
+"x133": {
+"trial": 4,
+"paid": 3
+},
+"x134": {
+"trial": 4,
+"paid": 2
+},
+"x135": {
+"trial": 4,
+"paid": 3
+},
+"x136": {
+"trial": 3,
+"paid": 2
+},
+"x137": {
+"trial": 4,
+"paid": 3
+},
+"x138": {
+"trial": 4,
+"paid": 2
+},
+"x139": {
+"trial": 4,
+"paid": 2
+},
+"x140": {
+"trial": 3,
+"paid": 2
+},
+"x141": {
+"trial": 4,
+"paid": 2
+},
+"x142": {
+"trial": 4,
+"paid": 2
+},
+"x143": {
+"trial": 5,
+"paid": 2
+},
+"x144": {
+"trial": 3,
+"paid": 1
+},
+"x145": {
+"trial": 5,
+"paid": 4
+},
+"x146": {
+"trial": 4,
+"paid": 3
+},
+"x147": {
+"trial": 3,
+"paid": 2
+},
+"x148": {
+"trial": 4,
+"paid": 2
+},
+"x149": {
+"trial": 3,
+"paid": 1
+},
+"x150": {
+"trial": 2,
+"paid": 1
+},
+"x151": {
+"trial": 4,
+"paid": 3
+},
+"x152": {
+"trial": 4,
+"paid": 2
+},
+"x153": {
+"trial": 3,
+"paid": 1
+},
+"x154": {
+"trial": 4,
+"paid": 3
+},
+"x155": {
+"trial": 4,
+"paid": 3
+},
+"x156": {
+"trial": 3,
+"paid": 3
+},
+"x157": {
+"trial": 4,
+"paid": 2
+},
+"x158": {
+"trial": 4,
+"paid": 2
+},
+"x159": {
+"trial": 4,
+"paid": 1
+},
+"x160": {
+"trial": 4,
+"paid": 3
+},
+"x161": {
+"trial": 3,
+"paid": 2
+},
+"x162": {
+"trial": 4,
+"paid": 2
+},
+"x163": {
+"trial": 3,
+"paid": 1
+},
+"x164": {
+"trial": 5,
+"paid": 1
+},
+"x165": {
+"trial": 5,
+"paid": 2
+},
+"x166": {
+"trial": 4,
+"paid": 1
+},
+"x167": {
+"trial": 3,
+"paid": 1
+},
+"x168": {
+"trial": 4,
+"paid": 2
+},
+"x169": {
+"trial": 3,
+"paid": 1
+},
+"x170": {
+"trial": 4,
+"paid": 2
+},
+"x171": {
+"trial": 4,
+"paid": 2
+},
+"x172": {
+"trial": 5,
+"paid": 4
+},
+"x173": {
+"trial": 5,
+"paid": 1
+},
+"x174": {
+"trial": 4,
+"paid": 2
+},
+"x175": {
+"trial": 3,
+"paid": 2
+},
+"x176": {
+"trial": 5,
+"paid": 4
+},
+"x177": {
+"trial": 4,
+"paid": 2
+},
+"x178": {
+"trial": 4,
+"paid": 2
+},
+"x179": {
+"trial": 4,
+"paid": 3
+},
+"x180": {
+"trial": 4,
+"paid": 1
+},
+"x181": {
+"trial": 4,
+"paid": 2
+},
+"x182": {
+"trial": 3,
+"paid": 1
+},
+"x183": {
+"trial": 4,
+"paid": 2
+},
+"x184": {
+"trial": 4,
+"paid": 3
+},
+"x185": {
+"trial": 2,
+"paid": 1
+},
+"x186": {
+"trial": 4,
+"paid": 3
+},
+"x187": {
+"trial": 3,
+"paid": 1
+},
+"x188": {
+"trial": 3,
+"paid": 2
+},
+"x189": {
+"trial": 3,
+"paid": 2
+},
+"x190": {
+"trial": 3,
+"paid": 1
+},
+"x191": {
+"trial": 4,
+"paid": 2
+},
+"x192": {
+"trial": 4,
+"paid": 3
+},
+"x193": {
+"trial": 4,
+"paid": 2
+},
+"x194": {
+"trial": 4,
+"paid": 2
+},
+"x195": {
+"trial": 4,
+"paid": 1
+},
+"x196": {
+"trial": 4,
+"paid": 3
+},
+"x197": {
+"trial": 4,
+"paid": 2
+},
+"x198": {
+"trial": 4,
+"paid": 2
+},
+"x199": {
+"trial": 5,
+"paid": 1
+},
+"x200": {
+"trial": 4,
+"paid": 1
+},
+"x201": {
+"trial": 5,
+"paid": 3
+},
+"x202": {
+"trial": 4,
+"paid": 2
+},
+"x203": {
+"trial": 4,
+"paid": 3
+},
+"x204": {
+"trial": 4,
+"paid": 2
+},
+"x205": {
+"trial": 4,
+"paid": 1
+},
+"x206": {
+"trial": 3,
+"paid": 1
+},
+"x207": {
+"trial": 4,
+"paid": 4
+},
+"x208": {
+"trial": 4,
+"paid": 2
+},
+"x209": {
+"trial": 4,
+"paid": 2
+},
+"x210": {
+"trial": 4,
+"paid": 2
+},
+"x211": {
+"trial": 4,
+"paid": 2
+},
+"x212": {
+"trial": 4,
+"paid": 2
+},
+"x213": {
+"trial": 4,
+"paid": 2
+},
+"x214": {
+"trial": 4,
+"paid": 3
+},
+"x215": {
+"trial": 4,
+"paid": 2
+},
+"x216": {
+"trial": 5,
+"paid": 3
+},
+"x217": {
+"trial": 3,
+"paid": 2
+},
+"x218": {
+"trial": 5,
+"paid": 3
+},
+"x219": {
+"trial": 3,
+"paid": 2
+},
+"x220": {
+"trial": 3,
+"paid": 2
+},
+"x221": {
+"trial": 3,
+"paid": 1
+},
+"x222": {
+"trial": 4,
+"paid": 3
+},
+"x223": {
+"trial": 4,
+"paid": 1
+},
+"x224": {
+"trial": 4,
+"paid": 2
+},
+"x225": {
+"trial": 4,
+"paid": 4
+},
+"x226": {
+"trial": 5,
+"paid": 1
+},
+"x227": {
+"trial": 4,
+"paid": 3
+},
+"x228": {
+"trial": 4,
+"paid": 1
+},
+"x229": {
+"trial": 4,
+"paid": 1
+},
+"x230": {
+"trial": 5,
+"paid": 2
+},
+"x231": {
+"trial": 2,
+"paid": 2
+},
+"x232": {
+"trial": 4,
+"paid": 3
+},
+"x233": {
+"trial": 4,
+"paid": 2
+},
+"x234": {
+"trial": 2,
+"paid": 1
+},
+"x235": {
+"trial": 3,
+"paid": 1
+},
+"x236": {
+"trial": 4,
+"paid": 3
+},
+"x237": {
+"trial": 4,
+"paid": 2
+},
+"x238": {
+"trial": 4,
+"paid": 3
+},
+"x239": {
+"trial": 4,
+"paid": 3
+},
+"x240": {
+"trial": 4,
+"paid": 2
+},
+"x241": {
+"trial": 3,
+"paid": 1
+},
+"x242": {
+"trial": 4,
+"paid": 2
+},
+"x243": {
+"trial": 4,
+"paid": 2
+},
+"x244": {
+"trial": 2,
+"paid": 1
+},
+"x245": {
+"trial": 4,
+"paid": 2
+},
+"x246": {
+"trial": 4,
+"paid": 2
+},
+"x247": {
+"trial": 4,
+"paid": 3
+},
+"x248": {
+"trial": 4,
+"paid": 2
+},
+"x249": {
+"trial": 4,
+"paid": 4
+},
+"x250": {
+"trial": 4,
+"paid": 2
+},
+"x251": {
+"trial": 4,
+"paid": 1
+},
+"x252": {
+"trial": 5,
+"paid": 1
+},
+"x253": {
+"trial": 4,
+"paid": 2
+},
+"x254": {
+"trial": 3,
+"paid": 2
+},
+"x255": {
+"trial": 3,
+"paid": 2
+},
+"x256": {
+"trial": 3,
+"paid": 3
+},
+"x257": {
+"trial": 3,
+"paid": 1
+},
+"x258": {
+"trial": 4,
+"paid": 2
+},
+"x259": {
+"trial": 4,
+"paid": 2
+},
+"x260": {
+"trial": 4,
+"paid": 3
+},
+"x261": {
+"trial": 2,
+"paid": 1
+},
+"x262": {
+"trial": 4,
+"paid": 1
+},
+"x263": {
+"trial": 4,
+"paid": 2
+},
+"x264": {
+"trial": 4,
+"paid": 2
+},
+"x265": {
+"trial": 3,
+"paid": 1
+},
+"x266": {
+"trial": 4,
+"paid": 3
+},
+"x267": {
+"trial": 5,
+"paid": 3
+},
+"x268": {
+"trial": 4,
+"paid": 3
+},
+"x269": {
+"trial": 4,
+"paid": 2
+},
+"x270": {
+"trial": 4,
+"paid": 3
+},
+"x271": {
+"trial": 4,
+"paid": 2
+},
+"x272": {
+"trial": 4,
+"paid": 2
+},
+"x273": {
+"trial": 4,
+"paid": 2
+},
+"x274": {
+"trial": 4,
+"paid": 2
+},
+"x275": {
+"trial": 4,
+"paid": 2
+},
+"x276": {
+"trial": 4,
+"paid": 2
+},
+"x277": {
+"trial": 4,
+"paid": 2
+},
+"x278": {
+"trial": 3,
+"paid": 2
+},
+"x279": {
+"trial": 3,
+"paid": 2
+},
+"x280": {
+"trial": 4,
+"paid": 2
+},
+"x281": {
+"trial": 3,
+"paid": 1
+},
+"x282": {
+"trial": 4,
+"paid": 2
+},
+"x283": {
+"trial": 3,
+"paid": 1
+},
+"x284": {
+"trial": 4,
+"paid": 3
+},
+"x285": {
+"trial": 4,
+"paid": 2
+},
+"x286": {
+"trial": 4,
+"paid": 3
+},
+"x287": {
+"trial": 4,
+"paid": 1
+},
+"x288": {
+"trial": 4,
+"paid": 3
+},
+"x289": {
+"trial": 5,
+"paid": 3
+},
+"x290": {
+"trial": 3,
+"paid": 2
+},
+"x291": {
+"trial": 3,
+"paid": 2
+},
+"x292": {
+"trial": 4,
+"paid": 1
+},
+"x293": {
+"trial": 2,
+"paid": 1
+},
+"x294": {
+"trial": 3,
+"paid": 1
+},
+"x295": {
+"trial": 4,
+"paid": 3
+},
+"x296": {
+"trial": 1,
+"paid": 1
+},
+"x297": {
+"trial": 4,
+"paid": 2
+},
+"x298": {
+"trial": 3,
+"paid": 1
+},
+"x299": {
+"trial": 5,
+"paid": 4
+},
+"x300": {
+"trial": 4,
+"paid": 3
+},
+"x301": {
+"trial": 4,
+"paid": 4
+},
+"x302": {
+"trial": 1,
+"paid": 2
+},
+"x303": {
+"trial": 4,
+"paid": 2
+},
+"x304": {
+"trial": 3,
+"paid": 1
+},
+"x305": {
+"trial": 4,
+"paid": 3
+},
+"x306": {
+"trial": 4,
+"paid": 3
+},
+"x307": {
+"trial": 4,
+"paid": 4
+},
+"x308": {
+"trial": 4,
+"paid": 3
+},
+"x309": {
+"trial": 4,
+"paid": 3
+},
+"x310": {
+"trial": 4,
+"paid": 1
+},
+"x311": {
+"trial": 5,
+"paid": 2
+},
+"x312": {
+"trial": 4,
+"paid": 3
+},
+"x313": {
+"trial": 4,
+"paid": 3
+},
+"x314": {
+"trial": 4,
+"paid": 2
+},
+"x315": {
+"trial": 5,
+"paid": 3
+},
+"x316": {
+"trial": 4,
+"paid": 2
+},
+"x317": {
+"trial": 4,
+"paid": 2
+},
+"x318": {
+"trial": 3,
+"paid": 2
+},
+"x319": {
+"trial": 4,
+"paid": 1
+},
+"x320": {
+"trial": 4,
+"paid": 2
+},
+"x321": {
+"trial": 4,
+"paid": 1
+},
+"x322": {
+"trial": 3,
+"paid": 3
+},
+"x323": {
+"trial": 4,
+"paid": 3
+},
+"x324": {
+"trial": 4,
+"paid": 3
+},
+"x325": {
+"trial": 4,
+"paid": 2
+},
+"x326": {
+"trial": 4,
+"paid": 3
+},
+"x327": {
+"trial": 4,
+"paid": 2
+},
+"x328": {
+"trial": 4,
+"paid": 4
+},
+"x329": {
+"trial": 4,
+"paid": 3
+},
+"x330": {
+"trial": 5,
+"paid": 2
+},
+"x331": {
+"trial": 3,
+"paid": 3
+},
+"x332": {
+"trial": 4,
+"paid": 3
+},
+"x333": {
+"trial": 4,
+"paid": 2
+},
+"x334": {
+"trial": 4,
+"paid": 3
+},
+"x335": {
+"trial": 4,
+"paid": 3
+},
+"x336": {
+"trial": 4,
+"paid": 2
+},
+"x337": {
+"trial": 2,
+"paid": 1
+},
+"x338": {
+"trial": 4,
+"paid": 2
+},
+"x339": {
+"trial": 5,
+"paid": 3
+},
+"x340": {
+"trial": 4,
+"paid": 2
+},
+"x341": {
+"trial": 4,
+"paid": 3
+},
+"x342": {
+"trial": 4,
+"paid": 3
+},
+"x343": {
+"trial": 3,
+"paid": 1
+},
+"x344": {
+"trial": 3,
+"paid": 1
+},
+"x345": {
+"trial": 3,
+"paid": 1
+},
+"x346": {
+"trial": 3,
+"paid": 1
+},
+"x347": {
+"trial": 4,
+"paid": 2
+},
+"x348": {
+"trial": 4,
+"paid": 3
+},
+"x349": {
+"trial": 5,
+"paid": 3
+},
+"x350": {
+"trial": 4,
+"paid": 3
+},
+"x351": {
+"trial": 3,
+"paid": 2
+},
+"x352": {
+"trial": 4,
+"paid": 3
+},
+"x353": {
+"trial": 4,
+"paid": 1
+},
+"x354": {
+"trial": 4,
+"paid": 2
+},
+"x355": {
+"trial": 4,
+"paid": 1
+},
+"x356": {
+"trial": 3,
+"paid": 1
+},
+"x357": {
+"trial": 3,
+"paid": 2
+},
+"x358": {
+"trial": 5,
+"paid": 2
+},
+"x359": {
+"trial": 4,
+"paid": 1
+},
+"x360": {
+"trial": 4,
+"paid": 2
+},
+"x361": {
+"trial": 4,
+"paid": 3
+},
+"x362": {
+"trial": 5,
+"paid": 2
+},
+"x363": {
+"trial": 2,
+"paid": 1
+},
+"x364": {
+"trial": 4,
+"paid": 2
+},
+"x365": {
+"trial": 2,
+"paid": 2
+},
+"x366": {
+"trial": 4,
+"paid": 2
+},
+"x367": {
+"trial": 4,
+"paid": 4
+},
+"x368": {
+"trial": 4,
+"paid": 1
+},
+"x369": {
+"trial": 3,
+"paid": 3
+},
+"x370": {
+"trial": 4,
+"paid": 2
+},
+"x371": {
+"trial": 3,
+"paid": 2
+},
+"x372": {
+"trial": 4,
+"paid": 2
+},
+"x373": {
+"trial": 2,
+"paid": 1
+},
+"x374": {
+"trial": 4,
+"paid": 1
+},
+"x375": {
+"trial": 3,
+"paid": 1
+},
+"x376": {
+"trial": 3,
+"paid": 1
+},
+"x377": {
+"trial": 4,
+"paid": 2
+},
+"x378": {
+"trial": 3,
+"paid": 1
+},
+"x379": {
+"trial": 4,
+"paid": 2
+},
+"x380": {
+"trial": 4,
+"paid": 2
+},
+"x381": {
+"trial": 4,
+"paid": 1
+},
+"x382": {
+"trial": 3,
+"paid": 1
+},
+"x383": {
+"trial": 5,
+"paid": 2
+},
+"x384": {
+"trial": 4,
+"paid": 2
+},
+"x385": {
+"trial": 4,
+"paid": 1
+},
+"x386": {
+"trial": 4,
+"paid": 1
+},
+"x387": {
+"trial": 4,
+"paid": 2
+},
+"x388": {
+"trial": 2,
+"paid": 1
+},
+"x389": {
+"trial": 4,
+"paid": 3
+},
+"x390": {
+"trial": 4,
+"paid": 3
+},
+"x391": {
+"trial": 5,
+"paid": 4
+},
+"x392": {
+"trial": 4,
+"paid": 2
+},
+"x393": {
+"trial": 4,
+"paid": 2
+},
+"x394": {
+"trial": 4,
+"paid": 2
+},
+"x395": {
+"trial": 4,
+"paid": 2
+},
+"x396": {
+"trial": 4,
+"paid": 3
+},
+"x397": {
+"trial": 5,
+"paid": 2
+},
+"x398": {
+"trial": 3,
+"paid": 1
+},
+"x399": {
+"trial": 5,
+"paid": 3
+},
+"x400": {
+"trial": 5,
+"paid": 3
+},
+"x401": {
+"trial": 4,
+"paid": 1
+},
+"x402": {
+"trial": 5,
+"paid": 2
+},
+"x403": {
+"trial": 4,
+"paid": 2
+},
+"x404": {
+"trial": 4,
+"paid": 2
+},
+"x405": {
+"trial": 3,
+"paid": 1
+},
+"x406": {
+"trial": 4,
+"paid": 3
+},
+"x407": {
+"trial": 4,
+"paid": 2
+},
+"x408": {
+"trial": 5,
+"paid": 3
+},
+"x409": {
+"trial": 4,
+"paid": 2
+},
+"x410": {
+"trial": 5,
+"paid": 3
+},
+"x411": {
+"trial": 4,
+"paid": 3
+},
+"x412": {
+"trial": 4,
+"paid": 1
+},
+"x413": {
+"trial": 5,
+"paid": 2
+},
+"x414": {
+"trial": 5,
+"paid": 1
+},
+"x415": {
+"trial": 4,
+"paid": 2
+},
+"x416": {
+"trial": 4,
+"paid": 2
+},
+"x417": {
+"trial": 3,
+"paid": 3
+},
+"x418": {
+"trial": 4,
+"paid": 2
+},
+"x419": {
+"trial": 4,
+"paid": 2
+},
+"x420": {
+"trial": 4,
+"paid": 2
+},
+"x421": {
+"trial": 4,
+"paid": 2
+},
+"x422": {
+"trial": 4,
+"paid": 1
+},
+"x423": {
+"trial": 4,
+"paid": 2
+},
+"x424": {
+"trial": 5,
+"paid": 2
+},
+"x425": {
+"trial": 4,
+"paid": 2
+},
+"x426": {
+"trial": 3,
+"paid": 2
+},
+"x427": {
+"trial": 3,
+"paid": 1
+},
+"x428": {
+"trial": 4,
+"paid": 2
+},
+"x429": {
+"trial": 5,
+"paid": 3
+},
+"x430": {
+"trial": 4,
+"paid": 1
+},
+"x431": {
+"trial": 3,
+"paid": 2
+},
+"x432": {
+"trial": 3,
+"paid": 1
+},
+"x433": {
+"trial": 4,
+"paid": 2
+},
+"x434": {
+"trial": 4,
+"paid": 2
+},
+"x435": {
+"trial": 3,
+"paid": 2
+},
+"x436": {
+"trial": 5,
+"paid": 4
+},
+"x437": {
+"trial": 3,
+"paid": 2
+},
+"x438": {
+"trial": 3,
+"paid": 1
+},
+"x439": {
+"trial": 3,
+"paid": 3
+},
+"x440": {
+"trial": 5,
+"paid": 2
+},
+"x441": {
+"trial": 4,
+"paid": 3
+},
+"x442": {
+"trial": 3,
+"paid": 2
+},
+"x443": {
+"trial": 4,
+"paid": 1
+},
+"x444": {
+"trial": 3,
+"paid": 3
+},
+"x445": {
+"trial": 3,
+"paid": 1
+},
+"x446": {
+"trial": 3,
+"paid": 2
+},
+"x447": {
+"trial": 4,
+"paid": 2
+},
+"x448": {
+"trial": 4,
+"paid": 1
+},
+"x449": {
+"trial": 3,
+"paid": 1
+},
+"x450": {
+"trial": 4,
+"paid": 1
+},
+"x451": {
+"trial": 5,
+"paid": 3
+},
+"x452": {
+"trial": 3,
+"paid": 1
+},
+"x453": {
+"trial": 3,
+"paid": 2
+},
+"x454": {
+"trial": 4,
+"paid": 3
+},
+"x455": {
+"trial": 4,
+"paid": 2
+},
+"x456": {
+"trial": 5,
+"paid": 3
+},
+"x457": {
+"trial": 3,
+"paid": 3
+},
+"x458": {
+"trial": 4,
+"paid": 3
+},
+"x459": {
+"trial": 4,
+"paid": 2
+},
+"x460": {
+"trial": 4,
+"paid": 1
+},
+"x461": {
+"trial": 3,
+"paid": 2
+},
+"x462": {
+"trial": 3,
+"paid": 2
+},
+"x463": {
+"trial": 4,
+"paid": 2
+},
+"x464": {
+"trial": 4,
+"paid": 1
+},
+"x465": {
+"trial": 4,
+"paid": 3
+},
+"x466": {
+"trial": 4,
+"paid": 3
+},
+"x467": {
+"trial": 4,
+"paid": 2
+},
+"x468": {
+"trial": 4,
+"paid": 2
+},
+"x469": {
+"trial": 3,
+"paid": 1
+},
+"x470": {
+"trial": 4,
+"paid": 1
+},
+"x471": {
+"trial": 1,
+"paid": 1
+},
+"x472": {
+"trial": 4,
+"paid": 3
+},
+"x473": {
+"trial": 3,
+"paid": 1
+},
+"x474": {
+"trial": 4,
+"paid": 2
+},
+"x475": {
+"trial": 4,
+"paid": 2
+},
+"x476": {
+"trial": 2,
+"paid": 2
+},
+"x477": {
+"trial": 5,
+"paid": 1
+},
+"x478": {
+"trial": 4,
+"paid": 2
+},
+"x479": {
+"trial": 4,
+"paid": 4
+},
+"x480": {
+"trial": 4,
+"paid": 4
+},
+"x481": {
+"trial": 5,
+"paid": 4
+},
+"x482": {
+"trial": 5,
+"paid": 2
+},
+"x483": {
+"trial": 4,
+"paid": 2
+},
+"x484": {
+"trial": 4,
+"paid": 3
+},
+"x485": {
+"trial": 5,
+"paid": 1
+},
+"x486": {
+"trial": 5,
+"paid": 3
+},
+"x487": {
+"trial": 4,
+"paid": 2
+},
+"x488": {
+"trial": 5,
+"paid": 1
+},
+"x489": {
+"trial": 5,
+"paid": 1
+},
+"x490": {
+"trial": 3,
+"paid": 1
+},
+"x491": {
+"trial": 4,
+"paid": 3
+},
+"x492": {
+"trial": 3,
+"paid": 2
+},
+"x493": {
+"trial": 3,
+"paid": 2
+},
+"x494": {
+"trial": 1,
+"paid": 1
+},
+"x495": {
+"trial": 4,
+"paid": 2
+},
+"x496": {
+"trial": 4,
+"paid": 3
+},
+"x497": {
+"trial": 3,
+"paid": 1
+},
+"x498": {
+"trial": 2,
+"paid": 1
+},
+"x499": {
+"trial": 4,
+"paid": 2
+},
+"x500": {
+"trial": 4,
+"paid": 3
+},
+"x501": {
+"trial": 4,
+"paid": 1
+},
+"x502": {
+"trial": 4,
+"paid": 3
+},
+"x503": {
+"trial": 4,
+"paid": 2
+},
+"x504": {
+"trial": 4,
+"paid": 2
+},
+"x505": {
+"trial": 4,
+"paid": 3
+},
+"x506": {
+"trial": 4,
+"paid": 4
+},
+"x507": {
+"trial": 4,
+"paid": 1
+},
+"x508": {
+"trial": 2,
+"paid": 2
+},
+"x509": {
+"trial": 4,
+"paid": 2
+},
+"x510": {
+"trial": 3,
+"paid": 1
+},
+"x511": {
+"trial": 4,
+"paid": 1
+},
+"x512": {
+"trial": 3,
+"paid": 1
+},
+"x513": {
+"trial": 3,
+"paid": 2
+},
+"x514": {
+"trial": 4,
+"paid": 2
+},
+"x515": {
+"trial": 4,
+"paid": 3
+},
+"x516": {
+"trial": 4,
+"paid": 2
+},
+"x517": {
+"trial": 4,
+"paid": 2
+},
+"x518": {
+"trial": 4,
+"paid": 3
+},
+"x519": {
+"trial": 4,
+"paid": 2
+},
+"x520": {
+"trial": 4,
+"paid": 3
+},
+"x521": {
+"trial": 4,
+"paid": 1
+},
+"x522": {
+"trial": 4,
+"paid": 2
+},
+"x523": {
+"trial": 2,
+"paid": 1
+},
+"x524": {
+"trial": 4,
+"paid": 2
+},
+"x525": {
+"trial": 4,
+"paid": 4
+},
+"x526": {
+"trial": 2,
+"paid": 1
+},
+"x527": {
+"trial": 4,
+"paid": 2
+},
+"x528": {
+"trial": 4,
+"paid": 2
+},
+"x529": {
+"trial": 5,
+"paid": 1
+},
+"x530": {
+"trial": 5,
+"paid": 3
+},
+"x531": {
+"trial": 3,
+"paid": 2
+},
+"x532": {
+"trial": 4,
+"paid": 2
+},
+"x533": {
+"trial": 4,
+"paid": 2
+},
+"x534": {
+"trial": 4,
+"paid": 2
+},
+"x535": {
+"trial": 4,
+"paid": 3
+},
+"x536": {
+"trial": 4,
+"paid": 1
+},
+"x537": {
+"trial": 4,
+"paid": 3
+},
+"x538": {
+"trial": 5,
+"paid": 2
+},
+"x539": {
+"trial": 4,
+"paid": 3
+},
+"x540": {
+"trial": 5,
+"paid": 1
+},
+"x541": {
+"trial": 4,
+"paid": 3
+},
+"x542": {
+"trial": 4,
+"paid": 3
+},
+"x543": {
+"trial": 4,
+"paid": 3
+},
+"x544": {
+"trial": 4,
+"paid": 3
+},
+"x545": {
+"trial": 5,
+"paid": 4
+},
+"x546": {
+"trial": 4,
+"paid": 2
+},
+"x547": {
+"trial": 4,
+"paid": 1
+},
+"x548": {
+"trial": 4,
+"paid": 2
+},
+"x549": {
+"trial": 4,
+"paid": 3
+},
+"x550": {
+"trial": 4,
+"paid": 3
+},
+"x551": {
+"trial": 4,
+"paid": 2
+},
+"x552": {
+"trial": 3,
+"paid": 3
+},
+"x553": {
+"trial": 4,
+"paid": 3
+},
+"x554": {
+"trial": 2,
+"paid": 1
+},
+"x555": {
+"trial": 5,
+"paid": 4
+},
+"x556": {
+"trial": 3,
+"paid": 1
+},
+"x557": {
+"trial": 3,
+"paid": 2
+},
+"x558": {
+"trial": 3,
+"paid": 2
+},
+"x559": {
+"trial": 4,
+"paid": 2
+},
+"x560": {
+"trial": 3,
+"paid": 1
+},
+"x561": {
+"trial": 5,
+"paid": 2
+},
+"x562": {
+"trial": 4,
+"paid": 1
+},
+"x563": {
+"trial": 3,
+"paid": 2
+},
+"x564": {
+"trial": 4,
+"paid": 2
+},
+"x565": {
+"trial": 5,
+"paid": 2
+},
+"x566": {
+"trial": 4,
+"paid": 4
+},
+"x567": {
+"trial": 4,
+"paid": 3
+},
+"x568": {
+"trial": 4,
+"paid": 3
+},
+"x569": {
+"trial": 4,
+"paid": 2
+},
+"x570": {
+"trial": 4,
+"paid": 2
+},
+"x571": {
+"trial": 4,
+"paid": 2
+},
+"x572": {
+"trial": 4,
+"paid": 1
+},
+"x573": {
+"trial": 4,
+"paid": 4
+},
+"x574": {
+"trial": 4,
+"paid": 2
+},
+"x575": {
+"trial": 4,
+"paid": 4
+},
+"x576": {
+"trial": 4,
+"paid": 3
+}
+}
+}

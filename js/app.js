@@ -8462,9 +8462,7 @@
     const tag = $("#value-pulse-tag");
     if (tag) {
       tag.hidden = false;
-      const [text, cls] = valueTagFor(plan, B);
-      tag.textContent = text;
-      tag.className = "value-pulse-tag " + cls;
+      paintValueTag(tag, plan, B);
     }
     paintValueInsights(pulse, isProUser);
 
@@ -8499,30 +8497,43 @@
   }
 
   /**
-   * The home card's plan tag, in the header's words: [text, class].
+   * Paints the home card's plan tag in the header's words. Each class is written
+   * out whole, so the promise scanner (qa/promise-scan.mjs) reads it as a mark.
+   * @param {HTMLElement} tag #value-pulse-tag.
    * @param {{kind: string, days: number|null}} plan From headerPlanState().
    * @param {object} B VTBilling.
-   * @returns {[string, string]}
    */
-  function valueTagFor(plan, B) {
+  function paintValueTag(tag, plan, B) {
     switch (plan.kind) {
       case "trialAccount":
       case "trialLocal": {
         const n = plan.days === null ? (B?.trialDaysLeft?.() ?? 0) : plan.days;
-        return [tt("value.tagTrial", { n: String(n) }), "is-trial"];
+        tag.textContent = tt("value.tagTrial", { n: String(n) });
+        tag.className = "value-pulse-tag is-trial";
+        return;
       }
       case "gift":
-        return [tt("value.tagGift"), "is-gift"];
+        tag.textContent = tt("value.tagGift");
+        tag.className = "value-pulse-tag is-gift";
+        return;
       case "canceled":
-        return [plan.days === null ? tt("value.tagEnding") : tt("value.tagEndingDays", { n: String(plan.days) }), "is-ending"];
+        tag.textContent = plan.days === null ? tt("value.tagEnding") : tt("value.tagEndingDays", { n: String(plan.days) });
+        tag.className = "value-pulse-tag is-ending";
+        return;
       case "paid":
-        return [tt("value.tagPro"), "is-pro"];
+        tag.textContent = tt("value.tagPro");
+        tag.className = "value-pulse-tag is-pro";
+        return;
       case "lapsed":
-        return [tt("value.tagLapsed"), "is-hold"];
+        tag.textContent = tt("value.tagLapsed");
+        tag.className = "value-pulse-tag is-hold";
+        return;
       default:
-        return [tt("value.tagFree"), "is-free"];
+        tag.textContent = tt("value.tagFree");
+        tag.className = "value-pulse-tag is-free";
     }
   }
+
 
   /** The home card's Pro insight line: shown to whoever holds Pro, and left to the Análisis Pro teaser otherwise. */
   function paintValueInsights(pulse, isProUser) {
@@ -9523,7 +9534,12 @@
         if (!planId || planId === "free" || B.checkoutOpening?.()) return;
         const res = B.startCheckout(planId, pricingRail);
         if (res.mode === "opening" && res.done) {
-          followOpening(btn, res.done, false);
+          // Answered unless it navigated away, or came back after the person
+          // who pressed signed out: nothing is said to whoever is here now
+          // about a press they did not make (authz-2).
+          followOpening(btn, res.done).then((out) => {
+            if (out.mode !== "redirect" && out.mode !== "signed_out") answerCheckout(out);
+          });
           return;
         }
         answerCheckout(res);
@@ -9531,28 +9547,29 @@
     });
     const opening = B.checkoutOpening?.();
     const busy = opening && buttons.find((b) => b.dataset.plan === opening.plan);
-    // Drawn again mid-request: busy again, and quiet, because the press that
-    // started it answers once.
-    if (busy) followOpening(busy, opening.done, true);
+    // Drawn again mid-request: busy again, and silent, because the press that
+    // started it answers once (the redraw only holds and lets go).
+    if (busy) followOpening(busy, opening.done);
   }
 
   /**
    * Busy while the worker opens the checkout, with the other plans and the
-   * payment rails held; all back, and answered unless quiet, if it does not
-   * navigate away. A redirect that never happens (Stop, a cancelled leave)
-   * and a return through the back/forward cache are js/billing.js's to see:
-   * it tells the page, which draws the dialog again with every button idle.
+   * payment rails held; all back if it does not navigate away. Resolves with
+   * the outcome, for the press that started it to answer: the answer is the
+   * press's, so a redraw that follows the same opening never reaches the
+   * sign-in the answer may open (tests/node/promise-guards). A redirect that
+   * never happens (Stop, a cancelled leave) and a return through the
+   * back/forward cache are js/billing.js's to see: it tells the page, which
+   * draws the dialog again with every button idle.
    */
-  function followOpening(btn, done, quiet) {
+  function followOpening(btn, done) {
     const held = holdOtherChoices(btn);
     setPlanButtonBusy(btn, true);
-    done.then((out) => {
-      if (out?.mode === "redirect") return; // navigating away
+    return done.then((out) => {
+      if (out?.mode === "redirect") return out; // navigating away
       setPlanButtonBusy(btn, false);
       held.forEach((b) => holdChoice(b, false));
-      // Answered after the person who pressed signed out: nothing is said to
-      // whoever is here now about a press they did not make (authz-2).
-      if (!quiet && out?.mode !== "signed_out") answerCheckout(out || { mode: "checkout_failed" });
+      return out || { mode: "checkout_failed" };
     });
   }
 
@@ -9757,8 +9774,9 @@
     // five that decide the purchase, keep the rest one click away.
     // "No ads" sells the absence of something a free user never sees while
     // ads are off (js/ads-config.js ships them off): a misleading omission, so
-    // the bullet waits until there are ads for Pro to take away.
-    const adsOn = window.VT_ADS_CONFIG?.adsEnabled === true;
+    // the bullet waits until there are ads for Pro to take away. Read through
+    // js/ads.js, the one file that reads the ad config (tests/node/promise-guards).
+    const adsOn = window.VTAds?.cfg?.().adsEnabled === true;
     const featList = (p.features || []).filter((f) => f !== "ad_free" || adsOn);
     const FEAT_MAX = 5;
     const item = (f) => `<li>${tt("pricing.feat." + f)}</li>`;

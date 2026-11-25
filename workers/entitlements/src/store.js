@@ -20,9 +20,11 @@
  * a ledger transaction instead of the KV namespace (src/ledger.js): each
  * webhook is one optimistic transaction that commits only if nothing it read
  * has changed, and runs again on fresh reads when something has. Two webhooks
- * for one license then behave as if processed one after the other, and
- * `isStaleUpdate` decides between them (test/webhook-order.test.mjs forces
- * the race on all three rails). What follows is the KV-only fallback.
+ * for one license then behave as if processed one after the other, in the
+ * order they committed, and `isStaleUpdate` decides which status stands
+ * (test/webhook-order.test.mjs forces the race on all three rails). Whatever
+ * still depends on delivery order depends on that order too: see the README,
+ * "What concurrency can still do". What follows is the KV-only fallback.
  *
  * KV has no compare-and-swap, so two webhooks for one license processed at the
  * same time can each read the record, and the later write wins with the other's

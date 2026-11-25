@@ -328,6 +328,22 @@ for (const railName of Object.keys(RAILS)) {
   }
 }
 
+// What D1 does not settle (VG-99): the race now ends as SOME serial order,
+// not as the provider's. Here the subscription was past due when it was
+// cancelled, so in the provider's order the cancellation keeps none of the
+// unpaid period (no token). When the cancellation is applied first it cannot
+// know that, and the late past_due is refused, so the unpaid period stays
+// open. The status is right in every arm above; access is not yet.
+for (const railName of ["stripe", "creem"]) {
+  test(`${railName}: a subscription cancelled while past due gets no token in any order`, { todo: "VG-99 the cancellation learns the dunning from the record's status at the time, so the order decides access" }, async () => {
+    for (const arm of ["in sequence", "older commits last", "newer commits last"]) {
+      const { record } = await race(railName, () => createAccountEnv(), arm);
+      assert.equal(record.status, "canceled");
+      assert.equal(isTokenIssuable(record, NOW), false, `${arm}: periodEnd ${record.periodEnd - NOW}s from now`);
+    }
+  });
+}
+
 // ------------------------------------------- refunds stay off the clock
 
 /**
@@ -503,22 +519,62 @@ test("Mercado Pago: a charge approved after a cancellation is still newer than i
   }
 });
 
-test("Mercado Pago: a charge's clock is its approval, never later than its last edit, and a one-off payment keeps its last edit", () => {
-  const at = (s) => Math.floor(new Date(s).getTime() / 1000);
+test("Mercado Pago: a subscription charge's clock is its stated approval, never later than its last edit, else its last edit", () => {
+  const at = (v) => Math.floor(new Date(v).getTime() / 1000);
   const charge = { id: 1, status: "approved", preapproval_id: "pre_u", date_created: "2026-11-01T10:00:00.000Z", date_approved: "2026-11-01T10:00:05.000Z", date_last_updated: "2026-11-09T00:00:00.000Z" };
   // Edited a week after it went through: dated by the approval.
   assert.equal(mapPaymentResource(charge, {}).occurredAt, at("2026-11-01T10:00:05.000Z"));
-  // No approval date: by its creation.
-  assert.equal(mapPaymentResource({ ...charge, date_approved: undefined }, {}).occurredAt, at("2026-11-01T10:00:00.000Z"));
+  // No approval date: its last edit, as before. Not its creation date, which
+  // a charge approved later has passed (a voucher, a retried card).
+  assert.equal(mapPaymentResource({ ...charge, date_approved: undefined }, {}).occurredAt, at("2026-11-09T00:00:00.000Z"));
   // A malformed approval dated after the last edit: the last edit, so a
   // future-dated charge cannot make every later state change look old.
   assert.equal(mapPaymentResource({ ...charge, date_approved: "2027-01-01T00:00:00.000Z" }, {}).occurredAt, at("2026-11-09T00:00:00.000Z"));
   // A one-off payment is its own lifecycle (approved, then refunded on the
   // same resource): its clock stays its last edit.
   assert.equal(mapPaymentResource({ ...charge, preapproval_id: undefined }, {}).occurredAt, at("2026-11-09T00:00:00.000Z"));
-  // The authorized-payment topic: by the payment's approval, else its debit date, never past the last edit.
+  // The authorized-payment topic: by the payment's approval when it states one...
   const authorized = { id: 2, preapproval_id: "pre_u", status: "processed", debit_date: "2026-11-01T09:00:00.000Z", date_created: "2026-10-31T00:00:00.000Z", last_modified: "2026-11-09T00:00:00.000Z", payment: { id: 1, status: "approved", date_approved: "2026-11-01T10:00:05.000Z" } };
   assert.equal(mapAuthorizedPaymentResource(authorized, {}).occurredAt, at("2026-11-01T10:00:05.000Z"));
-  assert.equal(mapAuthorizedPaymentResource({ ...authorized, payment: { id: 1, status: "approved" } }, {}).occurredAt, at("2026-11-01T09:00:00.000Z"));
+  // ...and as documented it states none: then its last edit, not its debit date.
+  assert.equal(mapAuthorizedPaymentResource({ ...authorized, payment: { id: 1, status: "approved" } }, {}).occurredAt, at("2026-11-09T00:00:00.000Z"));
   assert.equal(mapAuthorizedPaymentResource({ ...authorized, payment: { id: 1, status: "approved", date_approved: "2027-01-01T00:00:00.000Z" } }, {}).occurredAt, at("2026-11-09T00:00:00.000Z"));
+  // No readable date of its own: no clock at all, even with a (future) approval date to hand.
+  const undated = { id: 3, preapproval_id: "pre_u", status: "processed", debit_date: "2027-01-01T00:00:00.000Z", payment: { id: 1, status: "approved", date_approved: "2027-01-01T00:00:00.000Z" } };
+  assert.equal(mapAuthorizedPaymentResource(undated, {}).occurredAt, null);
+});
+
+test("Mercado Pago: an installment approved on a retry keeps the month it paid for, whichever of it and an older preapproval snapshot is processed last", async () => {
+  // The documented authorized-payment shape: the payment has no approval
+  // date. Due at M0, turned down, approved on a retry four days later; the
+  // payer updated the card on the preapproval in between (still authorized,
+  // its next charge date still the unpaid one).
+  const M0 = NOW - 20 * DAY;
+  const pre = (at, next) => ({ ...mpPre("authorized", at), id: "pre_rt", next_payment_date: iso(next), date_created: iso(M0 - 40 * DAY) });
+  const inst = (id, status, payStatus, debitAt, modifiedAt, payId) => ({
+    id, preapproval_id: "pre_rt", status, debit_date: iso(debitAt), date_created: iso(M0 - 3600), last_modified: iso(modifiedAt),
+    payment: { id: payId, status: payStatus, status_detail: payStatus === "approved" ? "accredited" : "cc_rejected_insufficient_amount" }
+  });
+  const setUp = [
+    ["subscription_preapproval", pre(M0 - 31 * DAY, M0)],
+    ["subscription_authorized_payment", inst(9200, "processed", "approved", M0 - 30 * DAY, M0 - 30 * DAY, 7300)],
+    ["subscription_authorized_payment", inst(9201, "recycling", "rejected", M0, M0, 7301)]
+  ];
+  const retry = ["subscription_authorized_payment", inst(9201, "processed", "approved", M0, M0 + 4 * DAY, 7302)];
+  const snapshot = ["subscription_preapproval", pre(M0 + 2 * DAY, M0)];
+  for (const [, makeEnv] of ENVS) {
+    for (const late of [[retry, snapshot], [snapshot, retry]]) {
+      const env = makeEnv();
+      for (const [t, resource] of [...setUp, ...late]) {
+        const a = await deliverMercadoPago(env, t, resource);
+        assert.equal(a.status, 200, `${t} answered ${a.status}`);
+      }
+      const { record } = await recordFor(env, "mercadopago", "pre_rt");
+      // Wrong (the first version of this fix, dated by the debit date): the
+      // snapshot counted as newer than the money and put the unpaid due date
+      // back as the period end, so a payer lost the month the retry bought.
+      assert.ok(record.periodEnd > NOW, `the retry's month is kept (periodEnd ${record.periodEnd - NOW}s from now)`);
+      assert.equal(isTokenIssuable(record, NOW), true);
+    }
+  }
 });

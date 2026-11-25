@@ -409,11 +409,16 @@ Consequences worth understanding before you ship:
   before the refund and delivered after it was refused, so the subscription
   kept Pro (and a resume was refused the same way). A one-off Mercado Pago
   payment is its own lifecycle, so its refund is dated by its last edit. A Mercado Pago subscription's
-  charge that went through is dated by when it went through (`date_approved`,
-  else its debit or creation date), never by its last edit: Mercado Pago edits
-  a payment long after (a partial refund leaves it approved), and dated by that
-  edit a charge made before a cancellation turned the cancelled subscription
-  back to active. Identity fields, a confirmed or failed payment, money
+  charge that went through is dated by the approval date it states, never
+  later than its last edit: Mercado Pago edits a payment long after (a partial
+  refund leaves it approved), and dated by that edit a charge made before a
+  cancellation turned the cancelled subscription back to active. Only a stated
+  approval counts: a debit or creation date is passed days before a retried
+  charge is approved, and dating by it let an older preapproval snapshot put
+  the unpaid due date back. A charge that states no approval (the
+  authorized-payment topic, as documented) keeps its last edit as its clock,
+  so an authorized payment edited after a cancellation can still undo it; its
+  payment's own notification, which does state one, cannot. Identity fields, a confirmed or failed payment, money
   given back, and the claim/subscription indexes are order-independent and
   are still written. So is the one interval a charge that went through buys
   (a Mercado Pago charge, a one-time Stripe checkout): a subscription paused
@@ -463,16 +468,24 @@ Consequences worth understanding before you ship:
   does a payment the deletion already knew of (`paidAtWhenEnded`, also in
   `ended:`): the subscription was in dunning or unpaid with it on record.
   Status and everything else stay as the deletion left them.
-- **What concurrency can still do: with D1, nothing.** With the `DB` binding,
-  which every production deploy has, each webhook runs as one optimistic
-  transaction in D1 (`src/ledger.js`): every key it read is checked at commit,
-  and if another webhook changed one in between, nothing is written and it runs
-  again on fresh reads. Two webhooks for one license then end as if processed
-  one after the other, and the out-of-order rule above decides between them.
+- **What concurrency can still do: with D1, no more than delivery order can.**
+  With the `DB` binding, which every production deploy has, each webhook runs
+  as one optimistic transaction in D1 (`src/ledger.js`): every key it read is
+  checked at commit, and if another webhook changed one in between, nothing is
+  written and it runs again on fresh reads. Two webhooks for one license then
+  end as if processed one after the other, so nothing is lost, and the
+  out-of-order rule above decides which status stands.
   `test/webhook-order.test.mjs` forces the race on all three rails (a newer
   cancellation and an older past-due or active event, with the older one
-  committing last) and fails if either half is taken away. What follows is the
-  KV-only fallback, a worker deployed without D1.
+  committing last) and fails if either half is taken away. What D1 does not do
+  is pick the provider's order: the race ends as if the two had been delivered
+  in whichever order they committed, so anything that still depends on
+  delivery order depends on the race too. One thing does (VG-99, a `todo` test
+  in that file): a Stripe or Creem subscription cancelled while it was past
+  due keeps none of the unpaid period only when the past due is processed
+  first; processed after the cancellation, it is refused as stale, and the
+  unpaid period stays open until it ends. What follows is the KV-only
+  fallback, a worker deployed without D1.
   Two webhooks for one license processed at
   the same moment both read the record, and the later write wins. A confirmed
   payment, a deletion, a charge that went through (so a subscriber who pays

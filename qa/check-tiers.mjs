@@ -206,11 +206,11 @@ expectNone(
 );
 expectNone(
   "the Spanish pricing panel's first proof line no longer says free practice is uncapped, which is the whole differentiator in docs/35-PRICING.md",
-  /gratis, siempre/.test(proof1[0] || "") ? [] : ["pricing.proof1 (es)"]
+  /gratis y sin l[ií]mite de minutos/.test(proof1[0] || "") ? [] : ["pricing.proof1 (es)"]
 );
 expectNone(
   "the English pricing panel's first proof line no longer says free practice is uncapped, which is the whole differentiator in docs/35-PRICING.md",
-  /free, always/.test(proof1[1] || "") ? [] : ["pricing.proof1 (en)"]
+  /free, with no daily time limit/.test(proof1[1] || "") ? [] : ["pricing.proof1 (en)"]
 );
 // The claim is scoped to the table. It used to read "every verified competitor",
 // until Nail the Pitch (read 2026-10-28) turned out to keep its real-time pitch

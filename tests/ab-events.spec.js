@@ -654,7 +654,12 @@ test.describe("The account and trial funnel", () => {
     await expect(page.locator("#account-modal")).toBeVisible();
     await page.evaluate(() => window.VTAnalytics.flush());
     await expect.poll(() => sent.bodies.filter(Boolean).flatMap((b) => b.events || []).length).toBeGreaterThan(0);
-    const events = sent.bodies.filter(Boolean).flatMap((b) => b.events || []);
+    // What the app raised, not what reached the wire: js/analytics.js applies the worker's rules before it sends
+    // (wireEvent), so the wire always passes them and an event the worker does not know would just be missing.
+    // The log on the device keeps events as raised, which is where that drift still shows.
+    const raised = () => page.evaluate(() => window.VTAnalytics.summary().recent);
+    await expect.poll(async () => (await raised()).map((e) => e.name), { message: "control: the account window's event is in the log" }).toContain("account_panel_open");
+    const events = await raised();
     const KEY = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
     const VALUE = /^[A-Za-z0-9_.:-]{0,64}$/;
     for (const e of events) {

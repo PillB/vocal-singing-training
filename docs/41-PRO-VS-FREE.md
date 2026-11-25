@@ -181,7 +181,10 @@ All of this is true under any of the three options:
    it, instead of only in this repository. `pricing.proof1` in both languages
    reads: *almost every singing app caps free practice — minutes a day,
    exercises a day, or beginner levels only; here every exercise, the mic and
-   the piano are free, always.* That closes VG-11.
+   the piano are free, always.* That closes VG-11. (Since 22 November 2026 the
+   line ends "free, with no daily time limit": the terms never promised free
+   practice for ever, so the owner chose to state today's terms; docs/48
+   section 13.)
    It deliberately does **not** name competitors in a table, which is what
    VG-11 originally proposed. A named comparison is stronger copy and a worse
    liability: it goes stale the day Riyaz changes its limit, nobody here will

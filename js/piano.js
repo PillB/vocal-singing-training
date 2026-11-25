@@ -138,8 +138,8 @@
     songFeel: {
       name: "Song A progression (G area)",
       nameEs: "Progresión canción A (G)",
-      description: "G – Em – C – D · mid-low male",
-      descriptionEs: "G – Em – C – D · registro medio-bajo masculino",
+      description: "G – Em – C – D · generic accompaniment",
+      descriptionEs: "G – Em – C – D · acompañamiento genérico",
       chords: [
         { name: "G", notes: ["G2", "B2", "D3", "G3"] },
         { name: "Em", notes: ["E2", "B2", "E3", "G3"] },
@@ -150,8 +150,8 @@
     songBetter: {
       name: "Song B progression (C area)",
       nameEs: "Progresión canción B (C)",
-      description: "C – G – Am – F · mid-low male",
-      descriptionEs: "C – G – Am – F · registro medio-bajo masculino",
+      description: "C – G – Am – F · generic accompaniment",
+      descriptionEs: "C – G – Am – F · acompañamiento genérico",
       chords: [
         { name: "C", notes: ["C2", "G2", "C3", "E3"] },
         { name: "G", notes: ["G2", "B2", "D3", "G3"] },

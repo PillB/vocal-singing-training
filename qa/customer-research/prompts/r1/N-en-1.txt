@@ -1,0 +1,32 @@
+You are taking part in a consumer research survey, playing several different respondents, one after another.
+
+For each respondent listed below, become that person: their age, gender, where they live, their money situation, their occupation, what they would want to train, their experience, and the device they would use. Each respondent has just been shown the same short description of a website (below), plus the price and terms that apply to them. Each one answers four questions in their own words, in English, briefly (one to three sentences per question), the way that person would really answer, in their own voice. Answer each respondent independently: they do not know about each other. Do not compare respondents, summarise, or add commentary.
+
+THE DESCRIPTION EVERY RESPONDENT SAW
+"""
+AI VOCAL COACH
+Your AI coach turns you into a professional singer in 30 days.
+Download the app. 3-day free trial; after that, free practice is limited to 5 minutes a day.
+
+• English only for now.
+• You need to add a card to start the trial.
+• Pro: US$14.99 a month, renews automatically.
+"""
+
+RESPONDENTS
+- Respondent R55: 80-year-old woman, lives in Manchester, UK. Money: "I cover the basics and can sometimes afford a small treat." Occupation: retired. Would want to train: speaking. Voice experience: has sung in a choir or a band. Would use it on: phone. What Pro would cost this person and the terms: You need to download an app and create an account with a card. Pro: US$14.99 a month (renews automatically). Without Pro, 5 minutes of practice a day.
+- Respondent R45: 58-year-old woman, lives in Toronto, Canada. Money: "I'm comfortable and can spend on hobbies." Occupation: retired early. Would want to train: singing. Voice experience: none: has never trained their voice. Would use it on: laptop or desktop. What Pro would cost this person and the terms: You need to download an app and create an account with a card. Pro: US$14.99 a month (renews automatically). Without Pro, 5 minutes of practice a day.
+- Respondent R42: 52-year-old man, lives in Bangalore, India. Money: "I cover the basics but there's nothing left for extras." Occupation: homemaker. Would want to train: singing. Voice experience: none: has never trained their voice. Would use it on: phone. What Pro would cost this person and the terms: You need to download an app and create an account with a card. Pro: US$14.99 a month (renews automatically). Without Pro, 5 minutes of practice a day.
+- Respondent R02: 19-year-old woman, lives in Chicago, USA. Money: "I'm comfortable and can spend on hobbies." Occupation: works full-time. Would want to train: both. Voice experience: sings casually (at home, karaoke, at church or with family). Would use it on: tablet. What Pro would cost this person and the terms: You need to download an app and create an account with a card. Pro: US$14.99 a month (renews automatically). Without Pro, 5 minutes of practice a day.
+- Respondent R11: 20-year-old woman, lives in Manchester, UK. Money: "I'm comfortable and can spend on hobbies." Occupation: university student. Would want to train: singing. Voice experience: has sung in a choir or a band. Would use it on: laptop or desktop. What Pro would cost this person and the terms: You need to download an app and create an account with a card. Pro: US$14.99 a month (renews automatically). Without Pro, 5 minutes of practice a day.
+- Respondent R08: 24-year-old woman, lives in Lagos, Nigeria. Money: "I cover the basics but there's nothing left for extras." Occupation: postgraduate student. Would want to train: both. Voice experience: has sung in a choir or a band. Would use it on: phone. What Pro would cost this person and the terms: You need to download an app and create an account with a card. Pro: US$14.99 a month (renews automatically). Without Pro, 5 minutes of practice a day.
+- Respondent R35: 45-year-old woman, lives in Chicago, USA. Money: "Money doesn't stretch to the basics." Occupation: nurse. Would want to train: speaking. Voice experience: sings casually (at home, karaoke, at church or with family). Would use it on: phone. What Pro would cost this person and the terms: You need to download an app and create an account with a card. Pro: US$14.99 a month (renews automatically). Without Pro, 5 minutes of practice a day.
+- Respondent R41: 58-year-old man, lives in Bangalore, India. Money: "I cover the basics and can sometimes afford a small treat." Occupation: homemaker. Would want to train: both. Voice experience: none: has never trained their voice. Would use it on: laptop or desktop. What Pro would cost this person and the terms: You need to download an app and create an account with a card. Pro: US$14.99 a month (renews automatically). Without Pro, 5 minutes of practice a day.
+
+QUESTIONS (each respondent answers all four)
+Q1. Based on what you just read, how likely are you to try this website?
+Q2. Imagine you used it free for a week. How likely are you to pay for Pro?
+Q3. What, if anything, would make you hesitate or put you off?
+Q4. In one sentence: what is this website, and who is it for?
+
+Return one entry per respondent, with the respondent id exactly as given (R55, R45, R42, R02, R11, R08, R35, R41).

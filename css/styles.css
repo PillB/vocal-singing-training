@@ -4584,6 +4584,18 @@ footer a {
   color: var(--text-muted);
 }
 
+/* The footer's two language links stay together, and the language on screen
+   reads as the current one, as guide, privacy and terms show theirs (strong).
+   It stays a link, so each version links both addresses for a crawler. */
+footer.app-footer .footer-langs {
+  white-space: nowrap;
+}
+footer.app-footer a[data-lang-link][aria-current="true"] {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
 .two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -4938,6 +4950,15 @@ a.btn-util {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent);
+  text-wrap: balance;
+}
+/* On a phone the tracking comes down so "Para cantar y para hablar · gratis" stays one line in wide fallback
+   fonts too: in DejaVu Sans at 360 px it needs 311 px of the 308 there are at 0.1em, and 295 at 0.06em. Below
+   about 340 px it may still wrap, and then into two even lines rather than leaving "gratis" alone. */
+@media (max-width: 400px) {
+  #start-panel .start-kicker {
+    letter-spacing: 0.06em;
+  }
 }
 #start-panel .start-title {
   margin: 0 0 0.35rem;
@@ -8033,11 +8054,30 @@ body.view-exercise .highway-stage {
   justify-self: start;
   gap: 0.35rem;
 }
+/* The strip's quiet ways onward (the fact cards, Tu camino, the reminder)
+   share one wrapping row. Two fit side by side on a phone, each label on up
+   to two lines, which keeps the strip as short as it was with one. */
+.loop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.5rem;
+}
+.loop-actions > .btn {
+  flex: 0 1 auto;
+}
+@media (max-width: 860px) {
+  body.loop-on #start-panel .loop-actions > .btn {
+    flex: 1 1 8.5rem;
+    line-height: 1.25;
+    text-align: center;
+  }
+}
 /* The classic arm's own way in to the reminder, under its start panel. */
 .start-remind {
   margin: 0.4rem 0 0;
 }
-body.loop-on #start-panel .loop-remind-btn {
+body.loop-on #start-panel .loop-remind-btn,
+body.loop-on #start-panel .loop-actions {
   grid-column: 1 / -1;
 }
 /* The reminder dialog: the old panel's rows inside a modal card. */

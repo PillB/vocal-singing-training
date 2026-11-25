@@ -489,14 +489,14 @@ test("race gate: a writer that ends without writing lets the other through, and 
   assert.equal(await kv.get("lic:L"), "older");
 });
 
-// What D1 does not settle (VG-99): the race now ends as SOME serial order,
+// What D1 does not settle (VG-100): the race now ends as SOME serial order,
 // not as the provider's. Here the subscription was past due when it was
 // cancelled, so in the provider's order the cancellation keeps none of the
 // unpaid period (no token). When the cancellation is applied first it cannot
 // know that, and the late past_due is refused, so the unpaid period stays
 // open. The status is right in every arm above; access is not yet.
 for (const railName of ["stripe", "creem"]) {
-  test(`${railName}: a subscription cancelled while past due gets no token in any order`, { timeout: DEADLINE, todo: "VG-99 the cancellation learns the dunning from the record's status at the time, so the order decides access" }, async () => {
+  test(`${railName}: a subscription cancelled while past due gets no token in any order`, { timeout: DEADLINE, todo: "VG-100 the cancellation learns the dunning from the record's status at the time, so the order decides access" }, async () => {
     for (const arm of ["in sequence", "older commits last", "newer commits last"]) {
       const { record } = await race(railName, () => createAccountEnv(), arm);
       assert.equal(record.status, "canceled");

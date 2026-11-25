@@ -1,0 +1,31 @@
+You are taking part in a consumer research survey, playing several different respondents, one after another.
+
+For each respondent listed below, become that person: their age, gender, where they live, their money situation, their occupation, what they would want to train, their experience, and the device they would use. Each respondent has just been shown the same short description of a website (below), plus the price and terms that apply to them. Each one answers four questions in their own words, in English, briefly (one to three sentences per question), the way that person would really answer, in their own voice. Answer each respondent independently: they do not know about each other. Do not compare respondents, summarise, or add commentary.
+
+THE DESCRIPTION EVERY RESPONDENT SAW
+"""
+FOR SINGING AND SPEAKING · FREE
+Train your voice 3 minutes a day.
+No account, no card, no music theory: just your voice and the mic.
+
+• Choose what to train: Singing (songs, choir, pitch) or Speaking (talks, interviews, diction).
+• Practise with your mic: the screen shows your pitch, volume or pace as you go.
+• Save and review: it is saved in this browser. No account needed.
+"""
+
+RESPONDENTS
+- Respondent R02: 19-year-old woman, lives in Chicago, USA. Money: "I'm comfortable and can spend on hobbies." Occupation: works full-time. Would want to train: both. Voice experience: sings casually (at home, karaoke, at church or with family). Would use it on: tablet. What Pro would cost this person and the terms: Works in the browser on your phone or computer: nothing to install, no account needed. In Spanish and English. Every exercise is free, with no time limit. Pro is optional: US$7.99 a month or US$49 a year. Pro adds: no ads, download your progress, up to 3 profiles, a chart of your last 28 days, and a summary to send your teacher. 7-day Pro trial, no card.
+- Respondent R54: 74-year-old woman, lives in Sydney, Australia. Money: "I cover the basics but there's nothing left for extras." Occupation: retired. Would want to train: both. Voice experience: none: has never trained their voice. Would use it on: laptop or desktop. What Pro would cost this person and the terms: Works in the browser on your phone or computer: nothing to install, no account needed. In Spanish and English. Every exercise is free, with no time limit. Pro is optional: US$7.99 a month or US$49 a year. Pro adds: no ads, download your progress, up to 3 profiles, a chart of your last 28 days, and a summary to send your teacher. 7-day Pro trial, no card.
+- Respondent R47: 63-year-old man, lives in Toronto, Canada. Money: "I'm comfortable and can spend on hobbies." Occupation: small-business owner. Would want to train: speaking. Voice experience: sings casually (at home, karaoke, at church or with family). Would use it on: phone. What Pro would cost this person and the terms: Works in the browser on your phone or computer: nothing to install, no account needed. In Spanish and English. Every exercise is free, with no time limit. Pro is optional: US$7.99 a month or US$49 a year. Pro adds: no ads, download your progress, up to 3 profiles, a chart of your last 28 days, and a summary to send your teacher. 7-day Pro trial, no card.
+- Respondent R36: 41-year-old woman, lives in Lagos, Nigeria. Money: "I'm comfortable and can spend on hobbies." Occupation: self-employed. Would want to train: singing. Voice experience: none: has never trained their voice. Would use it on: phone. What Pro would cost this person and the terms: Works in the browser on your phone or computer: nothing to install, no account needed. In Spanish and English. Every exercise is free, with no time limit. Pro is optional: US$7.99 a month or US$49 a year. Pro adds: no ads, download your progress, up to 3 profiles, a chart of your last 28 days, and a summary to send your teacher. 7-day Pro trial, no card.
+- Respondent R64: 68-year-old woman, lives in Toronto, Canada. Money: "Money isn't a concern when it comes to hobbies." Occupation: retired, volunteers at church. Would want to train: singing. Voice experience: sings casually (at home, karaoke, at church or with family). Would use it on: phone. What Pro would cost this person and the terms: Works in the browser on your phone or computer: nothing to install, no account needed. In Spanish and English. Every exercise is free, with no time limit. Pro is optional: US$7.99 a month or US$49 a year. Pro adds: no ads, download your progress, up to 3 profiles, a chart of your last 28 days, and a summary to send your teacher. 7-day Pro trial, no card.
+- Respondent R35: 45-year-old woman, lives in Chicago, USA. Money: "Money doesn't stretch to the basics." Occupation: nurse. Would want to train: speaking. Voice experience: sings casually (at home, karaoke, at church or with family). Would use it on: phone. What Pro would cost this person and the terms: Works in the browser on your phone or computer: nothing to install, no account needed. In Spanish and English. Every exercise is free, with no time limit. Pro is optional: US$7.99 a month or US$49 a year. Pro adds: no ads, download your progress, up to 3 profiles, a chart of your last 28 days, and a summary to send your teacher. 7-day Pro trial, no card.
+- Respondent R41: 58-year-old man, lives in Bangalore, India. Money: "I cover the basics and can sometimes afford a small treat." Occupation: homemaker. Would want to train: both. Voice experience: none: has never trained their voice. Would use it on: laptop or desktop. What Pro would cost this person and the terms: Works in the browser on your phone or computer: nothing to install, no account needed. In Spanish and English. Every exercise is free, with no time limit. Pro is optional: US$7.99 a month or US$49 a year. Pro adds: no ads, download your progress, up to 3 profiles, a chart of your last 28 days, and a summary to send your teacher. 7-day Pro trial, no card.
+
+QUESTIONS (each respondent answers all four)
+Q1. Based on what you just read, how likely are you to try this website?
+Q2. Imagine you used it free for a week. How likely are you to pay for Pro?
+Q3. What, if anything, would make you hesitate or put you off?
+Q4. In one sentence: what is this website, and who is it for?
+
+Return one entry per respondent, with the respondent id exactly as given (R02, R54, R47, R36, R64, R35, R41).

@@ -28,8 +28,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Run affected integration flows before the longer core/mutation dependency.
+  integration-focus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test tests/browser-language.spec.js tests/home-design.spec.js tests/session-sets.spec.js tests/song-library.spec.js tests/sweep-reachability.spec.js --project=chromium --workers=2 --reporter=line
+      - run: npx playwright test tests/redteam-exercise-language.spec.js --project=chromium --workers=2 --reporter=line -g 'stage refit respects|open panels and the scroll position'
+      - name: Preserve focused browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-focus-failures
+          path: test-results/
+
+  safari-layout:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    env:
+      CI: '1'
+      MIC_HELP: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install webkit
+      - name: macOS WebKit design selection and device layouts
+        run: npx playwright test --project=webkit-layout --workers=2 --reporter=line --global-timeout=600000
+      - name: Native select regression must be detected on macOS
+        env:
+          # Isolate this nested runner from the preceding suite's server.
+          VT_TEST_PORT: '8766'
+          DEBUG: 'pw:webserver'
+        run: bash qa/check-safari-selector.sh
+      - name: Preserve macOS WebKit diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safari-layout-failures
+          path: test-results/
+          if-no-files-found: ignore
+
   contracts:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +104,7 @@ jobs:
 
   browser-contracts:
     needs: contracts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       CI: '1'
@@ -82,12 +135,12 @@ jobs:
   # mutants (boot) left regress for the same reason: with them it took 28.3 of its 30 minutes (PR #42).
   mutation:
     needs: contracts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        set: [stage, a11y, flows, regress, boot, billing, scoring, controls, audit, toast, designs, splits, syncing, inject, learner, authwall]
+        set: [stage, a11y, flows, regress, boot, billing, scoring, controls, audit, toast, designs, splits, syncing, inject, learner, authwall, promises, promises-time-2, promises-time-3, promises-voice, promises-account-ads, lang, pathui, curriculumui]
     env:
       CI: '1'
       MIC_HELP: '0'
@@ -115,7 +168,7 @@ jobs:
 
   safari-audio:
     needs: contracts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       CI: '1'
@@ -142,7 +195,7 @@ jobs:
 
   browser:
     needs: browser-contracts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -175,7 +228,7 @@ jobs:
   # own spec; this catches a mutant that one spec stopped killing while another still does.
   mutation-wide:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
       CI: '1'
@@ -196,7 +249,7 @@ jobs:
   # 110 minutes and silently left three forensic specs unexecuted.
   sweeps:
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.sweeps)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -270,7 +323,7 @@ jobs:
   sweep-smoke:
     if: github.event_name == 'pull_request'
     needs: contracts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       CI: '1'

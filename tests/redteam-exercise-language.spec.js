@@ -109,6 +109,31 @@ async function settle(page, ms = 350) {
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 
+/** Panel transition completion precedes its smooth reveal; observe the viewport too. */
+async function settledScroll(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    let previous = scrollY;
+    let quietSince = performance.now();
+    let frame = 0;
+    const timeout = setTimeout(() => {
+      cancelAnimationFrame(frame);
+      reject(new Error(`Scroll never settled: last position ${scrollY}px`));
+    }, 5000);
+    const sample = (now) => {
+      const y = scrollY;
+      if (y !== previous) quietSince = now;
+      previous = y;
+      if (now - quietSince >= 150) {
+        clearTimeout(timeout);
+        resolve(y);
+        return;
+      }
+      frame = requestAnimationFrame(sample);
+    };
+    frame = requestAnimationFrame(sample);
+  }));
+}
+
 async function ready(page) {
   await page.waitForFunction(() => !!window.VTApp && !!window.VTI18n && !!document.querySelector("#exercise-list .card-ex"), null, { timeout: 15000 });
 }
@@ -825,3 +850,35 @@ test.describe("the microphone notice", () => {
     expect((await noticeOpen(page)).text).toBe(es.text);
   });
 });
+
+
+for (const size of [LAPTOP, PHONE]) {
+  for (const id of ["s9-pitch-match", "v1-diction"]) {
+    test(`stage refit respects a learner reading below the stage: ${id} at ${size.width}px`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await seed(page, { lang: "es" });
+      await openEx(page, id);
+      await page.locator("#btn-toggle-guide").click();
+      await page.locator("#btn-toggle-metrics").click();
+      if (size.width < 500 && id === "s9-pitch-match") {
+        await page.locator("#btn-toggle-piano").click();
+        await expect(page.locator("#piano-block")).toHaveClass(/is-settled/);
+      }
+      await expect(page.locator("#btn-toggle-guide")).toHaveAttribute("aria-expanded", "true");
+      // is-settled belongs to the piano's CSS transition, not the subsequent
+      // smooth reveal. Finish that navigation before sampling a reading position.
+      await settledScroll(page);
+      await page.evaluate(() => scrollTo({ top: 700, behavior: "instant" }));
+      const before = await settledScroll(page);
+      expect(before).toBeGreaterThan(300);
+      await page.evaluate(() => {
+        window.VTApp.fitHighwayToViewport();
+        window.VTApp.fitHighwayToViewport();
+      });
+      const after = await settledScroll(page);
+      expect((await page.locator("#highway-stage").boundingBox()).height).toBeGreaterThanOrEqual(120);
+      console.log("stage-refit-scroll", { id, width: size.width, before, after });
+      expect(Math.abs(after - before)).toBeLessThanOrEqual(2);
+    });
+  }
+}

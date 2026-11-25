@@ -1,0 +1,8437 @@
+{
+"note": "Tags from coders who saw only the answers to \"what would put you off\" and \"what is it and who is it for\", in mixed batches across concepts.",
+"coded": {
+"x001": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x002": {
+"hesitation": [
+"data_or_device",
+"ads",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x003": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x004": {
+"hesitation": [
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x005": {
+"hesitation": [
+"language",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x006": {
+"hesitation": [
+"doubt_effectiveness",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x007": {
+"hesitation": [
+"currency_or_payment",
+"self_consciousness",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x008": {
+"hesitation": [
+"subscription_terms",
+"currency_or_payment",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": "thinks it is a phone app with an AI coach, not a website"
+},
+"x009": {
+"hesitation": [
+"doubt_effectiveness",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x010": {
+"hesitation": [
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": ""
+},
+"x011": {
+"hesitation": [
+"doubt_effectiveness",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x012": {
+"hesitation": [
+"time_or_habit",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x013": {
+"hesitation": [
+"time_or_habit",
+"self_consciousness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x014": {
+"hesitation": [
+"subscription_terms",
+"language"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "professionals/performers",
+"misreading": "thinks it is a mobile app with an AI teacher, aimed at aspiring professional singers who can afford to pay"
+},
+"x015": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"wants_human"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x016": {
+"hesitation": [
+"subscription_terms",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "thinks it is an AI app, not a website"
+},
+"x017": {
+"hesitation": [
+"progress_storage",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x018": {
+"hesitation": [
+"time_or_habit",
+"too_basic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x019": {
+"hesitation": [
+"data_or_device",
+"self_consciousness",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x020": {
+"hesitation": [
+"wrong_focus",
+"data_or_device",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": ""
+},
+"x021": {
+"hesitation": [
+"currency_or_payment",
+"trust_unknown",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x022": {
+"hesitation": [
+"doubt_effectiveness",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x023": {
+"hesitation": [
+"self_consciousness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x024": {
+"hesitation": [
+"self_consciousness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x025": {
+"hesitation": [
+"wrong_focus",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x026": {
+"hesitation": [
+"doubt_effectiveness",
+"trust_unknown",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x027": {
+"hesitation": [
+"wrong_focus",
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x028": {
+"hesitation": [
+"tech_difficulty",
+"wants_human"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x029": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": ""
+},
+"x030": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x031": {
+"hesitation": [
+"data_or_device",
+"ads",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x032": {
+"hesitation": [
+"wrong_focus",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x033": {
+"hesitation": [
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x034": {
+"hesitation": [
+"privacy_mic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x035": {
+"hesitation": [
+"doubt_effectiveness",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": ""
+},
+"x036": {
+"hesitation": [
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x037": {
+"hesitation": [
+"doubt_effectiveness",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x038": {
+"hesitation": [
+"language",
+"hype_or_claims",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": "thinks it is an AI app, not a website"
+},
+"x039": {
+"hesitation": [
+"tech_difficulty",
+"doubt_effectiveness",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x040": {
+"hesitation": [
+"hype_or_claims",
+"subscription_terms",
+"language",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "thinks it is an AI app, not a website"
+},
+"x041": {
+"hesitation": [
+"doubt_effectiveness",
+"ads",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": ""
+},
+"x042": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "young people",
+"misreading": ""
+},
+"x043": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x044": {
+"hesitation": [
+"language",
+"subscription_terms",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "thinks it is an AI app, not a website"
+},
+"x045": {
+"hesitation": [
+"language",
+"subscription_terms",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "thinks it is a phone app with AI, not a website"
+},
+"x046": {
+"hesitation": [
+"self_consciousness",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x047": {
+"hesitation": [
+"privacy_mic",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x048": {
+"hesitation": [
+"age_fit",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x049": {
+"hesitation": [
+"doubt_effectiveness",
+"wants_human"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x050": {
+"hesitation": [
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x051": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x052": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": ""
+},
+"x053": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness",
+"wants_human"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x054": {
+"hesitation": [
+"data_or_device",
+"age_fit",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "other",
+"misreading": ""
+},
+"x055": {
+"hesitation": [
+"age_fit",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x056": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"time_or_habit",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x057": {
+"hesitation": [
+"tech_difficulty",
+"age_fit",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x058": {
+"hesitation": [
+"tech_difficulty",
+"age_fit",
+"data_or_device",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x059": {
+"hesitation": [
+"trust_unknown",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x060": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x061": {
+"hesitation": [
+"subscription_terms",
+"currency_or_payment",
+"hype_or_claims",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "thinks it is an AI singing-teacher app for becoming a singer quickly, not a website"
+},
+"x062": {
+"hesitation": [
+"tech_difficulty",
+"wants_human",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x063": {
+"hesitation": [
+"wants_human",
+"doubt_effectiveness",
+"tech_difficulty",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x064": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "other",
+"misreading": ""
+},
+"x065": {
+"hesitation": [
+"age_fit",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x066": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x067": {
+"hesitation": [
+"language",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": "calls it an AI phone app; the product is a browser website"
+},
+"x068": {
+"hesitation": [
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x069": {
+"hesitation": [
+"data_or_device",
+"tech_difficulty",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x070": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x071": {
+"hesitation": [
+"data_or_device",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x072": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x073": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x074": {
+"hesitation": [
+"self_consciousness",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x075": {
+"hesitation": [
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x076": {
+"hesitation": [
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x077": {
+"hesitation": [
+"self_consciousness",
+"time_or_habit",
+"ads",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x078": {
+"hesitation": [
+"tech_difficulty",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x079": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x080": {
+"hesitation": [
+"doubt_effectiveness",
+"trust_unknown",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x081": {
+"hesitation": [
+"hype_or_claims",
+"subscription_terms",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": "thinks it is a phone app; the product is a browser website"
+},
+"x082": {
+"hesitation": [
+"data_or_device",
+"subscription_terms",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x083": {
+"hesitation": [
+"tech_difficulty",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x084": {
+"hesitation": [
+"subscription_terms",
+"ads",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x085": {
+"hesitation": [
+"wrong_focus",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x086": {
+"hesitation": [
+"subscription_terms",
+"language",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "calls it an AI app; the product is a browser website"
+},
+"x087": {
+"hesitation": [
+"wrong_focus",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x088": {
+"hesitation": [
+"subscription_terms",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "calls it a phone singing app with an AI coach; the product is a browser website"
+},
+"x089": {
+"hesitation": [
+"privacy_mic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x090": {
+"hesitation": [
+"doubt_effectiveness",
+"data_or_device",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x091": {
+"hesitation": [
+"too_basic",
+"ads",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x092": {
+"hesitation": [
+"subscription_terms",
+"language",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": "calls it an AI app that gives singing classes; the product is a browser website"
+},
+"x093": {
+"hesitation": [
+"subscription_terms",
+"language",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": "calls it an AI phone app for English speakers; the product is a browser website"
+},
+"x094": {
+"hesitation": [
+"data_or_device",
+"subscription_terms",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x095": {
+"hesitation": [
+"data_or_device",
+"currency_or_payment",
+"wants_human",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x096": {
+"hesitation": [
+"ads",
+"subscription_terms",
+"progress_storage",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x097": {
+"hesitation": [
+"hype_or_claims",
+"subscription_terms",
+"language"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "calls it an English-language AI app giving singing classes; the product is a browser website"
+},
+"x098": {
+"hesitation": [
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x099": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x100": {
+"hesitation": [
+"tech_difficulty",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x101": {
+"hesitation": [
+"subscription_terms",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": "calls it an AI app; the product is a browser website"
+},
+"x102": {
+"hesitation": [
+"hype_or_claims",
+"currency_or_payment",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": "calls it an AI vocal coach app; the product is a browser website"
+},
+"x103": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x104": {
+"hesitation": [
+"hype_or_claims",
+"language",
+"install_or_app"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": "thinks it is an AI app that may not run on a laptop; the product is a browser website"
+},
+"x105": {
+"hesitation": [
+"doubt_effectiveness",
+"tech_difficulty",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x106": {
+"hesitation": [
+"wrong_focus",
+"tech_difficulty",
+"language"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x107": {
+"hesitation": [
+"ads",
+"doubt_effectiveness",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x108": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x109": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x110": {
+"hesitation": [
+"hype_or_claims",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": "calls it an AI app; the product is a browser website"
+},
+"x111": {
+"hesitation": [
+"currency_or_payment",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x112": {
+"hesitation": [
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x113": {
+"hesitation": [
+"data_or_device",
+"ads",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x114": {
+"hesitation": [
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x115": {
+"hesitation": [
+"tech_difficulty",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x116": {
+"hesitation": [
+"tech_difficulty",
+"language",
+"self_consciousness",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x117": {
+"hesitation": [
+"tech_difficulty",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x118": {
+"hesitation": [
+"wrong_focus",
+"privacy_mic",
+"ads",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x119": {
+"hesitation": [
+"wrong_focus",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x120": {
+"hesitation": [
+"language",
+"subscription_terms",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "calls it an app with an AI trainer; the product is a browser website"
+},
+"x121": {
+"hesitation": [
+"data_or_device",
+"ads",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x122": {
+"hesitation": [
+"currency_or_payment",
+"tech_difficulty",
+"ads",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x123": {
+"hesitation": [
+"currency_or_payment",
+"subscription_terms",
+"language"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "professionals/performers",
+"misreading": "calls it an AI app for aspiring singers who speak English; the product is a browser website"
+},
+"x124": {
+"hesitation": [
+"tech_difficulty",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x125": {
+"hesitation": [
+"wrong_focus",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x126": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x127": {
+"hesitation": [
+"progress_storage",
+"doubt_effectiveness",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x128": {
+"hesitation": [
+"tech_difficulty",
+"language",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x129": {
+"hesitation": [
+"language",
+"ads",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x130": {
+"hesitation": [
+"tech_difficulty",
+"subscription_terms",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x131": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x132": {
+"hesitation": [
+"tech_difficulty",
+"trust_unknown",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x133": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x134": {
+"hesitation": [
+"doubt_effectiveness",
+"self_consciousness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x135": {
+"hesitation": [
+"hype_or_claims",
+"install_or_app"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": "thinks it is a downloadable app with an AI singing coach"
+},
+"x136": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"language"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x137": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x138": {
+"hesitation": [
+"doubt_effectiveness",
+"data_or_device",
+"ads",
+"currency_or_payment",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x139": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x140": {
+"hesitation": [
+"install_or_app",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "thinks it is a downloadable app with an AI coach, mainly for young people"
+},
+"x141": {
+"hesitation": [
+"doubt_effectiveness",
+"wrong_focus",
+"currency_or_payment",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x142": {
+"hesitation": [
+"ads",
+"data_or_device",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x143": {
+"hesitation": [
+"data_or_device",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x144": {
+"hesitation": [
+"trust_unknown",
+"ads",
+"subscription_terms",
+"data_or_device",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x145": {
+"hesitation": [
+"data_or_device",
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x146": {
+"hesitation": [
+"doubt_effectiveness",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x147": {
+"hesitation": [
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x148": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x149": {
+"hesitation": [
+"tech_difficulty",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x150": {
+"hesitation": [
+"currency_or_payment",
+"subscription_terms",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": "thinks it is an AI-coach app that needs a paid dollar subscription"
+},
+"x151": {
+"hesitation": [
+"wrong_focus",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x152": {
+"hesitation": [
+"language",
+"too_basic",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x153": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x154": {
+"hesitation": [
+"doubt_effectiveness",
+"time_or_habit",
+"hype_or_claims",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x155": {
+"hesitation": [
+"data_or_device",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x156": {
+"hesitation": [
+"hype_or_claims",
+"trust_unknown",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": "thinks it is a phone app with an AI vocal coach"
+},
+"x157": {
+"hesitation": [
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x158": {
+"hesitation": [
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x159": {
+"hesitation": [
+"data_or_device",
+"ads",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x160": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x161": {
+"hesitation": [
+"self_consciousness",
+"wants_human",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x162": {
+"hesitation": [
+"currency_or_payment",
+"trust_unknown",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x163": {
+"hesitation": [
+"wrong_focus",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x164": {
+"hesitation": [
+"trust_unknown",
+"doubt_effectiveness",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x165": {
+"hesitation": [
+"self_consciousness",
+"time_or_habit",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x166": {
+"hesitation": [
+"data_or_device",
+"ads",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x167": {
+"hesitation": [
+"data_or_device",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x168": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x169": {
+"hesitation": [
+"wrong_focus",
+"ads",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x170": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x171": {
+"hesitation": [
+"currency_or_payment",
+"language",
+"age_fit",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x172": {
+"hesitation": [
+"doubt_effectiveness",
+"privacy_mic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x173": {
+"hesitation": [
+"tech_difficulty",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x174": {
+"hesitation": [
+"trust_unknown",
+"privacy_mic",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x175": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x176": {
+"hesitation": [
+"data_or_device",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x177": {
+"hesitation": [
+"tech_difficulty",
+"age_fit",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x178": {
+"hesitation": [
+"doubt_effectiveness",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x179": {
+"hesitation": [
+"tech_difficulty",
+"age_fit",
+"ads",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x180": {
+"hesitation": [
+"too_basic",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x181": {
+"hesitation": [
+"data_or_device",
+"ads",
+"trust_unknown",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": ""
+},
+"x182": {
+"hesitation": [
+"time_or_habit",
+"wrong_focus",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x183": {
+"hesitation": [
+"wrong_focus",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x184": {
+"hesitation": [
+"hype_or_claims",
+"trust_unknown",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "thinks it is an AI-powered vocal training app"
+},
+"x185": {
+"hesitation": [
+"language",
+"install_or_app",
+"subscription_terms",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "thinks it is a phone program to download where a machine teaches, aimed at young people who want to be artists"
+},
+"x186": {
+"hesitation": [
+"doubt_effectiveness",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x187": {
+"hesitation": [
+"tech_difficulty",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x188": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x189": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"trust_unknown",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x190": {
+"hesitation": [
+"tech_difficulty",
+"data_or_device",
+"ads",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x191": {
+"hesitation": [
+"ads",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x192": {
+"hesitation": [
+"too_basic",
+"time_or_habit",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x193": {
+"hesitation": [
+"wrong_focus",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x194": {
+"hesitation": [
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x195": {
+"hesitation": [
+"privacy_mic",
+"data_or_device",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x196": {
+"hesitation": [
+"tech_difficulty",
+"doubt_effectiveness",
+"wants_human"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x197": {
+"hesitation": [
+"currency_or_payment",
+"subscription_terms",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x198": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x199": {
+"hesitation": [
+"data_or_device",
+"ads",
+"doubt_effectiveness",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x200": {
+"hesitation": [
+"ads",
+"data_or_device",
+"doubt_effectiveness",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x201": {
+"hesitation": [
+"progress_storage",
+"wrong_focus",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x202": {
+"hesitation": [
+"self_consciousness",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x203": {
+"hesitation": [
+"tech_difficulty",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x204": {
+"hesitation": [
+"self_consciousness",
+"data_or_device",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x205": {
+"hesitation": [
+"currency_or_payment",
+"trust_unknown",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x206": {
+"hesitation": [
+"subscription_terms",
+"privacy_mic",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x207": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"wants_human"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x208": {
+"hesitation": [
+"too_basic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x209": {
+"hesitation": [
+"wrong_focus",
+"ads",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x210": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness",
+"self_consciousness",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x211": {
+"hesitation": [
+"wrong_focus",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x212": {
+"hesitation": [
+"ads",
+"doubt_effectiveness",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x213": {
+"hesitation": [
+"wrong_focus",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "older people",
+"misreading": ""
+},
+"x214": {
+"hesitation": [
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x215": {
+"hesitation": [
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x216": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x217": {
+"hesitation": [
+"subscription_terms",
+"hype_or_claims",
+"install_or_app"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "Thinks it is an AI-powered singing coach app to download, not a browser site"
+},
+"x218": {
+"hesitation": [
+"data_or_device",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x219": {
+"hesitation": [
+"self_consciousness",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x220": {
+"hesitation": [
+"language",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "Thinks it is an AI app with a coach, and that it is English-only"
+},
+"x221": {
+"hesitation": [
+"price_level",
+"currency_or_payment",
+"data_or_device",
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": "Thinks you practise singing songs; the product offers exercises"
+},
+"x222": {
+"hesitation": [
+"tech_difficulty",
+"data_or_device",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x223": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness",
+"ads",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x224": {
+"hesitation": [
+"tech_difficulty",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": "Implies they would have to judge their own tuning by ear, missing the on-screen pitch feedback"
+},
+"x225": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x226": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x227": {
+"hesitation": [
+"currency_or_payment",
+"doubt_effectiveness",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x228": {
+"hesitation": [
+"subscription_terms",
+"ads",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x229": {
+"hesitation": [
+"ads",
+"data_or_device",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x230": {
+"hesitation": [
+"doubt_effectiveness",
+"data_or_device",
+"ads",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x231": {
+"hesitation": [
+"language",
+"subscription_terms",
+"trust_unknown",
+"hype_or_claims",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "Thinks it is a phone app, English-only, for young people"
+},
+"x232": {
+"hesitation": [
+"progress_storage",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x233": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x234": {
+"hesitation": [
+"subscription_terms",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "professionals/performers",
+"misreading": "Thinks it is an app with an AI teacher for people who want to become singers"
+},
+"x235": {
+"hesitation": [
+"language",
+"ads",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x236": {
+"hesitation": [
+"doubt_effectiveness",
+"privacy_mic",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x237": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x238": {
+"hesitation": [
+"wrong_focus",
+"trust_unknown",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x239": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x240": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x241": {
+"hesitation": [
+"wrong_focus",
+"doubt_effectiveness",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x242": {
+"hesitation": [
+"time_or_habit",
+"doubt_effectiveness",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x243": {
+"hesitation": [
+"self_consciousness",
+"tech_difficulty",
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x244": {
+"hesitation": [
+"hype_or_claims",
+"subscription_terms",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "professionals/performers",
+"misreading": "Thinks it is an AI app for aspiring singers and explicitly not for improving the speaking voice"
+},
+"x245": {
+"hesitation": [
+"too_basic",
+"data_or_device",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x246": {
+"hesitation": [
+"currency_or_payment",
+"language",
+"ads",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x247": {
+"hesitation": [
+"tech_difficulty",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x248": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x249": {
+"hesitation": [
+"tech_difficulty",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x250": {
+"hesitation": [
+"self_consciousness",
+"wants_human",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x251": {
+"hesitation": [
+"tech_difficulty",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x252": {
+"hesitation": [
+"currency_or_payment",
+"age_fit",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x253": {
+"hesitation": [
+"tech_difficulty",
+"self_consciousness",
+"currency_or_payment",
+"language"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x254": {
+"hesitation": [
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x255": {
+"hesitation": [
+"hype_or_claims",
+"subscription_terms",
+"install_or_app",
+"language"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "Thinks it is an AI app to download that gives singing lessons"
+},
+"x256": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic",
+"wrong_focus",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": ""
+},
+"x257": {
+"hesitation": [
+"subscription_terms",
+"hype_or_claims",
+"language"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "Calls it an AI app used from the phone, not a website in the browser"
+},
+"x258": {
+"hesitation": [
+"ads",
+"pro_value",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x259": {
+"hesitation": [
+"self_consciousness",
+"ads",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x260": {
+"hesitation": [
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x261": {
+"hesitation": [
+"language",
+"subscription_terms",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "Calls it a paid AI app for young English speakers with money"
+},
+"x262": {
+"hesitation": [
+"currency_or_payment",
+"language",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x263": {
+"hesitation": [
+"subscription_terms",
+"pro_value",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x264": {
+"hesitation": [
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x265": {
+"hesitation": [
+"subscription_terms",
+"data_or_device",
+"tech_difficulty",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x266": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x267": {
+"hesitation": [
+"data_or_device",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": ""
+},
+"x268": {
+"hesitation": [
+"doubt_effectiveness",
+"wants_human",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x269": {
+"hesitation": [
+"ads",
+"pro_value",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x270": {
+"hesitation": [
+"tech_difficulty",
+"age_fit",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x271": {
+"hesitation": [
+"ads",
+"doubt_effectiveness",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x272": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x273": {
+"hesitation": [
+"tech_difficulty",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x274": {
+"hesitation": [
+"wrong_focus",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x275": {
+"hesitation": [
+"ads",
+"pro_value",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x276": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x277": {
+"hesitation": [
+"self_consciousness",
+"privacy_mic",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x278": {
+"hesitation": [
+"doubt_effectiveness",
+"wants_human",
+"age_fit",
+"language",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x279": {
+"hesitation": [
+"wrong_focus",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x280": {
+"hesitation": [
+"language",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x281": {
+"hesitation": [
+"wrong_focus",
+"data_or_device",
+"pro_value"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x282": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x283": {
+"hesitation": [
+"time_or_habit",
+"data_or_device",
+"ads",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x284": {
+"hesitation": [
+"doubt_effectiveness",
+"ads",
+"language"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x285": {
+"hesitation": [
+"currency_or_payment",
+"self_consciousness",
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x286": {
+"hesitation": [
+"time_or_habit",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x287": {
+"hesitation": [
+"price_level",
+"currency_or_payment",
+"wrong_focus",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x288": {
+"hesitation": [
+"wrong_focus",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x289": {
+"hesitation": [
+"time_or_habit",
+"self_consciousness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x290": {
+"hesitation": [
+"tech_difficulty",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x291": {
+"hesitation": [
+"subscription_terms",
+"language",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": "Calls it an AI application for English speakers, not a free website"
+},
+"x292": {
+"hesitation": [
+"doubt_effectiveness",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x293": {
+"hesitation": [
+"subscription_terms",
+"currency_or_payment",
+"trust_unknown",
+"hype_or_claims",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "Thinks it is a phone app with a computer singing teacher for would-be singers"
+},
+"x294": {
+"hesitation": [
+"tech_difficulty",
+"data_or_device",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x295": {
+"hesitation": [
+"data_or_device",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x296": {
+"hesitation": [
+"language",
+"data_or_device",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "Calls it an AI program for young would-be singers and doubts it runs on a computer, as if it were phone-only"
+},
+"x297": {
+"hesitation": [
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x298": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x299": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x300": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x301": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x302": {
+"hesitation": [
+"language",
+"subscription_terms",
+"hype_or_claims",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "Thinks it is a mobile phone app that teaches with AI"
+},
+"x303": {
+"hesitation": [
+"doubt_effectiveness",
+"ads",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x304": {
+"hesitation": [
+"tech_difficulty",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x305": {
+"hesitation": [
+"time_or_habit",
+"doubt_effectiveness",
+"pro_value"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x306": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x307": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x308": {
+"hesitation": [
+"tech_difficulty",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x309": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "older people",
+"misreading": ""
+},
+"x310": {
+"hesitation": [
+"tech_difficulty",
+"subscription_terms",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x311": {
+"hesitation": [
+"data_or_device",
+"ads",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x312": {
+"hesitation": [
+"tech_difficulty",
+"subscription_terms",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x313": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x314": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x315": {
+"hesitation": [
+"self_consciousness",
+"time_or_habit",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": ""
+},
+"x316": {
+"hesitation": [
+"tech_difficulty",
+"wants_human",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x317": {
+"hesitation": [
+"doubt_effectiveness",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x318": {
+"hesitation": [
+"tech_difficulty",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x319": {
+"hesitation": [
+"currency_or_payment",
+"ads",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x320": {
+"hesitation": [
+"progress_storage",
+"doubt_effectiveness",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x321": {
+"hesitation": [
+"language",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x322": {
+"hesitation": [
+"language",
+"currency_or_payment",
+"trust_unknown",
+"hype_or_claims",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "thinks it is an AI program (not a website), English-only, aimed at the young"
+},
+"x323": {
+"hesitation": [
+"tech_difficulty",
+"age_fit",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x324": {
+"hesitation": [
+"tech_difficulty",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x325": {
+"hesitation": [
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x326": {
+"hesitation": [
+"tech_difficulty",
+"currency_or_payment",
+"trust_unknown",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x327": {
+"hesitation": [
+"currency_or_payment",
+"ads",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x328": {
+"hesitation": [
+"tech_difficulty",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x329": {
+"hesitation": [
+"wrong_focus",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x330": {
+"hesitation": [
+"data_or_device",
+"currency_or_payment",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x331": {
+"hesitation": [
+"tech_difficulty",
+"trust_unknown",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x332": {
+"hesitation": [
+"hype_or_claims",
+"trust_unknown",
+"data_or_device",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": "calls it an AI vocal coach app rather than a website"
+},
+"x333": {
+"hesitation": [
+"self_consciousness",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x334": {
+"hesitation": [
+"progress_storage",
+"too_basic",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x335": {
+"hesitation": [
+"wrong_focus",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x336": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x337": {
+"hesitation": [
+"language",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "thinks it is a paid AI app for young English speakers"
+},
+"x338": {
+"hesitation": [
+"trust_unknown",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x339": {
+"hesitation": [
+"tech_difficulty",
+"currency_or_payment",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x340": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x341": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x342": {
+"hesitation": [
+"doubt_effectiveness",
+"data_or_device",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x343": {
+"hesitation": [
+"trust_unknown",
+"ads",
+"self_consciousness",
+"time_or_habit",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x344": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x345": {
+"hesitation": [
+"data_or_device",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x346": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"privacy_mic",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x347": {
+"hesitation": [
+"time_or_habit",
+"self_consciousness",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x348": {
+"hesitation": [
+"doubt_effectiveness",
+"self_consciousness",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x349": {
+"hesitation": [
+"currency_or_payment",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x350": {
+"hesitation": [
+"wrong_focus",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x351": {
+"hesitation": [
+"age_fit",
+"wrong_focus",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "older people",
+"misreading": ""
+},
+"x352": {
+"hesitation": [
+"self_consciousness",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x353": {
+"hesitation": [
+"age_fit",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x354": {
+"hesitation": [
+"wrong_focus",
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x355": {
+"hesitation": [
+"wrong_focus",
+"too_basic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x356": {
+"hesitation": [
+"data_or_device",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x357": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x358": {
+"hesitation": [
+"doubt_effectiveness",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x359": {
+"hesitation": [
+"data_or_device",
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x360": {
+"hesitation": [
+"self_consciousness",
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x361": {
+"hesitation": [
+"data_or_device",
+"currency_or_payment",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x362": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x363": {
+"hesitation": [
+"subscription_terms",
+"hype_or_claims",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "thinks it is a paid monthly singing app with a computer coach"
+},
+"x364": {
+"hesitation": [
+"doubt_effectiveness",
+"self_consciousness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x365": {
+"hesitation": [
+"wrong_focus",
+"hype_or_claims",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "thinks it is an AI singing coach app, singing only"
+},
+"x366": {
+"hesitation": [
+"language"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x367": {
+"hesitation": [
+"wrong_focus",
+"trust_unknown",
+"doubt_effectiveness",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x368": {
+"hesitation": [
+"ads",
+"trust_unknown",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x369": {
+"hesitation": [
+"tech_difficulty",
+"wants_human"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x370": {
+"hesitation": [
+"doubt_effectiveness",
+"ads",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x371": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x372": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x373": {
+"hesitation": [
+"subscription_terms",
+"language",
+"install_or_app",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "thinks it is an AI app, unsure it runs on a computer; English-only"
+},
+"x374": {
+"hesitation": [
+"data_or_device",
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x375": {
+"hesitation": [
+"data_or_device",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x376": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x377": {
+"hesitation": [
+"age_fit",
+"too_basic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x378": {
+"hesitation": [
+"tech_difficulty",
+"subscription_terms",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x379": {
+"hesitation": [
+"price_level",
+"ads",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x380": {
+"hesitation": [
+"data_or_device",
+"ads",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x381": {
+"hesitation": [
+"data_or_device",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x382": {
+"hesitation": [
+"self_consciousness",
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x383": {
+"hesitation": [
+"ads",
+"doubt_effectiveness",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x384": {
+"hesitation": [
+"data_or_device",
+"too_basic",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": ""
+},
+"x385": {
+"hesitation": [
+"wrong_focus",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x386": {
+"hesitation": [
+"ads",
+"subscription_terms",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x387": {
+"hesitation": [
+"data_or_device",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x388": {
+"hesitation": [
+"subscription_terms",
+"price_level",
+"language",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": "Calls it an AI app, not a website, and thinks it is only for well-off English speakers"
+},
+"x389": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x390": {
+"hesitation": [
+"hype_or_claims",
+"subscription_terms",
+"language",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": "Calls it an AI app that gives singing lessons, not a website"
+},
+"x391": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x392": {
+"hesitation": [
+"ads",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x393": {
+"hesitation": [
+"wrong_focus",
+"doubt_effectiveness",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x394": {
+"hesitation": [
+"tech_difficulty",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x395": {
+"hesitation": [
+"doubt_effectiveness",
+"ads",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x396": {
+"hesitation": [
+"too_basic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x397": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x398": {
+"hesitation": [
+"currency_or_payment",
+"language"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x399": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x400": {
+"hesitation": [
+"tech_difficulty",
+"progress_storage",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x401": {
+"hesitation": [
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x402": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x403": {
+"hesitation": [
+"doubt_effectiveness",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x404": {
+"hesitation": [
+"doubt_effectiveness",
+"data_or_device",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x405": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x406": {
+"hesitation": [
+"wrong_focus",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x407": {
+"hesitation": [
+"self_consciousness",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x408": {
+"hesitation": [
+"self_consciousness",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": ""
+},
+"x409": {
+"hesitation": [
+"age_fit",
+"too_basic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x410": {
+"hesitation": [
+"time_or_habit",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x411": {
+"hesitation": [
+"too_basic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x412": {
+"hesitation": [
+"subscription_terms",
+"privacy_mic",
+"tech_difficulty",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x413": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x414": {
+"hesitation": [
+"ads",
+"data_or_device",
+"currency_or_payment",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x415": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x416": {
+"hesitation": [
+"self_consciousness",
+"privacy_mic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x417": {
+"hesitation": [
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x418": {
+"hesitation": [
+"tech_difficulty",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x419": {
+"hesitation": [
+"tech_difficulty",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x420": {
+"hesitation": [
+"doubt_effectiveness",
+"data_or_device",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "other",
+"misreading": ""
+},
+"x421": {
+"hesitation": [
+"trust_unknown",
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x422": {
+"hesitation": [
+"trust_unknown",
+"privacy_mic",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x423": {
+"hesitation": [
+"doubt_effectiveness",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x424": {
+"hesitation": [
+"currency_or_payment",
+"ads",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x425": {
+"hesitation": [
+"doubt_effectiveness",
+"self_consciousness",
+"trust_unknown",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x426": {
+"hesitation": [
+"tech_difficulty",
+"data_or_device",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x427": {
+"hesitation": [
+"trust_unknown",
+"ads",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x428": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x429": {
+"hesitation": [
+"time_or_habit",
+"wants_human",
+"doubt_effectiveness",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x430": {
+"hesitation": [
+"data_or_device",
+"ads",
+"tech_difficulty",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x431": {
+"hesitation": [
+"tech_difficulty",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x432": {
+"hesitation": [
+"wrong_focus",
+"tech_difficulty",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x433": {
+"hesitation": [
+"tech_difficulty",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x434": {
+"hesitation": [
+"wrong_focus",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x435": {
+"hesitation": [
+"self_consciousness",
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x436": {
+"hesitation": [
+"data_or_device",
+"tech_difficulty",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x437": {
+"hesitation": [
+"tech_difficulty",
+"language",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x438": {
+"hesitation": [
+"self_consciousness",
+"data_or_device",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x439": {
+"hesitation": [
+"hype_or_claims",
+"trust_unknown",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": "Calls it an AI singing coach app, not a website"
+},
+"x440": {
+"hesitation": [
+"ads",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x441": {
+"hesitation": [
+"tech_difficulty",
+"self_consciousness",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x442": {
+"hesitation": [
+"age_fit",
+"tech_difficulty",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": ""
+},
+"x443": {
+"hesitation": [
+"tech_difficulty",
+"trust_unknown",
+"ads",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x444": {
+"hesitation": [
+"language",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": "Calls it an AI app that teaches singing, not a website"
+},
+"x445": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x446": {
+"hesitation": [
+"tech_difficulty",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x447": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x448": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x449": {
+"hesitation": [
+"data_or_device",
+"ads",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x450": {
+"hesitation": [
+"data_or_device",
+"ads",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x451": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x452": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x453": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x454": {
+"hesitation": [
+"data_or_device",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x455": {
+"hesitation": [
+"too_basic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x456": {
+"hesitation": [
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x457": {
+"hesitation": [
+"tech_difficulty",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": ""
+},
+"x458": {
+"hesitation": [
+"ads",
+"data_or_device",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x459": {
+"hesitation": [
+"hype_or_claims",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": "thinks it is an AI coach app"
+},
+"x460": {
+"hesitation": [
+"wrong_focus",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x461": {
+"hesitation": [
+"wrong_focus",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x462": {
+"hesitation": [
+"wrong_focus",
+"self_consciousness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x463": {
+"hesitation": [
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x464": {
+"hesitation": [
+"tech_difficulty",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x465": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x466": {
+"hesitation": [
+"time_or_habit",
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x467": {
+"hesitation": [
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x468": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x469": {
+"hesitation": [
+"data_or_device",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x470": {
+"hesitation": [
+"wrong_focus",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x471": {
+"hesitation": [
+"subscription_terms",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "thinks it is an app with a machine that corrects you"
+},
+"x472": {
+"hesitation": [
+"tech_difficulty",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x473": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"subscription_terms",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x474": {
+"hesitation": [
+"ads",
+"time_or_habit",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x475": {
+"hesitation": [
+"tech_difficulty",
+"age_fit",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x476": {
+"hesitation": [
+"hype_or_claims",
+"subscription_terms",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "thinks it is a phone app with an AI coach"
+},
+"x477": {
+"hesitation": [
+"data_or_device",
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x478": {
+"hesitation": [
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x479": {
+"hesitation": [
+"doubt_effectiveness",
+"trust_unknown",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x480": {
+"hesitation": [
+"too_basic",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x481": {
+"hesitation": [
+"wrong_focus",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "professionals/performers",
+"misreading": ""
+},
+"x482": {
+"hesitation": [
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x483": {
+"hesitation": [
+"time_or_habit",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x484": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x485": {
+"hesitation": [
+"ads",
+"data_or_device",
+"language",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x486": {
+"hesitation": [
+"doubt_effectiveness",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x487": {
+"hesitation": [
+"privacy_mic",
+"ads",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x488": {
+"hesitation": [
+"currency_or_payment",
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x489": {
+"hesitation": [
+"too_basic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x490": {
+"hesitation": [
+"wrong_focus",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x491": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x492": {
+"hesitation": [
+"language",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "thinks it is an AI app"
+},
+"x493": {
+"hesitation": [
+"currency_or_payment",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x494": {
+"hesitation": [
+"subscription_terms",
+"language",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "thinks it is an app where an AI teaches you"
+},
+"x495": {
+"hesitation": [
+"wrong_focus",
+"age_fit",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x496": {
+"hesitation": [
+"doubt_effectiveness",
+"wrong_focus",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x497": {
+"hesitation": [
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x498": {
+"hesitation": [
+"subscription_terms",
+"language"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": "thinks it is an AI app"
+},
+"x499": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x500": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x501": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x502": {
+"hesitation": [
+"tech_difficulty",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x503": {
+"hesitation": [
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x504": {
+"hesitation": [
+"tech_difficulty",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x505": {
+"hesitation": [
+"self_consciousness",
+"wants_human",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x506": {
+"hesitation": [
+"wrong_focus",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x507": {
+"hesitation": [
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x508": {
+"hesitation": [
+"wrong_focus",
+"hype_or_claims",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": "thinks it is an AI coach app"
+},
+"x509": {
+"hesitation": [
+"data_or_device",
+"doubt_effectiveness",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x510": {
+"hesitation": [
+"subscription_terms",
+"language"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "thinks it is an AI app that makes you sing like a professional"
+},
+"x511": {
+"hesitation": [
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x512": {
+"hesitation": [
+"time_or_habit",
+"privacy_mic",
+"ads",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x513": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x514": {
+"hesitation": [
+"wrong_focus",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x515": {
+"hesitation": [
+"too_basic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x516": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x517": {
+"hesitation": [
+"ads",
+"privacy_mic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x518": {
+"hesitation": [
+"wrong_focus",
+"doubt_effectiveness",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": ""
+},
+"x519": {
+"hesitation": [
+"ads",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x520": {
+"hesitation": [
+"hype_or_claims",
+"trust_unknown",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "Thinks it is a phone app with an AI singing teacher."
+},
+"x521": {
+"hesitation": [
+"tech_difficulty",
+"language"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x522": {
+"hesitation": [
+"subscription_terms",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": "Thinks it is an AI voice coach app."
+},
+"x523": {
+"hesitation": [
+"subscription_terms",
+"language"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "Thinks it is an English-only AI app for young aspiring singers."
+},
+"x524": {
+"hesitation": [
+"tech_difficulty",
+"doubt_effectiveness",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x525": {
+"hesitation": [
+"currency_or_payment",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "Thinks it is a phone app with an AI teacher."
+},
+"x526": {
+"hesitation": [
+"currency_or_payment",
+"price_level",
+"subscription_terms",
+"hype_or_claims",
+"install_or_app"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": "Thinks it is a downloadable AI singing coach app."
+},
+"x527": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic",
+"wants_human"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x528": {
+"hesitation": [
+"time_or_habit",
+"doubt_effectiveness",
+"subscription_terms"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x529": {
+"hesitation": [
+"data_or_device",
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x530": {
+"hesitation": [
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x531": {
+"hesitation": [
+"tech_difficulty",
+"language",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "young people",
+"misreading": "Thinks it is mainly aimed at young people."
+},
+"x532": {
+"hesitation": [
+"subscription_terms",
+"hype_or_claims",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": "Thinks it is an AI singing coach app."
+},
+"x533": {
+"hesitation": [
+"tech_difficulty",
+"doubt_effectiveness",
+"trust_unknown"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x534": {
+"hesitation": [
+"time_or_habit",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x535": {
+"hesitation": [
+"tech_difficulty",
+"ads",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x536": {
+"hesitation": [
+"ads",
+"doubt_effectiveness",
+"wrong_focus",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x537": {
+"hesitation": [
+"doubt_effectiveness",
+"wrong_focus",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x538": {
+"hesitation": [
+"data_or_device",
+"ads",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x539": {
+"hesitation": [
+"wrong_focus",
+"ads",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x540": {
+"hesitation": [
+"doubt_effectiveness",
+"ads",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x541": {
+"hesitation": [
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x542": {
+"hesitation": [
+"doubt_effectiveness",
+"hype_or_claims",
+"wrong_focus"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x543": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x544": {
+"hesitation": [
+"wants_human",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x545": {
+"hesitation": [
+"tech_difficulty",
+"age_fit",
+"progress_storage"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "other",
+"misreading": ""
+},
+"x546": {
+"hesitation": [
+"self_consciousness",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x547": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x548": {
+"hesitation": [
+"too_basic",
+"hype_or_claims",
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x549": {
+"hesitation": [
+"self_consciousness",
+"privacy_mic",
+"currency_or_payment"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x550": {
+"hesitation": [
+"too_basic",
+"doubt_effectiveness",
+"trust_unknown",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+},
+"x551": {
+"hesitation": [
+"wrong_focus",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x552": {
+"hesitation": [
+"wrong_focus",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x553": {
+"hesitation": [
+"ads",
+"time_or_habit",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x554": {
+"hesitation": [
+"subscription_terms",
+"hype_or_claims"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": false,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "other",
+"misreading": "Thinks it is an AI app for English speakers who pay a dollar subscription."
+},
+"x555": {
+"hesitation": [
+"wrong_focus",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x556": {
+"hesitation": [
+"time_or_habit",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x557": {
+"hesitation": [
+"tech_difficulty",
+"self_consciousness",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "people who think they can't sing",
+"misreading": ""
+},
+"x558": {
+"hesitation": [
+"tech_difficulty",
+"privacy_mic",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x559": {
+"hesitation": [
+"currency_or_payment",
+"doubt_effectiveness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x560": {
+"hesitation": [
+"tech_difficulty",
+"language",
+"data_or_device"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x561": {
+"hesitation": [
+"self_consciousness",
+"ads"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x562": {
+"hesitation": [
+"tech_difficulty",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x563": {
+"hesitation": [
+"currency_or_payment",
+"price_level",
+"language",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x564": {
+"hesitation": [
+"wrong_focus",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "beginners",
+"misreading": ""
+},
+"x565": {
+"hesitation": [
+"currency_or_payment",
+"price_level",
+"data_or_device",
+"ads"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x566": {
+"hesitation": [
+"tech_difficulty",
+"age_fit"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x567": {
+"hesitation": [
+"tech_difficulty",
+"self_consciousness"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x568": {
+"hesitation": [
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": true,
+"audience": "anyone",
+"misreading": ""
+},
+"x569": {
+"hesitation": [
+"ads",
+"privacy_mic",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x570": {
+"hesitation": [
+"doubt_effectiveness",
+"ads",
+"too_basic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x571": {
+"hesitation": [
+"wrong_focus",
+"ads",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x572": {
+"hesitation": [
+"data_or_device",
+"ads",
+"doubt_effectiveness"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x573": {
+"hesitation": [
+"doubt_effectiveness",
+"too_basic",
+"wants_human"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "anyone",
+"misreading": ""
+},
+"x574": {
+"hesitation": [
+"doubt_effectiveness",
+"privacy_mic"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": true,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": false,
+"audience": "students/workers who present",
+"misreading": ""
+},
+"x575": {
+"hesitation": [
+"age_fit",
+"tech_difficulty"
+],
+"says_singing": true,
+"says_speaking": false,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": true,
+"says_short_daily": false,
+"audience": "beginners",
+"misreading": ""
+},
+"x576": {
+"hesitation": [
+"doubt_effectiveness",
+"time_or_habit"
+],
+"says_singing": true,
+"says_speaking": true,
+"says_free": false,
+"says_browser_no_install": true,
+"says_visual_feedback": false,
+"says_short_daily": true,
+"audience": "amateurs/hobbyists",
+"misreading": ""
+}
+}
+}

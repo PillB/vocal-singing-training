@@ -345,6 +345,27 @@
     }
   }
 
+  /** A short one-way fingerprint (FNV-1a) of a session token, so the token itself is never copied. */
+  function tokenPrint(token) {
+    if (!token) return null;
+    let h = 0x811c9dc5;
+    for (let i = 0; i < token.length; i += 1) {
+      h ^= token.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(36);
+  }
+
+  /**
+   * Whether a handover on record was noted for this sign-in. A sign-in made on
+   * a page without this file (admin.html loads account.js alone) replaces the
+   * session without telling sync, and leaves the last record behind it. A
+   * record from before the fingerprint was kept counts as this sign-in's.
+   */
+  function handoverIsFor(h, token) {
+    return !h.tok || h.tok === tokenPrint(token);
+  }
+
   /**
    * Somebody just signed in. If this browser's practice is another account's,
    * note when it stopped being theirs: everything done here from now on is
@@ -353,7 +374,8 @@
   function noteHandover() {
     const owner = readOwner();
     const me = accountId();
-    writeHandover(owner && owner !== me ? { owner, me, since: new Date().toISOString() } : null);
+    const tok = tokenPrint(sessionToken());
+    writeHandover(owner && owner !== me ? { owner, me, since: new Date().toISOString(), tok } : null);
   }
 
   /** The put-aside list, dropping anything malformed. */
@@ -424,12 +446,28 @@
     return { state: "other", owner, me };
   }
 
-  /** True while the signed-in account has to choose before anything syncs. */
-  function otherOwner() {
+  /**
+   * Whose this browser's practice is, as getStatus() reports it, from one
+   * look (ownerState reads every profile's bag when the account is known).
+   * `waiting` is true while the practice may be another account's and nobody
+   * has said whose: the question waits ("other"), or the account has not said
+   * who it is yet ("unknown") and a handover from the owner on file is on
+   * record for this sign-in. The record outlives a reload and the account's
+   * id does not (it waits for /v1/me, and all page long offline), so "other"
+   * alone reads as nobody waiting after every reload. Tu camino writes
+   * nothing meanwhile (js/voice-path.js): sync keeps what it writes with the
+   * earlier owner.
+   * @returns {{other: boolean, waiting: boolean}} Answer.
+   */
+  function ownerFlags() {
     try {
-      return isAvailable() && ownerState().state === "other";
+      if (!isAvailable()) return { other: false, waiting: false };
+      const s = ownerState();
+      if (s.state !== "unknown") return { other: s.state === "other", waiting: s.state === "other" };
+      const h = readHandover();
+      return { other: false, waiting: !!h && h.owner === s.owner && handoverIsFor(h, sessionToken()) };
     } catch {
-      return false;
+      return { other: false, waiting: false };
     }
   }
 
@@ -1141,6 +1179,9 @@
     if (who.me) {
       writeOwner(who.me);
       restoreAside(who.me);
+      // A handover from this very account is one nobody is waiting on: its
+      // newcomer left on a page that could not say so (admin.html).
+      if (readHandover()?.owner === who.me) writeHandover(null);
     }
     return null;
   }
@@ -1418,13 +1459,17 @@
    * Current sync status, synchronously.
    * @returns {{available: boolean, syncing: boolean, lastSyncedAt: string|null,
    *            lastError: string|null, refusedReason: string|null, rev: number,
-   *            otherOwner: boolean, pending: boolean, fetching: boolean}} Status.
+   *            otherOwner: boolean, handoverWaiting: boolean, pending: boolean,
+   *            fetching: boolean}} Status.
    *            `otherOwner`: this browser holds another account's practice and
-   *            the one signed in has to choose. `pending`: something written on
+   *            the one signed in has to choose. `handoverWaiting`: that, or
+   *            the account's id is not known yet and a handover is on record
+   *            for the owner on file and this sign-in (see ownerFlags). `pending`: something written on
    *            this page has not reached the account yet (FLOW-6). `fetching`:
    *            just signed in, and the account has not been read yet (FLOW-7).
    */
   function getStatus() {
+    const who = ownerFlags();
     let rev = 0;
     try {
       // A revision on file is only this account's if this account synced here.
@@ -1440,7 +1485,8 @@
       lastError,
       refusedReason,
       rev,
-      otherOwner: otherOwner(),
+      otherOwner: who.other,
+      handoverWaiting: who.waiting,
       pending: hasUnpushed(),
       fetching: !!fetchingFor && fetchingFor === sessionToken()
     };
@@ -1459,9 +1505,10 @@
   /**
    * Forget what this page knew about the account that was signed in: its
    * revisions and copies, why it failed, what it turned down.
+   * @param {string|null} leaving The session that left, if this page knew one.
    */
-  function forgetAccount() {
-    setAsideLeaver();
+  function forgetAccount(leaving) {
+    setAsideLeaver(leaving);
     writeHandover(null);
     confirmed.clear();
     // "Guardado en tu cuenta" was about the account that just left.
@@ -1612,10 +1659,14 @@
    * and comes back when they sign in here again; the rest stays here as the
    * previous owner's. Left in place, their takes reached the previous owner's
    * account the next time it signed in here.
+   * @param {string|null} leaving The session that left, if this page knew one.
    */
-  function setAsideLeaver() {
+  function setAsideLeaver(leaving) {
     const h = readHandover();
     if (!h || !h.me || readOwner() !== h.owner) return;
+    // Somebody else's sign-in, made where sync could not see it, is leaving:
+    // what was done here since is not the newcomer's alone.
+    if (leaving && !handoverIsFor(h, leaving)) return;
     const theirs = {};
     const rest = {};
     for (const id of localProfileIds()) {
@@ -1724,7 +1775,7 @@
     global.VTAccount.onChange((state) => {
       const token = state.signedIn ? sessionToken() : null;
       // Signed out, or somebody else signed in.
-      if (token !== seenToken) forgetAccount();
+      if (token !== seenToken) forgetAccount(seenToken);
       const arrived = !!token && token !== seenToken;
       seenToken = token;
       if (arrived) {

@@ -38,6 +38,22 @@ For **every feature and meaningful design/implementation decision**:
    source that corrected it in the ledger row, so the next agent does not try
    it again.
 
+## Before execution and after each round
+
+Compare at least two plausible implementation routes against the existing
+storage, session, localization, accessibility and deployment contracts. Record
+what an expert would reject about each, the selected route, and its explicit
+trade-offs before editing. After the round, compare predicted failures with
+observed failures and update the shared-path regression matrix.
+
+Simulate future source drift: removed catalogue IDs, stale cached assets,
+unknown/renamed skill tags, malformed persisted state, and older/newer clients
+merging the same data. Fail with a useful diagnostic at the authoring/CI gate;
+keep runtime fallback safe. Do not silently turn missing research provenance
+into an efficacy claim. Test both valid input and each representative drift.
+Research links and historical editions need periodic rechecking; a broken
+external score link is not permission to substitute a copyrighted arrangement.
+
 ## Falsifiable test contract — every task and every round
 
 Before writing a fix, define a test oracle with **(a) expected correct behavior,
@@ -242,6 +258,8 @@ ends (QA-28); `VTStorage.createProfile` defaults to the Pro cap (QA-30).
   entry is a build error); `MUTATE_WIDE=1 node qa/mutate.mjs a11y` (or
   `--wide`) judges it by all six specs at once and runs nightly, so a spec
   that stopped killing its mutant while another still does shows up there.
+  Tu camino (docs/48) has a Node set, `path`, among the defaults, and a
+  browser set, `pathui`, in the matrix.
 - `npx playwright test --project=chromium` — the **PR gate**: headless,
   deterministic, one generated test per exercise where a suite walks the
   catalog, so shards balance and a failure names the exercise. No retries
@@ -252,6 +270,19 @@ ends (QA-28); `VTStorage.createProfile` defaults to the Pro cap (QA-30).
   and the two auth tests that need a generated secrets file). Do not write
   `if (!API) test.skip()` for a page API the test drives: assert it
   (`expect(api).toBeTruthy()`), so the test fails by name when it goes missing.
+- **The test browser speaks Spanish.** The app opens in the browser's
+  language when the visitor has chosen none (`js/boot-head.js`,
+  `window.VTLangPref`), and Playwright's own default is en-US, so
+  `playwright.config.js` sets `locale: "es-US"` for every spec: Spanish, and
+  nothing else a spec checks moves (`js/billing.js` prices es-US like en-US,
+  es-PE is Peru, in soles; the reminder clock stays 12-hour, 6:00 p.m.). A
+  spec that means another visitor names its locale;
+  `tests/browser-language.spec.js` holds the English path, the address
+  (`?lang=`) and the tab that keeps it, the stored choice, the footer's
+  language links and the learner carry-over (mutation set `lang`),
+  `tests/node/hreflang.test.mjs` the hreflang set and the links' addresses,
+  and `tests/node/language-disclosure.test.mjs` what the privacy page says
+  about it, against what the code keeps and the worker reads.
 - `npm run test:sweep` (`--project=sweep`) — headed watch sweeps with a real
   pointer, slowMo, screenshots and reports. Nightly and on manual dispatch,
   never on the PR gate. `tests/node/playwright-projects.test.mjs` fails if a

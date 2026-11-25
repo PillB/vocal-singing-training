@@ -1,0 +1,773 @@
+{
+"note": "Round 2. A 1-5 rating of each intent answer by raters who saw only the answer text.",
+"rated": {
+"y001": {
+"trial": 4,
+"paid": 2
+},
+"y002": {
+"trial": 5,
+"paid": 3
+},
+"y003": {
+"trial": 3,
+"paid": 1
+},
+"y004": {
+"trial": 4,
+"paid": 3
+},
+"y005": {
+"trial": 3,
+"paid": 1
+},
+"y006": {
+"trial": 4,
+"paid": 2
+},
+"y007": {
+"trial": 4,
+"paid": 1
+},
+"y008": {
+"trial": 4,
+"paid": 2
+},
+"y009": {
+"trial": 5,
+"paid": 1
+},
+"y010": {
+"trial": 4,
+"paid": 2
+},
+"y011": {
+"trial": 4,
+"paid": 2
+},
+"y012": {
+"trial": 4,
+"paid": 3
+},
+"y013": {
+"trial": 4,
+"paid": 2
+},
+"y014": {
+"trial": 3,
+"paid": 1
+},
+"y015": {
+"trial": 4,
+"paid": 2
+},
+"y016": {
+"trial": 3,
+"paid": 1
+},
+"y017": {
+"trial": 4,
+"paid": 2
+},
+"y018": {
+"trial": 2,
+"paid": 1
+},
+"y019": {
+"trial": 3,
+"paid": 3
+},
+"y020": {
+"trial": 4,
+"paid": 1
+},
+"y021": {
+"trial": 4,
+"paid": 1
+},
+"y022": {
+"trial": 3,
+"paid": 3
+},
+"y023": {
+"trial": 4,
+"paid": 3
+},
+"y024": {
+"trial": 4,
+"paid": 2
+},
+"y025": {
+"trial": 4,
+"paid": 3
+},
+"y026": {
+"trial": 4,
+"paid": 2
+},
+"y027": {
+"trial": 5,
+"paid": 2
+},
+"y028": {
+"trial": 4,
+"paid": 2
+},
+"y029": {
+"trial": 4,
+"paid": 3
+},
+"y030": {
+"trial": 3,
+"paid": 2
+},
+"y031": {
+"trial": 3,
+"paid": 1
+},
+"y032": {
+"trial": 4,
+"paid": 3
+},
+"y033": {
+"trial": 4,
+"paid": 1
+},
+"y034": {
+"trial": 3,
+"paid": 1
+},
+"y035": {
+"trial": 5,
+"paid": 2
+},
+"y036": {
+"trial": 4,
+"paid": 3
+},
+"y037": {
+"trial": 4,
+"paid": 2
+},
+"y038": {
+"trial": 3,
+"paid": 2
+},
+"y039": {
+"trial": 4,
+"paid": 1
+},
+"y040": {
+"trial": 3,
+"paid": 1
+},
+"y041": {
+"trial": 4,
+"paid": 1
+},
+"y042": {
+"trial": 4,
+"paid": 1
+},
+"y043": {
+"trial": 4,
+"paid": 2
+},
+"y044": {
+"trial": 4,
+"paid": 2
+},
+"y045": {
+"trial": 5,
+"paid": 2
+},
+"y046": {
+"trial": 3,
+"paid": 1
+},
+"y047": {
+"trial": 4,
+"paid": 2
+},
+"y048": {
+"trial": 4,
+"paid": 2
+},
+"y049": {
+"trial": 4,
+"paid": 2
+},
+"y050": {
+"trial": 3,
+"paid": 2
+},
+"y051": {
+"trial": 3,
+"paid": 1
+},
+"y052": {
+"trial": 4,
+"paid": 2
+},
+"y053": {
+"trial": 4,
+"paid": 1
+},
+"y054": {
+"trial": 4,
+"paid": 1
+},
+"y055": {
+"trial": 4,
+"paid": 2
+},
+"y056": {
+"trial": 4,
+"paid": 4
+},
+"y057": {
+"trial": 4,
+"paid": 2
+},
+"y058": {
+"trial": 4,
+"paid": 1
+},
+"y059": {
+"trial": 3,
+"paid": 2
+},
+"y060": {
+"trial": 4,
+"paid": 3
+},
+"y061": {
+"trial": 4,
+"paid": 2
+},
+"y062": {
+"trial": 3,
+"paid": 2
+},
+"y063": {
+"trial": 4,
+"paid": 2
+},
+"y064": {
+"trial": 5,
+"paid": 1
+},
+"y065": {
+"trial": 4,
+"paid": 2
+},
+"y066": {
+"trial": 4,
+"paid": 4
+},
+"y067": {
+"trial": 4,
+"paid": 2
+},
+"y068": {
+"trial": 4,
+"paid": 1
+},
+"y069": {
+"trial": 3,
+"paid": 2
+},
+"y070": {
+"trial": 4,
+"paid": 3
+},
+"y071": {
+"trial": 4,
+"paid": 3
+},
+"y072": {
+"trial": 4,
+"paid": 3
+},
+"y073": {
+"trial": 4,
+"paid": 1
+},
+"y074": {
+"trial": 4,
+"paid": 3
+},
+"y075": {
+"trial": 4,
+"paid": 2
+},
+"y076": {
+"trial": 3,
+"paid": 2
+},
+"y077": {
+"trial": 4,
+"paid": 2
+},
+"y078": {
+"trial": 5,
+"paid": 2
+},
+"y079": {
+"trial": 3,
+"paid": 1
+},
+"y080": {
+"trial": 4,
+"paid": 1
+},
+"y081": {
+"trial": 3,
+"paid": 3
+},
+"y082": {
+"trial": 4,
+"paid": 2
+},
+"y083": {
+"trial": 4,
+"paid": 2
+},
+"y084": {
+"trial": 4,
+"paid": 2
+},
+"y085": {
+"trial": 4,
+"paid": 2
+},
+"y086": {
+"trial": 5,
+"paid": 2
+},
+"y087": {
+"trial": 3,
+"paid": 1
+},
+"y088": {
+"trial": 4,
+"paid": 1
+},
+"y089": {
+"trial": 3,
+"paid": 1
+},
+"y090": {
+"trial": 3,
+"paid": 2
+},
+"y091": {
+"trial": 4,
+"paid": 3
+},
+"y092": {
+"trial": 4,
+"paid": 3
+},
+"y093": {
+"trial": 3,
+"paid": 1
+},
+"y094": {
+"trial": 4,
+"paid": 1
+},
+"y095": {
+"trial": 4,
+"paid": 1
+},
+"y096": {
+"trial": 4,
+"paid": 4
+},
+"y097": {
+"trial": 4,
+"paid": 3
+},
+"y098": {
+"trial": 4,
+"paid": 1
+},
+"y099": {
+"trial": 4,
+"paid": 2
+},
+"y100": {
+"trial": 4,
+"paid": 2
+},
+"y101": {
+"trial": 4,
+"paid": 2
+},
+"y102": {
+"trial": 4,
+"paid": 2
+},
+"y103": {
+"trial": 3,
+"paid": 1
+},
+"y104": {
+"trial": 4,
+"paid": 1
+},
+"y105": {
+"trial": 4,
+"paid": 2
+},
+"y106": {
+"trial": 3,
+"paid": 1
+},
+"y107": {
+"trial": 5,
+"paid": 4
+},
+"y108": {
+"trial": 4,
+"paid": 3
+},
+"y109": {
+"trial": 3,
+"paid": 2
+},
+"y110": {
+"trial": 4,
+"paid": 4
+},
+"y111": {
+"trial": 4,
+"paid": 2
+},
+"y112": {
+"trial": 4,
+"paid": 1
+},
+"y113": {
+"trial": 4,
+"paid": 2
+},
+"y114": {
+"trial": 5,
+"paid": 2
+},
+"y115": {
+"trial": 4,
+"paid": 3
+},
+"y116": {
+"trial": 4,
+"paid": 3
+},
+"y117": {
+"trial": 5,
+"paid": 2
+},
+"y118": {
+"trial": 5,
+"paid": 2
+},
+"y119": {
+"trial": 3,
+"paid": 1
+},
+"y120": {
+"trial": 5,
+"paid": 2
+},
+"y121": {
+"trial": 4,
+"paid": 2
+},
+"y122": {
+"trial": 4,
+"paid": 2
+},
+"y123": {
+"trial": 4,
+"paid": 2
+},
+"y124": {
+"trial": 4,
+"paid": 3
+},
+"y125": {
+"trial": 3,
+"paid": 1
+},
+"y126": {
+"trial": 4,
+"paid": 2
+},
+"y127": {
+"trial": 4,
+"paid": 2
+},
+"y128": {
+"trial": 5,
+"paid": 3
+},
+"y129": {
+"trial": 3,
+"paid": 1
+},
+"y130": {
+"trial": 3,
+"paid": 2
+},
+"y131": {
+"trial": 4,
+"paid": 2
+},
+"y132": {
+"trial": 4,
+"paid": 1
+},
+"y133": {
+"trial": 4,
+"paid": 3
+},
+"y134": {
+"trial": 4,
+"paid": 2
+},
+"y135": {
+"trial": 3,
+"paid": 2
+},
+"y136": {
+"trial": 4,
+"paid": 4
+},
+"y137": {
+"trial": 3,
+"paid": 2
+},
+"y138": {
+"trial": 4,
+"paid": 3
+},
+"y139": {
+"trial": 3,
+"paid": 2
+},
+"y140": {
+"trial": 5,
+"paid": 4
+},
+"y141": {
+"trial": 4,
+"paid": 3
+},
+"y142": {
+"trial": 4,
+"paid": 1
+},
+"y143": {
+"trial": 4,
+"paid": 2
+},
+"y144": {
+"trial": 5,
+"paid": 3
+},
+"y145": {
+"trial": 3,
+"paid": 2
+},
+"y146": {
+"trial": 4,
+"paid": 2
+},
+"y147": {
+"trial": 4,
+"paid": 3
+},
+"y148": {
+"trial": 4,
+"paid": 3
+},
+"y149": {
+"trial": 3,
+"paid": 2
+},
+"y150": {
+"trial": 5,
+"paid": 3
+},
+"y151": {
+"trial": 4,
+"paid": 2
+},
+"y152": {
+"trial": 2,
+"paid": 2
+},
+"y153": {
+"trial": 3,
+"paid": 4
+},
+"y154": {
+"trial": 4,
+"paid": 3
+},
+"y155": {
+"trial": 4,
+"paid": 3
+},
+"y156": {
+"trial": 4,
+"paid": 2
+},
+"y157": {
+"trial": 4,
+"paid": 2
+},
+"y158": {
+"trial": 3,
+"paid": 2
+},
+"y159": {
+"trial": 4,
+"paid": 3
+},
+"y160": {
+"trial": 4,
+"paid": 3
+},
+"y161": {
+"trial": 4,
+"paid": 3
+},
+"y162": {
+"trial": 4,
+"paid": 3
+},
+"y163": {
+"trial": 4,
+"paid": 2
+},
+"y164": {
+"trial": 5,
+"paid": 4
+},
+"y165": {
+"trial": 4,
+"paid": 3
+},
+"y166": {
+"trial": 4,
+"paid": 2
+},
+"y167": {
+"trial": 4,
+"paid": 2
+},
+"y168": {
+"trial": 4,
+"paid": 3
+},
+"y169": {
+"trial": 4,
+"paid": 2
+},
+"y170": {
+"trial": 4,
+"paid": 2
+},
+"y171": {
+"trial": 5,
+"paid": 1
+},
+"y172": {
+"trial": 4,
+"paid": 2
+},
+"y173": {
+"trial": 3,
+"paid": 2
+},
+"y174": {
+"trial": 4,
+"paid": 1
+},
+"y175": {
+"trial": 4,
+"paid": 2
+},
+"y176": {
+"trial": 3,
+"paid": 2
+},
+"y177": {
+"trial": 4,
+"paid": 2
+},
+"y178": {
+"trial": 4,
+"paid": 4
+},
+"y179": {
+"trial": 4,
+"paid": 3
+},
+"y180": {
+"trial": 4,
+"paid": 2
+},
+"y181": {
+"trial": 4,
+"paid": 2
+},
+"y182": {
+"trial": 4,
+"paid": 3
+},
+"y183": {
+"trial": 5,
+"paid": 2
+},
+"y184": {
+"trial": 5,
+"paid": 4
+},
+"y185": {
+"trial": 4,
+"paid": 2
+},
+"y186": {
+"trial": 5,
+"paid": 2
+},
+"y187": {
+"trial": 4,
+"paid": 2
+},
+"y188": {
+"trial": 3,
+"paid": 2
+},
+"y189": {
+"trial": 3,
+"paid": 1
+},
+"y190": {
+"trial": 4,
+"paid": 2
+},
+"y191": {
+"trial": 4,
+"paid": 2
+},
+"y192": {
+"trial": 4,
+"paid": 2
+}
+}
+}

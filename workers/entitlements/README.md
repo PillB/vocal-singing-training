@@ -481,7 +481,7 @@ Consequences worth understanding before you ship:
   is taken away. What D1 does not do
   is pick the provider's order: the race ends as if the two had been delivered
   in whichever order they committed, so anything that still depends on
-  delivery order depends on the race too. One thing does (VG-99, a `todo` test
+  delivery order depends on the race too. One thing does (VG-100, a `todo` test
   in that file): a Stripe or Creem subscription cancelled while it was past
   due keeps none of the unpaid period only when the past due is processed
   first; processed after the cancellation, it is refused as stale, and the

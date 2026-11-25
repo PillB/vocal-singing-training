@@ -90,7 +90,7 @@ test.describe("First visit: what to train, then the Mínimo", () => {
       ["vocal", "true"]
     ]);
     await expect(page.locator("#next-step-label")).toHaveText(`Tus básicos · 3${NBSP}min`);
-    await expect(page.locator("#next-step-title")).toHaveText(/^Trinos de labios 1:15 → dicción 1:45$/);
+    await expect(page.locator("#next-step-title")).toHaveText(`Trinos de labios (brrr) 1${NBSP}min 15${NBSP}s → dicción 1${NBSP}min 45${NBSP}s`);
     // Vocal's Mínimo ends on diction, which reads a page aloud: the card says so.
     await expect(page.locator("#next-step-why")).toContainText(/texto corto/);
     await expect(page.locator("#btn-next-step")).toHaveText(`▶ Empezar (3${NBSP}min)`);
@@ -120,8 +120,8 @@ test.describe("First visit: what to train, then the Mínimo", () => {
       ["singing", "true"],
       ["vocal", "false"]
     ]);
-    await expect(page.locator("#next-step-title")).toHaveText(/^Trinos de labios 1:30 → solfeo en trino 1:30$/);
-    await expect(page.locator("#next-step-why")).toHaveText("Sin libro ni partitura: solo tu voz y el micrófono.");
+    await expect(page.locator("#next-step-title")).toHaveText(`Trinos de labios (brrr) 1${NBSP}min 30${NBSP}s → do-re-mi en trino 1${NBSP}min 30${NBSP}s`);
+    await expect(page.locator("#next-step-why")).toHaveText("Sin cuenta, sin tarjeta y sin saber música: solo tu voz y el micrófono.");
     // The choice is the track: the catalog, which keeps its own switch, follows it.
     await expect(page.locator("#catalog-panel #track-switch")).toBeAttached();
     await expect(page.locator("#tab-singing")).toHaveAttribute("aria-selected", "true");
@@ -164,8 +164,8 @@ test.describe("First visit: what to train, then the Mínimo", () => {
     await boot(page, { lang: "en", tab: "singing" });
     await expect(page.locator("#track-pick-q")).toHaveText("What do you want to train?");
     await expect(page.locator("#start-title")).toHaveText(`Train your voice 3${NBSP}minutes a day.`);
-    await expect(page.locator("#next-step-title")).toHaveText(/^Lip trills 1:30 → trill solfège 1:30$/);
-    await expect(page.locator("#next-step-why")).toHaveText("No book or sheet music: just your voice and the mic.");
+    await expect(page.locator("#next-step-title")).toHaveText(`Lip trills (brrr) 1${NBSP}min 30${NBSP}s → do-re-mi on a trill 1${NBSP}min 30${NBSP}s`);
+    await expect(page.locator("#next-step-why")).toHaveText("No account, no card, no music theory: just your voice and the mic.");
     await expect(page.locator("#btn-next-step")).toHaveText(`▶ Start (3${NBSP}min)`);
     const text = await page.locator("#start-panel").innerText();
     expect(text).not.toMatch(/Empieza|Cantar|Hablar|Tus básicos|minutos/);
@@ -204,7 +204,7 @@ test.describe("Today's basics: headline and button", () => {
     await expect(page.locator("#next-step-card")).toHaveAttribute("data-loop", "go");
     await expect(page.locator("#start-kicker")).toBeVisible();
     // A number and its unit stay together on a narrow screen.
-    await expect(page.locator("#start-title")).toHaveText(`Trinos y solfeo en trino, 3${NBSP}minutos`);
+    await expect(page.locator("#start-title")).toHaveText(`Trinos y do-re-mi en trino, 3${NBSP}minutos`);
     await expect(page.locator("#btn-next-step")).toBeVisible();
     await expect(page.locator("#start-sub")).toBeHidden();
     await expect(page.locator("#next-step-card .next-step-body")).toBeHidden();

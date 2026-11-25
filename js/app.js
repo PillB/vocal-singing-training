@@ -675,22 +675,6 @@
     stage.style.height = `${h}px`;
   }
 
-  /** Keep the stage's top in view so the sticky geometry matches the measure. */
-  function anchorStageTop(stage) {
-    try {
-      const anchor =
-        document.getElementById("ex-title") || document.getElementById("practice-cockpit") || stage;
-      const ar = anchor.getBoundingClientRect();
-      if (ar.top < 0 || ar.top > (window.innerHeight || 600) * 0.35) {
-        // "instant": html has scroll-behavior: smooth, so "auto" glided and
-        // the stage below was measured mid-scroll.
-        anchor.scrollIntoView({ block: "start", behavior: "instant" });
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
   /**
    * The lowest the stage sits at rest. It is sticky, so a page scrolled by a
    * few pixels lifts it to its sticky offset; measured then, the stage came
@@ -865,7 +849,7 @@
         clearStageFit(stage);
         return;
       }
-      anchorStageTop(stage);
+      // A refit measures layout; only explicit navigation may move the reader.
       syncStageInsets();
       const { vh, offsetTop, safeBottom } = getViewportMetrics();
       // Gap: short/landscape + safe-area (home indicator)
@@ -1729,6 +1713,17 @@
   }
 
   /**
+   * Whether a click on a footer language link is the language button's choice:
+   * a plain press of the main button, with the strings there to switch to. A
+   * click for a new tab or window (Ctrl or Cmd, Shift, Alt to download, any
+   * other button) is the browser's.
+   */
+  function switchesInPlace(e) {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
+    return typeof window.VTI18n?.setLang === "function";
+  }
+
+  /**
    * On an exercise the header's guide opens beside it, as the exercise's own
    * guide link does: leaving the tab mid-take dropped the take and its
    * rating without the app's own question.
@@ -2030,10 +2025,19 @@
       const anchor = a.getAttribute("data-guide-anchor");
       a.href = anchor ? window.VTTour?.guideHref?.(anchor) || `guide.html#${anchor}` : clean;
     });
-    // privacy.html holds both languages in one file as well: an English reader
-    // opens the English half, and switching back takes the anchor off again.
-    $$('a[href^="privacy.html"]').forEach((a) => {
-      a.setAttribute("href", window.VTI18n?.lang === "en" ? "privacy.html#en" : "privacy.html");
+    // privacy.html and terms.html hold both languages in one file as well: an
+    // English reader opens the English half, and switching back takes the
+    // anchor off again.
+    const english = window.VTI18n?.lang === "en";
+    for (const page of ["privacy.html", "terms.html"]) {
+      $$(`a[href^="${page}"]`).forEach((a) => a.setAttribute("href", english ? `${page}#en` : page));
+    }
+    // The footer's two language links: the one for the language on screen is
+    // marked as the current one. Pressing it changes nothing on screen; it
+    // keeps that language as the visitor's choice, as the button would.
+    $$("a[data-lang-link]").forEach((a) => {
+      if (a.getAttribute("hreflang") === window.VTI18n?.lang) a.setAttribute("aria-current", "true");
+      else a.removeAttribute("aria-current");
     });
   }
 
@@ -2983,6 +2987,7 @@
     stopHold();
     stopPitchViz();
     state.recorder.clear();
+    clearPostSessionAd();
     VTPiano.stopAll();
     resetSessionPractice();
     renderExerciseAfresh();
@@ -3722,6 +3727,7 @@
         </div>`
       )
       .join("");
+    if (globalThis.VTSongLibrary) row.insertAdjacentHTML("beforeend", globalThis.VTSongLibrary.html(VTI18n.lang));
     $$("[data-song-prog]", row).forEach((btn) => {
       btn.addEventListener("click", async () => {
         selectProgression(btn.dataset.songProg);
@@ -4512,6 +4518,19 @@
    * used to carry over, so the second take was never recorded and leaving
    * it did not ask.
    */
+  /**
+   * The end-of-task card belongs to the task that just ended. A new take, a new exercise or a routine takes it
+   * away, so it never rides into practice ("nunca durante la práctica", terms.html). It used to stay in the
+   * rating card through the next take, and visible between a later routine's steps (docs/48 section 11).
+   */
+  function clearPostSessionAd() {
+    try {
+      window.VTAds?.clearSlot?.(document.getElementById("ad-slot-post-session"));
+    } catch {
+      /* ignore */
+    }
+  }
+
   function startNewTakeAfterSave() {
     if (state.sessionPractice.saved) {
       resetSessionPractice();
@@ -4519,6 +4538,18 @@
       const scored = $("#score-result");
       if (scored) scored.hidden = true;
     }
+  }
+
+  /**
+   * Start on a paused routine's own step resumes the routine: the visitor is practising it again. Left paused,
+   * its steps were taken one after another while History drew an ad between them, because a paused routine is
+   * not practice to the ad gate (js/ads.js routineUnderWay; docs/48 section 11, third red team).
+   */
+  function resumeRoutineOnStart() {
+    if (!state.structured || VTSession.get()?.status !== "paused") return;
+    if (VTSession.currentExerciseId() !== state.exercise?.id) return;
+    VTSession.resume();
+    updateSessionBanner();
   }
 
   async function startPractice() {
@@ -4536,6 +4567,8 @@
       if (startsElsewhere(ex, profile)) return;
 
       startNewTakeAfterSave();
+      clearPostSessionAd();
+      resumeRoutineOnStart();
       state.practiceStarting = true;
       setPracticeUI(false); // hides/disables Start while bootstrapping
       trackPracticeStart(ex, profile);
@@ -5851,13 +5884,13 @@
       evenness: "Uniformidad del aire",
       roots: "Tónicas completadas",
       intonation: "Afinación",
-      closure: "Calidad de cierre",
+      closure: "Comodidad y facilidad (autoevaluación)",
       air: "Dosificación de aire",
       breathiness: "Claridad del tono (5 = limpio)",
       reps: "Repeticiones",
-      repsFeel: "Reps frase completa (canción A)",
-      repsBetter: "Reps frase completa (canción B)",
-      phraseBreath: "Frase sin pausa a mitad",
+      repsFeel: "Intentos de frase corta de la canción A (autoevaluación)",
+      repsBetter: "Intentos de frase corta de la canción B (autoevaluación)",
+      phraseBreath: "Pausas para respirar elegidas (autoevaluación)",
       pitchComfort: "Comodidad de tono",
       accuracy: "Exactitud",
       precision: "Precisión (estabilidad)",
@@ -6120,8 +6153,11 @@
 
   /** After the score card: the end-of-task ad, the routine's step done, and the way out the leave question asked for. */
   function followRatedTake(ex, wasSaved, pending) {
-    // Post-session native tip (free only; never mid-practice) — research: end-of-task ads only
-    if (!wasSaved) {
+    // Post-session native tip (free only; never mid-practice) — research: end-of-task ads only.
+    // Inside a guided routine the task ends with its last step: a card between steps is an ad
+    // during the practice the learner started (terms: "nunca durante la práctica"; docs/48 §11).
+    const routineGoesOn = state.structured && !!nextAfterRatedTake(ex);
+    if (!wasSaved && !routineGoesOn) {
       try {
         setTimeout(() => window.VTAds?.onPostSession?.(), 700);
       } catch {
@@ -6874,6 +6910,8 @@
       const progressCard = $("#value-pulse");
       if (progressCard) progressCard.hidden = !daysHtml && !recent.length;
       renderValuePulse();
+      // The card sits under the list now, where it stays: the home button's scroll can land.
+      window.VTPath?.historyDrawn?.();
       // Gentle trial and progress prompts live here, never during practice.
       setTimeout(() => showValueMoment(), 400);
 
@@ -8418,18 +8456,26 @@
     }
   }
 
-  /** The achievement badges, each with its label, earned or not. */
-  function renderProAchievements(pulse) {
-    const grid = $("#pro-ach-grid");
-    if (grid && VTValuePulse?.achievements) {
-      const ach = VTValuePulse.achievements(pulse);
-      grid.innerHTML = ach
-        .map((a) => {
-          const title = tt("pro.ach." + a.id);
-          return `<span class="pro-ach-badge${a.unlocked ? " is-on" : ""}" title="${escapeHtml(title)}">${a.unlocked ? "★" : "☆"} <small>${escapeHtml(title)}</small></span>`;
-        })
-        .join("");
-    }
+  /**
+   * Tu camino (js/voice-path.js) in Historial: areas counted in days and the
+   * logros earned. It replaced the badge grid, whose streak and weekly badges
+   * went dark again and whose locked ones were a list of what was missing.
+   */
+  function renderPathCard() {
+    if (window.VTPath) window.VTPath.renderCard();
+  }
+
+  /** The card's buttons, and the home button that opens Historial on it. */
+  function bindPath() {
+    if (!window.VTPath) return;
+    window.VTPath.bind({
+      getTab: () => state.tab,
+      // Design "b" keeps the card on the Estadísticas tab; "a" has one Historial.
+      showHistory: () => {
+        if (window.VTSiteLayout) window.VTSiteLayout.openProgress("stats");
+        else $("#btn-history").click();
+      }
+    });
   }
 
   /** Days practised over 26 weeks, once they go back further than Historial's calendar. */
@@ -8474,8 +8520,8 @@
     renderProSpark(pulse, isProUser);
     renderProHoldTrend(pulse, isProUser);
 
-    // Achievements (earn free; labels always)
-    renderProAchievements(pulse);
+    // Tu camino: a card of its own, beside this one
+    renderPathCard();
 
     // Practice heatmap (26 weeks)
     renderPracticeHeatmap();
@@ -11240,6 +11286,7 @@
       },
       focusReminders: () => openReminders()
     });
+    bindPath();
     // Goal sets (js/session-sets.js) start through the same guided engine.
     window.VTSets?.bind({
       getTab: () => state.tab,
@@ -11262,6 +11309,18 @@
     $("#btn-lang")?.addEventListener("click", () => {
       const next = (window.VTI18n?.lang || "es") === "es" ? "en" : "es";
       VTI18n.setLang(next);
+    });
+    // The footer's language links are real links (./?lang=en): a crawler
+    // finds each language's address, a new tab or a copied address opens in
+    // that language, and without js/i18n.js the link still loads the address
+    // (js/boot-head.js reads it). With the app running, a plain click is the
+    // language button's choice, kept like it, without a reload.
+    $$("a[data-lang-link]").forEach((a) => {
+      a.addEventListener("click", (e) => {
+        if (!switchesInPlace(e)) return;
+        e.preventDefault();
+        window.VTI18n.setLang(a.getAttribute("hreflang"));
+      });
     });
 
     const s = VTSession.get();

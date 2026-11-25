@@ -1445,6 +1445,10 @@ export const MUTANTS = {
     ["WO10 a charge with no readable last edit is dated by its approval unbounded, so a future one locks the record", "src/mercadopago.js", "? Math.min(approvedAt, updatedAt) : updatedAt;", "? Math.min(approvedAt, updatedAt) : (Number.isFinite(approvedAt) ? approvedAt : updatedAt);", "webhook-order"],
     ["WO11 a retried installment is dated by its debit date: an older preapproval snapshot puts the unpaid due date back", "src/mercadopago.js", "occurredAt: approved ? chargeClock(isoToUnixSeconds(payment.date_approved), occurredAt) : null", "occurredAt: approved ? chargeClock(isoToUnixSeconds(payment.date_approved) || chargeDueAt(a, null), occurredAt) : null", "webhook-order"],
     ["WO12 a subscription charge with no approval date is dated by its creation, which a later approval has passed", "src/mercadopago.js", "const stateAt = subscriptionId ? chargeClock(isoToUnixSeconds(p.date_approved), occurredAt) : occurredAt;", "const stateAt = subscriptionId ? chargeClock(chargeTime(p, null), occurredAt) : occurredAt;", "webhook-order"],
+    // The race test's own gate (test/webhook-order.test.mjs): held at the record alone it let a Stripe
+    // deletion's ended: key be read by the other writer, which then never reached the gate (CI hang, 2026-11-25).
+    ["WO13 the race gate holds a writer at its record write alone, so the other reads its side key first", "test/webhook-order.test.mjs", 'const LICENSE_KEYS = ["lic:", "paid:", "ended:", "reversed:", "charged:"];', 'const LICENSE_KEYS = ["lic:"];', "webhook-order"],
+    ["WO14 a writer that ends without writing leaves the other held at the race gate for ever", "test/webhook-order.test.mjs", "    turn.done.resolve();\n    startOnceAllAreIn();\n  }", "    turn.done.resolve();\n  }", "webhook-order"],
   ].map(([name, file, from, to, test]) => ({
     name,
     file: `workers/entitlements/${file}`,

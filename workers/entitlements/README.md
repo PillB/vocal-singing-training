@@ -476,8 +476,9 @@ Consequences worth understanding before you ship:
   end as if processed one after the other, so nothing is lost, and the
   out-of-order rule above decides which status stands.
   `test/webhook-order.test.mjs` forces the race on all three rails (a newer
-  cancellation and an older past-due or active event, with the older one
-  committing last) and fails if either half is taken away. What D1 does not do
+  cancellation and an older past-due or active event, with either one
+  reading first and the older one committing last) and fails if either half
+  is taken away. What D1 does not do
   is pick the provider's order: the race ends as if the two had been delivered
   in whichever order they committed, so anything that still depends on
   delivery order depends on the race too. One thing does (VG-99, a `todo` test

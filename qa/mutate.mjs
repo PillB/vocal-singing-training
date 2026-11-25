@@ -1874,6 +1874,7 @@ export const MUTANTS = {
     ["WO14 a writer that ends without writing leaves the other held at the race gate for ever", "test/webhook-order.test.mjs", "    turn.done.resolve();\n    startOnceAllAreIn();\n  }", "    turn.done.resolve();\n  }", "webhook-order"],
     ["WO15 the race runner ignores which writer it was told reads first, so every case runs one way round", "test/webhook-order.test.mjs", "  start(first);\n  await gate.reached(first);", "  first = \"older\";\n  start(first);\n  await gate.reached(first);", "webhook-order"],
     ["WO16 the race gate holds puts alone, so a writer's delete of a license key is read by the other first", "test/webhook-order.test.mjs", 'for (const method of ["put", "delete"])', 'for (const method of ["put"])', "webhook-order"],
+    ["WO17 the race gate forgets one of the license's keys (charged:), so a writer's write of it goes unheld", "test/webhook-order.test.mjs", '"reversed:", "charged:"];', '"reversed:"];', "webhook-order"],
   ].map(([name, file, from, to, test]) => ({
     name,
     file: `workers/entitlements/${file}`,

@@ -49,6 +49,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 import { handleRequest } from "../src/index.js";
 import { ledgerEnabled, ledgerReader } from "../src/ledger.js";
@@ -487,6 +488,26 @@ test("race gate: a writer that ends without writing lets the other through, and 
   assert.deepEqual(gate.heldAt(), { older: "KV write", newer: null }, "the gate says the newer writer was never held");
   assert.deepEqual(gate.arrivals(), ["older", "newer"], "the newer writer counts as in once it ended");
   assert.equal(await kv.get("lic:L"), "older");
+});
+
+// Source drift: the gate holds what it is told are a license's keys. A key
+// store.js starts keeping per license that is not in that list would be
+// written unheld, and the race would quietly stop being forced, with every
+// case still green. So the list is checked against the store's own builders.
+const STORE_SOURCE = readFileSync(new URL("../src/store.js", import.meta.url), "utf8");
+
+/** The prefixes of the keys a store module builds from a license id (`return \`x:${licenseId}\``). */
+function licenseKeyPrefixes(source) {
+  return [...source.matchAll(/return `([a-z]+:)\$\{licenseId\}`/g)].map((m) => m[1]).sort();
+}
+
+test("race gate: it holds every key store.js keeps per license, and says so when one is added", () => {
+  assert.deepEqual(licenseKeyPrefixes(STORE_SOURCE), [...LICENSE_KEYS].sort(),
+    "store.js builds a per-license key the race gate does not hold: add its prefix to LICENSE_KEYS here (and to LICENSE_FAMILY in src/ledger.js)");
+  // The drift, simulated: a key added to the store is found, so the check above fails on it.
+  const drifted = `${STORE_SOURCE}\nfunction declinedKey(licenseId) {\n  return \`declined:\${licenseId}\`;\n}\n`;
+  assert.ok(licenseKeyPrefixes(drifted).includes("declined:"), "a per-license key added to store.js is seen");
+  assert.notDeepEqual(licenseKeyPrefixes(drifted), [...LICENSE_KEYS].sort(), "and no longer matches the gate's list");
 });
 
 // What D1 does not settle (VG-100): the race now ends as SOME serial order,

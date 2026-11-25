@@ -16,6 +16,14 @@
  *   charged:<licenseId>                   -> chargedAt  (latest charge that went through)
  *   refused:<provider>:<eventId>          -> unix secs  (API first refused its resource, 30d TTL)
  *
+ * With a D1 binding, which every production deploy has, this store is handed
+ * a ledger transaction instead of the KV namespace (src/ledger.js): each
+ * webhook is one optimistic transaction that commits only if nothing it read
+ * has changed, and runs again on fresh reads when something has. Two webhooks
+ * for one license then behave as if processed one after the other, and
+ * `isStaleUpdate` decides between them (test/webhook-order.test.mjs forces
+ * the race on all three rails). What follows is the KV-only fallback.
+ *
  * KV has no compare-and-swap, so two webhooks for one license processed at the
  * same time can each read the record, and the later write wins with the other's
  * change lost. A fact that never changes back once true (a confirmed payment, a
@@ -49,8 +57,8 @@
  * the one-off payment) it belongs to, so writers who cannot see each other
  * still agree: see `deriveLicenseId`.
  *
- * Closing the rest of that needs a single writer per license (a Durable
- * Object, or a D1 row updated conditionally), which this store does not have.
+ * Closing the rest of that is what the D1 ledger above does; without D1 the
+ * worker has no conditional write to do it with.
  */
 
 "use strict";

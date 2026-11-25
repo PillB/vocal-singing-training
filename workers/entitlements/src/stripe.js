@@ -873,6 +873,13 @@ function stampEventTimes(update, event, object) {
     if (!Number.isFinite(update.reversedChargeAt)) {
       update.reverseLatestCharge = true;
     }
+    // Money going back says nothing about the subscription's status, plan or
+    // period, so it has no place in the order those are judged by either (as
+    // on the Mercado Pago rail). Left on, it became the record's clock, and a
+    // status change made before the refund but delivered after it was refused
+    // as stale: a subscription Stripe had marked `unpaid` or paused kept Pro,
+    // and one it had resumed stayed shut out. `reversedAt` keeps the moment.
+    update.occurredAt = null;
   }
   // When a cancellation took effect (a failed async payment has no `ended_at`
   // of its own). The store ends a period that was never paid for there.

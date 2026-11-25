@@ -93,3 +93,7 @@ import "./address-block.test.mjs";
 // off account refused before any session or licence, and nosniff on every
 // answer (red team 2026-11-18, AUTHN-1/2/7).
 import "./sign-in-identity.test.mjs";
+// Two webhooks for one subscription at once, or out of order: the race forced
+// on all three rails on D1 and on KV, and the two clocks the stale check was
+// handed wrong (a refund's; a Mercado Pago charge's last edit). 2026-11-25.
+import "./webhook-order.test.mjs";

@@ -1065,6 +1065,17 @@ A rollback restores the code, and may restore the secrets that version had, so
 check the admin list (section 7) afterwards. It does **not** roll back the
 database or the licence store.
 
+**Once checkout is open, don't roll back to code from before the payment
+ledger** (merged on 17 November 2026, PR #38): a version deployed before your
+first deploy of that `main`. Older code keeps payments in the licence store
+(KV) only, while the newer code reads each licence from the database once it
+has written it there. So a payment webhook the older code accepts during the
+rollback is written where the newer code no longer looks, and is lost when you
+deploy forward again: a cancellation can be undone and the subscription served
+again. While checkout is closed there is no payment to lose. If a deploy after
+that breaks payments, fix forward, or roll back only to a version deployed
+from that `main` or later.
+
 **Don't roll back past the statistics redeploy** (8.7) unless something is
 badly broken. The older code has no daily clean-up, and its **Limpiar ahora**
 does not delete statistics, so the 180-day promise would break; the site's

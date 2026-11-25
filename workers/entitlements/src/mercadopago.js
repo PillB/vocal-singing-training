@@ -499,6 +499,9 @@ export function mapPaymentResource(payment, env) {
   // below ends the period it paid for, without moving the subscription's clock.
   const silent = Boolean(subscriptionId) && !approved;
   const named = silent ? {} : paymentPlan(p, subscriptionId);
+  // A one-off payment is its own lifecycle, so its last update is its clock.
+  // A subscription's charge is not: see `chargeClock`.
+  const stateAt = subscriptionId ? chargeClock(chargeTime(p, null), occurredAt) : occurredAt;
   return {
     provider: "mercadopago",
     // A payment's id is Mercado Pago's operation number: sequential, and
@@ -524,8 +527,30 @@ export function mapPaymentResource(payment, env) {
     // arrived buys time: an unpaid voucher or a turned-down card gets none.
     periodEndFromCharge: approved ? chargeTime(p, null) : null,
     ...paymentReversal(p, subscriptionId, occurredAt),
-    occurredAt: silent ? null : occurredAt
+    occurredAt: silent ? null : stateAt
   };
+}
+
+/**
+ * The clock of a subscription's charge that went through: when it went
+ * through, never later than the resource's last update.
+ *
+ * What such a charge says about the subscription ("it was being paid") was
+ * true when the money arrived, and is not made newer by a later edit of the
+ * charge. Mercado Pago edits a payment long after it is approved (a partial
+ * refund keeps it `approved`; the money is released), and dated by that edit
+ * a charge made before a cancellation counted as newer than it, so its
+ * "active" overwrote the cancellation and the cancellation's own redelivery
+ * was then refused as stale.
+ * @param {number|null} chargedAt Unix seconds the charge went through, if known.
+ * @param {number|null} updatedAt Unix seconds the resource last changed, if known.
+ * @returns {number|null} Unix seconds or null.
+ */
+function chargeClock(chargedAt, updatedAt) {
+  if (!Number.isFinite(chargedAt)) {
+    return updatedAt;
+  }
+  return Number.isFinite(updatedAt) ? Math.min(chargedAt, updatedAt) : chargedAt;
 }
 
 /**
@@ -637,6 +662,7 @@ export function mapAuthorizedPaymentResource(authorized, env) {
   // the subscription's own notifications.
   const reversed = isReversedPayment(payment.status);
   const dueAt = chargeDueAt(a, occurredAt);
+  const chargedAt = isoToUnixSeconds(payment.date_approved) || chargeDueAt(a, null);
   return {
     provider: "mercadopago",
     // A recurring charge's id is a number like a payment's (see
@@ -653,7 +679,7 @@ export function mapAuthorizedPaymentResource(authorized, env) {
     periodEnd: undefined,
     // A recurring charge extends the period by one interval of whatever plan the
     // license already holds (the store knows it; this resource does not).
-    periodEndFromCharge: approved ? (isoToUnixSeconds(payment.date_approved) || chargeDueAt(a, null)) : null,
+    periodEndFromCharge: approved ? chargedAt : null,
     reversedAt: reversed ? occurredAt : undefined,
     reversedChargeAt: reversed ? chargeTime(payment, dueAt) : undefined,
     // A charge that was turned down, as on the payment topic. Dated by when it
@@ -661,7 +687,8 @@ export function mapAuthorizedPaymentResource(authorized, env) {
     // not yet due when it was last updated was called off (stopping the
     // subscription does that to its next charge), not turned down.
     declinedAt: isDeclinedPayment(payment.status) && !(dueAt > occurredAt) ? dueAt : undefined,
-    occurredAt: approved ? occurredAt : null
+    // Dated by when it went through, as on the payment topic (`chargeClock`).
+    occurredAt: approved ? chargeClock(chargedAt, occurredAt) : null
   };
 }
 

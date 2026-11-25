@@ -6,19 +6,22 @@
  * subscription webhooks arrive almost together, the handler reads
  * the record, both compute a new state, and the later write wins, so a late
  * "past_due" overwrites "canceled" and a cancelled subscription comes back.
- * The cure is two things together, and each test below needs both:
+ * The cure is two things together, and the race tests below need both:
  *
  *   1. a version check on every read-modify-write, retried on a conflict
  *      (src/ledger.js: one optimistic transaction per webhook in D1);
  *   2. an event older than the one the record holds may not change its state
  *      (`isStaleUpdate` in src/store.js).
  *
- * Without (1) the older write lands last; without (2) its retry re-reads the
- * cancellation and overwrites it anyway. Both turn the D1 rows below red.
+ * Without (1) the older write lands last, and the D1 rows of every rail turn
+ * red. Without (2) its retry re-reads the cancellation and overwrites it
+ * anyway, which turns the Creem and Mercado Pago D1 rows red; on Stripe the
+ * deletion's own `ended:` key already refuses the late event, so (2) is
+ * pinned by the other two rails.
  *
  * The race is forced, not hoped for: a gate holds each writer at its first
- * write until both have read, then lets them write one at a time in a fixed
- * order. The gate holds a D1 commit and a KV write of any of the license's
+ * write of the license's state until both have read it, then lets them write
+ * one at a time in a fixed order. The gate holds a D1 commit and a KV write of any of the license's
  * keys, in every arm, so a worker that silently stopped using D1 still meets
  * the race; and each raced case is run with each writer reading first, so
  * which one gets ahead is not left to the crypto thread pool. The KV-only arm of
@@ -133,23 +136,29 @@ function deferred() {
 }
 
 /**
- * Hold each writer in `order` at its first write until every one has reached
- * its own, so each has read everything it reads before writing and none has
- * written; then let them go one at a time in `order`, each writer's whole
- * delivery finishing before the next is let go. A writer's later writes (a
+ * Hold each writer in `order` at its first write of the license's state (a
+ * D1 commit, or a KV write of one of `LICENSE_KEYS`; its own event marker on
+ * KV is not one and passes) until every one has reached its own, so each has
+ * read that state before any has written to it; then let them go one at a
+ * time in `order`, each writer's whole delivery finishing before the next is
+ * let go. A writer's later writes (a
  * ledger retry, the record after its `ended:` key) follow it straight through.
  *
  * Which writer is which comes from `writer`, never from what is written. The
  * first version of this gate told them apart by the event time in the record
- * it held, and held nothing else: a Stripe deletion that got ahead wrote its
- * `ended:` key, the past-due writer read it, wrote a record with another
- * time, and the gate waited for it until the test timed out (CI, 2026-11-25).
+ * it held, and on KV held nothing else: a Stripe deletion that got ahead
+ * wrote its `ended:` key, the past-due writer read it and wrote a record
+ * carrying another time, which passed the gate unrecognised, and the gate
+ * waited for that writer until the test timed out (CI, 2026-11-25).
  *
  * A writer whose delivery ends without writing lets the others through, so
- * nothing can hang; `heldAt` then shows the race was not forced.
+ * nothing can hang; `heldAt` then shows the race was not forced. `arrivals`
+ * is the order the writers reached the gate in (or ended without reaching
+ * it), so a test can check that the writer it named really read first.
  */
 function orderedGate(order) {
   const turns = Object.fromEntries(order.map((label) => [label, { at: null, reached: deferred(), go: deferred(), done: deferred(), ended: false }]));
+  const arrivals = [];
   let started = false;
   async function letThemGo() {
     for (const label of order) {
@@ -170,6 +179,7 @@ function orderedGate(order) {
     }
     if (!turn.at) {
       turn.at = point;
+      arrivals.push(writer.getStore());
       turn.reached.resolve();
       startOnceAllAreIn();
     }
@@ -178,6 +188,9 @@ function orderedGate(order) {
   }
   function finished(label) {
     const turn = turns[label];
+    if (!turn.at && !turn.ended) {
+      arrivals.push(label);
+    }
     turn.ended = true;
     turn.reached.resolve();
     turn.done.resolve();
@@ -189,7 +202,8 @@ function orderedGate(order) {
     /** Resolves once `label` is held at the gate, or its delivery has ended. */
     reached: (label) => turns[label].reached.promise,
     /** Where each writer was first held: "D1 commit", "KV write", or null if it never was. */
-    heldAt: () => Object.fromEntries(order.map((label) => [label, turns[label].at]))
+    heldAt: () => Object.fromEntries(order.map((label) => [label, turns[label].at])),
+    arrivals: () => arrivals.slice()
   };
 }
 
@@ -200,11 +214,14 @@ function isCommit(statements) {
 
 /**
  * Put one gate on both stores of an env: its D1 commits (when it has D1) and
- * its KV writes of a license's keys. `commits` counts each writer's commits.
+ * its KV writes of a license's keys. `conflicts` counts each writer's commits
+ * that the ledger refused (its last statement, settling the transaction's
+ * row, changed nothing: src/ledger.js `commit`), so a check that a writer ran
+ * again is a check that it really conflicted, not only that it committed twice.
  */
 function installGate(env, order, keys = LICENSE_KEYS) {
   const gate = orderedGate(order);
-  const commits = Object.fromEntries(order.map((label) => [label, 0]));
+  const conflicts = Object.fromEntries(order.map((label) => [label, 0]));
   if (env.DB) {
     const batch = env.DB.batch.bind(env.DB);
     env.DB.batch = (statements) => {
@@ -212,10 +229,14 @@ function installGate(env, order, keys = LICENSE_KEYS) {
         return batch(statements);
       }
       const label = writer.getStore();
-      if (label in commits) {
-        commits[label] += 1;
-      }
-      return gate.hold("D1 commit", () => batch(statements));
+      return gate.hold("D1 commit", async () => {
+        const results = await batch(statements);
+        const last = results && results[results.length - 1];
+        if (label in conflicts && Number(last && last.meta && last.meta.changes) !== 1) {
+          conflicts[label] += 1;
+        }
+        return results;
+      });
     };
   }
   const ns = env.ENTITLEMENTS;
@@ -225,7 +246,7 @@ function installGate(env, order, keys = LICENSE_KEYS) {
       ? gate.hold("KV write", () => write(key, ...rest))
       : write(key, ...rest));
   }
-  return { ...gate, commits };
+  return { ...gate, conflicts };
 }
 
 /**
@@ -346,16 +367,30 @@ async function race(railName, makeEnv, arm, first = "older") {
   return { rail, answers, record, raw, gate, first, usedD1: ledgerEnabled(env) };
 }
 
-/** What the forced race must show: both writers held before either wrote, and on D1 the last one ran again. */
+/**
+ * What the forced race must show: the writer named first reached the gate
+ * first, both were held before either wrote the license's state, and on D1
+ * the one let go last really conflicted (and the one let go first did not).
+ */
 function assertForced(outcome, store, arm) {
   const { gate, first, usedD1 } = outcome;
   const point = usedD1 ? "D1 commit" : "KV write";
+  assert.equal(gate.arrivals()[0], first, `the ${first} writer read first, as the case names it (${JSON.stringify(gate.arrivals())})`);
   assert.deepEqual(gate.heldAt(), { older: point, newer: point }, `both writers were held at their first ${point}, before either wrote (${first} read first)`);
   if (store === "D1") {
-    const last = arm === "older commits last" ? "older" : "newer";
-    assert.ok(gate.commits[last] >= 2, `on D1 the writer that committed last conflicted and ran again (${JSON.stringify(gate.commits)}, ${first} read first)`);
+    const [goesFirst, goesLast] = arm === "older commits last" ? ["newer", "older"] : ["older", "newer"];
+    const seen = `${JSON.stringify(gate.conflicts)}, ${first} read first`;
+    assert.ok(gate.conflicts[goesLast] >= 1, `on D1 the writer let go last conflicted and ran again (${seen})`);
+    assert.equal(gate.conflicts[goesFirst], 0, `on D1 the writer let go first committed at once (${seen})`);
   }
 }
+
+/**
+ * A deadline of its own for each case that goes through the gate, so a gate
+ * that leaves a writer waiting fails here, by name, in seconds, whatever
+ * timeout the runner was started with (test:core sets none).
+ */
+const DEADLINE = 10000;
 
 /** Raced arms run once with each writer reading first; "in sequence" once. */
 const firstReaders = (arm) => (arm === "in sequence" ? ["older"] : ["older", "newer"]);
@@ -367,7 +402,7 @@ for (const railName of Object.keys(RAILS)) {
       const title = `${railName}, ${store}, ${arm}: ${control
         ? `CONTROL, without the ledger the older write wins the record (${RAILS[railName].kvOlderLast} is read)`
         : "the newer cancellation is what stays"}`;
-      test(title, async () => {
+      test(title, { timeout: DEADLINE }, async () => {
         for (const first of firstReaders(arm)) {
           const outcome = await race(railName, makeEnv, arm, first);
           const { rail, answers, record, raw } = outcome;
@@ -391,17 +426,19 @@ for (const railName of Object.keys(RAILS)) {
 }
 
 // The gate itself, on two writers made up to show what it must prevent: one
-// writes a license's side key and then its record, the other reads that side
-// key before writing. Held at its record write alone (the first version of the
-// gate) the first writer's side key is already out when the second reads.
-async function sideKeyRace(keys) {
+// changes a license's side key (writes it, or deletes it) and then its
+// record, the other reads that side key before writing. Held at its record
+// write alone (the first version of the gate), or at puts alone, the first
+// writer's change to the side key is already out when the second reads.
+async function sideKeyRace(change, keys) {
   const env = createTestEnv();
   const kv = env.ENTITLEMENTS;
+  await kv.put("ended:L", "as set up");
   const gate = installGate(env, ["older", "newer"], keys);
   let seen;
-  const answers = await runWriters(gate, {
+  await runWriters(gate, {
     older: async () => {
-      await kv.put("ended:L", "deleted");
+      await (change === "delete" ? kv.delete("ended:L") : kv.put("ended:L", "changed"));
       await kv.put("lic:L", "older");
     },
     newer: async () => {
@@ -409,20 +446,36 @@ async function sideKeyRace(keys) {
       await kv.put("lic:L", "newer");
     }
   }, "older");
-  return { seen, answers, heldAt: gate.heldAt(), record: await kv.get("lic:L") };
+  return { seen, heldAt: gate.heldAt(), record: await kv.get("lic:L") };
 }
 
-test("race gate: a writer is held at its first write of a license's keys, so the other reads none of it", async () => {
-  const held = await sideKeyRace(LICENSE_KEYS);
-  assert.equal(held.seen, null, "the second writer read before the first wrote anything");
-  assert.deepEqual(held.heldAt, { older: "KV write", newer: "KV write" });
-  assert.equal(held.record, "newer", "then they wrote in the gate's order");
-  // The wrong gate, held at the record alone: the side key is read early.
-  const recordOnly = await sideKeyRace(["lic:"]);
-  assert.equal(recordOnly.seen, "deleted", "control: held at the record alone, the first writer's side key was already read");
+for (const change of ["put", "delete"]) {
+  test(`race gate: a writer is held at its first write of a license's keys (a ${change}), so the other reads none of it`, { timeout: DEADLINE }, async () => {
+    const held = await sideKeyRace(change);
+    assert.equal(held.seen, "as set up", "the second writer read before the first changed anything");
+    assert.deepEqual(held.heldAt, { older: "KV write", newer: "KV write" });
+    assert.equal(held.record, "newer", "then they wrote in the gate's order");
+    // The wrong gate, held at the record alone: the side key is read changed.
+    const recordOnly = await sideKeyRace(change, ["lic:"]);
+    assert.equal(recordOnly.seen, change === "delete" ? null : "changed", "control: held at the record alone, the first writer's change was already read");
+  });
+}
+
+test("race gate: the writer named first is the first to reach the gate, either way round", { timeout: DEADLINE }, async () => {
+  for (const first of ["older", "newer"]) {
+    const env = createTestEnv();
+    const kv = env.ENTITLEMENTS;
+    const gate = installGate(env, ["older", "newer"]);
+    await runWriters(gate, {
+      older: () => kv.put("lic:L", "older"),
+      newer: () => kv.put("lic:L", "newer")
+    }, first);
+    assert.deepEqual(gate.arrivals(), first === "older" ? ["older", "newer"] : ["newer", "older"], `${first} named first`);
+    assert.equal(await kv.get("lic:L"), "newer", "and they still wrote in the gate's order");
+  }
 });
 
-test("race gate: a writer that ends without writing lets the other through, and the race reads as not forced", async () => {
+test("race gate: a writer that ends without writing lets the other through, and the race reads as not forced", { timeout: DEADLINE }, async () => {
   const env = createTestEnv();
   const kv = env.ENTITLEMENTS;
   const gate = installGate(env, ["older", "newer"]);
@@ -432,6 +485,7 @@ test("race gate: a writer that ends without writing lets the other through, and 
   }, "older");
   assert.deepEqual(answers, { older: "wrote", newer: "wrote nothing" }, "both finished, neither was left waiting");
   assert.deepEqual(gate.heldAt(), { older: "KV write", newer: null }, "the gate says the newer writer was never held");
+  assert.deepEqual(gate.arrivals(), ["older", "newer"], "the newer writer counts as in once it ended");
   assert.equal(await kv.get("lic:L"), "older");
 });
 
@@ -442,7 +496,7 @@ test("race gate: a writer that ends without writing lets the other through, and 
 // know that, and the late past_due is refused, so the unpaid period stays
 // open. The status is right in every arm above; access is not yet.
 for (const railName of ["stripe", "creem"]) {
-  test(`${railName}: a subscription cancelled while past due gets no token in any order`, { todo: "VG-99 the cancellation learns the dunning from the record's status at the time, so the order decides access" }, async () => {
+  test(`${railName}: a subscription cancelled while past due gets no token in any order`, { timeout: DEADLINE, todo: "VG-99 the cancellation learns the dunning from the record's status at the time, so the order decides access" }, async () => {
     for (const arm of ["in sequence", "older commits last", "newer commits last"]) {
       const { record } = await race(railName, () => createAccountEnv(), arm);
       assert.equal(record.status, "canceled");

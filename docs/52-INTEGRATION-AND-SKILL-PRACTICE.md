@@ -132,3 +132,11 @@ job and full browser gate. Newer main's nightly split, current clickablePoint
 helper and scaled failure budgets are preserved;41's old whole tree would
 regress those. A mutant removes the pointer's scrolling trial and must fail on
 actual expanded-metrics state, allowing41 to close once this tree passes.
+
+2026-11-25 follow-up: hosted trace proved the remaining phone delta happened
+before the fitter call (700 to762), after piano reveal had begun smooth
+navigation. A panel's is-settled CSS class was not a scroll-completion signal.
+Observe actual scrollY until150ms quiet (bounded5s) before taking the baseline
+and after double refit; preserve the >300 precondition and <=2px oracle.
+Independent helper controls reject premature completion. No CSS/scroll-anchor
+policy was weakened; hosted browser and restored-anchor mutation remain gates.

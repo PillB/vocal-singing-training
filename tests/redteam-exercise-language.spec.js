@@ -109,6 +109,31 @@ async function settle(page, ms = 350) {
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 
+/** Panel transition completion precedes its smooth reveal; observe the viewport too. */
+async function settledScroll(page) {
+  return page.evaluate(() => new Promise((resolve, reject) => {
+    let previous = scrollY;
+    let quietSince = performance.now();
+    let frame = 0;
+    const timeout = setTimeout(() => {
+      cancelAnimationFrame(frame);
+      reject(new Error(`Scroll never settled: last position ${scrollY}px`));
+    }, 5000);
+    const sample = (now) => {
+      const y = scrollY;
+      if (y !== previous) quietSince = now;
+      previous = y;
+      if (now - quietSince >= 150) {
+        clearTimeout(timeout);
+        resolve(y);
+        return;
+      }
+      frame = requestAnimationFrame(sample);
+    };
+    frame = requestAnimationFrame(sample);
+  }));
+}
+
 async function ready(page) {
   await page.waitForFunction(() => !!window.VTApp && !!window.VTI18n && !!document.querySelector("#exercise-list .card-ex"), null, { timeout: 15000 });
 }
@@ -840,16 +865,18 @@ for (const size of [LAPTOP, PHONE]) {
         await expect(page.locator("#piano-block")).toHaveClass(/is-settled/);
       }
       await expect(page.locator("#btn-toggle-guide")).toHaveAttribute("aria-expanded", "true");
+      // is-settled belongs to the piano's CSS transition, not the subsequent
+      // smooth reveal. Finish that navigation before sampling a reading position.
+      await settledScroll(page);
       await page.evaluate(() => scrollTo({ top: 700, behavior: "instant" }));
-      const before = await page.evaluate(() => scrollY);
+      const before = await settledScroll(page);
       expect(before).toBeGreaterThan(300);
       await page.evaluate(() => {
         window.VTApp.fitHighwayToViewport();
         window.VTApp.fitHighwayToViewport();
       });
-      await settle(page, 150);
+      const after = await settledScroll(page);
       expect((await page.locator("#highway-stage").boundingBox()).height).toBeGreaterThanOrEqual(120);
-      const after = await page.evaluate(() => scrollY);
       console.log("stage-refit-scroll", { id, width: size.width, before, after });
       expect(Math.abs(after - before)).toBeLessThanOrEqual(2);
     });

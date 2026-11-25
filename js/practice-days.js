@@ -288,7 +288,23 @@
     }
     earnRest(bag);
     write(bag);
+    announce(rec, k);
     return { day: k, becameDay: k === today && !before && counts(row), row };
+  }
+
+  /**
+   * Tell this tab's page a take was recorded: which exercise, on which day,
+   * and whether it is a new take or more seconds on one already counted.
+   * Only this tab hears it, in the order its takes were recorded; a row's
+   * own order is no timeline (backfill and merge do not keep one).
+   */
+  function announce(rec, day) {
+    try {
+      const detail = { exerciseId: rec.exerciseId || null, day, isNew: rec.bump !== false };
+      global.dispatchEvent(new CustomEvent("vt:practice-recorded", { detail }));
+    } catch {
+      /* no events */
+    }
   }
 
   /**

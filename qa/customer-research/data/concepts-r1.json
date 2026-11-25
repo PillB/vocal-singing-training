@@ -1,0 +1,69 @@
+{
+ "round": 1,
+ "note": "Round 1 screens message framings. Every concept describes the same product with the same features and price; only the framing changes, except the two controls. C0 is the site's copy on 2026-11-21 (index.html hero and start steps). C0p says the same thing as C0 in different, equally polished words: it measures how much a respondent rewards a rewrite as such (the novelty effect the design test saw, docs/38). N is a worse offer and must score lower or the panel cannot tell offers apart. P is C0 at half the Pro price and must score higher on paid intent or the panel ignores price.",
+ "facts": {
+  "es": "Funciona en el navegador del teléfono o la computadora, sin instalar nada y sin crear cuenta. En español y en inglés. Todos los ejercicios son gratis, sin límite de tiempo. Pro es opcional: {price}. Pro agrega: sin anuncios, descargar tu progreso, hasta 3 perfiles, un gráfico de tus últimos 28 días y un resumen para enviar a tu profesor. Prueba de Pro de 7 días sin tarjeta.",
+  "en": "Works in the browser on your phone or computer: nothing to install, no account needed. In Spanish and English. Every exercise is free, with no time limit. Pro is optional: {price}. Pro adds: no ads, download your progress, up to 3 profiles, a chart of your last 28 days, and a summary to send your teacher. 7-day Pro trial, no card."
+ },
+ "prices": {
+  "PEN": {"es": "S/ 19.90 al mes o S/ 119.90 al año", "en": "S/ 19.90 a month or S/ 119.90 a year"},
+  "USD": {"es": "US$ 7.99 al mes o US$ 49 al año", "en": "US$7.99 a month or US$49 a year"},
+  "EUR": {"es": "7,99 € al mes o 49 € al año", "en": "€7.99 a month or €49 a year"},
+  "GBP": {"es": "7,99 £ al mes o 49 £ al año", "en": "£7.99 a month or £49 a year"},
+  "PEN_half": {"es": "S/ 9.90 al mes o S/ 59.90 al año", "en": "S/ 9.90 a month or S/ 59.90 a year"},
+  "USD_half": {"es": "US$ 3.99 al mes o US$ 24.50 al año", "en": "US$3.99 a month or US$24.50 a year"},
+  "EUR_half": {"es": "3,99 € al mes o 24,50 € al año", "en": "€3.99 a month or €24.50 a year"},
+  "GBP_half": {"es": "3,99 £ al mes o 24,50 £ al año", "en": "£3.99 a month or £24.50 a year"}
+ },
+ "concepts": {
+  "C0": {
+   "name": "today",
+   "es": {"kicker": "Canto y oratoria · gratis", "headline": "Entrena tu voz 3 minutos al día.", "sub": "Un estudio de voz en el navegador: elige un ejercicio, practica con el micrófono y guarda cómo te fue.", "bullets": ["Elige un ejercicio: Hablar para presentaciones, Cantar para canciones.", "Practica con el micrófono: el piano y el afinador te guían en pantalla.", "Guarda y revisa: tu progreso se queda en este navegador."]},
+   "en": {"kicker": "Singing and speaking · free", "headline": "Train your voice 3 minutes a day.", "sub": "A voice studio in your browser: pick an exercise, practise with your mic, and save how it went.", "bullets": ["Pick an exercise: Speaking for presentations, Singing for songs.", "Practise with your mic: the piano and tuner guide you on screen.", "Save and review: your progress stays in this browser."]}
+  },
+  "C0p": {
+   "name": "placebo rewrite of today",
+   "es": {"kicker": "Canto y oratoria, gratis", "headline": "Tres minutos al día para entrenar tu voz.", "sub": "Tu estudio de voz, dentro del navegador: escoges un ejercicio, practicas con el micrófono y guardas tu resultado.", "bullets": ["Escoge qué practicar: Hablar si es para presentaciones, Cantar si es para canciones.", "Practica con tu micrófono, con el piano y el afinador guiándote en la pantalla.", "Guarda tu sesión y revísala: tu avance queda en este navegador."]},
+   "en": {"kicker": "Singing and speaking, free", "headline": "Three minutes a day to train your voice.", "sub": "Your voice studio, right in the browser: choose an exercise, practise with your mic, and keep your result.", "bullets": ["Choose what to practise: Speaking if it's for presentations, Singing if it's for songs.", "Practise with your mic, with the piano and tuner guiding you on screen.", "Save your session and look back at it: your progress stays in this browser."]}
+  },
+  "C1": {
+   "name": "see your voice (live feedback)",
+   "es": {"kicker": "Canto y voz hablada · gratis", "headline": "Mira tu voz mientras cantas.", "sub": "Una línea en la pantalla te muestra, nota a nota, si estás alto, bajo o justo en la nota. El piano se ajusta a tu registro.", "bullets": ["Sabes al momento si vas afinado: no tienes que adivinarlo.", "Básicos guiados de 3 minutos al día, para cantar y para hablar con claridad.", "Grábate y escucha cómo cambias semana a semana."]},
+   "en": {"kicker": "Singing and speaking voice · free", "headline": "See your voice while you sing.", "sub": "A line on the screen shows you, note by note, whether you're high, low or right on the note. The piano moves to fit your range.", "bullets": ["Know straight away if you're in tune: no guessing.", "Guided 3-minute basics each day, for singing and for speaking clearly.", "Record yourself and hear how you change week by week."]}
+  },
+  "C2": {
+   "name": "you are not tone-deaf (belief reframe, private practice)",
+   "es": {"kicker": "Para quien cree que no sabe cantar", "headline": "Casi nadie es desafinado. Lo que falta es práctica con guía.", "sub": "Practica en privado, a tu ritmo y sin que nadie te escuche. La pantalla te muestra la nota y si la alcanzas.", "bullets": ["Empiezas por lo más fácil: 3 minutos al día.", "Ves en vivo si estás en la nota, en vez de adivinarlo.", "Ejercicios para cantar y para hablar con más seguridad."]},
+   "en": {"kicker": "For anyone who thinks they can't sing", "headline": "Almost nobody is tone-deaf. What's missing is guided practice.", "sub": "Practise in private, at your own pace, with nobody listening. The screen shows you the note and whether you're hitting it.", "bullets": ["Start with the easiest part: 3 minutes a day.", "See live whether you're on the note, instead of guessing.", "Exercises for singing and for speaking with more confidence."]}
+  },
+  "C3": {
+   "name": "your real moments (karaoke, presentation, interview)",
+   "es": {"kicker": "Canto y oratoria · gratis", "headline": "Que tu voz suene como quieres: en el karaoke, en tu exposición, en tu entrevista.", "sub": "Ejercicios cortos con el micrófono para afinar al cantar y hablar con claridad y seguridad.", "bullets": ["Cantar: ves en vivo si vas afinado, con un piano que se ajusta a tu voz.", "Hablar: dicción, volumen, pausas y ritmo para presentar sin que te tiemble la voz.", "3 minutos al día; grábate y escucha tu avance."]},
+   "en": {"kicker": "Singing and speaking · free", "headline": "Sound the way you want to: at karaoke, in your presentation, in your interview.", "sub": "Short exercises with your mic to sing in tune and speak clearly and confidently.", "bullets": ["Singing: see live whether you're in tune, with a piano that fits your voice.", "Speaking: diction, volume, pauses and pace, so your voice doesn't shake when you present.", "3 minutes a day; record yourself and hear your progress."]}
+  },
+  "C4": {
+   "name": "your voice, at any age",
+   "es": {"kicker": "Para cantar y hablar, a cualquier edad", "headline": "Tu voz, en forma a cualquier edad.", "sub": "Ejercicios cortos y suaves para cantar con gusto y hablar con claridad, a tu ritmo y en tu casa.", "bullets": ["3 minutos al día, con instrucciones claras paso a paso.", "Ves en la pantalla si estás en la nota; el piano se ajusta a tu voz.", "Sin instalar nada: en el teléfono, la tableta o la computadora."]},
+   "en": {"kicker": "For singing and speaking, at any age", "headline": "Keep your voice in shape, at any age.", "sub": "Short, gentle exercises to enjoy singing and speak clearly, at your own pace, at home.", "bullets": ["3 minutes a day, with clear step-by-step instructions.", "See on the screen whether you're on the note; the piano fits your voice.", "Nothing to install: on your phone, tablet or computer."]}
+  },
+  "C5": {
+   "name": "all free, no time limit",
+   "es": {"kicker": "Canto y oratoria", "headline": "Todos los ejercicios, gratis. Sin límite de minutos.", "sub": "Muchas apps de canto cortan la práctica gratis a los pocos minutos al día. Aquí practicas todo lo que quieras, con el micrófono y un piano que se ajusta a tu voz.", "bullets": ["Afinación en vivo, ejercicios de canto y de voz hablada.", "Básicos guiados de 3 minutos al día.", "Pro es opcional y solo suma extras: la práctica nunca se paga."]},
+   "en": {"kicker": "Singing and speaking", "headline": "Every exercise, free. No time limit.", "sub": "Many singing apps cut off free practice after a few minutes a day. Here you practise as much as you like, with your mic and a piano that fits your voice.", "bullets": ["Live pitch feedback, singing and speaking exercises.", "Guided 3-minute basics each day.", "Pro is optional and only adds extras: practice is never paid."]}
+  },
+  "N": {
+   "name": "negative control: worse offer",
+   "es": {"kicker": "Coach vocal con IA", "headline": "Tu coach de IA te convierte en cantante profesional en 30 días.", "sub": "Descarga la app. Prueba gratis de 3 días; después, la práctica gratis se limita a 5 minutos al día.", "bullets": ["Solo en inglés por ahora.", "Requiere crear cuenta con tarjeta para empezar la prueba.", "Pro: US$ 14.99 al mes; se renueva automáticamente."]},
+   "en": {"kicker": "AI vocal coach", "headline": "Your AI coach turns you into a professional singer in 30 days.", "sub": "Download the app. 3-day free trial; after that, free practice is limited to 5 minutes a day.", "bullets": ["English only for now.", "You need to add a card to start the trial.", "Pro: US$14.99 a month, renews automatically."]},
+   "facts_override": {
+    "es": "Hay que descargar una app y crear una cuenta con tarjeta. Pro: US$ 14.99 al mes (se renueva automáticamente). Sin Pro, 5 minutos de práctica al día.",
+    "en": "You need to download an app and create an account with a card. Pro: US$14.99 a month (renews automatically). Without Pro, 5 minutes of practice a day."
+   }
+  },
+  "P": {
+   "name": "price check: today at half the Pro price",
+   "copy_of": "C0",
+   "price_key_suffix": "_half"
+  }
+ }
+}

@@ -154,6 +154,12 @@ export const EVENT_NAMES = new Set([
   "mic_primer_dismiss",
   "mic_primer_show",
   "milestone",
+  // Tu camino (js/voice-path.js), added 2026-11-21. Sent only where it is
+  // served, so every one is an arm event of path_2026_12.
+  "path_hide",
+  "path_new",
+  "path_open",
+  "path_share",
   "practice_day",
   "practice_recorded",
   "practice_start",
@@ -225,6 +231,7 @@ const LOOP_EVENTS = [
   "loop_cards_open",
   "loop_remind_click",
   "milestone",
+  "path_open",
   "rest_used",
   "surprise_shown"
 ];
@@ -316,6 +323,21 @@ export const EXPERIMENT_PRESETS = {
     plan: { nPerArm: 565, minDays: 28, mde: 1 },
     primary: { event: "practice_day", kind: "days", from: 0, to: 28 },
     guardrails: [{ event: "basics_incomplete", kind: "share", from: 0, to: 28 }]
+  },
+  path_2026_12: {
+    arms: ["path", "none"],
+    weights: [1, 1],
+    control: "path",
+    // Only the arm that has Tu camino sends its events. path_open comes from
+    // the loop's home panel, so it is a loop event too.
+    armEvents: { path: ["path_new", "path_open", "path_share", "path_hide"], none: [] },
+    // +2 practice days in weeks 5-12 (mean 10, SD 12): 2 * 7.85 * 144 / 4.
+    plan: { nPerArm: 566, minDays: 84, mde: 2 },
+    primary: { event: "practice_day", kind: "days", from: 28, to: 84 },
+    guardrails: [
+      { event: "practice_day", kind: "days", from: 0, to: 28 },
+      { event: "basics_incomplete", kind: "share", from: 0, to: 28 }
+    ]
   },
   site_layout_2026_11: {
     arms: ["a", "b"],

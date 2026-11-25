@@ -420,8 +420,17 @@ The rest of this step is what the account involves once that is settled:
    the page to every visitor — so they are safe in this repository. There is no
    AdSense secret to keep, which is why this step has no `wrangler secret put`.
 
-Three things to know before you choose this mode, each measured rather than
-assumed:
+Four things to know before you choose this mode, the first a setting to keep and
+the other three measured rather than assumed:
+
+- **Keep Auto ads off for this site** (AdSense, Ads, By site). The tag the page
+  loads, `adsbygoogle.js?client=ca-pub-…`, is the same tag Auto ads use, and
+  Auto ads are switched on in the account, not by the page. With them on,
+  Google places its own anchor and vignette ads, and an anchor ad stays at the
+  bottom of the screen during a take: that breaks "nunca durante la práctica".
+  The page itself only asks for the units it draws, and outside practice
+  (`tests/node/promise-guards.test.mjs` checks that every push is an empty
+  `{}`). No test can see the account switch, so this line is the guard.
 
 - **Google's script outlives the ads.** A learner who buys Pro part-way through a
   session has the ad unit removed from the page immediately, but

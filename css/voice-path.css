@@ -1,0 +1,339 @@
+/* Tu camino (js/voice-path.js): areas counted in days, and logros that are
+   only ever earned. Calm on purpose: no confetti, no locked silhouettes, no
+   numbers in red. Gold (--reward) marks what was earned, as on the loop's
+   completion card; everything else stays in the card's own colours. */
+
+#view-history .path-card {
+  margin-top: 1rem;
+}
+.path-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.path-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+.path-title:focus {
+  outline: none;
+}
+.path-title:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.path-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  max-width: 60ch;
+}
+/* The switch is a quiet one, but still a full-size target. */
+.path-card .path-toggle {
+  flex: none;
+  min-height: var(--min-tap);
+  min-width: var(--min-tap);
+  font-size: 0.82rem;
+}
+.path-weeks {
+  margin: 0.85rem 0 0;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+.path-h {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 1.1rem 0 0.2rem;
+  font-size: 0.98rem;
+  font-weight: 750;
+}
+.path-count {
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--reward);
+}
+.path-note {
+  margin: 0 0 0.55rem;
+  font-size: 0.85rem;
+}
+
+/* —— Areas: one row each, five pips for the five stages —— */
+.path-areas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15.5rem), 1fr));
+  gap: 0.45rem 0.9rem;
+}
+.path-area {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "name pips"
+    "meta meta";
+  align-items: center;
+  gap: 0.15rem 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+}
+.path-area-name {
+  grid-area: name;
+  font-weight: 650;
+  font-size: 0.95rem;
+}
+/* Five short segments of one path, not five dots: dots in a row read as a
+   star rating, and a stage is how often, not how well. */
+.path-pips {
+  grid-area: pips;
+  display: inline-flex;
+  gap: 3px;
+}
+.path-pip {
+  width: 0.85rem;
+  height: 0.32rem;
+  border-radius: 2px;
+  background: var(--border);
+}
+.path-pip.on {
+  background: var(--accent);
+}
+.path-area-meta {
+  grid-area: meta;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+/* Not practised yet: the row stays, read as an invitation, not as a gap. */
+.path-area.is-empty {
+  background: transparent;
+  border: 1px dashed var(--border);
+}
+.path-area.is-empty .path-area-name {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.path-week {
+  color: var(--success);
+  font-weight: 650;
+}
+
+/* —— Logros: earned only, newest marked —— */
+.path-logros {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
+  gap: 0.55rem 0.9rem;
+}
+.path-logro {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  border: 1px solid transparent;
+}
+.path-logro.is-new {
+  background:
+    linear-gradient(var(--bg-soft), var(--bg-soft)) padding-box,
+    linear-gradient(135deg, var(--reward), var(--singing)) border-box;
+}
+.path-logro h4 {
+  margin: 0.05rem 0 0.25rem;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+.path-logro p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.path-logro .path-logro-k {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.path-new {
+  color: var(--reward);
+}
+.path-logro details {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.path-logro summary {
+  list-style: none;
+  cursor: pointer;
+  position: relative;
+  padding-right: 1.6rem;
+  min-height: var(--min-tap);
+  border-radius: 6px;
+}
+.path-logro summary::-webkit-details-marker {
+  display: none;
+}
+/* The fold says it opens: a chevron that turns, not the browser's triangle. */
+.path-logro summary::after {
+  content: "";
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: translateY(-70%) rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.path-logro details[open] summary::after {
+  transform: translateY(-30%) rotate(-135deg);
+}
+.path-logro summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.path-logro summary h4 {
+  margin-bottom: 0;
+}
+.path-logro details p {
+  margin-top: 0.3rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .path-logro summary::after {
+    transition: none;
+  }
+}
+.path-none {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+}
+
+/* A medal drawn in CSS: a gold disc with a ring, the same for every logro,
+   so none reads as worth more than another. */
+.path-medal {
+  flex: none;
+  width: 1.7rem;
+  height: 1.7rem;
+  margin-top: 0.1rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff3c9 0 18%, var(--reward) 19% 58%, #c79a3c 59% 66%, var(--reward) 67%);
+  box-shadow: 0 0 0 2px rgba(255, 211, 110, 0.18);
+}
+
+/* —— Sharing —— */
+.path-share {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+}
+.path-share-note {
+  margin: 0;
+  font-size: 0.84rem;
+}
+.path-share-status {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+.path-share-status:empty {
+  display: none;
+}
+
+.path-hidden-note {
+  margin: 0.6rem 0 0.5rem;
+  font-size: 0.92rem;
+}
+
+/* —— Home: the way in, beside the fact cards —— */
+.loop-path-btn.has-new::before {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--reward);
+}
+
+/* —— Completion cards (the loop's and a goal set's) —— */
+.path-done-list {
+  margin: 0.75rem 0 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.path-done {
+  margin: 0;
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(var(--bg-soft), var(--bg-soft)) padding-box,
+    linear-gradient(135deg, var(--reward), var(--singing)) border-box;
+  border: 1px solid transparent;
+}
+.path-done p {
+  margin: 0;
+}
+.path-done .path-done-k {
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--reward);
+}
+.path-done .path-done-t {
+  font-weight: 700;
+  font-size: 1rem;
+  margin: 0.05rem 0 0.2rem;
+}
+.path-done .path-done-b {
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.path-done.is-stage {
+  align-items: center;
+  font-weight: 650;
+  font-size: 0.95rem;
+  background: var(--bg-soft);
+}
+.path-done-more {
+  margin: 0;
+  font-size: 0.88rem;
+}
+.set-done-path:empty {
+  display: none;
+}
+.loop-done-card .path-done-list,
+.set-done-card .path-done-list {
+  animation: loop-rise 420ms 320ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .loop-done-card .path-done-list,
+  .set-done-card .path-done-list {
+    animation: none;
+  }
+}
+
+
+
+@media (forced-colors: active) {
+  .path-pip.on,
+  .path-medal,
+  .loop-path-btn.has-new::before {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+}

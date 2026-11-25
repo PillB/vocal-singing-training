@@ -47,7 +47,9 @@ test.describe("Pro features", () => {
     // empty chart of your own data.
     await expect(page.locator("#pro-spark")).toBeHidden();
     await expect(page.locator("#pro-coach-focus")).toBeVisible();
-    await expect(page.locator("#pro-ach-grid")).toBeVisible();
+    // Logros left the Pro studio for Tu camino, a free card of their own.
+    await expect(page.locator("#pro-ach-grid")).toHaveCount(0);
+    await expect(page.locator("#path-card")).toBeVisible();
   });
 
   test("free cannot create second profile without Pro", async ({ page }) => {
@@ -124,12 +126,15 @@ test.describe("Pro features", () => {
       return {
         sparkLen: (s.spark || []).length,
         hasFocus: typeof VTValuePulse.coachFocus === "function",
-        ach: VTValuePulse.achievements(s).length
+        // The export carries the logros of Tu camino: earned ones only.
+        ach: VTValuePulse.achievements(s),
+        earned: VTPath.earned()
       };
     });
     expect(r.sparkLen).toBe(28);
     expect(r.hasFocus).toBe(true);
-    expect(r.ach).toBeGreaterThanOrEqual(5);
+    expect(r.ach.map((a) => a.id)).toEqual(r.earned);
+    expect(r.ach.every((a) => a.unlocked === true && typeof a.title === "string" && a.title.length > 0)).toBe(true);
   });
 
   test("Pro progressions exist and gated by can()", async ({ page }) => {

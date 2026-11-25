@@ -338,10 +338,14 @@
   }
 
   /**
-   * Achievements — earned free; export/share is Pro.
-   * @returns {{ id: string, unlocked: boolean, progress?: number }[]}
+   * Achievements for the coach export: the logros of Tu camino
+   * (js/voice-path.js), earned ones only, as they never go back. The list
+   * below is the old badge grid, kept for a page without that file.
+   * @returns {{ id: string, unlocked: boolean, title?: string, group?: string }[]}
    */
   function achievements(stats) {
+    const path = global.VTPath;
+    if (path) return path.earned().map((id) => ({ id, unlocked: true, title: path.logroText(id).title, group: path.logroText(id).group }));
     const s = stats || compute();
     const flags = global.VTStorage?.getAchievementFlags?.() || {};
     const list = [

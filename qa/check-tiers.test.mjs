@@ -75,8 +75,8 @@ test("control: the real files pass", () => {
 });
 
 const MUTANTS = [
-  ["English proof1 loses its free-always claim", ["js/i18n.js", "Here every exercise, the mic and the piano are free, always.", "Here every exercise is free for your first week."]],
-  ["Spanish proof1 loses its gratis-siempre claim", ["js/i18n.js", "son gratis, siempre.", "son gratis una semana."]],
+  ["English proof1 loses its no-time-limit claim", ["js/i18n.js", "Here every exercise, the mic and the piano are free, with no daily time limit.", "Here every exercise is free for your first week."]],
+  ["Spanish proof1 loses its sin-límite claim", ["js/i18n.js", "son gratis y sin límite de minutos.", "son gratis una semana."]],
   ["English words for a promised feature deleted", ["js/i18n.js", '      "pricing.feat.extra_freezes": "Save up to 3 rest days instead of 2",\n', ""]],
   ["Spanish words for a promised feature deleted", ["js/i18n.js", '      "pricing.feat.extra_freezes": "Guarda hasta 3 días de descanso en vez de 2",\n', ""]],
   ["a Pro card stops promising a capability can() still answers", ["js/billing-config.js", '          "extra_reminders",\n          "extra_freezes"\n', '          "extra_reminders"\n']],

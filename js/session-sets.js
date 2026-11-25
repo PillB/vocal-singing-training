@@ -38,6 +38,9 @@
 
   /** Short step names for exercises the loop's teasers do not name (js/daily-loop.js SHORT). */
   const SHORT = {
+    "s3-song-stanzas": ["frase de canción", "song phrase"],
+    "s12-easy-onset": ["inicio fácil", "easy onset"],
+    "s20-five-vowels": ["cinco vocales", "five vowels"],
     "s6-straw": ["pajita", "straw"],
     "s8-breath-support": ["apoyo en S", "support on S"],
     "s13-arpeggio-match": ["arpegio", "arpeggio"],
@@ -58,6 +61,7 @@
   const SETS = [
     {
       id: "v-pretalk",
+      focus: "coordination",
       track: "vocal",
       grade: "lim",
       steps: [
@@ -82,6 +86,7 @@
     },
     {
       id: "v-aftertalk",
+      focus: "recovery",
       track: "vocal",
       grade: "mod",
       steps: [
@@ -105,6 +110,7 @@
     },
     {
       id: "v-clarity",
+      focus: "speech",
       track: "vocal",
       grade: "lim",
       steps: [
@@ -129,6 +135,7 @@
     },
     {
       id: "v-expression",
+      focus: "speech",
       track: "vocal",
       grade: "lim",
       steps: [
@@ -154,6 +161,7 @@
     },
     {
       id: "v-fillers",
+      focus: "speech",
       track: "vocal",
       grade: "lim",
       steps: [
@@ -178,6 +186,7 @@
     },
     {
       id: "v-voice",
+      focus: "coordination",
       track: "vocal",
       grade: "mod",
       steps: [
@@ -201,6 +210,7 @@
     },
     {
       id: "s-warmup",
+      focus: "coordination",
       track: "singing",
       grade: "lim",
       steps: [
@@ -228,6 +238,7 @@
     },
     {
       id: "s-pitch",
+      focus: "pitch",
       track: "singing",
       grade: "lim",
       steps: [
@@ -253,6 +264,7 @@
     },
     {
       id: "s-technique",
+      focus: "coordination",
       track: "singing",
       grade: "lim",
       steps: [
@@ -280,6 +292,7 @@
     },
     {
       id: "s-function",
+      focus: "coordination",
       track: "singing",
       grade: "mod",
       steps: [
@@ -303,6 +316,7 @@
     },
     {
       id: "s-range",
+      focus: "pitch",
       track: "singing",
       grade: "trad",
       steps: [
@@ -328,6 +342,7 @@
     },
     {
       id: "s-cooldown",
+      focus: "recovery",
       track: "singing",
       grade: "lim",
       steps: [
@@ -348,6 +363,264 @@
         why: "In a study of 20 singers, most said the voice felt better after cooling down, but the change was not statistically significant and listeners could not tell which week had the cool-down. It is brief and gentle: do it if it feels good.",
         tip: "",
         src: "Ragan 2016"
+      }
+    },
+    {
+      "id": "s-breath-phrases",
+      "track": "singing",
+      "focus": "breath",
+      "grade": "trad",
+      "steps": [
+        [
+          "s18-costal-breath",
+          60
+        ],
+        [
+          "s15-sh-air-ladder",
+          90
+        ],
+        [
+          "s3-song-stanzas",
+          150
+        ]
+      ],
+      "es": {
+        "name": "Aire para una frase",
+        "goal": "Practica una salida de aire cómoda y elige dónde volver a respirar al cantar.",
+        "why": "Esta secuencia es una propuesta de práctica, no una medición de capacidad pulmonar ni un tratamiento. El SH es una tarea distinta de cantar; comprueba después si la frase se siente cómoda.",
+        "tip": "Puedes respirar dentro de una frase. Acórtala o cambia la tonalidad antes de forzar; detente si hay dolor, mareo o ronquera.",
+        "src": "Diseño pedagógico; NIDCD, cuidado de la voz"
+      },
+      "en": {
+        "name": "Breath for a phrase",
+        "goal": "Practise comfortable airflow and choose where to breathe again in a song.",
+        "why": "This sequence is a practice design, not a lung-capacity measurement or treatment. SH is a different task from singing; check afterwards whether the phrase feels comfortable.",
+        "tip": "You can breathe within a phrase. Shorten it or change key before forcing; stop for pain, dizziness or hoarseness.",
+        "src": "Teaching design; NIDCD voice care"
+      }
+    },
+    {
+      "id": "s-rhythm-phrasing",
+      "track": "singing",
+      "focus": "song",
+      "grade": "trad",
+      "steps": [
+        [
+          "s14-staccato-legato",
+          90
+        ],
+        [
+          "s16-major-scale-coord",
+          90
+        ],
+        [
+          "s3-song-stanzas",
+          180
+        ]
+      ],
+      "es": {
+        "name": "Ritmo y fraseo",
+        "goal": "Lleva un patrón lento a una frase de canción con pulso y pausas elegidas.",
+        "why": "Un patrón y una canción piden cosas distintas. Aquí comparas duración de notas, sílabas y silencios en una frase; esta rutina concreta no es un programa clínicamente validado.",
+        "tip": "Primero marca el pulso sin cantar. Luego canta despacio en una zona cómoda. Escucha una toma corta y elige un cambio para el siguiente intento.",
+        "src": "Diseño pedagógico; práctica de repertorio"
+      },
+      "en": {
+        "name": "Rhythm and phrasing",
+        "goal": "Take a slow pattern into a song phrase with a pulse and chosen pauses.",
+        "why": "A pattern and a song make different demands. Here you compare note lengths, syllables and silences in a phrase; this particular routine is not a clinically validated programme.",
+        "tip": "First tap the pulse without singing. Then sing slowly in a comfortable range. Listen back to one short take, then choose one change for the next attempt.",
+        "src": "Teaching design; repertoire practice"
+      }
+    },
+    {
+      "id": "s-onset-words",
+      "track": "singing",
+      "focus": "coordination",
+      "grade": "trad",
+      "steps": [
+        [
+          "s12-easy-onset",
+          90
+        ],
+        [
+          "s20-five-vowels",
+          90
+        ],
+        [
+          "s3-song-stanzas",
+          150
+        ]
+      ],
+      "es": {
+        "name": "Inicio, vocal y palabra",
+        "goal": "Pasa de una vocal cómoda a las consonantes y palabras de una canción.",
+        "why": "Esta propuesta combina tareas del catálogo para comparar el inicio y la continuidad del sonido. El gráfico de afinación no mide cierre de los pliegues vocales ni calidad artística.",
+        "tip": "Prueba una vocal, luego tu propio texto. No aprietes para buscar un cierre; cambia la frase si exige esfuerzo.",
+        "src": "Diseño pedagógico; NIDCD, cuidado de la voz"
+      },
+      "en": {
+        "name": "Onset, vowel and word",
+        "goal": "Move from a comfortable vowel to a song’s consonants and words.",
+        "why": "This design combines catalogue tasks to compare the onset and continuity of sound. The pitch graph does not measure vocal-fold closure or artistic quality.",
+        "tip": "Try a vowel, then your own words. Do not squeeze to seek closure; change the phrase if it demands effort.",
+        "src": "Teaching design; NIDCD voice care"
+      }
+    },
+    {
+      "id": "s-song-listening",
+      "track": "singing",
+      "focus": "song",
+      "grade": "trad",
+      "steps": [
+        [
+          "s9-pitch-match",
+          90
+        ],
+        ["s7-humming", 60],
+        ["s3-song-stanzas", 180]
+      ],
+      "es": {
+        "name": "Escuchar y transferir",
+        "goal": "Compara una nota de referencia con una frase y escucha una toma sin acompañamiento.",
+        "why": "La canción añade texto, ritmo e intención a las notas aisladas. La grabación sirve para tu revisión; esta secuencia no demuestra por sí sola mejora duradera ni puntúa expresividad.",
+        "tip": "Elige solo un foco: afinación, ritmo, palabra o pausa. Repite sin la referencia y comprueba qué recuerdas.",
+        "src": "Diseño pedagógico; práctica de repertorio"
+      },
+      "en": {
+        "name": "Listen and transfer",
+        "goal": "Compare a reference note with a phrase and listen to a take without accompaniment.",
+        "why": "A song adds text, rhythm and intention to isolated notes. Recording supports your own review; this sequence alone does not demonstrate lasting improvement or score expression.",
+        "tip": "Choose just one focus: pitch, rhythm, word or pause. Repeat without the reference and check what you remember.",
+        "src": "Teaching design; repertoire practice"
+      }
+    },
+    {
+      "id": "v-breath-pauses",
+      "track": "vocal",
+      "focus": "breath",
+      "grade": "trad",
+      "steps": [
+        [
+          "s18-costal-breath",
+          60
+        ],
+        [
+          "v10-power-pause",
+          150
+        ],
+        [
+          "v23-clear-speech",
+          150
+        ]
+      ],
+      "es": {
+        "name": "Aire y pausas al hablar",
+        "goal": "Practica una inhalación cómoda y pausas que ayuden a entender tu mensaje.",
+        "why": "Esta secuencia aplica tareas del catálogo al habla. No mide función respiratoria: compara una grabación con pausas elegidas y otra a tu ritmo habitual.",
+        "tip": "No aguantes el aire para acabar una oración. Divide la idea y respira antes si lo necesitas.",
+        "src": "Diseño pedagógico; NIDCD, cuidado de la voz"
+      },
+      "en": {
+        "name": "Breath and pauses in speech",
+        "goal": "Practise a comfortable inhalation and pauses that help a listener follow your message.",
+        "why": "This sequence applies catalogue tasks to speech. It does not measure respiratory function: compare a recording with chosen pauses against one at your usual pace.",
+        "tip": "Do not hold your breath to finish a sentence. Split the idea and breathe sooner if needed.",
+        "src": "Teaching design; NIDCD voice care"
+      }
+    },
+    {
+      "id": "v-text-phrasing",
+      "track": "vocal",
+      "focus": "speech",
+      "grade": "trad",
+      "steps": [
+        [
+          "v1-diction",
+          90
+        ],
+        [
+          "v10-power-pause",
+          120
+        ],
+        [
+          "v23-clear-speech",
+          120
+        ]
+      ],
+      "es": {
+        "name": "Texto, pausa e intención",
+        "goal": "Lleva la articulación a un mensaje corto con pausas elegidas.",
+        "why": "Esta propuesta combina dicción, pausas y revisión de una grabación. Valora si se entiende el mensaje; las palabras por minuto no miden por sí solas claridad o intención.",
+        "tip": "Usa tu propio texto. Elige un cambio concreto antes de repetir y permite respirar dentro de una oración.",
+        "src": "Diseño pedagógico; práctica del habla"
+      },
+      "en": {
+        "name": "Text, pause and intention",
+        "goal": "Take articulation into a short message with chosen pauses.",
+        "why": "This design combines diction, pauses and recording review. Judge whether the message is understandable; words per minute alone do not measure clarity or intention.",
+        "tip": "Use your own text. Choose one specific change before repeating and allow breaths within a sentence.",
+        "src": "Teaching design; speech practice"
+      }
+    },
+    {
+      "id": "v-listen-contrast",
+      "track": "vocal",
+      "focus": "speech",
+      "grade": "trad",
+      "steps": [
+        [
+          "v14-pace-variation",
+          150
+        ],
+        [
+          "v23-clear-speech",
+          150
+        ]
+      ],
+      "es": {
+        "name": "Escuchar dos versiones",
+        "goal": "Compara una frase habitual con otra dicha con claridad deliberada.",
+        "why": "Esta secuencia propone comparar tus propias tomas; una grabación personal no equivale a una evaluación clínica ni a una prueba con oyentes.",
+        "tip": "Mantén el mismo texto en ambas tomas y escucha una diferencia concreta: consonantes, pausas o velocidad.",
+        "src": "Diseño pedagógico; práctica del habla"
+      },
+      "en": {
+        "name": "Listen to two versions",
+        "goal": "Compare a phrase at your usual pace with one spoken deliberately clearly.",
+        "why": "This sequence proposes comparing your own takes; a personal recording is not a clinical evaluation or a test with listeners.",
+        "tip": "Keep the same text in both takes and listen for one specific difference: consonants, pauses or pace.",
+        "src": "Teaching design; speech practice"
+      }
+    },
+    {
+      "id": "v-easy-message",
+      "track": "vocal",
+      "focus": "coordination",
+      "grade": "trad",
+      "steps": [
+        [
+          "s7-humming",
+          60
+        ],
+        [
+          "v21-straw-to-speech",
+          300
+        ]
+      ],
+      "es": {
+        "name": "De sonido cómodo a mensaje",
+        "goal": "Compara un sonido suave con una frase hablada sin empujar el volumen.",
+        "why": "Esta secuencia conecta dos tareas del catálogo. La comodidad es una valoración personal; un zumbido en la cara no demuestra dónde se produce la voz ni demuestra eficiencia.",
+        "tip": "Usa una cañita limpia y una frase breve. Descansa o termina antes si lo necesitas; no busques más resistencia.",
+        "src": "Diseño pedagógico; NIDCD, cuidado de la voz"
+      },
+      "en": {
+        "name": "From easy sound to message",
+        "goal": "Compare a soft sound with a spoken phrase without pushing volume.",
+        "why": "This sequence connects two catalogue tasks. Comfort is a personal rating; facial vibration does not establish where voice is produced or demonstrate efficiency.",
+        "tip": "Use a clean straw and a short phrase. Rest or finish early if needed; do not seek more resistance.",
+        "src": "Teaching design; NIDCD voice care"
       }
     }
   ];
@@ -425,6 +698,7 @@
       id: def.id,
       track: def.track,
       grade: def.grade,
+      focus: def.focus,
       order,
       sec,
       totalSec,
@@ -602,6 +876,30 @@
     handle.onpointercancel = reset;
   }
 
+  const FOCUS = {
+    es: { all: "Todas las habilidades", breath: "Aire y respiración", pitch: "Afinación y rango cómodo", coordination: "Coordinación vocal", song: "Canción y escucha", speech: "Claridad y expresión", recovery: "Recuperación" },
+    en: { all: "All skills", breath: "Breath and airflow", pitch: "Pitch and comfortable range", coordination: "Vocal coordination", song: "Song and listening", speech: "Clarity and expression", recovery: "Recovery" }
+  };
+
+  function filterFocus(sets, focus) {
+    return Object.hasOwn(FOCUS.en, focus) && focus !== "all" ? sets.filter((set) => set.focus === focus) : sets;
+  }
+
+  function drawFocusPicker(sets, done) {
+    const picker = $("#sets-focus");
+    const words = FOCUS[lang()];
+    const available = new Set(sets.map((set) => set.focus));
+    picker.setAttribute("aria-label", lang() === "es" ? "Habilidad que quieres practicar" : "Skill you want to practise");
+    picker.innerHTML = Object.entries(words).filter(([id]) => id === "all" || available.has(id)).map(([id, text]) => `<option value="${id}">${esc(text)}</option>`).join("");
+    picker.value = "all";
+    const paint = () => {
+      $("#sets-list").innerHTML = filterFocus(sets, picker.value).map((set) => cardHtml(set, done)).join("");
+      $("#sets-list").scrollTop = 0;
+    };
+    picker.onchange = paint;
+    paint();
+  }
+
   function openSheet(opener) {
     const modal = $("#sets-sheet");
     if (!modal) return;
@@ -610,7 +908,7 @@
     const done = practisedToday();
     $("#sets-title").textContent = tt("sets.title");
     $("#sets-sub").textContent = tt(trackId === "vocal" ? "sets.subVocal" : "sets.subSinging");
-    $("#sets-list").innerHTML = sets.map((s) => cardHtml(s, done)).join("");
+    drawFocusPicker(sets, done);
     const close = $("#sets-close");
     close.setAttribute("aria-label", tt("sets.close"));
     hooks.hideToast?.();
@@ -743,6 +1041,8 @@
   }
 
   global.VTSets = {
+    FOCUS,
+    filterFocus,
     GRADES,
     GRADE_MARKS,
     SETS,

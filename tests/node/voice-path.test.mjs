@@ -1122,16 +1122,16 @@ test("the week's sentence says days, the singer's range and the total, in either
   const es = page({ days });
   assert.equal(
     es.P.shareText("singing"),
-    "Esta semana canté 2 días (mi meta: 3 a 5). Llevo 3 días cantados. Entreno con Entrenamiento vocal y de canto: https://example.test/index.html"
+    "Esta semana practiqué mi voz 2 días (mi meta: 3 a 5). Llevo 3 días de práctica. Entreno con Entrenamiento vocal y de canto: https://example.test/index.html"
   );
   assert.match(es.P.shareText("vocal"), /^Esta semana practiqué mi voz 2 días .* 3 días de práctica\./);
   const en = page({ days: daysOf(["2026-11-18"]), lang: "en" });
-  assert.match(en.P.shareText("singing"), /^This week I sang on 1 day \(my goal: 3 to 5\)\. 1 day sung so far\. I practise/);
+  assert.match(en.P.shareText("singing"), /^This week I practised my voice on 1 day \(my goal: 3 to 5\)\. 1 day of practice so far\. I practise/);
   // A week with nothing in it yet: only the total, never "0 days".
   const empty = page({ days: daysOf(["2026-11-02", "2026-11-03"]) });
   assert.equal(
     empty.P.shareText("singing"),
-    "Llevo 2 días cantados. Entreno con Entrenamiento vocal y de canto: https://example.test/index.html"
+    "Llevo 2 días de práctica. Entreno con Entrenamiento vocal y de canto: https://example.test/index.html"
   );
 });
 
@@ -1197,4 +1197,44 @@ test("the copy promises nothing, names no score, and reads in both languages", (
     for (const a of P.AREAS) assert.ok(C.area[a.id], `${lang}: area ${a.id} has a name`);
   }
   for (const id of P.LOGROS) assert.notEqual(P.COPY.es.logro[id][1], P.COPY.en.logro[id][1], `${id} is translated`);
+});
+
+// Regression: actual sync normalizes achievements to true-only before union.
+test("pending stages survive real sync and a seen flag from either device wins", () => {
+  const { P, store, win } = page({ flags: { "g:init": true, "g:st:breath:5": false } });
+  assert.deepEqual(plain(P.unseen().stages), [["breath", 5]], "legacy pending stage migrates");
+  assert.equal(store.flags["g:stage:breath:5"], true, "migration persists before an upload");
+  runInNewContext(read("js/sync.js"), win);
+  const merge = (a, b) => plain(win.VTSync.mergeBag({ v: 1, profileId: "default", achievements: a }, { v: 1, profileId: "default", achievements: b }).achievements);
+  store.flags = merge(store.flags, {});
+  P.evaluate();
+  assert.deepEqual(plain(P.unseen().stages), [["breath", 5]], "sync must not silently consume pending news");
+  const stale = { ...store.flags };
+  P.markSeen({ stages: [["breath", 5]] });
+  const seen = { ...store.flags };
+  store.flags = merge(stale, seen);
+  assert.deepEqual(plain(P.unseen().stages), [], "remote seen wins over stale pending");
+  store.flags = merge(seen, stale);
+  assert.deepEqual(plain(P.unseen().stages), [], "merge order cannot resurrect news");
+});
+
+test("a speaking-only day cannot be shared as a day sung", () => {
+  const { P } = page({ days: { "2026-11-18": row(["v1-diction"]) }, lang: "en" });
+  assert.match(P.shareText("singing"), /practised my voice on 1 day/);
+  assert.doesNotMatch(P.shareText("singing"), /sang|sung/);
+});
+
+test("valid-looking unknown stages cannot fabricate milestones", () => {
+  const { P } = page({ flags: { "g:stage:bogus:5": true, "g:stage:breath:999": true, "g:stage:breath:5": true } });
+  assert.deepEqual(plain(P.unseen().stages), [["breath", 5]]);
+});
+
+test("an unchanged milestone evaluation does not rebuild the whole calendar summary", () => {
+  const { P, win } = page({ days: daysOf(["2026-11-17"]) });
+  P.evaluate();
+  const summary = win.VTDays.summary;
+  let calls = 0;
+  win.VTDays.summary = (...args) => { calls += 1; return summary(...args); };
+  P.evaluate();
+  assert.equal(calls, 0, "no news needs no second full-ledger summary");
 });

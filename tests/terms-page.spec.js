@@ -117,6 +117,9 @@ test.describe("terms of use", () => {
     await page.goto(BASE + "/terms.html", { waitUntil: "domcontentloaded" });
     await expect(page.locator('a[href="privacy.html"]')).toHaveCount(1);
     await expect(page.locator('a[href="privacy.html#en"]')).toHaveCount(1);
-    await expect(page.locator('a[href="./"]')).toHaveCount(2);
+    // The header's "← App", and each half's own way back, to its language's address (index.html's hreflang)
+    await expect(page.locator('header a[href="./"]')).toHaveCount(1);
+    await expect(page.locator('main a[href="./?lang=es"]:not(section[lang="en"] *)')).toHaveCount(1);
+    await expect(page.locator('section[lang="en"] a[href="./?lang=en"]')).toHaveCount(1);
   });
 });

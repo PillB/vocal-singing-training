@@ -21,9 +21,28 @@
   font-weight: 650;
 }
 .site-version-select {
+  /* macOS WebKit's native popup can override min-height with a 22px bezel.
+     Keep the native select behaviour, but draw its closed control ourselves. */
+  -webkit-appearance: none;
+  appearance: none;
   min-height: var(--min-tap, 44px);
   max-width: 100%;
   font-weight: 650;
+  padding: 0.4rem 2rem 0.4rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background-color: var(--bg, #0c1118);
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 1rem) 50%, calc(100% - 0.7rem) 50%;
+  background-size: 0.3rem 0.3rem;
+  background-repeat: no-repeat;
+}
+@media (forced-colors: active) {
+  .site-version-select {
+    -webkit-appearance: auto;
+    appearance: auto;
+    background-image: none;
+  }
 }
 .site-version-hint {
   flex: 0 1 auto;

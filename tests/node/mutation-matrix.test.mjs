@@ -16,6 +16,12 @@ export function matrixSets(yaml) {
   return list ? list[1].split(",").map((s) => s.trim()).filter(Boolean) : [];
 }
 
+/** macOS-only oracle must run on its supported OS, not the Linux matrix. */
+export function dedicatedSets(yaml) {
+  const job = jobText(yaml, "safari-layout");
+  return /runs-on: macos-latest/.test(job) && /run: bash qa\/check-safari-selector\.sh/.test(job) ? ["safari-layout"] : [];
+}
+
 /** The sets that run nowhere, and the matrix entries that name no set. */
 export function unrun(sets, defaults, matrix) {
   return {
@@ -25,7 +31,7 @@ export function unrun(sets, defaults, matrix) {
 }
 
 test("every mutation set runs in CI: the Node sets in one step, each browser set as a job of its own", () => {
-  const matrix = matrixSets(workflow);
+  const matrix = [...matrixSets(workflow), ...dedicatedSets(workflow)];
   assert.ok(matrix.includes("regress") && matrix.includes("boot"), `control: the matrix is read (${matrix.join(", ")})`);
   assert.deepEqual(unrun(Object.keys(MUTANTS), DEFAULT_SETS, matrix), { missing: [], unknown: [] });
   assert.equal(new Set(matrix).size, matrix.length, "no set runs twice");
@@ -77,4 +83,10 @@ test("the check tells a job that keeps its traces from one that keeps none, or o
   assert.equal(keepsTraces(jobText(job(kept.replace("test-results/", "playwright-report/")), "mutation"), "set"), false, "not where the traces are");
   assert.equal(keepsTraces(jobText(job("") + "  other:\n    steps:\n" + kept, "mutation"), "set"), false, "another job's step is not this one's");
   assert.equal(keepsTraces(jobText(job(kept.replace("path: test-results/", "path: |\n            playwright-report/\n            test-results/")), "mutation"), "set"), true, "control: a list of paths with test-results/ in it");
+});
+
+test("a macOS-only mutation cannot silently lose its runner or invocation", () => {
+  assert.deepEqual(dedicatedSets(workflow), ["safari-layout"]);
+  assert.deepEqual(dedicatedSets(workflow.replace("runs-on: macos-latest", "runs-on: ubuntu-latest")), []);
+  assert.deepEqual(dedicatedSets(workflow.replace("run: bash qa/check-safari-selector.sh", "run: true")), []);
 });

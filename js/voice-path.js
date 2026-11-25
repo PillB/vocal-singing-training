@@ -98,6 +98,7 @@
   const INIT = `${P}init`;
   const earnedKey = (id) => `${P}${id}`;
   const seenKey = (id) => `${P}seen:${id}`;
+  const stageEarnedKey = (area, n) => `${P}stage:${area}:${n}`;
   const stageKey = (area, n) => `${P}st:${area}:${n}`;
   const setKey = (id) => `${P}set:${id}`;
   /** Evidence only the moment can give (the order of two takes), kept for the logro that needs it. */
@@ -106,10 +107,31 @@
   function readFlags() {
     try {
       const f = global.VTStorage?.getAchievementFlags?.();
-      return f && typeof f === "object" && !Array.isArray(f) ? { ...f } : {};
+      return migrateStages(f && typeof f === "object" && !Array.isArray(f) ? { ...f } : {});
     } catch {
       return {};
     }
+  }
+
+  // Sync deliberately unions true flags. Keep earned and seen separately; migrate
+  // the draft's false pending flags before the next upload, preserving seen wins.
+  function validStage(match) {
+    return !!match && AREAS.some((area) => area.id === match[1]) && STAGES.includes(Number(match[2]));
+  }
+
+  function migrateStages(flags) {
+    let changed = false;
+    Object.keys(flags).forEach((key) => {
+      const m = /^g:st:([a-z]+):(\d+)$/.exec(key);
+      if (!validStage(m)) return;
+      if (typeof flags[key] !== "boolean") return;
+      if (!flags[stageEarnedKey(m[1], Number(m[2]))]) changed = true;
+      flags[stageEarnedKey(m[1], Number(m[2]))] = true;
+      if (flags[key] === false) changed = true;
+      if (flags[key] === false) delete flags[key];
+    });
+    if (changed) writeFlags(flags);
+    return flags;
   }
 
   function writeFlags(f) {
@@ -222,9 +244,13 @@
     if (!diff || !add) return 0;
     const rest = new Set(lg.restUsed);
     let n = 0;
+    // ISO date-only keys represent calendar days in UTC, independent of DST.
+    let previous = Date.parse(lg.keys[0]);
     for (let i = 1; i < lg.keys.length; i += 1) {
       const b = lg.keys[i];
-      if (diff(lg.keys[i - 1], b) >= 2 && !rest.has(add(b, -1))) n += 1;
+      const current = Date.parse(b);
+      if (current - previous >= 172800000 && !rest.has(add(b, -1))) n += 1;
+      previous = current;
     }
     return n;
   }
@@ -278,9 +304,9 @@
       lg,
       flags,
       byArea,
-      weeks: weeksInRange(lg, goalLow()),
-      weekday: weekdayRun(lg),
-      comebacks: comebacks(lg),
+      weeks: flags[earnedKey("week12")] ? 12 : weeksInRange(lg, goalLow()),
+      weekday: flags[earnedKey("weekday")] ? 0 : weekdayRun(lg),
+      comebacks: flags[earnedKey("back")] ? 1 : comebacks(lg),
       basicsDays: rowsOf(lg).filter((r) => Number(r.basics) > 0).length
     };
   }
@@ -379,9 +405,9 @@
     AREAS.forEach((a) => {
       const n = byArea[a.id].length;
       STAGES.forEach((t) => {
-        if (n < t || flags[stageKey(a.id, t)] !== undefined) return;
-        // false = reached, not yet shown; true = shown (or filed quietly)
-        flags[stageKey(a.id, t)] = quiet || n !== t || t === STAGES[0];
+        if (n < t || flags[stageEarnedKey(a.id, t)] === true) return;
+        flags[stageEarnedKey(a.id, t)] = true;
+        if (quiet || n !== t || t === STAGES[0]) flags[stageKey(a.id, t)] = true;
         changed = true;
       });
     });
@@ -429,7 +455,8 @@
     const flags = readFlags();
     const c = context(flags);
     const due = LOGROS.filter((l) => !flags[earnedKey(l.id)] && safeTest(l, c)).map((l) => l.id);
-    const quiet = quietNow(flags, due.length);
+    const hasNews = due.length > 0 || AREAS.some((a) => STAGES.some((t) => c.byArea[a.id].length >= t && !flags[stageEarnedKey(a.id, t)]));
+    const quiet = hasNews ? quietNow(flags, due.length) : true;
     const fresh = fileLogros(flags, due, quiet);
     const stagesChanged = fileStages(flags, c.byArea, quiet);
     const first = !flags[INIT];
@@ -449,8 +476,8 @@
     const logros = earned(flags).filter((id) => !flags[seenKey(id)]);
     const stages = [];
     Object.keys(flags).forEach((k) => {
-      const m = /^g:st:([a-z]+):(\d+)$/.exec(k);
-      if (m && flags[k] === false) stages.push([m[1], Number(m[2])]);
+      const m = /^g:stage:([a-z]+):(\d+)$/.exec(k);
+      if (validStage(m) && flags[k] === true && !flags[stageKey(m[1], Number(m[2]))]) stages.push([m[1], Number(m[2])]);
     });
     return { logros, stages };
   }
@@ -734,7 +761,7 @@
       share: "Compartir mi semana",
       shareDone: "Copiado. Pégalo donde quieras.",
       shareFail: "No se pudo compartir. Este es el texto:",
-      shareNote: "Nada sale de este navegador hasta que lo compartes tú.",
+      shareNote: "Este resumen se comparte solo cuando tú lo decides.",
       hide: "Ocultar",
       hideAria: "Ocultar Tu camino",
       show: "Mostrar Tu camino",
@@ -751,12 +778,12 @@
       doneMore: "Y {n} más en Historial, en Tu camino.",
       doneMore1: "Y 1 más en Historial, en Tu camino.",
       shareWeek: {
-        singing: ["Esta semana canté 1 día", "Esta semana canté {n} días"],
+        singing: ["Esta semana practiqué mi voz 1 día", "Esta semana practiqué mi voz {n} días"],
         vocal: ["Esta semana practiqué mi voz 1 día", "Esta semana practiqué mi voz {n} días"]
       },
       shareGoal: " (mi meta: {lo} a {hi}).",
       shareTotal: {
-        singing: ["Llevo 1 día cantado.", "Llevo {n} días cantados."],
+        singing: ["Llevo 1 día de práctica.", "Llevo {n} días de práctica."],
         vocal: ["Llevo 1 día de práctica.", "Llevo {n} días de práctica."]
       },
       shareTail: "Entreno con Entrenamiento vocal y de canto: {url}",
@@ -808,7 +835,7 @@
         both: ["Dos voces", "Practicaste canto y voz hablada. Muchas bases son las mismas: el aire, la resonancia, una voz sin esfuerzo."],
         set: ["Una rutina con objetivo", "Terminaste una rutina por objetivo. Saber para qué practicas algo ayuda a practicarlo con atención."],
         cool: ["Terminar suave", "Hiciste un enfriamiento o una recuperación de la voz. Mucha gente nota la voz más cómoda después; que proteja de lesiones no está probado."],
-        warmfirst: ["Calentar antes de cantar", "Calentaste antes de tu canción. Cinco a diez minutos bastan; más no añade."],
+        warmfirst: ["Calentar antes de cantar", "Practicaste un calentamiento antes de tu canción. Hazlo con comodidad; la duración depende de tu voz y de la tarea."],
         rated: ["Valoraste tu práctica", "Puntuaste cómo te fue. Pararte a valorar lo que hiciste es parte de aprender a cantar."],
         listen: ["Grabar y escucharte", "Mientras cantas también te oyes por dentro, a través de los huesos; una grabación se parece más a lo que oyen los demás."]
       }
@@ -832,7 +859,7 @@
       share: "Share my week",
       shareDone: "Copied. Paste it wherever you like.",
       shareFail: "Could not share. Here is the text:",
-      shareNote: "Nothing leaves this browser until you share it.",
+      shareNote: "This summary is shared only when you choose.",
       hide: "Hide",
       hideAria: "Hide Your path",
       show: "Show Your path",
@@ -849,12 +876,12 @@
       doneMore: "And {n} more in History, under Your path.",
       doneMore1: "And 1 more in History, under Your path.",
       shareWeek: {
-        singing: ["This week I sang on 1 day", "This week I sang on {n} days"],
+        singing: ["This week I practised my voice on 1 day", "This week I practised my voice on {n} days"],
         vocal: ["This week I practised my voice on 1 day", "This week I practised my voice on {n} days"]
       },
       shareGoal: " (my goal: {lo} to {hi}).",
       shareTotal: {
-        singing: ["1 day sung so far.", "{n} days sung so far."],
+        singing: ["1 day of practice so far.", "{n} days of practice so far."],
         vocal: ["1 practice day so far.", "{n} practice days so far."]
       },
       shareTail: "I practise with Vocal & Singing Training: {url}",
@@ -906,7 +933,7 @@
         both: ["Two voices", "You practised singing and speaking. Many of the basics are the same: breath, resonance, an easy voice."],
         set: ["A routine with a purpose", "You finished a routine for a goal. Knowing what you practise something for helps you practise it with attention."],
         cool: ["Ending gently", "You did a cool-down or a voice recovery. Many people find the voice more comfortable afterwards; there is no proof that it protects the voice from injury."],
-        warmfirst: ["Warming up before singing", "You warmed up before your song. Five to ten minutes is enough; more adds nothing."],
+        warmfirst: ["Warming up before singing", "You practised a warm-up before your song. Keep it comfortable; the duration depends on your voice and task."],
         rated: ["You rated your practice", "You rated how it went. Stopping to judge what you did is part of learning to sing."],
         listen: ["Record and listen", "While you sing you also hear yourself from inside, through your bones; a recording is closer to what others hear."]
       }

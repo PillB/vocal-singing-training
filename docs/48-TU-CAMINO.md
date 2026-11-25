@@ -91,12 +91,11 @@ sizes and caveats, are in the research run behind this round.
 | Age changes perceived ease of use, not enjoyment of game elements | Koivisto & Hamari 2014, *CHB* 35:179 | One adult visual language for both ages; effort spent on legibility and targets |
 | For adults 55+, gamification evidence is 12 mostly weak studies; one game wrapper was rated less enjoyable than plain puzzles | Koivisto & Malik 2021, *Gerontologist* 61:e360; Boot et al. 2016 | No cartoon, no fiction, no "for seniors" mode; every logro tied to a voice benefit |
 | Relatedness is the largest gamification lever (g = 1.78); rankings cause anxiety and jealousy | Li, Hew & Du 2024 (abstract); Bai et al. 2020 | Private share; no leaderboard |
-| A 5 to 10 minute warm-up is enough; 15 added nothing | Ragsdale et al. 2020; Gish et al. 2012, *J Voice* 26:e1 | "Calentar antes de cantar" rewards order, not length |
+| Small, task-specific warm-up studies do not establish one sufficient duration for every voice | Ragsdale et al. 2020; Gish et al. 2012, *J Voice* 26:e1 | "Calentar antes de cantar" rewards order, not length |
 | Cool-downs feel better; no measured protection | Ragan et al. 2016, *J Voice* 30:764.e1 | The caption says "felt", and says protection is unproven |
 | Forecasts of which nudge works correlate with results at r = 0.02 | Milkman et al. 2021, *Nature* 600:478 | Shipped behind an experiment with a pre-stated metric |
 
-No randomised study of gamification for singing or speaking-voice practice
-was found. Every estimate above is borrowed from education, physical
+The reviewed sources did not include a randomised study of gamification for singing or speaking-voice practice. Every estimate above is borrowed from education, physical
 activity and consumer research.
 
 ## 4. Decisions, the alternatives, and how each could still be wrong
@@ -238,7 +237,7 @@ seen once the card is on screen, not when it is drawn.
 
 ### D8 · Sharing is one sentence, sent by the singer
 
-"Esta semana canté 2 días (mi meta: 3 a 5). Llevo 5 días cantados. Entreno
+"Esta semana practiqué mi voz 2 días (mi meta: 3 a 5). Llevo 5 días de práctica. Entreno
 con Entrenamiento vocal y de canto: <address>". A week with nothing yet says
 only the total. The share sheet if there is one, else the clipboard, else
 the sentence on screen to copy.
@@ -367,7 +366,7 @@ already uses for celebration.
    "Nuevo", the home dot); the accent for stages; green only for "esta
    semana", as on the calendar. Motion only on the completion card, off with
    reduced motion. English checked in full (no Spanish left on the card) and
-   for plurals ("1 day sung so far").
+   for plurals ("1 day of practice so far").
 
 ## 7. Verification
 

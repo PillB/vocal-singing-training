@@ -20,7 +20,8 @@ flowchart LR
 
 **These are separate deployments.** A successful Pages build does not update
 the Worker. A Cloudflare Workers & Pages screen has Workers and Pages projects;
-this app needs a Worker, KV and D1, not a new Cloudflare Pages frontend.
+the current backend replica needs a Worker, KV and D1. A future frontend
+migration is a separate release, tracked by subscription PR54.
 
 | Service / resource | Location and purpose | Evidence / current confidence | Operator record |
 | --- | --- | --- | --- |
@@ -50,6 +51,17 @@ this app needs a Worker, KV and D1, not a new Cloudflare Pages frontend.
 | Polar / Paddle / Gumroad / Lemon Squeezy | Research alternatives in operator/payment docs. | No deployment/account evidence found. |
 | Culqi / Openpay / Niubiz / Yape / Payoneer / banks / SUNAT / Indecopi | Business, regulatory or fallback discussion in the Peru runbook. | These mentions do not establish project accounts, contracts or registrations. |
 | Historical-score archives | LOC, Rochester and Johns Hopkins links in the song library. | External references, not storage owned by this project; monitor edition links without substituting copyrighted arrangements. |
+
+Pending [PR54](https://github.com/PillB/vocal-singing-training/pull/54) additionally
+researches Shopify, Dodo, PayPal and Patreon and proposes Cloudflare Pages on
+an owned domain for future subscriptions. Its87 changed files were checked for
+account/email clues: checkout links/product IDs remain empty, API checkout is
+off, and no new verified operator email was found. It proposes an application
+to Paddle; that is not evidence of an approved merchant account. A Cloudflare
+Pages project, domain registration and branded support mailbox remain
+**unprovisioned/unverified**. GitHub's [Pages terms](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits)
+restrict sites primarily facilitating commercial transactions/SaaS; keep
+payment activation and any frontend migration behind that release's review.
 
 ## Email evidence and private record
 
@@ -163,3 +175,19 @@ Primary references: [Wrangler configuration/source of truth](https://developers.
 [identity commands](https://developers.cloudflare.com/workers/wrangler/commands/general/),
 [secret preservation](https://developers.cloudflare.com/workers/configuration/secrets/),
 [D1 import/export](https://developers.cloudflare.com/d1/best-practices/import-export-data/).
+
+## Verified implementation results
+
+The guarded wrapper was exercised against the actual replica: it fetched main
+`43374b7fb748cd56f6eb42356e635be596f94a4b`, preserved the signing key, deployed
+version `80f192ee-58ca-4f72-9b32-281a77618c20`, verified its source annotation,
+and passed D1/KV/JWKS checks with events off. The previous version and private
+receipt were copied into the canonical workspace's ignored directory.
+
+Final local core: **1359 passed,0 failed,2 existing billing TODOs**. All nine
+ops mutants were killed and restored. Independent QA reproduced and then
+retested wrong-account URL, environment overrides, secret-inventory errors,
+changed/unchanged/concurrent versions and failed final analytics verification.
+Hosted CI and the post-merge live Pages Playwright run remain separate evidence;
+these results do not establish physical-device, payer, human-admin or migrated
+data validation.

@@ -237,13 +237,22 @@ test.describe("Tu camino", () => {
   test("at 200% zoom the home button lands on the card's title, just below the sticky header", async ({ page }) => {
     // A 1280 × 720 laptop at 200% zoom. Reduced motion makes the scroll instant, so where it lands is final.
     // Wrong ways this catches: scrolling before Historial's calendar is drawn (the calendar then pushes the
-    // card down and the title ends at the bottom of the screen), and landing under the header (the page's
-    // scroll-padding-top keeps the header's height free).
+    // card down and the title ends at the bottom of the screen), including on a draw of the card that comes
+    // from elsewhere while the recordings are still being read (an account change redraws the progress
+    // cards), and landing under the header (the page's scroll-padding-top keeps the header's height free).
     await page.setViewportSize({ width: 640, height: 360 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await boot(page, { days: FIVE_DAYS, flags: RETURNING });
+    await page.evaluate(() => {
+      const read = VTStorage.listRecordings.bind(VTStorage);
+      window.__recordingsRead = new Promise((r) => (window.__letRecordingsRead = r));
+      VTStorage.listRecordings = () => window.__recordingsRead.then(read);
+    });
     await page.locator("#path-home-btn").focus();
     await page.keyboard.press("Enter");
+    await expect(page.locator("#history-list")).toContainText(/Cargando/i);
+    await page.evaluate(() => VTPath.renderCard()); // drawn from elsewhere, before the calendar
+    await page.evaluate(() => window.__letRecordingsRead());
     await page.clock.runFor(800);
     await expect(page.locator("#history-list .hist-rec-empty")).toBeVisible();
     await expect(page.locator("#path-title")).toBeFocused();
@@ -415,7 +424,35 @@ test.describe("Tu camino", () => {
     await expect(page.locator("#path-card .path-share-status")).toContainText("No se pudo compartir. Este es el texto: Esta semana practiqué mi voz 2 días");
   });
 
-  test("the arm without it shows nothing, stores nothing, and is still counted as exposed", async ({ page }) => {
+  test("warming up before the song is heard from the takes as they are sung, not from a row's order", async ({ page }) => {
+    // Two exercises sung through the exercise screen, the way a singer does: the order is judged when the
+    // song's take is recorded. A backfilled row listing trills before the song (today, before any take) is
+    // no evidence on its own.
+    test.setTimeout(120000);
+    const days = { ...FIVE_DAYS, days: { ...FIVE_DAYS.days, "2026-11-17": row(["s4-lip-trills", "s3-song-stanzas"]) } };
+    await boot(page, { days, flags: RETURNING });
+    expect(await page.evaluate(() => VTPath.earned())).not.toContain("warmfirst");
+    const sing = async (id) => {
+      await page.evaluate((x) => window.VTApp.openExercise(x), id);
+      await page.clock.runFor(400);
+      await page.locator("#btn-practice-start").click();
+      // Fifty seconds jumped over, not ticked through (see ab-events.spec.js).
+      await page.clock.fastForward(50000);
+      await page.clock.runFor(500);
+      // Stop, and save from the rating card the stop opens.
+      await page.locator("#btn-practice-stop").click();
+      await page.clock.runFor(800);
+      await page.locator("#btn-complete").click();
+      await page.clock.runFor(1500);
+    };
+    await sing("s4-lip-trills");
+    expect((await flags(page))["g:ev:warmfirst"], "control: trills alone are no evidence").toBeUndefined();
+    await sing("s3-song-stanzas");
+    expect((await flags(page))["g:ev:warmfirst"]).toBe(true);
+    expect(await page.evaluate(() => VTPath.earned())).toContain("warmfirst");
+  });
+
+  test("the arm without it shows nothing, earns nothing, and is still counted as exposed", async ({ page }) => {
     await boot(page, { days: FIVE_DAYS, arm: "none" });
     await expect(page.locator("#path-home-btn")).toBeHidden();
     await page.locator("#btn-history").click();

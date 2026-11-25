@@ -327,7 +327,10 @@ test.describe("What is sent: visits, time in use, and switches", () => {
     const src = path.join(__dirname, "..", "workers", "entitlements", "src");
     const { EVENT_NAMES, sanitizeProps } = await import(pathToFileURL(path.join(src, "events.js")).href);
     const { LAYOUT_VERSIONS } = await import(pathToFileURL(path.join(src, "layouts.js")).href);
-    const ours = events(sent).filter((e) => e.name.startsWith("layout_"));
+    // What the app raised, not what reached the wire: js/analytics.js applies the worker's rules before it
+    // sends (wireEvent), so the wire always agrees with them and a dropped prop would just be missing. The log
+    // on the device keeps events as raised, which is where a prop the worker would drop still shows.
+    const ours = (await page.evaluate(() => window.VTAnalytics.summary().recent)).filter((e) => e.name.startsWith("layout_"));
     expect(new Set(ours.map((e) => e.name))).toEqual(new Set(["layout_session", "layout_switch", "layout_time"]));
     for (const e of ours) {
       expect(EVENT_NAMES.has(e.name), e.name).toBe(true);

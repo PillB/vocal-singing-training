@@ -80,12 +80,12 @@
     "sha": "83c2f5ef7927b252"
   },
   "js/analytics.js": {
-    "v": "20261103a",
-    "sha": "319fd17f4fbb6fd1"
+    "v": "20261125b",
+    "sha": "6ddbb40663db0968"
   },
   "js/app.js": {
-    "v": "20261125a",
-    "sha": "b9a83c1419bfc899"
+    "v": "20261125c",
+    "sha": "73311c5fb5bebec6"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -152,8 +152,8 @@
     "sha": "c71728a23a6aaa7d"
   },
   "js/i18n.js": {
-    "v": "20261123b",
-    "sha": "65720af0bbcd3033"
+    "v": "20261125a",
+    "sha": "09e0e512a090bb7a"
   },
   "js/license.js": {
     "v": "20261103d",
@@ -176,8 +176,8 @@
     "sha": "3d44891a2efe3be0"
   },
   "js/practice-days.js": {
-    "v": "20261113a",
-    "sha": "3768e7089266f4f8"
+    "v": "20261121b",
+    "sha": "00e6e119cc432141"
   },
   "js/practice-engine.js": {
     "v": "20261113a",
@@ -276,12 +276,12 @@
     "sha": "b4d0d814c3138e46"
   },
   "js/sync.js": {
-    "v": "20261118g",
-    "sha": "17b5d830dfdcfb8a"
+    "v": "20261125a",
+    "sha": "e8d01f69cfdf35e1"
   },
   "js/tour.js": {
-    "v": "20261113a",
-    "sha": "c355d53898e46cfd"
+    "v": "20261125a",
+    "sha": "b660e8a931ee6279"
   },
   "js/value-pulse.js": {
     "v": "20261123a",
@@ -292,8 +292,8 @@
     "sha": "fdb6b849b629fe36"
   },
   "js/voice-path.js": {
-    "v": "20261123e",
-    "sha": "761a87c66c7015ce"
+    "v": "20261125a",
+    "sha": "51e8b651b6bc06b9"
   },
   "js/wake-lock.js": {
     "v": "20261112b",

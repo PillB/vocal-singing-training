@@ -188,7 +188,8 @@ test("T4 a human visit: geo lookup, consent bar and an analytics flush raise no 
   await expect(page.locator("[data-region-consent] button").first()).toBeVisible({ timeout: 8000 });
   await page.locator("[data-region-consent] button").first().click(); // accept
   await page.evaluate(() => {
-    window.VTAnalytics.track("csp_probe", {});
+    // An event the worker keeps: since the wire filter (docs/48 section 11, third round) an unknown name never leaves.
+    window.VTAnalytics.track("practice_start", { exerciseId: "csp-probe" });
     return window.VTAnalytics.flush();
   });
   await expect.poll(() => seen.filter((s) => s === "GET /v1/geo").length).toBe(1);

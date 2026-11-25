@@ -101,6 +101,8 @@
   const stageEarnedKey = (area, n) => `${P}stage:${area}:${n}`;
   const stageKey = (area, n) => `${P}st:${area}:${n}`;
   const setKey = (id) => `${P}set:${id}`;
+  /** Evidence only the moment can give (the order of two takes), kept for the logro that needs it. */
+  const evidenceKey = (id) => `${P}ev:${id}`;
 
   function readFlags() {
     try {
@@ -256,14 +258,6 @@
   const rowsOf = (lg) => lg.keys.map((k) => lg.days[k]);
   const exOf = (row) => (Array.isArray(row?.ex) ? row.ex : []);
 
-  /** A day on which a warm-up or breath exercise came before the first song. */
-  function warmedBeforeSong(lg) {
-    return rowsOf(lg).some((row) => {
-      const ex = exOf(row);
-      const song = ex.indexOf(SONG_EX);
-      return song > 0 && ex.slice(0, song).some((id) => WARM_AREAS.includes(AREA_OF.get(id)));
-    });
-  }
 
   function allAreas(track, byArea) {
     return AREAS.filter((a) => a.tracks.includes(track)).every((a) => byArea[a.id].length > 0);
@@ -296,7 +290,7 @@
     },
     { id: "set", group: "explore", test: (c) => Object.keys(c.flags).some((k) => k.startsWith(`${P}set:`) && c.flags[k]) },
     { id: "cool", group: "care", test: (c) => anyFlag(c.flags, COOL_SETS) || rowsOf(c.lg).some((r) => exOf(r).some((id) => COOL_EX.includes(id))) },
-    { id: "warmfirst", group: "care", test: (c) => warmedBeforeSong(c.lg) },
+    { id: "warmfirst", group: "care", test: (c) => !!c.flags[evidenceKey("warmfirst")] },
     { id: "rated", group: "listen", test: (c) => rowsOf(c.lg).some((r) => !!r.saved) },
     { id: "listen", group: "listen", test: (c) => rowsOf(c.lg).some((r) => exOf(r).some((id) => LISTEN_EX.includes(id))) }
   ];
@@ -347,18 +341,40 @@
     }
   }
 
+  /**
+   * The singer's switch. Not while a handover waits: the switch lives in the
+   * loop's memory, which sync keeps with the earlier owner, and nothing could
+   * be filed before it turned (see handoverPending).
+   * @returns {boolean} whether it turned
+   */
   function setHidden(off) {
+    if (handoverPending()) return false;
+    // What the hidden weeks earned is filed before the switch turns, while
+    // it can still be filed as seen: showing it again announces nothing old.
+    if (!off) fileWhileHidden();
     try {
       global.VTLoop?.setPathOff?.(!!off);
     } catch {
       /* ignore */
     }
     track("path_hide", { off: !!off });
+    return true;
   }
 
   /** Shown: served and not hidden. */
   function visible() {
     return served() && !hidden();
+  }
+
+  /**
+   * Hidden, the layer still files what is earned, as already seen (quietNow),
+   * so showing it again, here or from another device, brings no news from
+   * the hidden weeks. Every path that evaluates when shown does this when
+   * hidden. Declared as a function so setHidden can call it before evaluate
+   * is defined further down.
+   */
+  function fileWhileHidden() {
+    if (hidden()) evaluate();
   }
 
   function track(name, props) {
@@ -431,7 +447,11 @@
    * @returns {{ fresh: string[] }} the logros earned by this call that are news
    */
   function evaluate() {
-    if (!served() || !D()) return { fresh: [] };
+    // Hidden on another device, a device in the other arm still files what
+    // it earns, quietly: it shows nothing either way, and the device that
+    // shows the layer again then finds it seen rather than new.
+    if ((!served() && !hidden()) || !D()) return { fresh: [] };
+    if (handoverPending()) return { fresh: [] };
     const flags = readFlags();
     const c = context(flags);
     const due = LOGROS.filter((l) => !flags[earnedKey(l.id)] && safeTest(l, c)).map((l) => l.id);
@@ -462,8 +482,20 @@
     return { logros, stages };
   }
 
-  /** Mark logros and stages as shown. */
+  /**
+   * What to tell as news now: nothing while a handover question waits, when
+   * everything unseen is the earlier owner's (see handoverPending). Remembers
+   * which of the two it drew, so a wait that begins or ends under the page
+   * redraws it (onOwnerChange).
+   */
+  function newsNow(flags = readFlags()) {
+    drawnWaiting = handoverPending();
+    return drawnWaiting ? { logros: [], stages: [] } : unseen(flags);
+  }
+
+  /** Mark logros and stages as shown; not while a handover waits, for the same reason. */
   function markSeen(items) {
+    if (handoverPending()) return;
     const flags = readFlags();
     (items.logros || []).forEach((id) => {
       flags[seenKey(id)] = true;
@@ -480,12 +512,204 @@
    * own, so this is the only record that one was finished.
    */
   function noteSet(id, practised, steps) {
-    if (!id || !(practised >= Math.max(1, Math.ceil((Number(steps) || 0) / 2)))) return false;
+    if (!id || handoverPending() || !(practised >= Math.max(1, Math.ceil((Number(steps) || 0) / 2)))) return false;
     const flags = readFlags();
     if (flags[setKey(id)]) return false;
     flags[setKey(id)] = true;
     writeFlags(flags);
+    fileWhileHidden();
     return true;
+  }
+
+  /**
+   * This tab's takes today, in the order they were recorded, for whoever is
+   * practising (the sign-in and the profile). In one page a take is
+   * recorded or dropped before the next exercise can start (leaving an
+   * exercise records it, a routine records each step), so this order is the
+   * order they were sung. Takes from another tab, device, profile or
+   * account are not here: when they were sung is unknown (backfill and sync
+   * keep no order, and a take is recorded when it is rated, which can come
+   * after another tab's warm-up). sessionStorage carries the list across a
+   * reload of the tab; a page reads it once, at load, so a page brought
+   * back from the back-forward cache does not see takes that other pages of
+   * the tab recorded while it was away, perhaps after its own pending song.
+   */
+  const TAKES_KEY = "vt_path_takes_v1";
+
+  /** The tab's stored takes: { day, who, id }, one entry per practiser and take. */
+  function readStoredTakes() {
+    try {
+      const t = JSON.parse(global.sessionStorage?.getItem(TAKES_KEY) || "null");
+      const list = Array.isArray(t?.takes) ? t.takes : [];
+      return list.filter((x) => x && typeof x.day === "string" && typeof x.who === "string" && typeof x.id === "string");
+    } catch {
+      return [];
+    }
+  }
+
+  /** What earlier pages of this tab recorded: all of it before this page loaded. */
+  const inheritedTakes = readStoredTakes();
+  /** This page's own takes. */
+  let ownTakes = [];
+
+  /** A short one-way fingerprint (FNV-1a), so the session token itself is never copied. */
+  function fingerprint(text) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < text.length; i += 1) {
+      h ^= text.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(36);
+  }
+
+  /**
+   * Whose practice this is: the sign-in (known from the page's first moment,
+   * unlike the account's id, which waits for the server) and the profile.
+   */
+  function whoPractises() {
+    let signIn = "";
+    try {
+      const token = global.VTAccount?.getSessionToken?.();
+      if (token) signIn = fingerprint(String(token));
+    } catch {
+      /* signed out */
+    }
+    return `${signIn}|${profileId()}`;
+  }
+
+  /** Set once a handover held something back on this page, so it is drawn when the wait ends. */
+  let heldBack = false;
+  /** Whether what Tu camino last drew was drawn while a handover waited (no news, no switch). */
+  let drawnWaiting = false;
+  /** Logros a completion card said in its own words while a handover waited (see doneHtml). */
+  const saidWhileWaiting = new Set();
+
+  /**
+   * A handover question waits: this browser holds another account's practice
+   * and the one signed in has not said whose it is, or has not been told yet
+   * who it is (after a reload, until the server answers; all page long
+   * offline) while a handover is on record. Sync keeps the flags with the
+   * practice from before the handover, so nothing is written meanwhile, and
+   * nothing is told as news: it would be credited to, or taken from, the
+   * earlier owner.
+   * @param {object} [status] Sync's status, when sync just passed it on.
+   */
+  function handoverPending(status) {
+    let waiting = false;
+    try {
+      const s = status || global.VTSync?.getStatus?.();
+      waiting = !!(s?.handoverWaiting || s?.otherOwner);
+    } catch {
+      waiting = false;
+    }
+    if (waiting) heldBack = true;
+    return waiting;
+  }
+
+  /**
+   * Whose the practice is changed under the page: another account signed in
+   * and the question waits, it was answered, or the account's id arrived
+   * after a reload. Tu camino is drawn again when a wait began or ended
+   * since it last drew, so the home button never tells the newcomer the
+   * earlier owner's news, and what waited is drawn at once. Not otherwise:
+   * sync tells its listeners on every write, and a redraw closes the logro
+   * the reader had opened.
+   * @param {object} [status] Sync's status, when sync is the one telling.
+   */
+  function onOwnerChange(status) {
+    const pending = handoverPending(status);
+    if (pending === drawnWaiting && (pending || !heldBack)) return;
+    if (!pending) {
+      heldBack = false;
+      fileSaid();
+    }
+    renderHomeButton();
+    const card = $("#path-card");
+    if (card && !card.hidden && card.getClientRects?.().length) renderCard();
+    drawnWaiting = pending;
+  }
+
+  /** What a completion card said in its own words while the wait was on counts as said, now it can be filed. */
+  function fileSaid() {
+    if (!saidWhileWaiting.size) return;
+    evaluate();
+    markSeen({ logros: unseen().logros.filter((id) => saidWhileWaiting.has(id)) });
+    saidWhileWaiting.clear();
+  }
+
+  function tabTakes(day, who) {
+    return [...inheritedTakes, ...ownTakes].filter((t) => t.day === day && t.who === who).map((t) => t.id);
+  }
+
+  /**
+   * A list of takes with this one added: today's only, one entry per
+   * practiser and exercise. Only whether a warm-up is in it is ever asked,
+   * so a repeat moves to the end rather than filling the list.
+   */
+  function withTake(list, day, who, id) {
+    return [...list.filter((t) => t.day === day && (t.who !== who || t.id !== id)), { day, who, id }].slice(-80);
+  }
+
+  function keepTake(day, who, id) {
+    ownTakes = withTake(ownTakes, day, who, id);
+    const takes = withTake(readStoredTakes(), day, who, id);
+    try {
+      global.sessionStorage?.setItem(TAKES_KEY, JSON.stringify({ v: 2, takes }));
+    } catch {
+      /* this page only */
+    }
+  }
+
+  /**
+   * A take was recorded in this tab (the ledger's "vt:practice-recorded").
+   * A new take of the song, after a warm-up or breath exercise this tab
+   * recorded earlier today, is the evidence for "Calentar antes de cantar".
+   * A fact of practice, kept in every arm of the experiment, like a finished
+   * set: nothing else can rebuild it later.
+   * @param {{ exerciseId?: string, day?: string, isNew?: boolean }} take
+   * @returns {boolean} whether the evidence was stored now
+   */
+  function noteTake(take) {
+    const t = take || {};
+    const day = today();
+    if (!t.exerciseId || !day || t.day !== day) return false;
+    const who = whoPractises();
+    const before = tabTakes(day, who);
+    keepTake(day, who, t.exerciseId);
+    if (!t.isNew || t.exerciseId !== SONG_EX) return false;
+    if (!before.some((id) => WARM_AREAS.includes(AREA_OF.get(id)))) return false;
+    if (handoverPending()) return false;
+    const flags = readFlags();
+    if (flags[evidenceKey("warmfirst")]) return false;
+    flags[evidenceKey("warmfirst")] = true;
+    writeFlags(flags);
+    return true;
+  }
+
+  /**
+   * Every take recorded in this tab. Hidden, what it earns is filed quietly
+   * now, in the same tick as the day it is part of, so the two leave in the
+   * same sync: a device that shows the layer again later finds it seen,
+   * even when nothing on this device was drawn after the take.
+   */
+  function onTake(e) {
+    noteTake(e?.detail);
+    fileWhileHidden();
+  }
+
+  try {
+    global.addEventListener?.("vt:practice-recorded", onTake);
+  } catch {
+    /* no events: the logro waits for a page that has them */
+  }
+
+  // Who the practice belongs to can change under the page: the handover
+  // question answered, or the account's id arriving after a reload.
+  try {
+    global.VTAccount?.onChange?.(() => onOwnerChange());
+    global.VTSync?.onChange?.((status) => onOwnerChange(status));
+  } catch {
+    /* nothing changes before the next page */
   }
 
   /* —— Views of the ledger —— */
@@ -542,6 +766,7 @@
       hideAria: "Ocultar Tu camino",
       show: "Mostrar Tu camino",
       hiddenNote: "Tu camino está oculto. Tus días y tu racha siguen igual.",
+      waitNote: "Podrás mostrarlo cuando respondas a la pregunta de tu cuenta sobre la práctica de este dispositivo.",
       homeBtn: "Tu camino · {n}\u00a0logros",
       homeBtn1: "Tu camino · 1\u00a0logro",
       homeBtn0: "Tu camino",
@@ -639,6 +864,7 @@
       hideAria: "Hide Your path",
       show: "Show Your path",
       hiddenNote: "Your path is hidden. Your days and your streak are unchanged.",
+      waitNote: "You can show it again once you answer your account's question about this device's practice.",
       homeBtn: "Your path · {n}\u00a0milestones",
       homeBtn1: "Your path · 1\u00a0milestone",
       homeBtn0: "Your path",
@@ -826,8 +1052,10 @@
     return `<p class="path-weeks">${esc(fill(w.best === 1 ? C.weeks1 : C.weeks, { n: w.inRange, b: w.best }))}</p>`;
   }
 
-  function cardHiddenHtml() {
+  /** Hidden: a note and the way back, which waits while a handover does (see setHidden). */
+  function cardHiddenHtml(waiting) {
     const C = copy();
+    if (waiting) return `<p class="muted path-hidden-note">${esc(C.hiddenNote)} ${esc(C.waitNote)}</p>`;
     return `<p class="muted path-hidden-note">${esc(C.hiddenNote)}</p>
       <button type="button" class="btn btn-ghost btn-sm" data-path-show>${esc(C.show)}</button>`;
   }
@@ -836,7 +1064,7 @@
     const C = copy();
     const list = areas(trackId);
     const got = earned(flags);
-    const fresh = new Set([...unseen(flags).logros, ...lingeringLogros()]);
+    const fresh = new Set([...newsNow(flags).logros, ...lingeringLogros()]);
     // What is new first, then the rest in the catalogue's order.
     const order = [...got.filter((id) => fresh.has(id)), ...got.filter((id) => !fresh.has(id))];
     const logros = got.length
@@ -874,9 +1102,19 @@
     }
   }
 
-  /** What still wears its "Nuevo" label on this profile's card. */
+  /**
+   * Whose card the lingering labels are: the sign-in and the profile. A
+   * profile switch must not carry one profile's "Nuevo" to another, nor a
+   * sign-in one person's to the next (who would be told the earlier owner's
+   * logros, or their own long-seen ones, as new).
+   */
+  function lingerKey() {
+    return whoPractises();
+  }
+
+  /** What still wears its "Nuevo" label on this practiser's card. */
   function lingeringLogros() {
-    return lingering.who === profileId() ? lingering.logros : [];
+    return lingering.who === lingerKey() ? lingering.logros : [];
   }
 
   /**
@@ -900,7 +1138,7 @@
       const on = entries.some((e) => e.isIntersecting);
       if (on && !wasOn && pending) {
         markSeen(items);
-        lingering = { logros: [...lingeringLogros(), ...items.logros], who: profileId() };
+        lingering = { logros: [...lingeringLogros(), ...items.logros], who: lingerKey() };
         renderHomeButton();
       }
       if (!on && wasOn) {
@@ -937,22 +1175,36 @@
     $("#path-sub").textContent = C.sub;
     const toggle = $("#path-toggle");
     const body = $("#path-body");
+    const waiting = handoverPending();
     if (hidden()) {
+      fileWhileHidden();
       if (toggle) toggle.hidden = true;
-      body.innerHTML = cardHiddenHtml();
+      body.innerHTML = cardHiddenHtml(waiting);
       watchSeen(card, { logros: [], stages: [] });
       return;
     }
     evaluate();
     const flags = readFlags();
     if (toggle) {
-      toggle.hidden = false;
+      // The switch is the earlier owner's while a handover waits.
+      toggle.hidden = waiting;
       toggle.textContent = C.hide;
       toggle.setAttribute("aria-label", C.hideAria);
     }
     body.innerHTML = cardHtml(currentTrack(), flags);
-    watchSeen(card, unseen(flags));
-    focusIfWanted(card);
+    watchSeen(card, newsNow(flags));
+  }
+
+  /**
+   * Historial has drawn its list, and the card under it (app.js
+   * renderHistory). Arrived from the home button, the card is brought into
+   * view now and not on an earlier draw: other things draw the card too (an
+   * account change redraws the progress cards), and while the recordings are
+   * still being read the calendar has not pushed it down yet.
+   */
+  function historyDrawn() {
+    const card = $("#path-card");
+    if (card && !card.hidden) focusIfWanted(card);
   }
 
   /** The quiet way in from home, beside the fact cards: how many logros, or how many are new. */
@@ -962,6 +1214,7 @@
     const sum = D()?.summary?.();
     const on = !!sum && sum.practiceDays > 0;
     if (on) expose();
+    if (on) fileWhileHidden();
     if (!on || !visible()) {
       b.hidden = true;
       return;
@@ -969,7 +1222,7 @@
     evaluate();
     const flags = readFlags();
     const n = earned(flags).length;
-    const u = unseen(flags);
+    const u = newsNow(flags);
     const news = u.logros.length + u.stages.length;
     b.hidden = false;
     b.classList.toggle("has-new", news > 0);
@@ -1002,7 +1255,17 @@
    * @returns {string}
    */
   function doneHtml(opts = {}) {
-    if (!visible()) return "";
+    if (!visible()) {
+      fileWhileHidden();
+      return "";
+    }
+    // What is unseen while a handover waits is the earlier owner's. What the
+    // card says in its own words is remembered, and counts as said once the
+    // wait ends (fileSaid).
+    if (handoverPending()) {
+      (opts.skip || []).forEach((id) => saidWhileWaiting.add(id));
+      return "";
+    }
     evaluate();
     const u = unseen();
     const skip = (opts.skip || []).filter((id) => u.logros.includes(id));
@@ -1082,10 +1345,10 @@
       b.addEventListener("click", () => {
         track("path_open", { from: "home" });
         focusWanted = Date.now();
-        // Historial draws the card again once its calendar is in (after the
-        // recordings are read), and renderCard scrolls to it then. Scrolling
-        // here would aim at where the card is before the calendar pushes it
-        // down, and land a screen short of it at 200% zoom.
+        // Historial says when its list and the card are drawn (historyDrawn),
+        // and the scroll waits for that. Scrolling here, or on any earlier
+        // draw of the card, would aim at where it is before the calendar
+        // pushes it down, and land a screen short of it at 200% zoom.
         hooks.showHistory?.();
       });
     }
@@ -1107,6 +1370,8 @@
     unseen,
     markSeen,
     noteSet,
+    noteTake,
+    historyDrawn,
     served,
     hidden,
     setHidden,

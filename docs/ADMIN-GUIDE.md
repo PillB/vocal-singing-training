@@ -1,5 +1,10 @@
 # Admin guide: testers, Pro access and support
 
+Deployment update (2026-11-25): use the [verified service and recovery map](53-DEPLOYMENT-OWNERSHIP-AND-RECOVERY.md)
+and root `wrangler.sh --plan` before existing-worker updates. Older terminal
+examples below do not establish account ownership or migrate data. Account
+emails and binding IDs belong in the ignored private inventory.
+
 This is the manual for whoever runs Estudio Vocal day to day: giving testers
 Pro, taking it back, gift codes, answering the usual support messages, and the
 few maintenance jobs that need a terminal.

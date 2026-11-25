@@ -1,5 +1,12 @@
 # The go-live gate — what is built and off, and the order to switch it on
 
+Deployment update (2026-11-25): [current service ownership/recovery evidence](53-DEPLOYMENT-OWNERSHIP-AND-RECOVERY.md)
+supersedes older account/deploy assumptions below. Use `./wrangler.sh --plan`
+for existing-worker updates; it deploys an events-off stage unless analytics
+are explicitly enabled. A separate-account replica does not migrate existing
+data or authorize frontend cutover. Outstanding human/device/payment gates
+remain open.
+
 Everything on this branch is finished and switched off. That is deliberate:
 several of the steps below start costing money, or start taking it from other
 people, the moment they are on, and a few of them cannot be quietly undone.

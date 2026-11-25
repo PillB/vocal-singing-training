@@ -214,6 +214,17 @@ export const MUTANTS = {
     to: ".site-version-select {\n  min-height: var(--min-tap, 44px);\n  max-width: 100%;\n  font-weight: 650;\n}",
     cmd: [process.execPath, "node_modules/@playwright/test/cli.js", "test", "tests/site-version-devices.spec.js", "--project=webkit-layout", "--workers=1", "--reporter=line", "-g", "iPhone 12-16"]
   }],
+  ops: [
+    ["OP1 account URL is not checked against the authenticated subdomain", "workers/entitlements/scripts/deploy-main.mjs", "  verifyEndpoint(value.result?.subdomain, target);", "  // Defect: trust the configured URL.", "tests/node/deploy-main.test.mjs", "failed endpoint"],
+    ["OP2 inherited environment can retarget the deployment", "workers/entitlements/scripts/deploy-main.mjs", "  verifyEnvironment(process.env);", "  // Defect: accept inherited retargeting.", "tests/node/deploy-main.test.mjs", "failed environment"],
+    ["OP3 a different version annotation is accepted", "workers/entitlements/scripts/deploy-main.mjs", "if (version.id !== id || version.annotations?.[\"workers/message\"] !== message)", "if (false)", "tests/node/deploy-main.test.mjs", "unverified concurrent-after"],
+    ["OP4 changed signing key is accepted", "workers/entitlements/scripts/deploy-main.mjs", "key.x === target.publicKeyJwk.x", "true", "tests/node/deploy-main.test.mjs", "operator gates"],
+    ["OP5 a nested error array is treated as a missing signing key", "workers/entitlements/scripts/setup.sh", "if(!Array.isArray(rows)||rows.some(x=>!x||typeof x.name!==\"string\"))process.exit(1);", "if(!Array.isArray(rows))rows=[];", "tests/node/setup-key-preservation.test.mjs", "inventory is object"],
+    ["OP6 stale deployed HTML is accepted", "tests/helpers/live-release.mjs", "if (actual !== expected)", "if (false)", "tests/node/live-release.test.mjs", "actual HTTP release"],
+    ["OP7 stale same-version assets are accepted", "tests/helpers/live-release.mjs", "if (deployed !== info.sha)", "if (false)", "tests/node/live-release.test.mjs", "actual HTTP release"],
+    ["OP8 final health failure hides the newly deployed analytics version", "workers/entitlements/scripts/deploy-main.mjs", "record.deployedVersion = verifiedVersion(cwd, target, next, record.eventsOffVersion);\n    writeFileSync(receipt, JSON.stringify(record, null, 2), { mode: 0o600 });", "record.deployedVersion = verifiedVersion(cwd, target, next, record.eventsOffVersion);", "tests/node/deploy-main.test.mjs", "analytics phase2-health"],
+    ["OP9 phase two overwrites another operator's deployment", "workers/entitlements/scripts/deploy-main.mjs", "if (currentVersion(cwd, target) !== record.eventsOffVersion)", "if (false)", "tests/node/deploy-main.test.mjs", "another deployment during phase-one"]
+  ].map(([name, file, from, to, spec, pattern]) => ({ name, file, from, to, cmd: node(["--test-name-pattern", pattern, spec]) })),
   curriculum: [
     ["CUR1 skill filter silently shows every routine", "js/session-sets.js", 'sets.filter((set) => set.focus === focus)', 'sets'],
     ["CUR2 future skill tag disappears without authoring failure", "js/session-sets.js", '"id": "s-breath-phrases",\n      "track": "singing",\n      "focus": "breath",', '"id": "s-breath-phrases",\n      "track": "singing",\n      "focus": "retired-skill",'],
@@ -1735,7 +1746,7 @@ export const MUTANTS = {
   }))
 };
 
-export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger", "claims", "path", "curriculum"];
+export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger", "claims", "path", "curriculum", "ops"];
 
 /** What the last failing command printed, so a red baseline in CI says which test failed. */
 let lastFailure = "";

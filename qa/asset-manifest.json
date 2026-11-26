@@ -60,8 +60,8 @@
     "sha": "7a22204f54e3c15f"
   },
   "js/account.js": {
-    "v": "20261113a",
-    "sha": "f1cc1d8c6ec51d19"
+    "v": "20261126a",
+    "sha": "66b86313f5a278f9"
   },
   "js/admin-layouts.js": {
     "v": "20261111a",
@@ -84,8 +84,8 @@
     "sha": "6ddbb40663db0968"
   },
   "js/app.js": {
-    "v": "20261125c",
-    "sha": "73311c5fb5bebec6"
+    "v": "20261126a",
+    "sha": "cb4bfac12d2d5dd9"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -208,8 +208,8 @@
     "sha": "0f564ccb9e300624"
   },
   "js/reminders.js": {
-    "v": "20261113a",
-    "sha": "dbc37be738c9fcbd"
+    "v": "20261126a",
+    "sha": "4cba0702ead791e9"
   },
   "js/reports.js": {
     "v": "20261113d",
@@ -276,8 +276,8 @@
     "sha": "b4d0d814c3138e46"
   },
   "js/sync.js": {
-    "v": "20261125a",
-    "sha": "e8d01f69cfdf35e1"
+    "v": "20261126b",
+    "sha": "0a57ee01ff3cf527"
   },
   "js/tour.js": {
     "v": "20261125a",

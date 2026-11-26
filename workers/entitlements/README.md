@@ -1,5 +1,11 @@
 # Entitlements worker (`vocal-studio-entitlements`)
 
+Current operator entry point: [`../../wrangler.sh`](../../wrangler.sh), starting
+with `--plan`. See the [deployment/ownership map](../../docs/53-DEPLOYMENT-OWNERSHIP-AND-RECOVERY.md)
+for verified locations and ignored private records. Existing-worker updates
+must use freshly fetched main and a verified target; legacy `setup.sh` is a
+first-creation tool, not account discovery or a data migration.
+
 The server half of Pro. GitHub Pages cannot hold a secret key or verify a
 `Stripe-Signature`, so everything that decides *whether someone actually paid*
 lives here, in a Cloudflare Worker.

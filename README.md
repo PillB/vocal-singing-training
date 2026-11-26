@@ -1,5 +1,9 @@
 # Vocal & Singing Training
 
+Deployment and account recovery: [service map](docs/53-DEPLOYMENT-OWNERSHIP-AND-RECOVERY.md).
+Use `./wrangler.sh --plan` to verify an existing Worker's exact-main update;
+private account records live outside git, as described in that map.
+
 Self-paced practice website for **Vocal Training** (speaking foundations) and **Singing Training** (technique drills), built from the project homework file.
 
 **Homework source:** [`Vocal training and Singing training Homework.md`](./Vocal%20training%20and%20Singing%20training%20Homework.md)

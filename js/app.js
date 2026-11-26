@@ -2674,10 +2674,21 @@
       everStarted: false,
       liveSince: null,
       accumulatedMs: 0,
+      // Time a live take spent with the page hidden (QA-77): the step's timer
+      // runs on through it, the practice clock does not.
+      hiddenMs: 0,
+      hiddenSince: null,
       saved: false,
       entryId: null,
       creditedSec: 0
     };
+  }
+
+  /** Seconds a live take of this open spent hidden, the span still open included. */
+  function hiddenSec() {
+    const sp = state.sessionPractice;
+    const open = sp.hiddenSince != null ? performance.now() - sp.hiddenSince : 0;
+    return ((sp.hiddenMs || 0) + open) / 1000;
   }
 
   function getExerciseTargetSec(ex) {
@@ -4552,11 +4563,28 @@
     updateSessionBanner();
   }
 
+  /**
+   * A recorded take left playing (the rating card's, or History's) would play
+   * on through the next take: the microphone, without echo cancellation, hears
+   * it as the learner, the hold log keeps its holds and the new recording holds
+   * it (QA-79). Start stops every take player; a mode's own sounds are its own.
+   */
+  function pauseTakePlayers() {
+    document.querySelectorAll("audio.audio-player").forEach((a) => {
+      try {
+        if (!a.paused) a.pause();
+      } catch {
+        /* a player that cannot pause is not playing */
+      }
+    });
+  }
+
   async function startPractice() {
     const ex = state.exercise;
     if (!ex || state.practiceLive || state.practiceStarting) return;
     hideStepDone();
     setExerciseEnded(false);
+    pauseTakePlayers();
     const profile = getProfile(ex);
     // Generation token: Stop / leave / exercise switch aborts in-flight Start
     const gen = ++state.practiceGen;
@@ -5208,6 +5236,11 @@
   }
 
   function stopPractice(silent) {
+    // A take to end: live, or a Start still on its way. Every other way out
+    // (Puntuar ahora, a view switch, leaving) stops too, and asking the mode to
+    // end a take a second time measured it again: the rate ladder's minutes ran
+    // on to that second call, and the larger number was saved and scored (QA-78).
+    const hadTake = !!(state.practiceLive || state.practiceStarting);
     // Invalidate any in-flight Start
     state.practiceGen = (state.practiceGen || 0) + 1;
     state.practiceStarting = false;
@@ -5216,14 +5249,15 @@
       clearInterval(state._pianoKeepAlive);
       state._pianoKeepAlive = null;
     }
-    const modeResult = takeModeResult();
+    const modeResult = hadTake ? takeModeResult() : null;
     haltTake();
     if (modeResult?.patches) applyMetricPatches(modeResult.patches);
     setPracticeUI(false);
     $("#level-fill").style.width = "0%";
     // This take's own words, kept whether or not the Stop is announced: a timer
-    // that ends the take must not leave the previous take's numbers on the card
-    state.rate.summary = modeResult?.summary || null;
+    // that ends the take must not leave the previous take's numbers on the card,
+    // and a stop with no take must not take them off it
+    if (hadTake) state.rate.summary = modeResult?.summary || null;
     if (!silent) announceStop(modeResult);
   }
 
@@ -5374,7 +5408,8 @@
    */
   function takeTimes() {
     const total = state.timer.total > 0 ? state.timer.total : 0;
-    const ran = total ? Math.max(0, Math.min(total, total - state.timer.remaining)) : 0;
+    // The timer runs on while the page is hidden; that time was not sung (QA-77).
+    const ran = total ? Math.max(0, Math.min(total, total - state.timer.remaining - hiddenSec())) : 0;
     return { done: Math.round(Math.max(ran, getPracticedSec())), total };
   }
 
@@ -7823,10 +7858,38 @@
       window.VTSync?.flush?.({ unloading: true });
     });
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState !== "hidden") return;
+      if (document.visibilityState !== "hidden") {
+        resumePracticeClock();
+        return;
+      }
       if (state.view === "exercise") recordPracticeIfDue("hidden");
+      pausePracticeClock();
       window.VTSync?.flush?.();
     });
+  }
+
+  /**
+   * Hidden in the middle of a take. Time nobody could hear is not practice:
+   * the engine already counts none of it, but the take's clock ran on, so
+   * half an hour in another app read "31:00 de 5:00 ✓" and went on the day
+   * (QA-77). The step's timer keeps running, so the microphone still closes
+   * when the step ends; only the credit stops.
+   */
+  function pausePracticeClock() {
+    const sp = state.sessionPractice;
+    if (sp.liveSince == null) return;
+    flushPracticeClock();
+    sp.hiddenSince = performance.now();
+  }
+
+  /** Shown again: a take still live runs its clock from now, not from when the page was hidden. */
+  function resumePracticeClock() {
+    const sp = state.sessionPractice;
+    if (sp.hiddenSince != null) {
+      sp.hiddenMs = (sp.hiddenMs || 0) + performance.now() - sp.hiddenSince;
+      sp.hiddenSince = null;
+    }
+    if (state.practiceLive && sp.liveSince == null) sp.liveSince = performance.now();
   }
 
   function bind() {
@@ -8557,7 +8620,8 @@
     const wrap2 = $("#rem-time-2-wrap");
     const t2 = $("#rem-time-2");
     if (wrap2) wrap2.hidden = !isPro;
-    if (t2 && cfg.times[1]) t2.value = cfg.times[1];
+    // Empty unless chosen: a pre-filled 09:00 was saved as if picked, and spent the day's reminder (QA-80).
+    if (t2) t2.value = cfg.times[1] || "";
     const bn = $("#chk-browser-notify");
     if (bn) bn.checked = !!cfg.browserNotify;
     // A browser without notifications (an iPhone outside the home screen) has
@@ -8590,10 +8654,20 @@
     }
   }
 
+  /** The reminder's times as one phrase ("6:00 p. m. y 8:00 p. m."): a second time was never named (QA-80). */
+  function reminderTimes(times) {
+    const said = times.filter(Boolean).map(clockTime);
+    try {
+      return new Intl.ListFormat(locale(), { type: "conjunction" }).format(said);
+    } catch {
+      return said.join(" · ");
+    }
+  }
+
   /** The week card's way in to the reminder says whether one is set. */
   function renderReminderWayIn(cfg, loopOn) {
     const remText =
-      cfg.enabled && cfg.times[0] ? tt("retain.openOn", { time: clockTime(cfg.times[0]) }) : tt("retain.open");
+      cfg.enabled && cfg.times[0] ? tt("retain.openOn", { time: reminderTimes(cfg.times) }) : tt("retain.open");
     const remLabel = $("#btn-reminder-label");
     if (remLabel) remLabel.textContent = remText;
     // The classic arm has no week card: its way in sits in the start panel.

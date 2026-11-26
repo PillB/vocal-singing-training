@@ -1426,6 +1426,10 @@
         /* reported through getStatus */
       });
     }
+    // The closing write asks whose the practice is, as every other write does:
+    // another tab may have signed in someone else, whose record this now is,
+    // before this page heard of it (QA-76).
+    if (ownerState().state !== "mine") return;
     const active = global.VTStorage.getActiveProfileId();
     for (const profileId of [active, ...otherUnpushed(active)]) {
       const last = confirmed.get(profileId);
@@ -1695,6 +1699,13 @@
   async function useAccountOnly() {
     const me = accountId();
     if (!isAvailable() || !me) return { ok: false, reason: "signed_out" };
+    // Asked once: a second window still showing the question, pressed again
+    // after the first answer, would pull the account's copy over every profile
+    // and lose what was practised since (QA-76).
+    if (ownerState().state !== "other") {
+      emit();
+      return { ok: true, reason: "answered" };
+    }
     const token = sessionToken();
     const ids = localProfileIds();
     const kept = await setAsideOwners(me, ids);
@@ -1797,6 +1808,10 @@
     // A failed sync need not wait out its retry once the connection is back.
     global.addEventListener?.("online", () => {
       if (lastError) schedule();
+    });
+    // Whose the practice is, answered in another window: this one stops asking (QA-76).
+    global.addEventListener?.("storage", (e) => {
+      if (e.key === LS_OWNER || e.key === LS_HANDOVER || e.key === null) emit();
     });
   }
 })(window);

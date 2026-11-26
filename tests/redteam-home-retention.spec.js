@@ -11,6 +11,7 @@
  * Fixed clock: Wednesday 28 October 2026, 10:00 in Lima.
  */
 const { test, expect } = require("@playwright/test");
+const { enableQaPro } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const NOW = "2026-10-28T10:00:00-05:00";
@@ -232,6 +233,39 @@ test.describe("Home and retention: red-team fixes", () => {
     expect(r.t).toBe("20:00");
     expect(r.due).toBe(false);
     expect(r.notifs).toBe(0);
+  });
+
+  // ---------------------------------------------------------------- QA-80
+  // A Pro learner's second reminder (state-machine inventory, 2026-11-26): one "told today" flag for the day let
+  // the earlier time spend it, so the second never came; and the second time's field was pre-filled with 09:00,
+  // saved as if chosen, so every Pro learner was reminded in the morning instead of at the hour they picked.
+  test("QA-80 two times in a day: each is told once, the second as well", async ({ page }) => {
+    await page.setViewportSize(LAPTOP);
+    await boot(page, { now: "2026-10-28T08:30:00-05:00", days: ledger([-3, -2, -1]), reminders: REMINDER_ON(["08:00", "20:00"]) });
+    const due = () => page.evaluate(() => !document.getElementById("remind-due").hidden);
+    await expect.poll(due, "control: the morning one").toBe(true);
+    // The way in names both times (8:00 a. m. and 8:00 p. m.), not only the first.
+    await expect(page.locator("#btn-reminder-label")).toHaveText(/8:00.*8:00/);
+    await page.clock.setSystemTime(new Date("2026-10-28T12:00:00-05:00"));
+    await page.reload();
+    await page.clock.runFor(800);
+    expect(await due(), "told once: not again at noon").toBe(false);
+    await page.clock.setSystemTime(new Date("2026-10-28T20:30:00-05:00"));
+    await page.reload();
+    await page.clock.runFor(800);
+    expect(await due(), "the evening one comes too").toBe(true);
+  });
+
+  test("QA-80 a Pro learner who sets one time is reminded at that time only", async ({ page }) => {
+    await page.setViewportSize(LAPTOP);
+    await enableQaPro(page);
+    await boot(page, { days: ledger([-3, -2, -1]) });
+    await page.evaluate(() => VTBilling.activateDemo("pro_monthly"));
+    await page.click("#btn-reminder");
+    await expect(page.locator("#rem-time-2-wrap"), "control: Pro sees the second time").toBeVisible();
+    await expect(page.locator("#rem-time-2")).toHaveValue("");
+    await page.click("#reminder-done");
+    expect(await page.evaluate(() => VTReminders.getConfig().times)).toEqual(["18:00"]);
   });
 
   // ---------------------------------------------------------------- home-01

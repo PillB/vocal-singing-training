@@ -95,7 +95,7 @@ module.exports = {
     {
       name: "webkit-layout",
       use: { browserName: "webkit" },
-      testMatch: /(site-version|site-version-devices|touch-hover|session-sets|song-library)\.spec\.js/
+      testMatch: /(site-version|site-version-devices|touch-hover|session-sets|song-library|phone-fit)\.spec\.js/
     },
     {
       name: "mobile-chrome",

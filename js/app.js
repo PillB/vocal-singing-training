@@ -920,20 +920,26 @@
    * @returns {boolean} True when the cue was given up, so the stage must be fitted again.
    */
   function applyStageRelief(stage, visualBottom) {
-    if (!stopUnderPage(visualBottom)) return false;
-    const cue = document.getElementById("mode-cue");
-    if (!cue || cue.hidden || cue.getBoundingClientRect().height < 1) return false;
+    if (!stopUnderPage(visualBottom) || !cueOnStage()) return false;
     stage.setAttribute("data-relief", "cue");
     return true;
   }
 
+  /** True while the coach strip's cue is on the stage, so there is something to give up. */
+  function cueOnStage() {
+    const cue = document.getElementById("mode-cue");
+    return !!cue && !cue.hidden && cue.getBoundingClientRect().height >= 1;
+  }
+
   /**
    * True when a rail that grew in the middle of a take has taken Detener under
-   * the page and nothing has been given up for it yet: time for a fit.
+   * the page and the cue has not been given up for it yet: time for a fit.
+   * Where there is no cue (a picture's stage) a fit would change nothing, so
+   * the observer goes on as it always has.
    */
   function reliefDueMidTake() {
     const stage = document.getElementById("highway-stage");
-    if (!stage || stage.hasAttribute("data-relief")) return false;
+    if (!stage || stage.hasAttribute("data-relief") || !cueOnStage()) return false;
     return stopUnderPage(stageVisualBottom());
   }
 

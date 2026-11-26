@@ -39,7 +39,10 @@ Observed root cause, two things stacked:
 | G. Drop the cue during every take on a phone, by a media query. | Removes content from phones where it fits. Content yields only where it has to. | Rejected. |
 
 Trade-offs of A, stated: on those phones, in that exercise and language, the
-cue cannot be read during the take. The microphone row stays under the page
+cue cannot be read during the take. Once it has yielded in a take it stays
+down until the take ends or the page changes size, also if the row that pushed
+it goes away again: a sentence that comes and goes with the tuning readout
+would be worse than one that waits for Detener. The microphone row stays under the page
 during a take, as it already is before one (the stage is taller than the page
 there). On a 320 px wide phone Empezar is still under the page on opening in
 the exercises with the tallest rails (decision cross-01: that page scrolls);
@@ -114,6 +117,31 @@ test below fails).
 | 4. Scenes with their own sideways rules crowd their buttons in a narrower panel | Not observed: guided (5 and 6 buttons), placement A/B, speech taps and the ladders are whole at 568x320, the narrowest page. |
 | 5. The cue does not come back after Detener | **Observed.** Only a take that ran to the end of its clock got a fit (`setExerciseEnded`); one stopped early got none, so the cue stayed hidden. Fixed: `leaveLivePractice` fits on the frame after a take ends. A stage stopped early now also returns to its opening height; it used to keep the height the take's rails had grown it to. |
 
+Not predicted, found by running the new tests with other fonts (the round's
+most useful check: the app draws with the device's own font, here Inter, on CI
+most likely DejaVu Sans or Liberation Sans, on a phone San Francisco or
+Roboto):
+
+- **The row also arrives in the middle of a take.** The tuning readout
+  ("Afinación —", then "↑ +37¢") and the chord change width as one sings, so
+  whether the readout fits beside the status corner changes during the take,
+  not only at Empezar. Only the fits at Empezar looked; the rail observer grew
+  the stage and asked nothing. With the test machine's font the row always
+  came at Empezar, which is why the first tests passed. Fixed: the observer
+  asks the same question (`reliefDueMidTake`) and fits; mutant PH19.
+- **Which page is the tight one depends on the font.** With DejaVu Sans the
+  song exercise's Empezar is already under a 375x629 page, and in English the
+  take needs the relief too; with Liberation Sans a 375x635 page needs none.
+  Three of the first tests failed on their premises, not on the app. The tests
+  that carry the regression now build the case for the font they run with:
+  `tightestPage` finds, by halving, the shortest page on which the button is
+  still whole, and the row is forced by the test. The tests at the phones' own
+  sizes judge the outcome only. All 20 pass with Inter, DejaVu Sans and
+  Liberation Sans in Chromium.
+- This is also the argument for route A over route E: a guard that measures
+  where Detener ends is right for any font; words tuned to fit are right for
+  the font they were tuned with.
+
 Not predicted, found by the new tests:
 
 - `.mode-cue` carries `height: auto !important` and `overflow: visible
@@ -126,6 +154,11 @@ Not predicted, found by the new tests:
   Empezar, where the stage jumped. On a 293 px page those px were the 2 to 3
   the picture's panel still lacked on opening. Fixed: one fit when the view's
   animation ends.
+- On the A/B exercise (s26) "Toma lista ✓" lost its first letter at 568 to
+  802 px wide: 69 px of words in a 60 px column. It did so on main too, and
+  was 2 px worse beside a narrower picture. Fixed in
+  `css/scenes/resonance.css`: the columns are never narrower than their words;
+  the opening tests now also fail on any button whose words are wider than it.
 
 ## Shared-path regression matrix
 
@@ -135,11 +168,17 @@ Not predicted, found by the new tests:
 | `syncStageInsets` now also sets `data-beside`, `--pic-t`, `--pic-l` | Pitch exercises, whose rail holds more than the status corner | `phone-fit` "not on a pitch exercise on its side"; `mic-hud-layout`, `bottom-rail` |
 | `setPracticeUI(false)` now fits | Every Stop: the review card, the rating, a routine's next step | `exercise-viz-stage` (after Stop), `finish-rating`, `redteam-exercise-take`, `daily-session` |
 | The rail observer also watches the status corner | Every exercise | `phone-fit` "a longer status word" |
+| The rail observer fits the stage when a take's Detener has gone under the page and the cue has not yielded yet | A take on one of the ten pitch exercises, once per take at most (nothing while `data-relief` is set). A stage with no cue, every picture exercise, is left to the observer as before | `phone-fit` "in the middle of a take"; `redteam-exercise-take`, `mic-hud-layout`, `rail-small-screens` |
+| `stageVisualBottom`, taken out of the fit so the observer reads the same edge | The EEA statistics bar (`--region-consent-h`), the visual viewport's offset | `stage-design`, `viewport-overflow`; mutants anchored on the fit still find their lines |
+| css: the A/B buttons' columns are as wide as their words on a page on its side | The placement A/B exercise only (`.vz-resonance .ab-btns`) | `exercise-viz-resonance`; `phone-fit` "on opening" (words wider than their button) |
 | A fit when the exercise view's animation ends | Every exercise opening | `phone-fit` "resting height"; the specs above, which had been fitting by hand after opening |
 | css: the cue's relief; the corner stacked beside a picture | The other nine pitch exercises; all 40 picture exercises; a routine on its side | `phone-fit` (every pitch exercise at two sizes in two languages; every picture at four sizes on opening and one during a take), `stage-design` "guided: one header row" |
 
 ## Simulated drift
 
+- A different font, wider or narrower words: the relief is measured, not
+  tuned, and its tests find their own tight page; the sideways tests passed
+  unchanged with three fonts.
 - A status word longer than today's two: the picture moves over (`phone-fit`,
   mutants PH9, PH10).
 - Something new in a picture stage's top rail: the script withdraws
@@ -162,5 +201,10 @@ Not predicted, found by the new tests:
   exercises with the tallest rails (decision cross-01).
 - The follow-up worth doing: a side column for Empezar, the microphone and the
   piano settings on a phone on its side (route R above).
-- Every measurement is in Chromium at the page sizes of real phones. No
-  physical phone was used.
+- Where the cue is shorter than the row that arrives, Detener still ends
+  partly under the page: the cue is all the stage gives up.
+- Every measurement is in Chromium at the page sizes of real phones, with the
+  test machine's font (Inter). A phone draws the same words with its own font
+  (San Francisco, Roboto), so the exact sizes at which a row wraps differ
+  there; the faults and the fixes do not depend on them. The new tests also
+  pass in Playwright's WebKit on Linux. No physical phone was used.

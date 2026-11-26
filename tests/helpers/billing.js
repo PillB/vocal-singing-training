@@ -97,6 +97,8 @@ function tamperToken(token, patch) {
  * replacing `providers` or `markets` wholesale drops the rails and markets a
  * test did not mean to touch (Creem, most of all):
  * - `links: { rail: { plan: url } }` sets checkout links on rails that exist;
+ * - `rails: { rail: { key: value } }` sets other keys on rails that exist
+ *   (`apiCheckout`, the switch that sells a rail through the worker);
  * - `extraMarkets: [market]` appends markets to the shipped list.
  * @param {import('@playwright/test').Page} page
  * @param {object} patch shallow merge, `verification` merged one level deeper,
@@ -113,20 +115,25 @@ async function patchBillingConfig(page, patch) {
         if (earlier && earlier.set) earlier.set(value);
         held = value;
         if (!value) return;
-        const { verification, links, extraMarkets, ...rest } = p || {};
+        const { verification, links, rails, extraMarkets, ...rest } = p || {};
         Object.assign(value, rest);
         if (verification) {
           value.verification = Object.assign({}, value.verification, verification);
         }
-        for (const [rail, byPlan] of Object.entries(links || {})) {
+        // Loud, not skipped: a link for a rail the config does not have (a
+        // typo, a renamed rail) used to vanish, and the test that set it went
+        // on checking nothing. Thrown here, the page's config never loads and
+        // every assertion after it fails.
+        const railOf = (rail) => {
           const provider = value.providers && value.providers[rail];
-          // Loud, not skipped: a link for a rail the config does not have
-          // (a typo, a renamed rail) used to vanish, and the test that set it
-          // went on checking nothing. Thrown here, the page's config never
-          // loads and every assertion after it fails.
           if (!provider) throw new Error(`patchBillingConfig: no rail "${rail}" in VT_BILLING_CONFIG.providers`);
+          return provider;
+        };
+        for (const [rail, byPlan] of Object.entries(links || {})) {
+          const provider = railOf(rail);
           provider.links = Object.assign({}, provider.links, byPlan);
         }
+        for (const [rail, keys] of Object.entries(rails || {})) Object.assign(railOf(rail), keys);
         if (extraMarkets) value.markets = (value.markets || []).concat(extraMarkets);
       }
     });

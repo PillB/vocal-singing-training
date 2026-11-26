@@ -89,31 +89,55 @@ const byId = (...ids) => ids.flatMap((id) => [id, "#" + id]);
  * The elements bound to a listener that opens the plans (`$("#btn-value-pro").click()` opens them with no name
  * above in sight), by id, and by a class only that element has on the page. tests/node/promise-guards.test.mjs
  * derives these from the code (openerHandles, following a named handler through what it calls) and from the
- * page, and fails when a new one is missing here.
+ * page, and fails when a new one is missing here. The account panel's "pay without an account" (VG-88) is one:
+ * it opens the plans again when the currency it would now charge in is not the one the pressed card showed (VG-85).
  */
 export const BILLING_HANDLES = new Set([
-  ...byId("btn-pricing", "btn-value-pro", "value-banner-cta", "btn-account-pricing", "btn-profile-add", "sel-week-goal", "rem-time-2", "btn-export-progress"),
+  ...byId("btn-pricing", "btn-value-pro", "value-banner-cta", "btn-account-pricing", "btn-profile-add", "sel-week-goal", "rem-time-2", "btn-export-progress", "account-pay-anyway-btn"),
   "[data-ad-cta]"
 ]);
 /**
  * The marks a reader of the plan paints on the page, which read the plan back off it: the header's Pro button's
  * `data-plan` and its classes, the progress board's tag's classes, and the trial note's moment. Derived from the
  * code and checked as the handles are (every class or data attribute a reader of the plan writes is here, or
- * written down as no mark with why).
+ * written down as no mark with why). Pro on hold (a subscription still open while Pro is off) has its own on the
+ * header button and on the board's tag: plan-hold and is-hold.
  */
-export const BILLING_MARKS = new Set(["[data-plan]", "data-plan", "btn-pro", "plan-trial", "plan-gift", "plan-paid", "plan-ending", "is-free", "is-pro", "is-trial", "is-gift", "is-ending", "data-moment-id"]);
+export const BILLING_MARKS = new Set(["[data-plan]", "data-plan", "btn-pro", "plan-trial", "plan-gift", "plan-paid", "plan-ending", "plan-hold", "is-free", "is-pro", "is-trial", "is-gift", "is-ending", "is-hold", "data-moment-id"]);
 /** The plan's own keys in storage, which read it with no call into billing: checked against every key the plan's files keep. */
 export const BILLING_KEYS = new Set(["vt_billing_v1", "vt_billing_trial_started_v1", "vt_billing_intent", "vt_license_v1", "vt_pro_paid_first_v1"]);
 /** The plan's handles that are not names. A dialog of the sale shown by its own id or class is counted too ("#pricing-modal:open"; see dialogShown). */
 export const BILLING_LITERALS = new Set([...BILLING_HANDLES, ...BILLING_MARKS, ...BILLING_KEYS]);
 /** What asks whether the visitor is signed in: the account and its sync, the older sign-in (VTAuth) that app.js also trusts, and the licence, whose claims name the account. */
 export const ACCOUNT_NAMES = new Set(["VTAccount", "VTSync", "VTAuth", "VTLicense", "signedIn", "getSessionToken", "openAccount", "signInWithGoogle", "startEmailSignIn", "renderGoogleButton"]);
-/** Every element bound to open the sign-in, by id and by a class only it has (derived and checked as the plan's are). */
-export const ACCOUNT_HANDLES = new Set([...byId("btn-account", "account-email-form", "account-code-form", "account-code-resend", "btn-start-trial"), "header-door"]);
+/**
+ * Every element bound to open the sign-in, by id and by a class only it has (derived and checked as the plan's are).
+ * Two more open it in answer to their press: "pay without an account" (VG-88) when the checkout asks for an account
+ * after all (this browser can sign in by now, or the link it would pay by has gone), and Manage when the session
+ * turns out to have ended (none in this page, or the worker answers 401).
+ */
+export const ACCOUNT_HANDLES = new Set([
+  ...byId("btn-account", "account-email-form", "account-code-form", "account-code-resend", "btn-start-trial", "account-pay-anyway-btn", "btn-manage-billing"),
+  "header-door"
+]);
 /** The marks the header's account door carries when someone is signed in, derived and checked as the plan's marks are. */
 export const ACCOUNT_MARKS = new Set(["is-signed-in", "door-avatar", "door-name"]);
-/** The sessions, the plan and the sync's own records the account keeps: checked against every key the account's files keep. */
-export const ACCOUNT_KEYS = new Set(["vt_account_session_v1", "vt_account_plan_v1", "vt_auth_session_v1", "vt_sync_aside_v1", "vt_sync_handover_v1", "vt_sync_owner_v1", "vt_sync_rev_v1"]);
+/**
+ * The sessions, the plan and the sync's own records the account keeps: checked against every key the account's files
+ * keep. The checkouts still to link to an account (VG-83), under the list's key and the one-entry key before it, are
+ * the account's too: each names who asked, and only the worker's answer to the link gives a plan.
+ */
+export const ACCOUNT_KEYS = new Set([
+  "vt_account_session_v1",
+  "vt_account_plan_v1",
+  "vt_auth_session_v1",
+  "vt_sync_aside_v1",
+  "vt_sync_handover_v1",
+  "vt_sync_owner_v1",
+  "vt_sync_rev_v1",
+  "vt_pending_links_v2",
+  "vt_pending_link_v1"
+]);
 /** The account's handles that are not names. */
 export const ACCOUNT_LITERALS = new Set([...ACCOUNT_HANDLES, ...ACCOUNT_MARKS, ...ACCOUNT_KEYS]);
 /** What `VTAccount.getState()` says about the visitor: `.account` is who is signed in, `.entitlement` what they bought. */

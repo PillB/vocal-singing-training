@@ -21,7 +21,7 @@ new numbers.
 | Peru, yearly | S/ 279 | **S/ 119.90** | 50% off, which is the category norm. 34% was not. |
 | World, monthly | $9.99 | **$7.99** | Modest cut; the monthly was the least wrong number. |
 | World, yearly | $79 | **$49** | The category's median annual is $38–45. $79 was double. |
-| Euro | €9.99 / €79 | **€7.99 / €49** | Same numerals as USD, which is the norm. ⚠ See the tax warning. |
+| Euro | €9.99 / €79 | **€7.99 / €49** | The 27 EU member states, VAT included (decided 2026-11-22, VG-85). Same numerals as USD, which is the norm. See [the VAT trade-off](#euros-in-the-european-union-decided-2026-11-22). |
 | Trial | 7 local / 30 account | **7 local / 7 account** | The account trial went from 30 to 7 days on 2026-09-24; see [the trial section](#the-trial-is-seven-days-decided-2026-09-24-was-30). |
 
 The yearly discount now reads 50% in soles and 49% in dollars — the same offer
@@ -281,13 +281,73 @@ price to be the total, taxes included (Código, art. 4.1), so the plan amount is
 what the buyer pays and Mercado Pago adds nothing to it. The 18% IGV the seller
 owes SUNAT therefore comes out of that amount: 18/118, about 15.3% of every
 Peru charge, is not in the "Net" column above. The dollar rows are exports
-through a merchant of record and carry no Peruvian IGV, so the two sets of rows
-are not comparable until that 15.3% is taken off the soles ones. One offset:
+through a merchant of record and carry no Peruvian IGV for the seller, so the
+two sets of rows are not comparable until that 15.3% is taken off the soles
+ones. A Peruvian buyer on the dollar rows is the exception for the buyer, not
+the seller: under DL 1623 (2024) a foreign digital service charges IGV to a
+Peruvian user, presumed from a Peruvian card, so Creem may add 18%. The Creem
+products must be tax-inclusive (`tax_mode: "inclusive"`), or US$ 7.99 becomes
+about US$ 9.43 at the checkout, against Code art. 4.1 (gate step 3). One offset:
 the "Fee" column already includes the IGV on Mercado Pago's commission
 (S/ 0.31 of the S/ 2.00), which is input IGV the seller can credit against what
 it owes, provided Mercado Pago's comprobante for the fee is a factura to the
 seller's RUC (not checked). On S/ 19.90 that leaves about S/ 15.17 after fee and
 tax, not S/ 17.90 − S/ 3.04.
+
+---
+
+## Euros in the European Union (decided 2026-11-22)
+
+Pablo's decision on VG-85: the Creem products charge **euros in the European
+Union** and **US dollars everywhere else**. Peru keeps Mercado Pago in soles.
+
+- **Who pays euros:** the 27 member states (AT BE BG HR CY CZ DK EE FI FR DE
+  GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE). Europe outside the Union
+  (the United Kingdom, Switzerland, Norway, Iceland) pays US dollars: the
+  decision is the Union's.
+- **What:** €7.99 a month and €49 a year, VAT included, on two more Creem
+  products (four in all, every one `tax_mode: "inclusive"`).
+- **The price shown is the price charged.** The EU's Price Indication
+  Directive (98/6/EC, art. 2(a)) makes the selling price the final one, VAT
+  and all other taxes included, and Peru's Ley 29571 (art. 6) says the same.
+  So the page shows a European € only where the checkout that will charge
+  them can charge euros: through the worker, once `/v1/health` reports
+  `creemEurConfigured`; by pasted links, once both euro links are in
+  `providers.creem.linksEur`. Otherwise it shows the US$ they would be
+  charged. While no press can take money (the dialog's own pre-launch, its
+  buttons saying "not available yet") it shows the planned € price. A
+  European's page asks `/v1/health` once it is idle, so the dialog opens on
+  the money it will charge rather than turning from US$ to € in front of
+  them; nobody else is asked before they open it.
+- **Said with the price:** the region line reads "precios en euros (€), IVA
+  incluido" / "prices in euros (€), VAT included". The directive asks for the
+  VAT-inclusive price; Germany's PAngV § 6(1) also asks a distance seller to
+  say that the price includes it, beside the price, before the checkout.
+- **How the page knows who is in the Union:** the browser's time zone first
+  (it says where the device is, so more often than the language where the
+  card was issued), and the language's region subtag only where the zone
+  names no place (UTC in a hardened browser). It is a guess: Creem's own
+  checkout sees the billing address.
+
+**The trade-off of one VAT-inclusive price.** The buyer sees one number in
+every member state, and VAT comes out of it, so what reaches the seller
+varies with the country's standard rate, from 17% in Luxembourg to 27% in
+Hungary:
+
+| Country (standard VAT) | €7.99 a month, before Creem's fee | €49 a year, before Creem's fee |
+|---|---|---|
+| Luxembourg (17%) | €6.83 | €41.88 |
+| Spain (21%) | €6.60 | €40.50 |
+| Hungary (27%) | €6.29 | €38.58 |
+
+The alternatives were worse. A price before VAT, with the tax added at the
+checkout, cannot be shown to an EU consumer as the price (the directive
+above), and it is the surprise at the checkout that every buyer dislikes. A
+price per country that evens out the net (€7.49 in Luxembourg, €8.49 in
+Hungary) would need a pair of Creem products per rate, and a buyer who
+compares across a border sees two prices for one product. The spread above,
+about 9% of the net between the lowest and the highest rate, is the cost of
+one honest number.
 
 ---
 
@@ -472,10 +532,14 @@ operator steps in [34-PERU-OPERATOR-RUNBOOK.md](34-PERU-OPERATOR-RUNBOOK.md):
 
 1. Create the Mercado Pago plan at S/ 19.90 and a second at S/ 119.90, and put
    their checkout URLs in `js/billing-config.js`.
-2. Create two Creem products, $7.99 monthly and $49 yearly, once Creem approves
-   a Peru-registered seller.
+2. Create four Creem products, once Creem approves a Peru-registered seller:
+   US$ 7.99 monthly and US$ 49 yearly, and €7.99 monthly and €49 yearly for
+   the European Union, all tax-inclusive.
 3. ~~**VG-20 blocks step 2.**~~ Done on 2026-11-03: the Creem rail is wired end
    to end, the host allow-list takes `checkout.creem.io`, and the claim route
    and `/v1/health` both know the provider. Nothing blocks step 2 but the
    account itself.
-4. Confirm Creem's tax mode before the euro price is shown to anyone.
+4. Confirm Creem's tax mode before any price is charged: every product with
+   `tax_mode: "inclusive"`, and one test purchase with an EU billing address
+   that totals €7.99 (docs/40, steps 3 and 4). The page shows a European € only
+   once the worker reports `creemEurConfigured`.

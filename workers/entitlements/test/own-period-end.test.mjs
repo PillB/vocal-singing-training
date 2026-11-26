@@ -60,6 +60,16 @@ import test from "node:test";
 import { handleRequest } from "../src/index.js";
 import { createFakeKv, createTestEnv } from "./fixtures.mjs";
 
+/**
+ * What a Creem subscription that renews answers once its paid period is over
+ * and no renewal has been paid yet: no Pro, and 402 rather than 403, so the
+ * browser keeps the licence for when the renewal or a retry goes through
+ * (found reviewing the merge, 2026-11-23: a buyer without an account lost it
+ * there). 403 is for one that will not renew: set to cancel, or ended by money
+ * going back.
+ */
+const RENEWAL_DUE = 402;
+
 const DAY = 86400;
 const T = Math.floor(Date.now() / 1000);
 const hmacHex = (secret, message) => createHmac("sha256", secret).update(message).digest("hex");
@@ -212,14 +222,14 @@ test("OPC0 control: a renewal that names the NEW period (the docs sample's shape
   await creem(env, "c3", "subscription.paid", 31, cpaid("sub_1", "tran_2", 31, 62, 31));
   assert.equal(await creemClaim(env, "ch_1", 40), 200);
   assert.equal(await creemClaim(env, "ch_1", 61), 200);
-  assert.equal(await creemClaim(env, "ch_1", 63), 403);
+  assert.equal(await creemClaim(env, "ch_1", 63), RENEWAL_DUE);
 });
 
 test("OPC1 control: a charge taken mid-period that names the current period gives no extra month (G2; the fix of CR12)", async () => {
   const env = freshEnv(); await creemMonthOne(env);
   await creem(env, "c3", "subscription.paid", 15, cpaid("sub_1", "tran_2", 0, 31, 15));
   assert.equal(await creemClaim(env, "ch_1", 20), 200);
-  assert.equal(await creemClaim(env, "ch_1", 33), 403, "the period ended at day 31 and nothing later was paid for");
+  assert.equal(await creemClaim(env, "ch_1", 33), RENEWAL_DUE, "the period ended at day 31 and nothing later was paid for");
 });
 
 test("OPC2 a renewal whose subscription snapshot still names the PREVIOUS period (the docs do not say which a renewal carries): the charge still buys its month (G1)", async () => {
@@ -227,17 +237,17 @@ test("OPC2 a renewal whose subscription snapshot still names the PREVIOUS period
   // charged on day 31, but the object was serialised before the period rolled: period 0..31
   await creem(env, "c3", "subscription.paid", 31, cpaid("sub_1", "tran_2", 0, 31, 31));
   assert.equal(await creemClaim(env, "ch_1", 40), 200, "tran_2 is new money charged at day 31");
-  assert.equal(await creemClaim(env, "ch_1", 63), 403, "and a month is all it bought");
+  assert.equal(await creemClaim(env, "ch_1", 63), RENEWAL_DUE, "and a month is all it bought");
 });
 
 test("OPC3 a renewal collected nine days late, after access had already lapsed: it buys the period it was for, not a month from the day it cleared (G2)", async () => {
   const env = freshEnv(); await creemMonthOne(env);
   // Month two's charge was turned down and retried; it cleared on day 40, and
   // says what it was for: period 31..62. Access lapsed at day 31 in between.
-  assert.equal(await creemClaim(env, "ch_1", 35), 403, "setup: month one had run out");
+  assert.equal(await creemClaim(env, "ch_1", 35), RENEWAL_DUE, "setup: month one had run out");
   await creem(env, "c3", "subscription.paid", 40, cpaid("sub_1", "tran_2", 31, 62, 40));
   assert.equal(await creemClaim(env, "ch_1", 50), 200, "the month it paid for is live again");
-  assert.equal(await creemClaim(env, "ch_1", 63), 403, "and it bought that month, not a month from the day it cleared");
+  assert.equal(await creemClaim(env, "ch_1", 63), RENEWAL_DUE, "and it bought that month, not a month from the day it cleared");
 });
 
 // ---------------- the test-mode gate ----------------

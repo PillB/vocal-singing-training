@@ -99,12 +99,6 @@
     },
     {
       "file": "js/app.js",
-      "sha": "9d556165ebcf239cdcb1a493d0655a8f87f67bd549b0a29cf962225590f5d7bc",
-      "complexity": 33,
-      "name": "Function 'renderValuePulse'"
-    },
-    {
-      "file": "js/app.js",
       "sha": "9623c1473d78f9486843c309eef081920298b3cf5bff1209558b1236962ce9ba",
       "complexity": 19,
       "name": "Function 'stopPitchViz'"
@@ -138,18 +132,6 @@
       "sha": "6ce5613dc5b22ea8e528c679ed9113df5ba5c1220da5b9fb71e86bd7389c0a92",
       "complexity": 22,
       "name": "Function 'activate'"
-    },
-    {
-      "file": "js/billing.js",
-      "sha": "7e1a763f0c091be6ffeddbb73014f6f4175ff0a561b010d9aa6bf8a003b2e54e",
-      "complexity": 43,
-      "name": "Function 'detectRegion'"
-    },
-    {
-      "file": "js/billing.js",
-      "sha": "ca0a3deacf87dca47010deaf725c309bee7a2bb55e63866e91d8b8e65adce9fb",
-      "complexity": 38,
-      "name": "Function 'exportProgressJson'"
     },
     {
       "file": "js/billing.js",
@@ -216,12 +198,6 @@
       "sha": "026b1b7506115dfdb56be5c0e83c2e23d7de5592503d1a8b4d304a9967b024cc",
       "complexity": 16,
       "name": "Method 'exField'"
-    },
-    {
-      "file": "js/license.js",
-      "sha": "c99e58d4b02bfe643aad53003b35c3cb514ac304e81958b58b3611ac167a8056",
-      "complexity": 18,
-      "name": "Async function 'claim'"
     },
     {
       "file": "js/license.js",

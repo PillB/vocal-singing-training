@@ -52,11 +52,70 @@
    * only conversion this browser will ever report.
    */
   const LS_PAID_FIRST_KEY = "vt_pro_paid_first_v1";
+  /**
+   * A checkout whose link to the signed-in account the worker has not
+   * confirmed yet (VG-83). The return page's one link attempt used to be
+   * dropped on a 202 — the webhook later than the buyer, which Creem and
+   * Stripe document as ordinary — and the next load then cleared the Pro the
+   * buyer had just paid for. The reference is kept here and retried on every
+   * load, and a few times while the page stays open, until the worker answers
+   * for it or a week has passed.
+   */
+  const LS_PENDING_LINK_KEY = "vt_pending_links_v2";
+  /**
+   * Where the page kept one pending link, as one object, before it kept a
+   * list. Read, merged into the list and removed; never written. The list has
+   * a key of its own because a tab opened before the list shipped still runs
+   * the old code: under the old key it read the list as nothing pending,
+   * wrote its one object over everybody's entries, and removed the key on a
+   * link (red team round two). Under its own key, an old tab only ever
+   * touches the old one, and the next read here takes what it wrote.
+   */
+  const LS_LEGACY_PENDING_LINK_KEY = "vt_pending_link_v1";
+  const PENDING_LINK_MAX_AGE_MS = 7 * 86400000;
+  /**
+   * How many pending links one browser keeps, each naming who asked for it.
+   * A list, because a shared browser can hold more than one person's
+   * purchase: with one slot, the next account's checkout overwrote the only
+   * record of the last one's (red team states-2). Short, because the
+   * signed-in person's own entries are each sent on every load and on the
+   * in-page schedule; other people's are only kept. Past it, the writer's own
+   * oldest entry goes first and somebody else's only when the writer has none
+   * left to give up (writePendingLink).
+   */
+  const PENDING_LINK_MAX = 4;
+  /** In-page retries after a 202; past the last one, the next load tries again. */
+  const LINK_RETRY_DELAYS_MS = [4000, 12000, 30000, 90000];
+  /** Answers after which retrying cannot help: malformed, unknown, or somebody else's. */
+  const LINK_FINAL_STATUSES = new Set([400, 404, 409]);
+  /** A link that has not answered in this long counts as offline: kept, and tried again later. */
+  const LINK_TIMEOUT_MS = 15000;
+  /** The rails a paid licence can come from (a grant or a trial has none of these). */
+  const PAID_RAILS = new Set(["creem", "stripe", "mercadopago"]);
   /** Google Identity Services, loaded on demand so a signed-out visitor pays nothing for it. */
   const GIS_SRC = "https://accounts.google.com/gsi/client";
 
   /** @type {{token: string, expiresAt: number}|null} */
   let session = null;
+  /**
+   * Licence ids the worker has settled (linked, or refused for good), so an
+   * answer cannot loop; and the ones being asked about right now. A licence
+   * whose link failed for a passing reason is in neither, so it is asked
+   * again rather than dropped on the next refresh.
+   */
+  const linkSettled = new Set();
+  const linkAsking = new Set();
+  /**
+   * The pending link as last written, for a browser whose storage refuses it
+   * (quota, blocked site data): the in-page retries read this copy.
+   */
+  let pendingMem = null;
+  let pendingMemOnly = false;
+  /** Link requests on their way, by body, so two callers asking at once send one. */
+  const linksInFlight = new Map();
+  /** The pending link's in-page retry timer, and how many delays it has used. */
+  let linkRetryTimer = null;
+  let linkRetryStep = 0;
   /** @type {object|null} Last `/v1/me` answer. */
   let snapshot = null;
   /**
@@ -332,8 +391,12 @@
     writeLastPlan(data && data.entitlement);
     notePaidFirst(data && data.entitlement);
     if (data && data.token && global.VTLicense?.adopt) {
+      // The account's own token (a trial, a gift) would replace a paid licence
+      // this browser holds that the account does not name yet, bought signed
+      // out (VG-88): it is linked first, or it is never linked at all.
+      linkHeldLicence(data.licenseId);
       await global.VTLicense.adopt(data.token, data.licenseId);
-    } else if (global.VTLicense?.clear) {
+    } else if (global.VTLicense?.clear && !(await keptByLinking())) {
       // Entitled to nothing right now: drop any token still lying around so the
       // UI cannot keep showing Pro after a gift was revoked.
       global.VTLicense.clear();
@@ -342,7 +405,82 @@
     return data;
   }
 
-  /** Forget the session locally. Used on sign-out and on a rejected token. */
+  /**
+   * The paid licence this browser holds that is not this account's yet, by
+   * id: one claimed on the way back from a checkout, or bought signed out.
+   * A token minted for an account carries `accountId`, and for that one the
+   * account's own answer is the truth (a revoked gift must end), so it is
+   * never returned here.
+   * @returns {string|null} Licence id, or null.
+   */
+  function heldPaidLicence() {
+    try {
+      const claims = global.VTLicense?.getClaims?.();
+      const id = global.VTLicense?.getStatus?.()?.licenseId;
+      if (!claims || claims.accountId || !PAID_RAILS.has(claims.provider)) return null;
+      return typeof id === "string" && /^[A-Za-z0-9_-]{43}$/.test(id) ? id : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Before dropping a paid licence the account does not show, ask the worker
+   * once to link it (VG-83: never clear a claimed licence before a link has
+   * been tried with its id). True when the licence is to be kept: the link
+   * worked (and its answer has been adopted), or the worker did not answer
+   * for it either way, in which case what the signature proves still stands.
+   * @returns {Promise<boolean>}
+   */
+  async function keptByLinking() {
+    const licenseId = heldPaidLicence();
+    if (!licenseId || linkSettled.has(licenseId) || !session?.token) return false;
+    // Already being asked (a second refresh, or that link's own answer being
+    // adopted): keep it until the answer settles it.
+    if (linkAsking.has(licenseId)) return true;
+    const res = await linkLicence(licenseId);
+    // Linked, and the account's answer grants nothing (the licence's record
+    // was refunded or has run out): that answer is the account's truth, so
+    // the licence goes now, not on the next refresh (red team tests-3).
+    if (res.ok && !res.granted) return false;
+    // Dropped only on an answer that settles it (malformed, unknown, or
+    // another account's); offline, throttled or failing, the signature stands
+    // and the link is tried again (it is pending until the worker answers).
+    // An answer that came after a sign-out is none of these, and leaves the
+    // next person's licence alone.
+    return res.ok || !LINK_FINAL_STATUSES.has(res.status);
+  }
+
+  /** Link the held paid licence before the account's own token replaces it; see adopt(). */
+  function linkHeldLicence(accountLicenceId) {
+    const held = heldPaidLicence();
+    if (!held || held === accountLicenceId || linkSettled.has(held) || linkAsking.has(held) || !session?.token) return;
+    linkLicence(held).catch(() => {});
+  }
+
+  /**
+   * Ask the worker to link a licence by id, kept pending until it answers
+   * for it, so a failure that passes is retried rather than forgotten.
+   * @param {string} licenseId Licence id.
+   * @returns {Promise<{ok: boolean, status?: number, reason?: string}>}
+   */
+  async function linkLicence(licenseId) {
+    linkAsking.add(licenseId);
+    try {
+      const res = await linkCheckout({ licenseId }, { persist: true });
+      if (res.ok || LINK_FINAL_STATUSES.has(res.status)) linkSettled.add(licenseId);
+      return res;
+    } finally {
+      linkAsking.delete(licenseId);
+    }
+  }
+
+  /**
+   * Forget the session locally. Used on sign-out and on a rejected token.
+   * A checkout still waiting to be claimed goes too: claimed after sign-out,
+   * it would be linked to whoever signs in next on this browser. A pending
+   * link stays, but names its account, and only that account retries it.
+   */
   function forget() {
     session = null;
     snapshot = null;
@@ -354,6 +492,23 @@
       /* ignore */
     }
     emit();
+  }
+
+  /**
+   * On a sign-out, and only then, drop the checkout still waiting for its
+   * licence, and stop any claim of it already running: claimed afterwards, it
+   * would be linked to whoever signs in next on this browser. Not on a session
+   * the worker rejected (expired, signed out everywhere): the buyer is still
+   * here, and the claim is how their purchase reaches them when they sign in
+   * again, since a link written before the account answered names only the
+   * session that lapsed.
+   */
+  function dropPendingClaim() {
+    try {
+      global.VTBilling?.forgetPendingClaim?.();
+    } catch {
+      /* ignore */
+    }
   }
 
   /**
@@ -454,13 +609,25 @@
       rails = d
         ? {
           // A worker too old to report a field leaves it null, and null is not
-          // a no: it must not stop a sale.
+          // a no: it must not stop a sale. Health has carried these two since
+          // the first build, so a missing one is a broken answer, not an old one.
           stripe: typeof d.stripeConfigured === "boolean" ? d.stripeConfigured : null,
           mercadopago: typeof d.mercadopagoConfigured === "boolean" ? d.mercadopagoConfigured : null,
-          creem: typeof d.creemConfigured === "boolean" ? d.creemConfigured : null,
+          // The Creem fields are the opposite case: each arrived in the same
+          // build as the route it reports on (the webhook; the bound checkout
+          // and the billing portal), so a worker that answers without one has
+          // no such route. A Creem payment taken there can never become Pro
+          // (the live worker before its redeploy answered the Creem webhook
+          // with 404), so missing is a no.
+          creem: d.creemConfigured === true,
+          creemCheckout: d.creemCheckoutConfigured === true,
+          creemPortal: d.creemPortalConfigured === true,
+          // The euro products (VG-85): missing is a no, like the fields
+          // above, so a worker without them is shown and charged dollars.
+          creemEur: d.creemEurConfigured === true,
           ok: true
         }
-        : { stripe: null, mercadopago: null, creem: null, ok: false };
+        : { stripe: null, mercadopago: null, creem: null, creemCheckout: null, creemPortal: null, creemEur: null, ok: false };
       railsPending = null;
       return rails;
     })();
@@ -510,6 +677,7 @@
     session = { token: res.data.sessionToken, expiresAt: res.data.expiresAt };
     writeSession(session);
     await adopt(res.data);
+    retryPendingLink().catch(() => {});
     return { ok: true, account: res.data.account };
   }
 
@@ -608,6 +776,7 @@
     session = { token: res.data.sessionToken, expiresAt: res.data.expiresAt };
     writeSession(session);
     await adopt(res.data);
+    retryPendingLink().catch(() => {});
     return { ok: true, account: res.data.account };
   }
 
@@ -622,6 +791,7 @@
     // Forget first, synchronously: the page is signed out the moment this is
     // called, whether or not the worker ever answers the call below.
     forget();
+    dropPendingClaim();
     if (token) {
       // Best effort, and bounded, so a caller that awaits this is not stuck.
       await request("POST", "/v1/auth/logout", { everywhere }, { token, timeoutMs: 6000 });
@@ -701,17 +871,346 @@
    * @param {{provider?: string, sessionId?: string, licenseId?: string}} input Checkout reference.
    * @returns {Promise<{ok: boolean, reason?: string}>} Result.
    */
-  async function linkCheckout(input) {
+  function linkCheckout(input, options) {
+    const body = linkBody(input);
+    const persist = !!(options && options.persist);
+    // Written before asking, so a tab closed mid-request still retries on the next load.
+    if (persist) writePendingLink(body);
+    // The return page and the load's own retry ask for the same reference
+    // within a moment of each other; one request answers both. Only for the
+    // same sign-in: a request sent with somebody else's session is not theirs.
+    const key = sessionTag() + JSON.stringify(body);
+    if (!linksInFlight.has(key)) {
+      linksInFlight.set(key, sendLink(body, persist).finally(() => linksInFlight.delete(key)));
+    }
+    return linksInFlight.get(key);
+  }
+
+  /**
+   * One `/v1/me/link` request, and what its answer does to the pending
+   * reference. `granted` is whether the account's answer carries a licence.
+   */
+  async function sendLink(body, persist) {
+    const token = session?.token;
+    const res = await request("POST", "/v1/me/link", body, { timeoutMs: LINK_TIMEOUT_MS });
+    // Sent with the session of somebody who has since signed out: the answer
+    // is about them, so it is not adopted for whoever is here now, and their
+    // pending link stays for them to retry (red team authz-2).
+    if (session?.token !== token) return answeredTooLate();
+    // Only the account's own answer is a link. A 202 is fetch's "ok" too, and
+    // its body ({ok: false, reason: "pending"}) is the webhook not having
+    // landed: taken for a link, it cleared the reference and replaced the
+    // account snapshot with a body that has no account in it (VG-83).
+    if (res.ok && res.data?.ok === true) {
+      dropPendingLink(body);
+      await adopt(res.data);
+      return { ok: true, status: res.status, granted: !!res.data.token };
+    }
+    settlePendingLink(body, res.status, persist);
+    return { ok: false, status: res.status, reason: res.data?.reason || (res.status === 0 ? "offline" : "error") };
+  }
+
+  /** The `/v1/me/link` body for a checkout reference or a licence id. */
+  function linkBody(input) {
     const body = {};
     if (input && input.licenseId) body.licenseId = String(input.licenseId);
     if (input && input.provider) body.provider = String(input.provider);
     if (input && input.sessionId) body.sessionId = String(input.sessionId);
-    const res = await request("POST", "/v1/me/link", body);
-    if (res.ok && res.data) {
-      await adopt(res.data);
-      return { ok: true };
+    return body;
+  }
+
+  /**
+   * After a link the worker did not make: forget the reference when retrying
+   * cannot help (malformed, unknown, or somebody else's), otherwise try again
+   * later — 202 (the webhook has not landed), 429, 401 until they sign in
+   * again, offline and 5xx alike.
+   */
+  function settlePendingLink(body, status, persist) {
+    if (LINK_FINAL_STATUSES.has(status)) {
+      dropPendingLink(body);
+    } else if (persist) {
+      scheduleLinkRetry();
     }
-    return { ok: false, reason: res.data?.reason || (res.status === 0 ? "offline" : "error") };
+  }
+
+  /** What a request answered after a sign-out comes to: nothing, for nobody. */
+  function answeredTooLate() {
+    return { ok: false, reason: "signed_out" };
+  }
+
+  /**
+   * The checkout references still waiting to be linked, each naming who
+   * asked; week-old ones are dropped. What the page kept under the old key
+   * (one object, from a tab still running the code before the list) is
+   * merged in, and the old key removed once the list holding it is stored.
+   * @returns {object[]} Entries, as stored.
+   */
+  function readPendingLinks() {
+    const kept = storedPendingLinks();
+    const legacy = legacyPendingLinks();
+    const added = (legacy || []).filter((rec) => !kept.some((k) => samePendingEntry(k, rec)));
+    const live = [...kept, ...added].filter(livePendingLink);
+    const changed = live.length !== kept.length || legacy !== null;
+    if (changed && storePendingLinks(live)) forgetLegacyPendingLink();
+    return live;
+  }
+
+  /** The list as stored, or as this page holds it when storage refused it. */
+  function storedPendingLinks() {
+    let rec = null;
+    try {
+      const raw = localStorage.getItem(LS_PENDING_LINK_KEY);
+      rec = raw ? JSON.parse(raw) : pendingMemOnly ? pendingMem : null;
+    } catch {
+      rec = pendingMem;
+    }
+    return listOf(rec);
+  }
+
+  /**
+   * What is under the old key: one object as the shipped page wrote it, or a
+   * list; null when the key is not there (or storage cannot be read).
+   * @returns {object[]|null}
+   */
+  function legacyPendingLinks() {
+    let raw = null;
+    try {
+      raw = localStorage.getItem(LS_LEGACY_PENDING_LINK_KEY);
+    } catch {
+      return null;
+    }
+    if (raw === null) return null;
+    try {
+      return listOf(JSON.parse(raw));
+    } catch {
+      return [];
+    }
+  }
+
+  /** Remove the old key, once what it held is in the list. */
+  function forgetLegacyPendingLink() {
+    try {
+      localStorage.removeItem(LS_LEGACY_PENDING_LINK_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** A stored value as a list of entries. */
+  function listOf(rec) {
+    if (Array.isArray(rec)) return rec;
+    return rec ? [rec] : [];
+  }
+
+  /** Whether two entries are one: the same reference, asked for by the same person. */
+  function samePendingEntry(a, b) {
+    if (!samePendingLink(a, b) || (a.acct || null) !== (b.acct || null)) return false;
+    return !!a.acct || a.sess === b.sess;
+  }
+
+  /** An entry that names a reference and was first asked about less than a week ago. */
+  function livePendingLink(rec) {
+    if (!rec || typeof rec !== "object" || !(rec.sessionId || rec.licenseId)) return false;
+    return Date.now() - Number(rec.at) < PENDING_LINK_MAX_AGE_MS;
+  }
+
+  /**
+   * Store the list, or forget it when it is empty.
+   * @returns {boolean} Whether storage took it (else only this page holds it).
+   */
+  function storePendingLinks(list) {
+    pendingMem = list.length ? list : null;
+    try {
+      if (list.length) localStorage.setItem(LS_PENDING_LINK_KEY, JSON.stringify(list));
+      else localStorage.removeItem(LS_PENDING_LINK_KEY);
+      pendingMemOnly = false;
+    } catch {
+      // Quota or blocked site data: the in-page retries read pendingMem.
+      pendingMemOnly = true;
+    }
+    return !pendingMemOnly;
+  }
+
+  /**
+   * Keep the reference to link, naming who asked: the account when it is
+   * known, and a tag of the session, so on a shared browser the next person
+   * to sign in does not link somebody else's purchase to themselves. Only
+   * this person's entry for the same reference is replaced, and it keeps the
+   * first time it was asked about; everybody else's entries stay, up to the
+   * cap (roomBeside).
+   */
+  function writePendingLink(body) {
+    const list = readPendingLinks();
+    const prev = list.find((rec) => samePendingLink(body, rec) && ownsPending(rec));
+    const at = prev ? prev.at : Date.now();
+    // An entry written before the account answered keeps the account it named.
+    const entry = { ...body, at, acct: snapshot?.account?.id || prev?.acct || null, sess: sessionTag() };
+    const rest = list.filter((rec) => rec !== prev);
+    storePendingLinks([...roomBeside(rest), entry]);
+  }
+
+  /**
+   * The entries kept beside a new one, oldest first. Past the cap the
+   * writer's own oldest goes first, and the oldest of somebody else's only
+   * when the writer has none left: their entry is their only way back to a
+   * purchase on this browser, and the one writing is here to retry theirs.
+   * So one person's checkouts, or return addresses naming other references,
+   * cannot push another person's purchase out. The stored order is not age
+   * order (an entry written again moves to the end and keeps its first
+   * date), so it is sorted first.
+   * @param {object[]} list Entries other than the one being written.
+   * @returns {object[]}
+   */
+  function roomBeside(list) {
+    const kept = [...list].sort((a, b) => Number(a.at) - Number(b.at));
+    while (kept.length >= PENDING_LINK_MAX) {
+      const own = kept.findIndex(ownsPending);
+      kept.splice(own >= 0 ? own : 0, 1);
+    }
+    return kept;
+  }
+
+  /** Forget this person's entry for the reference, once the worker has answered for it for good. */
+  function dropPendingLink(body) {
+    const list = readPendingLinks();
+    const rest = list.filter((rec) => !(samePendingLink(body, rec) && ownsPending(rec)));
+    if (rest.length !== list.length) storePendingLinks(rest);
+  }
+
+  /** Whether a pending entry was written by whoever is signed in now. */
+  function ownsPending(rec) {
+    const acct = snapshot?.account?.id;
+    if (rec.acct && acct) return rec.acct === acct;
+    return !!rec.sess && rec.sess === sessionTag();
+  }
+
+  /** A short, one-way tag of the session token (FNV-1a), never the token itself. */
+  function sessionTag() {
+    const token = session?.token;
+    if (!token) return "";
+    let h = 0x811c9dc5;
+    for (let i = 0; i < token.length; i += 1) {
+      h ^= token.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(16);
+  }
+
+  /** Whether a link body names the reference of a pending entry. */
+  function samePendingLink(body, rec) {
+    if (!rec || !body) return false;
+    return (!!body.sessionId && body.sessionId === rec.sessionId && body.provider === rec.provider)
+      || (!!body.licenseId && body.licenseId === rec.licenseId);
+  }
+
+  /** Try the pending link again after the next delay, while the page stays open. */
+  function scheduleLinkRetry() {
+    if (linkRetryTimer || linkRetryStep >= LINK_RETRY_DELAYS_MS.length) return;
+    const delay = LINK_RETRY_DELAYS_MS[linkRetryStep];
+    linkRetryStep += 1;
+    linkRetryTimer = setTimeout(() => {
+      linkRetryTimer = null;
+      retryPendingLink().catch(() => {});
+    }, delay);
+  }
+
+  /**
+   * Link the pending checkouts of whoever is signed in, now: on every load,
+   * after a sign-in, and on the in-page schedule. Only their own entries go,
+   * one at a time, so a list is not a burst against the worker's limit.
+   * @returns {Promise<{ok: boolean, reason?: string}|null>} An answer that
+   *   linked one, else the first answer; null with nothing of theirs pending.
+   */
+  async function retryPendingLink() {
+    let out = null;
+    for (const rec of readPendingLinks()) {
+      const res = await retryOne(rec);
+      if (res && (!out || res.ok)) out = res;
+    }
+    return out;
+  }
+
+  /** One pending entry, sent when it is the signed-in person's; null when it is not. */
+  function retryOne(rec) {
+    if (!rec || !session?.token || !ownsPending(rec)) return Promise.resolve(null);
+    const { at, acct, sess, ...body } = rec;
+    return linkCheckout(body, { persist: true });
+  }
+
+  /**
+   * Ask the worker to open a checkout bound to this account
+   * (`POST /v1/me/checkout`); js/billing.js navigates to the answer.
+   * @param {{plan: string, provider?: string, returnPath?: string, currency?: string}} input What to buy.
+   * @returns {Promise<{ok: boolean, url?: string, reason?: string}>} Result.
+   */
+  async function openCheckout(input) {
+    if (!session?.token) return { ok: false, reason: "no_session" };
+    const token = session.token;
+    const res = await request("POST", "/v1/me/checkout", checkoutBody(input), { timeoutMs: 20000 });
+    // A checkout for whoever asked: never one to send the next person to,
+    // and a 401 for their ended session is not a reason to sign out whoever is here now.
+    if (session?.token !== token) return answeredTooLate();
+    if (res.ok && res.data?.url) return { ok: true, url: String(res.data.url) };
+    if (res.status === 401) return lostSession();
+    return refusalOf(res);
+  }
+
+  /**
+   * A refusal from the worker, with what the page needs to answer it: the
+   * reason, the rail an open subscription is on (`subscription_open`), and how
+   * many seconds a rate limit has left (`rate_limited`), when the worker said.
+   */
+  function refusalOf(res) {
+    const out = { ok: false, status: res.status, reason: res.data?.reason || (res.status === 0 ? "offline" : "error") };
+    if (typeof res.data?.provider === "string") out.provider = res.data.provider;
+    const wait = Number(res.data?.retryAfter);
+    if (Number.isFinite(wait) && wait > 0) out.retryAfter = wait;
+    return out;
+  }
+
+  /**
+   * The `/v1/me/checkout` body for what the page asked to buy, in the money
+   * its card showed. The worker charges that currency or refuses; it never
+   * falls back to another (VG-85).
+   */
+  function checkoutBody(input) {
+    return {
+      plan: String(input?.plan || ""),
+      provider: String(input?.provider || "creem"),
+      returnPath: String(input?.returnPath || "/"),
+      currency: String(input?.currency || "USD")
+    };
+  }
+
+  /**
+   * A 401 on a press: the session ended elsewhere (signed out, everywhere or
+   * in another tab; expired; disabled). Forgotten here as refresh() does, so
+   * the page asks them to sign in rather than failing every press until a
+   * reload, whatever words the worker gave for it.
+   */
+  function lostSession() {
+    forget();
+    return { ok: false, status: 401, reason: "no_session" };
+  }
+
+  /**
+   * The page where a subscriber manages or cancels (`POST /v1/me/billing-portal`).
+   * @returns {Promise<{ok: boolean, url?: string, reason?: string, providers?: string[]}>} Result.
+   */
+  async function openBillingPortal() {
+    if (!session?.token) return { ok: false, reason: "no_session" };
+    const token = session.token;
+    const res = await request("POST", "/v1/me/billing-portal", {}, { timeoutMs: 15000 });
+    // The portal of whoever asked, as for a checkout above.
+    if (session?.token !== token) return answeredTooLate();
+    if (res.ok && res.data?.url) return { ok: true, url: String(res.data.url) };
+    if (res.status === 401) return lostSession();
+    return {
+      ok: false,
+      status: res.status,
+      reason: res.data?.reason || (res.status === 0 ? "offline" : "error"),
+      providers: Array.isArray(res.data?.providers) ? res.data.providers : []
+    };
   }
 
   /**
@@ -730,6 +1229,10 @@
       // only; read `pro` below for whether anything is actually unlocked.
       lastPlan: lastPlan === undefined ? (lastPlan = readLastPlan()) : lastPlan,
       grants: snapshot?.grants || [],
+      // Rails this account has a subscription on that is not over, Pro or
+      // not: a renewal being retried after the paid period still needs its
+      // "Manage or cancel" button.
+      billingRails: Array.isArray(snapshot?.billingRails) ? snapshot.billingRails : [],
       // Null until the first /v1/auth/methods answer lands, so read it
       // defensively: the pricing panel may open before anyone signs in.
       methods,
@@ -817,6 +1320,7 @@
       /* ignore */
     }
     await refresh();
+    retryPendingLink().catch(() => {});
     return getState();
   }
 
@@ -840,6 +1344,9 @@
     startTrial,
     redeem,
     linkCheckout,
+    retryPendingLink,
+    openCheckout,
+    openBillingPortal,
     request,
     LS_KEY
   };

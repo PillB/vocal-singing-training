@@ -37,6 +37,7 @@
       "nav.planGiftDays": "Regalo · {d}",
       "nav.planPaid": "Pro · activo",
       "nav.planPastDue": "Pro · pago pendiente",
+      "nav.planLapsed": "Pro en espera",
       "nav.planEnding": "Pro · termina",
       "nav.planEndingDays": "Pro · termina en {d}",
       "auth.titleOut": "Guarda tu progreso",
@@ -71,6 +72,10 @@
       "auth.useAnotherEmail": "Usar otro correo",
       "auth.checking": "Comprobando cómo entrar…",
       "auth.signInOffline": "No pudimos comprobar el acceso ahora mismo. Tu práctica se guarda en este navegador.",
+      "auth.payWithoutAccount": "Puedes pagar igual desde este navegador. Tu Pro quedará guardado solo en él: para pasarlo a tu cuenta, entra más adelante desde este mismo navegador, no desde otro navegador ni otro dispositivo.",
+      "auth.payWithoutAccountCreem": "Puedes pagar igual desde este navegador. Tu Pro quedará guardado solo en él: para pasarlo a tu cuenta, entra más adelante desde este mismo navegador, no desde otro navegador ni otro dispositivo. Para cancelar, usa el enlace que Creem te manda por correo después de cada pago, o escríbenos.",
+      "auth.payWithoutAccountMp": "Puedes pagar igual desde este navegador. Tu Pro quedará guardado solo en él: para pasarlo a tu cuenta, entra más adelante desde este mismo navegador, no desde otro navegador ni otro dispositivo. Para cancelar, entra a tu cuenta de Mercado Pago, en la sección de suscripciones, o escríbenos.",
+      "auth.payWithoutAccountBtn": "Continuar al pago",
       "auth.signInBlocked": "Este sitio entra con Google, y el navegador no pudo cargarlo. Suele ser una extensión que bloquea scripts, o la red. Tu práctica se guarda en este navegador igual.",
       "auth.retry": "Intentar de nuevo",
       "auth.retryChecking": "Comprobando…",
@@ -85,6 +90,7 @@
       "auth.planGift": "Pro de regalo · termina el {date}",
       "auth.planPaid": "Pro · se renueva el {date}",
       "auth.planPastDue": "Pro · pago pendiente. El último cobro no se pudo hacer.",
+      "auth.planLapsed": "Pro en espera. Tu suscripción sigue abierta, pero Pro no está activo por ahora.",
       "auth.planPaidOpen": "Pro · suscripción activa",
       "auth.planCanceled": "Pro hasta el {date} · suscripción cancelada",
       "auth.startTrial": "Empezar prueba gratis",
@@ -215,21 +221,36 @@
       "auth.confirmClearBilling": "¿Quitar el Pro local de este navegador?",
       "pricing.title": "Estudio Vocal Pro",
       "pricing.sub": "Practicar es gratis y sin límite de minutos. Pro suma extras para seguir y compartir tu avance.",
-      "pricing.note": "Pago seguro con tarjeta. En Perú el cobro es en soles vía Mercado Pago. Puedes cancelar cuando quieras, y cómo hacerlo depende de dónde pagaste: te lo decimos aquí mismo.",
+      "pricing.note": "Pago seguro en la propia página del procesador de pagos: los datos de tu tarjeta no pasan por este sitio. Puedes cancelar cuando quieras, y aquí mismo te decimos cómo.",
       // Una línea por riel, porque la ruta para cancelar es distinta en cada uno
       // y solo una de las tres es un botón de esta página. Se muestra la del riel
       // por el que pagó esta persona; a quien tiene prueba o regalo no se le
       // muestra ninguna, porque no hay nada que cancelar.
-      "pricing.cancel.stripe": "Pagaste con tarjeta vía Stripe. El botón «Gestionar suscripción» abre el portal donde puedes cambiar la tarjeta o cancelar.",
-      "pricing.cancel.creem": "Pagaste con tarjeta internacional vía Creem. Después de cada pago, Creem te envía por correo un enlace propio para gestionar o cancelar tu suscripción.",
-      "pricing.cancel.mercadopago": "Pagaste con Mercado Pago. La suscripción se cancela desde tu propia cuenta de Mercado Pago, donde están tus pagos recurrentes.",
+      "pricing.cancel.stripe": "Pagaste con tarjeta vía Stripe. El botón «Gestionar o cancelar suscripción» abre el portal donde puedes cambiar la tarjeta o cancelar.",
+      "pricing.cancel.creem": "Pagaste con tarjeta vía Creem. «Gestionar o cancelar suscripción» abre tu portal de Creem, donde cancelas o cambias la tarjeta; Creem también te manda ese enlace por correo después de cada pago.",
+      "pricing.cancel.lapsed": "Tu suscripción sigue abierta, pero Pro no está activo. Puede ser un cobro de renovación que se está reintentando, un pago que se te devolvió o una pausa. Con «Gestionar o cancelar suscripción» cambias cómo pagas, o la cancelas para que no se renueve.",
+      "pricing.cancel.lapsedEmail": "Tu suscripción sigue abierta, pero Pro no está activo. Puede ser un cobro de renovación que se está reintentando, un pago que se te devolvió o una pausa. Para cambiar cómo pagas o cancelarla, usa el enlace que Creem te manda por correo después de cada pago, o escríbenos.",
+      "pricing.cancel.aside": "Ahora tu Pro viene de un regalo o de una prueba, y tu suscripción sigue abierta aparte. Con «Gestionar o cancelar suscripción» cambias cómo pagas, o la cancelas para que no se renueve.",
+      "pricing.cancel.asideEmail": "Ahora tu Pro viene de un regalo o de una prueba, y tu suscripción sigue abierta aparte. Para cambiar cómo pagas o cancelarla, usa el enlace que Creem te manda por correo después de cada pago, o escríbenos.",
+      "pricing.cancel.creemEmail": "Pagaste con tarjeta vía Creem. Después de cada pago, Creem te manda por correo tu enlace para gestionar o cancelar la suscripción.",
+      "pricing.cancel.mercadopago": "Pagaste con Mercado Pago. «Gestionar o cancelar suscripción» abre tus suscripciones en tu propia cuenta de Mercado Pago, donde se cancela.",
+      "pricing.cancel.alsoOpenCreem": "También tienes una suscripción abierta con Creem, que puede renovarse aparte. Para gestionarla o cancelarla, usa el enlace que Creem te manda por correo después de cada pago, o escríbenos.",
+      "pricing.cancel.alsoOpenMp": "También tienes una suscripción abierta con Mercado Pago, que puede renovarse aparte. Para gestionarla o cancelarla, entra a tu cuenta de Mercado Pago, en la sección de suscripciones, o escríbenos.",
+      // Creem es quien vende la suscripción (merchant of record) y sus términos
+      // de comerciante (3.7) piden decirlo antes del pago, junto a sus Términos
+      // para compradores. Se muestra solo con el riel de Creem elegido.
+      "pricing.morNote": "El pago con tarjeta lo procesa Creem (Armitage Labs OÜ, Estonia), que te vende la suscripción como comerciante registrado y emite tu factura; es su nombre el que verás en tu estado de cuenta.",
+      "pricing.morTerms": "Términos para compradores de Creem",
+      "pricing.opening": "Abriendo el pago seguro…",
       "pricing.export": "Exportar progreso (Pro)",
-      "pricing.manage": "Gestionar suscripción",
+      "pricing.manage": "Gestionar o cancelar suscripción",
       "pricing.healthPrefix": "Estado de pagos:",
       "pricing.demo": "Activar demo Pro",
       "pricing.current": "Plan actual",
       "pricing.freeAlways": "Siempre incluido",
       "pricing.subscribe": "Suscribirse",
+      "pricing.manageOpen": "Gestionar mi suscripción",
+      "pricing.subscriptionOpen": "Ya tienes una suscripción",
       "pricing.trial": "Prueba Pro activa",
       "pricing.trialSpent": "Ya usaste tu prueba gratis. Todo lo gratis sigue igual, y cuando los pagos abran podrás suscribirte desde aquí.",
       "pricing.statusTrial": "Prueba gratis",
@@ -243,8 +264,11 @@
       "pricing.free": "Plan gratis",
       "pricing.statusEnded": "Tu prueba terminó · estás en el plan gratis",
       "pricing.region": "Tu región",
+      "pricing.currency.PEN": "precios en soles (S/)",
+      "pricing.currency.USD": "precios en dólares de EE. UU. (US$)",
+      "pricing.currency.EUR": "precios en euros (€), IVA incluido",
       "pricing.railStripe": "Tarjeta internacional",
-      "pricing.railMp": "Mercado Pago (Perú / LATAM)",
+      "pricing.railMp": "Mercado Pago (Perú)",
       "pricing.dream": "La meta: voz clara y afinada, con un plan que puedes seguir cada semana.",
       "pricing.proof1": "Muchas apps de canto con suscripción limitan la práctica gratis: a unos minutos al día o a los niveles de principiante. Aquí todos los ejercicios, el micrófono y el piano son gratis y sin límite de minutos.",
       "pricing.proof2": "Pro suma: tus últimos 28 días en un gráfico, un resumen para tu profesor, metas semanales y más perfiles.",
@@ -254,6 +278,7 @@
       "pricing.trialLeft": "Te quedan {n} días de prueba Pro",
       "pricing.trialLeftOne": "Te queda {n} día de prueba Pro",
       "pricing.statusPastDue": "Pro · pago pendiente · el último cobro no se pudo hacer",
+      "pricing.statusLapsed": "Pro en espera · tu suscripción sigue abierta",
       "pricing.startTrial": "Empezar prueba Pro de {n} días",
       // Pre-launch pricing: checkout cannot take money yet (app.js isCheckoutPrelaunch)
       "pricing.notYet": "Aún no disponible",
@@ -261,10 +286,13 @@
       "pricing.notePrelaunch": "La prueba gratis no pide tarjeta. Cuando termina, sigues en el plan Gratis y no se cobra nada.",
       "pricing.trialNeedsAccount": "Entra o crea tu cuenta gratis para empezar la prueba",
       "pricing.checkoutNeedsAccount": "Entra primero para que tu Pro quede en tu cuenta y no solo en este navegador",
+      "pricing.portalNeedsAccount": "Tu sesión terminó. Entra de nuevo para gestionar o cancelar tu suscripción",
       "pricing.recheck": "Comprobar mi pago",
       "pricing.trialUsed": "Ya usaste la prueba en este navegador",
       "pricing.verifying": "Confirmando tu pago con el proveedor…",
       "pricing.unverified": "Pago aún sin confirmar",
+      "pricing.claimInactive": "Este pago no se completó o ya no está activo",
+      "pricing.claimNotFound": "No encontramos este pago · escribe a soporte",
       "pricing.verifyUnavailable": "Los pagos están en pausa hasta que la verificación esté activa.",
       "pricing.feat.all_exercises": "Todos los ejercicios, gratis y sin límite de minutos",
       "pricing.feat.pitch_highway": "Ves tu afinación en vivo y cantas con un piano que se ajusta a tu voz",
@@ -272,7 +300,7 @@
       "pricing.feat.basic_plan": "Plan de 12 semanas",
       "pricing.feat.value_pulse": "Tu progreso a la vista en el Historial",
       "pricing.feat.all_free": "Todo lo del plan Gratis",
-      "pricing.feat.ad_free": "Sin anuncios ni recomendaciones patrocinadas",
+      "pricing.feat.ad_free": "Sin anuncios ni consejos patrocinados en ninguna parte",
       "pricing.feat.export_progress": "Descarga todo tu progreso en un archivo para guardarlo",
       "pricing.feat.multi_profile": "Hasta 3 perfiles, cada uno con su propio progreso",
       "pricing.feat.pro_insights": "Un gráfico de tus últimos 28 días, cómo van tus notas largas y qué practicar después",
@@ -370,6 +398,7 @@
       "value.tagFree": "Gratis",
       "value.tagGift": "Regalo",
       "value.tagEnding": "Termina",
+      "value.tagLapsed": "En espera",
       "value.tagEndingDays": "Termina · {n}d",
       "value.insightsPro": "Análisis Pro",
       "value.bannerCta": "Ver Pro",
@@ -537,9 +566,21 @@
       "pricing.toast.success": "¡Suscripción activada! Gracias.",
       "pricing.toast.cancel": "Pago cancelado — sigue practicando gratis",
       "pricing.toast.unconfigured": "Los pagos aún no están públicos. Sigue practicando gratis; Pro se activará cuando estén listos.",
+      // Pre-launch, above the trial button: what can be done today, not what cannot.
+      "pricing.prelaunchLead": "Todavía no vendemos planes de pago. Lo que sí puedes hacer hoy:",
       "pricing.toast.portalUnconfigured":
         "La gestión de suscripción aún no está disponible. Si ya pagaste, sigue practicando; te avisaremos cuando puedas administrarla aquí.",
       "pricing.toast.portalOpened": "Abriendo portal de facturación…",
+      "pricing.toast.portalFailed":
+        "No pudimos abrir tu portal de facturación. Usa el enlace del último correo de Creem, o escríbenos y lo cancelamos por ti.",
+      "pricing.toast.checkoutBusy": "Demasiados intentos seguidos. Vuelve a intentarlo dentro de una hora como mucho; no se cobró nada.",
+      "pricing.toast.checkoutBusyMin": "Demasiados intentos seguidos. Vuelve a intentarlo en {n} minutos; no se cobró nada.",
+      "pricing.toast.checkoutBusyOne": "Demasiados intentos seguidos. Vuelve a intentarlo en 1 minuto; no se cobró nada.",
+      "pricing.toast.subscriptionOpenCreem": "Ya tienes una suscripción abierta, así que no abrimos otra y no se cobró nada. Te llevamos a tu portal de Creem para gestionarla.",
+      "pricing.toast.subscriptionOpenMp": "Ya tienes una suscripción abierta en Mercado Pago, así que no abrimos otra y no se cobró nada. Te llevamos a tus suscripciones de Mercado Pago para gestionarla.",
+      "pricing.toast.subscriptionOpenEmail": "Ya tienes una suscripción abierta, así que no abrimos otra y no se cobró nada. Para gestionarla, usa el enlace que Creem te manda por correo después de cada pago, o escríbenos.",
+      "pricing.toast.subscriptionOpen": "Ya tienes una suscripción abierta, así que no abrimos otra y no se cobró nada.",
+      "pricing.toast.checkoutFailed": "No pudimos abrir el pago y no se cobró nada. Inténtalo de nuevo en un momento.",
       "pricing.toast.exportNeedPro": "Exportar requiere Pro o prueba",
       "pricing.toast.exported": "Progreso exportado",
       "pricing.toast.checkoutError":
@@ -548,13 +589,25 @@
       "pricing.toast.trialUsed": "Ya usaste tu prueba gratis en este navegador",
       "pricing.toast.verifyUnavailable":
         "Aún no abrimos los pagos: solo activamos Pro cuando el cobro queda verificado de extremo a extremo. Sigue practicando gratis.",
+      "pricing.toast.priceCurrencyChanged":
+        "El precio ahora se muestra en otra moneda. Revísalo antes de pagar: no te cobramos nada.",
       "pricing.toast.railUnavailable":
         "Ese medio de pago no está disponible ahora mismo, así que no te cobramos nada. Inténtalo en un rato; si sigue igual, cuéntanoslo con «Reportar un problema».",
       "pricing.toast.verifyPending":
         "Confirmando tu pago… Pro se activa en cuanto el proveedor nos confirme.",
+      "pricing.toast.verifyPendingMp":
+        "Mercado Pago hace el primer cobro alrededor de una hora después de suscribirte. Cuando entre, Pro se activa al volver a abrir la app o al pulsar «Comprobar mi pago».",
+      "pricing.toast.verifyDeclinedMp":
+        "Mercado Pago no pudo cobrar con tu tarjeta y volverá a intentarlo durante unos 10 días. Revisa tu medio de pago en Mercado Pago; cuando el cobro entre, Pro se activa al volver a abrir la app o al pulsar «Comprobar mi pago».",
       "pricing.toast.verifyOk": "¡Pago verificado! Pro activo en este navegador.",
       "pricing.toast.verifyFailed":
-        "Todavía no podemos confirmar el pago. Seguimos reintentando; si ya te cobraron, escribe a soporte con el comprobante.",
+        "Todavía no recibimos la confirmación del proveedor. Lo volvemos a comprobar cada vez que abres la app, hasta 7 días después del pago, y cuando pulsas «Comprobar mi pago». Si ya te cobraron y Pro no se activa, escribe a soporte con el comprobante.",
+      "pricing.toast.verifyInactive":
+        "El proveedor nos dice que este pago no se completó o ya no está activo, así que Pro no se activó. Si ves el cobro en tu tarjeta o tu cuenta, escribe a soporte con el comprobante; si no, puedes suscribirte de nuevo.",
+      "pricing.toast.verifyNotFound":
+        "No encontramos este pago. No vuelvas a pagar: escribe a soporte con el comprobante y lo revisamos.",
+      "pricing.toast.verifySuspended":
+        "El proveedor tiene tu suscripción en espera, así que Pro aún no está activo. Cuando un cobro entre, Pro se activa al volver a abrir la app o al pulsar «Comprobar mi pago». Si no lo esperabas, revisa tu medio de pago con el proveedor.",
       "nav.lang": "English",
       "nav.tour": "Ver el tour",
       // —— Design: phone-header —— Pro, Cuenta, idioma and Tour behind one button
@@ -1179,7 +1232,8 @@
       "ex.s24-nana-high": "Agudos con «NANA»",
       "ex.s25-zone-tour": "Recorrido por las tres zonas",
       "ex.s26-placement-compare": "Comparar colocaciones (A/B)",
-      "ex.s27-lip-trill-solfege": "Solfeo en trino de labios"
+      "ex.s27-lip-trill-solfege": "Solfeo en trino de labios",
+      "pricing.regionElsewhere": "resto del mundo"
     },
     en: {
       "meta.title": "Singing and speaking practice, free in your browser",
@@ -1209,6 +1263,7 @@
       "nav.planGiftDays": "Gift · {d}",
       "nav.planPaid": "Pro · active",
       "nav.planPastDue": "Pro · payment pending",
+      "nav.planLapsed": "Pro on hold",
       "nav.planEnding": "Pro · ending",
       "nav.planEndingDays": "Pro · ends in {d}",
       "auth.titleOut": "Save your progress",
@@ -1243,6 +1298,10 @@
       "auth.useAnotherEmail": "Use another email",
       "auth.checking": "Checking how to sign in…",
       "auth.signInOffline": "We couldn’t check sign-in just now. Your practice is saved in this browser.",
+      "auth.payWithoutAccount": "You can still pay from this browser. Your Pro will be kept only in it: to move it to your account, sign in later from this same browser, not from another browser or device.",
+      "auth.payWithoutAccountCreem": "You can still pay from this browser. Your Pro will be kept only in it: to move it to your account, sign in later from this same browser, not from another browser or device. To cancel, use the link Creem emails you after every payment, or write to us.",
+      "auth.payWithoutAccountMp": "You can still pay from this browser. Your Pro will be kept only in it: to move it to your account, sign in later from this same browser, not from another browser or device. To cancel, go to your Mercado Pago account, under subscriptions, or write to us.",
+      "auth.payWithoutAccountBtn": "Continue to payment",
       "auth.signInBlocked": "This site signs in with Google, and your browser could not load it. Usually that is a script-blocking extension, or the network. Your practice is saved in this browser either way.",
       "auth.retry": "Try again",
       "auth.retryChecking": "Checking…",
@@ -1257,6 +1316,7 @@
       "auth.planGift": "Gifted Pro · ends {date}",
       "auth.planPaid": "Pro · renews {date}",
       "auth.planPastDue": "Pro · payment pending. The last payment did not go through.",
+      "auth.planLapsed": "Pro on hold. Your subscription is still open, but Pro is off for now.",
       "auth.planPaidOpen": "Pro · subscription active",
       "auth.planCanceled": "Pro until {date} · subscription cancelled",
       "auth.startTrial": "Start free trial",
@@ -1387,17 +1447,29 @@
       "auth.confirmClearBilling": "Remove the local Pro from this browser?",
       "pricing.title": "Vocal Studio Pro",
       "pricing.sub": "Practice is free, with no daily time limit. Pro adds extras to follow and share your progress.",
-      "pricing.note": "Secure card checkout. In Peru you are charged in soles through Mercado Pago. You can cancel any time, and how you do it depends on where you paid: we say so right here.",
-      "pricing.cancel.stripe": "You paid by card through Stripe. The “Manage subscription” button opens the portal where you can change the card or cancel.",
-      "pricing.cancel.creem": "You paid by international card through Creem. After every payment, Creem emails you your own link to manage or cancel the subscription.",
-      "pricing.cancel.mercadopago": "You paid with Mercado Pago. The subscription is cancelled from your own Mercado Pago account, where your recurring payments live.",
+      "pricing.note": "Secure checkout on the payment processor's own page: your card details never pass through this site. You can cancel any time, and we tell you how right here.",
+      "pricing.cancel.stripe": "You paid by card through Stripe. The “Manage or cancel subscription” button opens the portal where you can change the card or cancel.",
+      "pricing.cancel.creem": "You paid by card through Creem. “Manage or cancel subscription” opens your Creem portal, where you cancel or change the card; Creem also emails you that link after every payment.",
+      "pricing.cancel.lapsed": "Your subscription is still open, but Pro is off. That can be a renewal payment being retried, a payment that was refunded, or a pause. Use “Manage or cancel subscription” to change how you pay, or cancel it so it does not renew.",
+      "pricing.cancel.lapsedEmail": "Your subscription is still open, but Pro is off. That can be a renewal payment being retried, a payment that was refunded, or a pause. To change how you pay or cancel it, use the link Creem emails you after every payment, or write to us.",
+      "pricing.cancel.aside": "Your Pro comes from a gift or a trial right now, and your subscription is still open beside it. Use “Manage or cancel subscription” to change how you pay, or cancel it so it does not renew.",
+      "pricing.cancel.asideEmail": "Your Pro comes from a gift or a trial right now, and your subscription is still open beside it. To change how you pay or cancel it, use the link Creem emails you after every payment, or write to us.",
+      "pricing.cancel.creemEmail": "You paid by card through Creem. After every payment, Creem emails you your own link to manage or cancel the subscription.",
+      "pricing.cancel.mercadopago": "You paid with Mercado Pago. “Manage or cancel subscription” opens the subscriptions in your own Mercado Pago account, where it is cancelled.",
+      "pricing.cancel.alsoOpenCreem": "You also have a subscription open with Creem, which can renew on its own. To manage or cancel it, use the link Creem emails you after every payment, or write to us.",
+      "pricing.cancel.alsoOpenMp": "You also have a subscription open with Mercado Pago, which can renew on its own. To manage or cancel it, go to your Mercado Pago account, under subscriptions, or write to us.",
+      "pricing.morNote": "Card payments are processed by Creem (Armitage Labs OÜ, Estonia), which sells you the subscription as merchant of record and issues your invoice; its name is the one on your card statement.",
+      "pricing.morTerms": "Creem's Buyer Terms",
+      "pricing.opening": "Opening secure checkout…",
       "pricing.export": "Export progress (Pro)",
-      "pricing.manage": "Manage subscription",
+      "pricing.manage": "Manage or cancel subscription",
       "pricing.healthPrefix": "Payment status:",
       "pricing.demo": "Activate demo Pro",
       "pricing.current": "Current plan",
       "pricing.freeAlways": "Always included",
       "pricing.subscribe": "Subscribe",
+      "pricing.manageOpen": "Manage my subscription",
+      "pricing.subscriptionOpen": "You already have a subscription",
       "pricing.trial": "Pro trial active",
       "pricing.trialSpent": "You have already used your free trial. Everything that is free stays free, and you will be able to subscribe here once payments open.",
       "pricing.statusTrial": "Free trial",
@@ -1411,8 +1483,11 @@
       "pricing.free": "Free plan",
       "pricing.statusEnded": "Your trial has ended · you are on the free plan",
       "pricing.region": "Your region",
+      "pricing.currency.PEN": "prices in Peruvian soles (S/)",
+      "pricing.currency.USD": "prices in US dollars (US$)",
+      "pricing.currency.EUR": "prices in euros (€), VAT included",
       "pricing.railStripe": "International card",
-      "pricing.railMp": "Mercado Pago (Peru / LATAM)",
+      "pricing.railMp": "Mercado Pago (Peru)",
       "pricing.dream": "The goal: a clear, in-tune voice, with a plan you can keep week to week.",
       "pricing.proof1": "Many subscription singing apps cap free practice: to a few minutes a day, or to beginner levels. Here every exercise, the mic and the piano are free, with no daily time limit.",
       "pricing.proof2": "Pro adds: your last 28 days in a chart, a summary for your teacher, weekly goals and more profiles.",
@@ -1422,6 +1497,7 @@
       "pricing.trialLeft": "{n} days left on Pro trial",
       "pricing.trialLeftOne": "{n} day left on Pro trial",
       "pricing.statusPastDue": "Pro · payment pending · the last payment did not go through",
+      "pricing.statusLapsed": "Pro on hold · your subscription is still open",
       "pricing.startTrial": "Start {n}-day Pro trial",
       // Pre-launch pricing: checkout cannot take money yet (app.js isCheckoutPrelaunch)
       "pricing.notYet": "Not available yet",
@@ -1429,10 +1505,13 @@
       "pricing.notePrelaunch": "The free trial needs no card. When it ends you stay on the Free plan and nothing is charged.",
       "pricing.trialNeedsAccount": "Sign in or create your free account to start the trial",
       "pricing.checkoutNeedsAccount": "Sign in first, so your Pro belongs to your account and not just to this browser",
+      "pricing.portalNeedsAccount": "Your session ended. Sign in again to manage or cancel your subscription",
       "pricing.recheck": "Check my payment",
       "pricing.trialUsed": "Trial already used in this browser",
       "pricing.verifying": "Confirming your payment with the provider…",
       "pricing.unverified": "Payment not confirmed yet",
+      "pricing.claimInactive": "This payment didn’t go through or is no longer active",
+      "pricing.claimNotFound": "We couldn’t find this payment · contact support",
       "pricing.verifyUnavailable": "Checkout is paused until payment verification is live.",
       "pricing.feat.all_exercises": "All exercises, free with no daily time limit",
       "pricing.feat.pitch_highway": "See your pitch live and sing with a piano that adjusts to your voice",
@@ -1440,7 +1519,7 @@
       "pricing.feat.basic_plan": "12-week plan",
       "pricing.feat.value_pulse": "Your progress at a glance in History",
       "pricing.feat.all_free": "Everything in Free",
-      "pricing.feat.ad_free": "No ads or sponsored tips",
+      "pricing.feat.ad_free": "No ads or sponsored tips anywhere",
       "pricing.feat.export_progress": "Download all your progress as a file to keep",
       "pricing.feat.multi_profile": "Up to 3 profiles, each with its own progress",
       "pricing.feat.pro_insights": "A chart of your last 28 days, how your long notes are going, and what to practise next",
@@ -1538,6 +1617,7 @@
       "value.tagFree": "Free",
       "value.tagGift": "Gift",
       "value.tagEnding": "Ending",
+      "value.tagLapsed": "On hold",
       "value.tagEndingDays": "Ends · {n}d",
       "value.insightsPro": "Pro analysis",
       "value.bannerCta": "See Pro",
@@ -1701,9 +1781,20 @@
       "pricing.toast.success": "Subscription activated — thank you!",
       "pricing.toast.cancel": "Checkout canceled — keep practicing free",
       "pricing.toast.unconfigured": "Checkout isn’t live yet. Keep practicing free — Pro unlocks when payments are ready.",
+      "pricing.prelaunchLead": "Paid plans aren’t on sale yet. What you can do today:",
       "pricing.toast.portalUnconfigured":
         "Subscription management isn’t available yet. If you already paid, keep practicing — self-serve billing will open soon.",
       "pricing.toast.portalOpened": "Opening billing portal…",
+      "pricing.toast.portalFailed":
+        "We couldn't open your billing portal. Use the link in Creem's latest email, or write to us and we'll cancel it for you.",
+      "pricing.toast.checkoutBusy": "Too many tries in a row. Wait an hour at most, then try again; nothing was charged.",
+      "pricing.toast.checkoutBusyMin": "Too many tries in a row. Try again in {n} minutes; nothing was charged.",
+      "pricing.toast.checkoutBusyOne": "Too many tries in a row. Try again in 1 minute; nothing was charged.",
+      "pricing.toast.subscriptionOpenCreem": "You already have a subscription open, so we did not open a second one and nothing was charged. Taking you to your Creem portal to manage it.",
+      "pricing.toast.subscriptionOpenMp": "You already have a subscription open on Mercado Pago, so we did not open a second one and nothing was charged. Taking you to your Mercado Pago subscriptions to manage it.",
+      "pricing.toast.subscriptionOpenEmail": "You already have a subscription open, so we did not open a second one and nothing was charged. To manage it, use the link Creem emails you after every payment, or write to us.",
+      "pricing.toast.subscriptionOpen": "You already have a subscription open, so we did not open a second one and nothing was charged.",
+      "pricing.toast.checkoutFailed": "We couldn't open the checkout, and nothing was charged. Try again in a moment.",
       "pricing.toast.exportNeedPro": "Export needs Pro or trial",
       "pricing.toast.exported": "Progress exported",
       "pricing.toast.checkoutError":
@@ -1712,13 +1803,25 @@
       "pricing.toast.trialUsed": "You already used the free trial in this browser",
       "pricing.toast.verifyUnavailable":
         "Checkout isn’t open yet: we only switch Pro on once a payment is verified end to end. Keep practicing free.",
+      "pricing.toast.priceCurrencyChanged":
+        "The price now shows in a different currency. Check it before you pay: you have not been charged.",
       "pricing.toast.railUnavailable":
         "That payment method isn’t available right now, so you have not been charged. Try again in a while, and if it stays that way, tell us with “Report a problem”.",
       "pricing.toast.verifyPending":
         "Confirming your payment… Pro switches on as soon as the provider confirms.",
+      "pricing.toast.verifyPendingMp":
+        "Mercado Pago takes the first payment about an hour after you subscribe. Once it goes through, Pro switches on the next time you open the app, or when you tap “Check my payment”.",
+      "pricing.toast.verifyDeclinedMp":
+        "Mercado Pago couldn’t charge your card and will try again for about 10 days. Check your payment method in Mercado Pago; once a charge goes through, Pro switches on the next time you open the app, or when you tap “Check my payment”.",
       "pricing.toast.verifyOk": "Payment verified — Pro is active in this browser.",
       "pricing.toast.verifyFailed":
-        "We can’t confirm the payment yet. We’ll keep retrying; if you were charged, contact support with your receipt.",
+        "The provider hasn’t confirmed the payment yet. We check again each time you open the app, for up to 7 days after the payment, and when you tap “Check my payment”. If you were charged and Pro doesn’t switch on, contact support with your receipt.",
+      "pricing.toast.verifyInactive":
+        "The provider tells us this payment didn’t go through or is no longer active, so Pro didn’t switch on. If you see the charge on your card or account, contact support with your receipt; if not, you can subscribe again.",
+      "pricing.toast.verifyNotFound":
+        "We couldn’t find this payment. Please don’t pay again: contact support with your receipt and we’ll look into it.",
+      "pricing.toast.verifySuspended":
+        "The provider has your subscription on hold, so Pro isn’t on yet. Once a charge goes through, Pro switches on the next time you open the app, or when you tap “Check my payment”. If you weren’t expecting this, check your payment method with the provider.",
       "nav.lang": "Español",
       "nav.tour": "Take the tour",
       // —— Design: phone-header —— Pro, Account, language and Tour behind one button
@@ -2328,7 +2431,8 @@
       "ex.s24-nana-high": "High Notes on \u201cNANA\u201d",
       "ex.s25-zone-tour": "Three-Zone Tour (Low\u2013Mid\u2013High)",
       "ex.s26-placement-compare": "Placement A/B (Compare Two Takes)",
-      "ex.s27-lip-trill-solfege": "Lip Trill Solf\u00e8ge (Scale on the Bubble)"
+      "ex.s27-lip-trill-solfege": "Lip Trill Solf\u00e8ge (Scale on the Bubble)",
+      "pricing.regionElsewhere": "rest of the world"
     }
   };
 

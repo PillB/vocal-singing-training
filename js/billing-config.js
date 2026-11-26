@@ -103,7 +103,11 @@
      * Primary rails:
      * - stripe (id only): the international card rail. The seller will be a
      *   merchant of record, not Stripe — see docs/34-PERU-OPERATOR-RUNBOOK.md.
-     * - mercadopago: Peru + LATAM, in soles, with automatic monthly charging.
+     * - mercadopago: Peru, in soles, with automatic monthly charging. A
+     *   Mercado Pago seller account is per country and this one is Peruvian:
+     *   its plans charge soles and a buyer pays with a Peruvian Mercado Pago
+     *   account or card, so the rest of Latin America buys on Creem, in US
+     *   dollars, until there is a seller account in their country.
      */
     providers: {
       /**
@@ -131,7 +135,33 @@
         links: {
           pro_monthly: "", // e.g. https://www.creem.io/payment/prod_xxxx
           pro_yearly: ""
-        }
+        },
+        /**
+         * The same two products priced in euros, for the European Union
+         * (VG-85, decided 2026-11-22): the links of the euro products. A
+         * visitor in the EU is shown € on this rail only when both are set
+         * (or, through the worker, when /v1/health says
+         * `creemEurConfigured`); with one missing they are shown, and
+         * charged, the dollar price instead.
+         */
+        linksEur: {
+          pro_monthly: "", // e.g. https://www.creem.io/payment/prod_xxxx (the euro product)
+          pro_yearly: ""
+        },
+        /**
+         * Open this rail's checkouts through the worker (POST /v1/me/checkout)
+         * instead of a pasted link: the worker creates the Creem checkout for
+         * the signed-in account and links the purchase inside the webhook, so
+         * a webhook later than the buyer cannot lose them their Pro (VG-83).
+         * Needs CREEM_API_KEY, the product ids and the webhook secret on the
+         * worker; /v1/health says `creemCheckoutConfigured` when it has them.
+         *
+         * Ships false. Setting it to true is the commit that puts Pro on sale
+         * on this rail (docs/40-GO-LIVE-GATE.md step 5), exactly as pasting a
+         * link used to be. The links above stay as the way to pay for a
+         * browser that cannot sign in at all (VG-88), and may stay empty.
+         */
+        apiCheckout: false
       },
       /**
        * Kept, not used. The worker still verifies and maps Stripe webhooks, so
@@ -155,8 +185,8 @@
       mercadopago: {
         id: "mercadopago",
         label: "Mercado Pago",
-        labelEs: "Mercado Pago (Perú / LATAM)",
-        regions: ["PE", "AR", "CL", "CO", "UY"],
+        labelEs: "Mercado Pago (Perú)",
+        regions: ["PE"],
         /**
          * Preference init_point or payment link from Mercado Pago.
          * Peru: create plan/subscription or checkout preference in MP dashboard.
@@ -175,8 +205,9 @@
      * shown to a Peruvian to be in soles and to be the final IGV-inclusive
      * figure, and the merchant of record that bills the rest of the world
      * cannot charge soles at all. The soles line therefore answers to the
-     * Peruvian market and the dollar line to the category. The reasoning and
-     * the evidence behind each number are in docs/35-PRICING.md.
+     * Peruvian market, the dollar line to the category, and the euro line
+     * (the dollar numerals, VAT included) to the European Union. The
+     * reasoning and the evidence behind each number are in docs/35-PRICING.md.
      */
     plans: [
       {
@@ -206,17 +237,27 @@
         // merchant of record cannot bill soles at all. See docs/35-PRICING.md.
         priceUsd: 7.99,
         pricePen: 19.9,
+        // The European Union pays in euros, VAT included, on Creem's euro
+        // products (VG-85, decided 2026-11-22; docs/35-PRICING.md). Shown
+        // only where that rail can charge euros (js/billing.js euroChargeable),
+        // so the price on the card is always the price charged.
         priceEur: 7.99,
         popular: true,
-        // Only list features actually delivered in product (trust > feature stack theater)
+        // Only list features actually delivered in product (trust > feature stack theater).
+        // The card shows the first five: what Pro adds that a learner asked for
+        // comes first, in the order the Pro panel's "Pro suma" line names it
+        // (the 28-day chart, the teacher summary, weekly goals, profiles). "No
+        // ads" sits behind the fold: in the 2026-11 concept test ads were the
+        // most common hesitation (33-44% of answers per concept), driven by
+        // "Pro adds: no ads"; and it is only drawn at all while ads are on.
         features: [
           "all_free",
-          "ad_free",
-          "export_progress",
-          "coach_pack",
           "pro_insights",
-          "multi_profile",
+          "coach_pack",
           "studio_goals",
+          "multi_profile",
+          "export_progress",
+          "ad_free",
           "pro_progressions",
           "achievements_export",
           "extra_reminders",
@@ -257,13 +298,39 @@
       { code: "FR", name: "France", currency: "EUR", rail: "creem", priority: 2 },
       { code: "IT", name: "Italy", currency: "EUR", rail: "creem", priority: 2 },
       { code: "BR", name: "Brasil", currency: "BRL", rail: "creem", priority: 2 },
-      { code: "AR", name: "Argentina", currency: "ARS", rail: "mercadopago", priority: 2 },
-      { code: "CL", name: "Chile", currency: "CLP", rail: "mercadopago", priority: 2 },
-      { code: "CO", name: "Colombia", currency: "COP", rail: "mercadopago", priority: 2 },
+      { code: "AR", name: "Argentina", currency: "ARS", rail: "creem", priority: 2 },
+      { code: "CL", name: "Chile", currency: "CLP", rail: "creem", priority: 2 },
+      { code: "CO", name: "Colombia", currency: "COP", rail: "creem", priority: 2 },
       { code: "CA", name: "Canada", currency: "CAD", rail: "creem", priority: 2 },
       { code: "AU", name: "Australia", currency: "AUD", rail: "creem", priority: 2 },
       { code: "PH", name: "Philippines", currency: "PHP", rail: "creem", priority: 3 },
       { code: "IN", name: "India", currency: "INR", rail: "creem", priority: 3 },
+      // The rest of the European Union, so every member state is shown the
+      // euro price (ES, DE, FR and IT are above). Non-EU Europe (GB, CH, NO,
+      // IS) stays in dollars: the decision is the EU's VAT-inclusive euro.
+      { code: "AT", name: "Austria", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "BE", name: "Belgium", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "BG", name: "Bulgaria", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "HR", name: "Croatia", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "CY", name: "Cyprus", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "CZ", name: "Czechia", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "DK", name: "Denmark", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "EE", name: "Estonia", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "FI", name: "Finland", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "GR", name: "Greece", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "HU", name: "Hungary", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "IE", name: "Ireland", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "LV", name: "Latvia", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "LT", name: "Lithuania", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "LU", name: "Luxembourg", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "MT", name: "Malta", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "NL", name: "Netherlands", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "PL", name: "Poland", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "PT", name: "Portugal", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "RO", name: "Romania", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "SK", name: "Slovakia", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "SI", name: "Slovenia", currency: "EUR", rail: "creem", priority: 3 },
+      { code: "SE", name: "Sweden", currency: "EUR", rail: "creem", priority: 3 },
       { code: "WW", name: "Worldwide", currency: "USD", rail: "creem", priority: 3 }
     ]
   };

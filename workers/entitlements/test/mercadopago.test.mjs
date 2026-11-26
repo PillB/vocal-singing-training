@@ -366,6 +366,48 @@ test("a charge called off before it was due was not turned down", () => {
   assert.equal(retriedLate.declinedAt, isoToUnixSeconds("2026-03-01T10:00:00.000-05:00"), "a charge that was due is still a decline");
 });
 
+test("a turned-down instalment moved on to its next retry date is still a decline, dated by the attempt (VG-84 review)", () => {
+  // Mercado Pago moves a declined instalment "to a new collection date".
+  const tried = "2026-03-03T10:00:00.000-05:00";
+  const nextTry = "2026-03-05T10:00:00.000-05:00";
+  const base = { id: "ap_m", preapproval_id: "pre_m", debit_date: nextTry, last_modified: tried };
+  for (const [label, fields] of [
+    ["recycling", { status: "recycling" }],
+    ["processed", { status: "processed" }],
+    ["scheduled, already tried", { status: "scheduled", retry_attempt: 2 }]
+  ]) {
+    for (const status of ["rejected", "cancelled", "canceled"]) {
+      const mapped = mapAuthorizedPaymentResource({ ...base, ...fields, payment: { id: 9, status } }, {});
+      assert.equal(mapped.declinedAt, isoToUnixSeconds(tried), `${label}, ${status}: dated by the failed attempt`);
+    }
+  }
+  // Never tried and not yet due: called off, as before.
+  const calledOff = mapAuthorizedPaymentResource({ ...base, status: "scheduled", retry_attempt: 0, payment: { id: 9, status: "canceled" } }, {});
+  assert.equal(calledOff.declinedAt, undefined, "scheduled, never tried");
+  // An invoice that is itself cancelled, in either spelling, was called off whatever its dates.
+  for (const status of ["canceled", "cancelled"]) {
+    const off = mapAuthorizedPaymentResource({ ...base, debit_date: "2026-03-01T10:00:00.000-05:00", status, payment: { id: 9, status: "canceled" } }, {});
+    assert.equal(off.declinedAt, undefined, `invoice ${status}`);
+  }
+});
+
+test("a payment that names a subscription never sets the plan, and a recurring one naming none is not a one-off (VG-84 review)", () => {
+  const charge = { id: 77, status: "approved", description: "Vocal Studio Pro anual", external_reference: "pro_yearly", date_approved: "2026-03-01T10:00:00.000-05:00" };
+  for (const link of [{ preapproval_id: "pre_t" }, { metadata: { preapproval_id: "pre_t" } },
+    { point_of_interaction: { transaction_data: { subscription_id: "pre_t" } } }]) {
+    const mapped = mapPaymentResource({ ...charge, ...link }, {});
+    assert.equal(mapped.subscriptionId, "pre_t", JSON.stringify(link));
+    assert.equal(mapped.claimId, null);
+    assert.equal(mapped.plan, undefined, `${JSON.stringify(link)}: the charge's text is not the subscription's plan`);
+  }
+  const unlinked = mapPaymentResource({ ...charge, operation_type: "recurring_payment" }, {});
+  assert.equal(unlinked.claimId, null, "not filed under its operation number");
+  assert.equal(mapMercadoPagoResource("payment", { ...charge, operation_type: "recurring_payment" }, {}).handled, false);
+  const oneOff = mapPaymentResource({ ...charge, operation_type: "regular_payment" }, {});
+  assert.equal(oneOff.claimId, "77", "a one-off payment still is");
+  assert.equal(oneOff.plan, "pro_yearly", "and its text still names its plan");
+});
+
 test("a refund or chargeback says when the money left and which charge it was, on either topic", () => {
   const approved = "2026-03-01T10:00:00.000-05:00";
   const reversedAt = "2026-03-03T09:00:00.000-05:00";

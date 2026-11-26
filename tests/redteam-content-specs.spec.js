@@ -347,7 +347,7 @@ test.describe("Public files", () => {
     const md = read("README.md");
     expect(md).not.toMatch(/Stripe \(global\)/);
     const line = md.split("\n").find((l) => /Subscriptions \(Pro\)/.test(l)) || "";
-    expect(line).toMatch(/Mercado Pago \(Perú\/LATAM\)/);
+    expect(line).toMatch(/Mercado Pago \(Perú\)/);
     expect(line).toMatch(/merchant of record/);
     expect(line).toMatch(/Peru-registered seller cannot be a Stripe merchant/);
     expect(line).toMatch(/docs\/34-PERU-OPERATOR-RUNBOOK\.md/);

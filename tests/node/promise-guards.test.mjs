@@ -112,16 +112,22 @@ export const EGRESS = {
     "bindHistoryList btn › createElement:audio": [1, "a saved take played back, on the device"],
     "bindHistoryList btn › set:src": [1, "its blob: address"],
     "bindHistoryList btn › html:audio": [2, "the saved takes' players"],
+    "answerOpenSubscription › navigate": [1, "Mercado Pago's own subscriptions page, the fixed https://www.mercadopago.com.pe/subscriptions, in the same tab, when the worker refuses a second checkout because one is open there: a fixed address, nothing of the page in it"],
+    "paintMorNote › set:href": [1, "the Pro dialog's link to Creem's Buyer Terms, the fixed https://www.creem.io/buyer-terms, opened in a new tab only when clicked: a fixed address, nothing of the page in it"],
     "bindAccount #gift-grant-form › VTAccount.request": [1, "the owner's grants, admin only"],
     "bindAccount #gift-code-form › VTAccount.request": [1, "the owner's gift codes, admin only"],
     "renderGiftCodes › VTAccount.request": [1, "the owner's gift codes (GET), admin only"],
     "renderFunnel › VTAccount.request": [1, "the owner's funnel (GET), admin only"],
     "renderAbResults › VTAccount.request": [2, "the owner's A/B results (GET), admin only"],
+    "openBillingPortal › window.open": [1, "Mercado Pago's subscriptions page, the fixed https://www.mercadopago.com.pe/subscriptions, in a new tab, when a Mercado Pago subscriber presses Manage: a fixed address, nothing of the page in it"],
+    "openCreemPortal › navigate": [1, "a Creem subscriber's portal, in the same tab, on Manage or when the worker refuses a second checkout: the link the worker asked Creem for, followed only for the sign-in that asked and only when validateCreemPageUrl passes it (https on creem.io or a subdomain, on the checkout host list, no user name or password); the page adds nothing to it"],
     "exportProgress › set:href": [2, "the progress file the visitor downloads, from a blob: address"]
   },
   "js/billing.js": {
     "openCustomerPortal › window.open": [1, "the payment provider's portal, when a subscriber asks for it"],
-    "startCheckout › navigate": [1, "the checkout page, when a buyer presses buy"]
+    "startCheckout › navigate": [1, "the checkout page, when a buyer presses buy"],
+    "goBackTo › navigate": [1, "back to the Creem checkout followWorkerAnswer last went to, once, when the same plan is pressed again within 30 minutes under the same rail, sign-in and money, and /v1/me lists no open subscription: the address it kept had passed validateCreemPageUrl, and the page adds nothing to it"],
+    "followWorkerAnswer › navigate": [1, "the Creem checkout the worker opened for this account, in the same tab, when a buyer presses buy: followed only for the sign-in that asked and only when validateCreemPageUrl passes it (https on creem.io or a subdomain, on the checkout host list, no user name or password); the page adds nothing to it"]
   },
   "js/boot-head.js": { "(top) › navigate": [1, "out of a frame another site put the page in"] },
   "js/frame-guard.js": { "(top) › navigate": [1, "out of a frame another site put the page in"] },
@@ -248,7 +254,8 @@ export const NOT_A_WAY_IN = {
 
 /** The functions on that path that read the plan, what they read, and why: each draws, none stops practice. */
 export const PLAN_READERS = {
-  renderValuePulse: ["VTBilling:1 getEntitlement:1 trialDaysLeft:1", "the progress board's Pro panel and trial line"],
+  renderValuePulse: ["VTBilling:1 getEntitlement:1", "the progress board's Pro panel and its tag, which paintValueTag paints"],
+  paintValueTag: ["trialDaysLeft:1", "the words and class of the board's tag: trial and its days, gift, ending, Pro, on hold or free; its classes are marks, read by the marks check"],
   headerPlanState: ["VTBilling:1 getEntitlement:1", "the header's plan label, the progress board's tag, and Start's trial funnel (it records trial_first_practice once, and starts nothing)"],
   renderProGoalPicker: ["#sel-week-goal:1 VTBilling:2", "Pro's goal picker, shown locked to a free visitor"],
   renderRetentionChrome: ["VTBilling:2 isPro:3", "the reminders card: Pro's second reminder"],
@@ -263,6 +270,7 @@ export const PLAN_READERS = {
 /** The functions on that way that touch the account module or ask whether the visitor is signed in, and why. */
 export const SIGN_IN_READERS = {
   headerPlanState: ["VTAccount:1 signedIn:1", "the header's plan label (Pro, trial, or signed in), the board's tag, and Start's trial funnel"],
+  openSubscriptionRail: ["VTAccount:1", "the header's label too: with Pro off, a subscription the last /v1/me listed as still open reads \"on hold\"; a guest's list is empty, and it sends nothing and asks no sign-in"],
   "bindPageLifecycle window": ["VTSync:1", "when the page hides, after the take is kept here, a signed-in visitor's copy is sent; a guest's is nothing"],
   "bindPageLifecycle document": ["VTSync:1", "the same, when the tab is hidden rather than closed"]
 };
@@ -277,7 +285,7 @@ export const SIGN_IN_READERS = {
  * and the same gate in renderProStudio, which is handed the answer, needs no call at all. So a change to one of
  * these, or a new one, fails until somebody reads it, checks it still only draws, and writes its new hash here.
  * The hash is of the code's tree, so a comment or the layout can change freely. The cost is a hash to bump with
- * each change to these 28 functions, renderExercise and the translator among them.
+ * each change to these 32 functions, renderExercise and the translator among them.
  */
 export const REVIEWED = {
   accountDate: ["e115090f7375", "handed the plan's end: words it as a date"],
@@ -286,9 +294,13 @@ export const REVIEWED = {
   "bindPageLifecycle window": ["98854a941fd2", "the same when the page closes, after the take is kept here"],
   browserPlanState: ["a81248caa813", "handed the browser's plan: names its kind, days left and end for the header"],
   fillProgressionSelect: ["427d041d4d03", "handed the progressions the piano offers, Pro's among them: fills their picker"],
-  headerPlanState: ["3cba7ff4a921", "names the plan for the header, the board's tag and the trial funnel; it gates nothing"],
+  headerPlanState: ["19cbd607ad60", "names the plan, \"on hold\" among its kinds, for the header, the board's tag and the trial funnel; it gates nothing"],
   heldAccountPlan: ["f4f27ec0404a", "handed the plan and the account: which of the account's plans is held"],
   keysHaveProg: ["9ccada1cfbf8", "whether the exercise has piano progressions, Pro's among them"],
+  openRailAside: ["ec15b9de255d", "handed the plan: the rail of a subscription still open that Pro does not come from, for the header's \"on hold\"; it gates nothing"],
+  openSubscriptionRail: ["8a86ce9f118d", "the rail the last /v1/me listed a subscription still open on, read from memory: none for a guest, and nothing is sent"],
+  paintValueInsights: ["1887467ae462", "handed whether this is Pro: the board's insight line, shown or hidden"],
+  paintValueTag: ["cb7682f9c44e", "handed the plan and the tag: paints the board's tag, its words and its class, and nothing else"],
   planDaysLeft: ["dedfdfc67cb4", "handed a plan's end: the days left to it"],
   progressionKeysFor: ["8915126b1c58", "which progressions the piano offers: Pro's extras on top of the exercise's own"],
   putAwayValueBanner: ["d9f498db7a17", "puts the trial note away and hands its focus on (focus only: it presses nothing)"],
@@ -301,9 +313,9 @@ export const REVIEWED = {
   renderProGoalPicker: ["623363793da6", "Pro's goal picker, shown locked to a free visitor"],
   renderReminderSettings: ["ed9fb6c72da7", "the reminders card's second time field, Pro's"],
   renderRetentionChrome: ["7ad87c5e4427", "the reminders card: Pro's second reminder"],
-  renderValuePulse: ["9b25f6afc411", "the progress board's Pro panel, its tag and the trial line"],
+  renderValuePulse: ["544c0e133c5e", "the progress board's numbers, Pro panel and tag; on hold keeps the panel locked and the board's Pro button hidden"],
   showValueBanner: ["8a681379dce0", "the trial's days left on the note"],
-  showValueMoment: ["d4d29b42fa1d", "the note about the trial: shown or put away, nothing else"],
+  showValueMoment: ["fccc67c81e1d", "the note about the trial: shown or put away, nothing else; on hold puts it away, as Pro does"],
   trackTrialFirstPractice: ["1662eabca5f5", "records trial_first_practice once for someone holding a trial; Start goes on either way"],
   tt: ["d75e0e6108f1", "the translator, handed the trial's days for the note's words"],
   valueMomentFor: ["0d7af863dfb7", "which note that is, from the plan and the progress"],
@@ -376,7 +388,9 @@ export const PLAN_FILES = {
 export const PLAN_USES = {
   "js/account.js": {
     adopt: ["VTLicense:4", "keeps the licence the worker signed for this account"],
+    heldPaidLicence: ["VTLicense:2", "the paid licence held here and not yet the account's, by id, so it is linked before the account's own answer replaces or drops it; it only reads"],
     forget: ["VTLicense:1", "clears the licence on signing out"],
+    dropPendingClaim: ["VTBilling:1", "on signing out, and only then, drops the checkout still waiting for its licence, so it is not linked to whoever signs in next"],
     refresh: ["VTLicense:1", "asks the worker for the account and its licence again"],
     getState: ["VTLicense:1", "the account's state: Pro when the account holds a signed licence"],
     init: ["VTLicense:1", "hands the licence its way to refresh itself"],
@@ -391,12 +405,13 @@ export const PLAN_USES = {
     progressionKeysFor: ["VTBilling:1", "Pro's extra piano progressions, an extra on top of the exercise"],
     isCheckoutPrelaunch: ["VTBilling:1", "whether checkout is open yet, for the pricing dialog's buttons"],
     headerPlanState: ["VTBilling:1 getEntitlement:1", "the header's plan label, the board's tag, and Start's trial funnel"],
-    planLabel: ["btn-pro:1 plan-ending:2 plan-gift:1 plan-paid:1 plan-trial:1", "the header's Pro button: the class for each plan"],
-    paintPlanButton: ["btn-pro:1 dataset.plan:1 plan-ending:1 plan-gift:1 plan-paid:1 plan-trial:1", "paints the header's Pro button with the plan it carries"],
+    planLabel: ["btn-pro:1 plan-ending:2 plan-gift:1 plan-hold:1 plan-paid:1 plan-trial:1", "the header's Pro button: the class for each plan"],
+    paintPlanButton: ["btn-pro:1 dataset.plan:1 plan-ending:1 plan-gift:1 plan-hold:1 plan-paid:1 plan-trial:1", "paints the header's Pro button with the plan it carries"],
     paintPlanSideButtons: ["#btn-account-pricing:1 #btn-export-progress:1", "the account panel's button to the plans, and the progress export, drawn for the plan"],
     trialSpent: ["VTBilling:1 trialStartedAt:1", "the pricing dialog's line on a trial already used"],
     updateBillingChrome: ["#btn-pricing:1 VTBilling:1 getEntitlement:1", "the header's Pro button's label"],
-    renderValuePulse: ["VTBilling:1 getEntitlement:1 trialDaysLeft:1", "the progress board's Pro panel and trial line"],
+    renderValuePulse: ["VTBilling:1 getEntitlement:1", "the progress board drawn for the plan: its tag, its Pro panel, and its offer, shown only to a free visitor and never beside the trial note; it only draws"],
+    paintValueTag: ["trialDaysLeft:1", "the progress board's tag in the header's words: the trial's days left, and the class for each plan; it only paints the tag"],
     renderProGoalPicker: ["#sel-week-goal:1 VTBilling:2", "Pro's goal picker, shown locked to a free visitor"],
     renderReminderSettings: ["#rem-time-2:1 isPro:2", "the reminders card's second time field"],
     renderRetentionChrome: ["VTBilling:2 isPro:3", "the reminders card: Pro's second reminder"],
@@ -413,18 +428,27 @@ export const PLAN_USES = {
     relabelValueBanner: ["VTBilling:1 dataset.momentId:1 trialDaysLeft:1", "the same note, redrawn in the new language"],
     hideValueBanner: ["dataset.momentId:1", "puts the note away, remembering which one was dismissed"],
     renderPricingModal: ["VTBilling:1 getEntitlement:2", "the pricing dialog itself"],
-    "renderPricingModal btn": ["dataset.plan:1 openAccount:1", "a plan button pressed: the plan it names, and the account first for someone not signed in"],
+    repaintPricingPrices: ["VTBilling:1 [data-plan]:1", "the open pricing dialog's prices, saving and region line, painted again in place when /v1/health answers; each card found by its plan"],
+    wirePlanButtons: ["dataset.plan:1", "binds the pricing dialog's plan buttons, and keeps busy the one whose checkout is still opening when they are drawn again"],
+    "wirePlanButtons btn": ["dataset.plan:1", "a plan button pressed in the pricing dialog: the checkout for the plan it names, or managing the subscription already open"],
+    answerCheckout: ["VTBilling:1 openAccount:1", "what a press to pay says when it did not leave: someone not signed in is sent to the account, the plan and its money kept for the offer to pay anyway"],
+    answerOpenSubscription: ["VTBilling:1 getEntitlement:1", "a checkout refused for a subscription already open: the portal of its rail, or where to manage it; only after a press to pay"],
     pricingStatusLine: ["trialDaysLeft:1", "the pricing dialog's status line"],
+    unheldPricingStatus: ["VTBilling:1", "that status line for someone holding no plan: asks only whether the worker has given a checkout its final answer, to say it (F14)"],
     openPricing: ["#pricing-modal:open:1 openPricing:1", "the pricing dialog's own opener"],
+    prefetchRailsForPrices: ["VTBilling:1", "asks /v1/health once the page is idle, only for a visitor whose prices wait on it, so the pricing dialog opens on the money a press charges; it opens nothing"],
+    paintPayAnyway: ["VTBilling:2", "the account panel's offer to pay without an account, shown after a plan's press where this browser cannot sign in and the plan has a link, with how to cancel on its rail"],
+    payAnyway: ["VTBilling:2 openPricing:1", "that offer pressed: the checkout the plan button was for, or the plans again if the money it would charge has changed"],
     openAccount: ["openAccount:1", "the account panel's own opener"],
-    bindAuth: ["#btn-account-pricing:1 openAccount:1", "the header's account button, and the account panel's button to the plans"],
+    bindAuth: ["#account-pay-anyway-btn:1 #btn-account-pricing:1 openAccount:1", "the header's account button, the account panel's button to the plans, and its offer to pay without an account when this browser cannot sign in (VG-88)"],
     "bindAuth #btn-account-pricing": ["openPricing:1", "the account panel's button to the plans"],
     "bindAuth #admin-force-pro": ["VTBilling:1", "the owner's admin button that turns Pro on"],
     "bindAuth #admin-clear-billing": ["VTBilling:1", "the owner's admin button that clears the plan"],
-    recheckPayment: ["VTBilling:1", "'I have paid': asks the worker again"],
+    recheckPayment: ["VTBilling:2 getEntitlement:1", "'I have paid': asks the worker again for the payment waiting here, and says its answer, in Mercado Pago's own words for a payment pending or declined"],
     startAccountTrial: ["openAccount:1", "the account's trial: someone not signed in is sent to the panel"],
     startLocalTrial: ["VTBilling:3 trialDaysLeft:1", "the browser's own trial, for a deploy with no sign-in"],
-    openBillingPortal: ["VTBilling:2", "the customer portal, from the pricing dialog"],
+    openBillingPortal: ["VTBilling:1 getEntitlement:1", "the pricing dialog's Manage button, and a plan button over an open subscription: the portal of the rail that bills it, or where to find it"],
+    openCreemPortal: ["VTBilling:1 openAccount:1", "a Creem subscriber's portal, asked of the worker after a press to manage it or a refused checkout; a session ended elsewhere is sent to the account"],
     exportProgress: ["VTBilling:2 openPricing:1", "the progress export is Pro's: a free visitor is shown the plans"],
     bindBillingEvents: ["VTBilling:3", "redraws when the plan changes, and the return from a checkout"],
     bindBilling: ["#btn-export-progress:1 #btn-pricing:1 #btn-value-pro:1 #value-banner-cta:1 VTBilling:1 openPricing:2", "binds the header's Pro button, the progress board's and the trial note's, and the progress export, Pro's"],
@@ -442,6 +466,7 @@ export const PLAN_USES = {
     clearEntitlement: ["VTLicense:1", "the plan itself: clears it"],
     rememberCheckoutIntent: ["vt_billing_intent:1", "remembers which plan a checkout was started for"],
     claimLicense: ["VTLicense:1", "the plan itself: claims the licence a checkout paid for"],
+    forgetPendingClaim: ["VTLicense:1", "the plan itself: on signing out, drops the checkout still waiting for its licence, and stops its claim"],
     returnedPlanAndProvider: ["vt_billing_intent:2", "the plan a returning checkout was for"],
     refreshLicense: ["VTLicense:1", "the plan itself: asks the worker for the licence again"],
     trialStartedAt: ["trialStartedAt:1", "the plan itself: when the trial started"],
@@ -497,6 +522,7 @@ const opensSignIn = (use) => SIGN_IN_NAMES.test(use) || use === "#account-modal:
 export const ACCOUNT_USES = {
   "js/account.js": {
     adopt: ["VTLicense:4", "the account itself: keeps the licence the worker signed for it"],
+    heldPaidLicence: ["VTLicense:2", "the account itself: the paid licence this browser holds that the account does not name yet (claimed back from a checkout, or bought signed out), linked before the account's answer drops it or its own token replaces it (VG-88); read only while that answer is adopted"],
     forget: ["VTLicense:1", "the account itself: signing out clears the licence"],
     startEmailSignIn: ["startEmailSignIn:1", "the account itself: the emailed code"],
     renderGoogleButton: ["renderGoogleButton:1", "the account itself: Google's button"],
@@ -506,7 +532,7 @@ export const ACCOUNT_USES = {
     getState: ["VTLicense:1 signedIn:1", "the account itself: its state"],
     getSessionToken: ["getSessionToken:1", "the account itself: its session"],
     init: ["VTLicense:1", "the account itself: hands the licence its way to refresh"],
-    "(top)": ["VTAccount:1 getSessionToken:2 renderGoogleButton:2 signInWithGoogle:2 startEmailSignIn:2 vt_account_plan_v1:1 vt_account_session_v1:1", "the account's storage keys and its exports"]
+    "(top)": ["VTAccount:1 getSessionToken:2 renderGoogleButton:2 signInWithGoogle:2 startEmailSignIn:2 vt_account_plan_v1:1 vt_account_session_v1:1 vt_pending_link_v1:1 vt_pending_links_v2:1", "the account's storage keys and its exports, with the checkouts paid while signed in that wait to be tied to the account"]
   },
   "js/admin-layouts.js": {
     load: ["VTAccount:2", "the owner's admin window: the layout counts, asked as the owner"],
@@ -527,9 +553,14 @@ export const ACCOUNT_USES = {
     trialSpent: ["VTAccount:1 signedIn:1", "the pricing dialog's line on a trial already used, across an account's browsers"],
     updateBillingChrome: ["#btn-start-trial:1", "draws the pricing dialog's trial button"],
     paintPricingTrial: ["VTAccount:1 signedIn:1", "the pricing dialog's trial button: offered, and the length it names"],
+    otherOpenRail: ["VTAccount:1", "the pricing dialog's line on a subscription still open on a rail 'Manage or cancel' does not manage; it reads what /v1/me last listed and only draws that line"],
+    openSubscriptionRail: ["VTAccount:1", "the rail this account still has a subscription open on, as /v1/me last listed it; it asks nothing, opens nothing, and a guest has none. It words the header, the home card, the pricing dialog and the account panel as on hold, never selling a second, and picks where 'Manage or cancel' goes; on the way to practice it only words the home card and holds back its offer of Pro"],
+    creemPortalOffered: ["VTAccount:2 signedIn:1", "whether 'Manage or cancel' can open a Creem portal: somebody signed in, whose customer the worker asks for, and a worker that has not said no; it asks nothing, and only the Manage route, drawn or pressed, and a plan refused for an open subscription read it"],
     catchUpAccount: ["VTAccount:2 VTSync:1 signedIn:1", "the tab shown again, signed in: the account asked again and a sync at most once a minute"],
-    "renderPricingModal btn": ["openAccount:1", "a plan button pressed by someone not signed in opens the account first"],
+    answerCheckout: ["openAccount:1", "a plan's press that needs an account: the pricing dialog closes and the account panel opens, the plan kept so the panel can offer to pay without one where this browser cannot sign in (VG-88); only a plan's press, in the pricing dialog or the panel's offer to pay without an account, is answered here"],
+    answerOpenSubscription: ["VTAccount:1", "a plan's press refused because a subscription is already open: sent to manage it, or the account asked again so the plans stop offering a second; only that refusal reaches it"],
     openPricing: ["VTAccount:2", "the pricing dialog asks the account for its sign-in methods as it opens"],
+    ask: ["VTAccount:1", "the European prices: the worker's health asked once the page is idle, with no session, for a visitor whose prices wait on it (VG-85); nothing waits on it and a failure is dropped"],
     accountPanelState: ["VTAccount:1 signedIn:1", "what the account panel showed, for its own event"],
     noteTrialArmExposure: ["VTAccount:1 signedIn:1", "the trial test's arm, counted for a signed-in account once"],
     accountSyncLine: ["VTSync:1", "the account panel's line on when progress last synced"],
@@ -549,7 +580,7 @@ export const ACCOUNT_USES = {
     mountGoogleButton: ["VTAccount:3 renderGoogleButton:1 signedIn:1", "Google's button inside the account panel"],
     askWhoIsSignedIn: ["VTAccount:2 signedIn:1", "the panel opened: asks the worker who is signed in if it never answered"],
     openAccount: ["#account-modal:open:1 VTAccount:2 VTAuth:1 openAccount:1 signedIn:3", "the account panel's own opener"],
-    bindAuth: ["#btn-account:1 VTAuth:1 openAccount:1", "the header's account button, and the owner's admin buttons"],
+    bindAuth: ["#account-pay-anyway-btn:1 #btn-account:1 VTAuth:1 openAccount:1", "the header's account button, the panel's offer to pay without an account (VG-88), and the owner's admin buttons"],
     "bindAuth #btn-logout": ["VTAccount:1 VTAuth:1 VTSync:1", "the panel's sign-out"],
     "bindAuth #account-retry": ["VTAccount:1", "the panel's 'try again' when Google's script did not load"],
     "bindAuth #login-form": ["VTAuth:2", "the older sign-in's form, for the owner and testers"],
@@ -575,8 +606,10 @@ export const ACCOUNT_USES = {
     watchAccountChanges: ["VTAccount:1 VTSync:2", "redraws the panel, the header and the home card when the account or its record changes"],
     startTrialFromPricing: ["VTAccount:2", "the pricing dialog's trial button: an account's trial, or the browser's own"],
     startAccountTrial: ["VTAccount:1 openAccount:1 signedIn:1", "the account's trial: someone not signed in is sent to the panel"],
-    linkReturnedCheckout: ["VTAccount:1", "a checkout paid while signed in is tied to the account"],
-    bindBilling: ["#btn-start-trial:1", "binds the pricing dialog's trial button"],
+    openCreemPortal: ["#btn-manage-billing:1 VTAccount:3 getSessionToken:2 openAccount:1", "'Manage or cancel' on Creem: the worker asks Creem for this account's own portal, opened only for the session that pressed, and a session gone sends them to the account panel; only that button, a plan drawn to manage an open subscription, or a plan the worker refused for one reaches it"],
+    linkReturnedCheckout: ["VTAccount:1 signedIn:1", "a checkout paid while signed in is tied to the account, only on the way back from a paid checkout; nothing waits on it"],
+    paintManageBilling: ["#btn-manage-billing:1", "shows the account panel's 'Manage or cancel' button only to whoever pays on a rail it can manage; it only draws"],
+    bindBilling: ["#btn-manage-billing:1 #btn-start-trial:1", "binds the pricing dialog's trial button and the account panel's 'Manage or cancel'"],
     "(top)": ["#btn-start-trial:1 openAccount:2", "the trial buttons each dialog holds, and the page's export of the opener"]
   },
   "js/auth.js": {
@@ -589,8 +622,13 @@ export const ACCOUNT_USES = {
     licenseClaims: ["VTLicense:1", "the plan itself: the signed licence's claims"],
     getLicenseStatus: ["VTLicense:1", "the plan itself: whether the licence is being checked"],
     clearEntitlement: ["VTLicense:1", "the plan itself: clears it"],
+    workerCheckout: ["signedIn:2", "a checkout the worker opens for the signed-in account (Creem, VG-83): someone not signed in is asked to sign in, or pays by the link where this browser cannot (VG-88); only a plan's press reaches it"],
+    sessionNow: ["VTAccount:1 getSessionToken:1", "the session signed in now, so one sign-in's checkout is never the next one's (authz-2); the checkout's own bookkeeping, read only from a plan's press and the pricing dialog's buttons"],
+    nothingOpenNow: ["VTAccount:1", "a second press of the same plan: /v1/me is asked again before going back to its checkout, so a subscription opened meanwhile is not sold twice; only that press reaches it"],
+    openWorkerCheckout: ["VTAccount:1", "asks the worker to open the signed-in account's checkout, then goes there; only a plan's press reaches it"],
     checkoutRefusal: ["signedIn:1", "why a checkout cannot start: it needs an account"],
     claimLicense: ["VTLicense:1", "the plan itself: claims the licence a checkout paid for"],
+    forgetPendingClaim: ["VTLicense:1", "on a sign-out, a checkout still waiting for its licence is dropped and its claim stopped, so the next person to sign in is not given it; only the sign-out calls it"],
     refreshLicense: ["VTLicense:1", "the plan itself: asks the worker for the licence again"],
     "(top)": ["VTLicense:1", "the plan's exports"]
   },
@@ -1154,7 +1192,8 @@ export const NOT_MARKS = {
     "pro-verb": "the span that holds the offer's verb on a phone",
     "value-pulse-tag": "the board's tag's own class, the same whatever the plan",
     "is-locked": "the board's insights panel, locked for a free visitor: read alone it names the panel's state, which the panel's own id would read too (see Trade-offs)",
-    "is-dim": "the board's spark bars, dimmed for a free visitor: the same"
+    "is-dim": "the board's spark bars, dimmed for a free visitor: the same",
+    "data-i18n": "the words key of the account panel's offer to pay without an account: which rail's cancel line it shows, not which plan (VG-88)"
   },
   account: {
     "account-open": "set while the account panel is open: it says the panel is up, not who is signed in",

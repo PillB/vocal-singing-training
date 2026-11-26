@@ -36,6 +36,16 @@ import test from "node:test";
 import { handleRequest } from "../src/index.js";
 import { createFakeKv, createTestEnv } from "./fixtures.mjs";
 
+/**
+ * What a Creem subscription that renews answers once its paid period is over
+ * and no renewal has been paid yet: no Pro, and 402 rather than 403, so the
+ * browser keeps the licence for when the renewal or a retry goes through
+ * (found reviewing the merge, 2026-11-23: a buyer without an account lost it
+ * there). 403 is for one that will not renew: set to cancel, or ended by money
+ * going back.
+ */
+const RENEWAL_DUE = 402;
+
 const DAY = 86400;
 const T = Math.floor(Date.now() / 1000);
 const hmacHex = (secret, message) => createHmac("sha256", secret).update(message).digest("hex");
@@ -118,14 +128,14 @@ test("CU0 control: two paid months, and a state event that names the same period
   const env = freshEnv(); await creemTwoMonths(env);
   await creem(env, "c4", "subscription.update", 31.5, csub("active", 31, 62));
   assert.equal((await claim(env, "creem", "ch_1", 50)).status, 200);
-  assert.equal((await claim(env, "creem", "ch_1", 63)).status, 403);
+  assert.equal((await claim(env, "creem", "ch_1", 63)).status, RENEWAL_DUE);
 });
 
 test("CU1 a state event whose snapshot names the PREVIOUS period cannot take month two away", async () => {
   const env = freshEnv(); await creemTwoMonths(env);
   await creem(env, "c4", "subscription.update", 31.5, csub("active", 0, 31));
   assert.equal((await claim(env, "creem", "ch_1", 40)).status, 200, "month two was paid for at day 31");
-  assert.equal((await claim(env, "creem", "ch_1", 63)).status, 403, "and a month is still all it bought");
+  assert.equal((await claim(env, "creem", "ch_1", 63)).status, RENEWAL_DUE, "and a month is still all it bought");
 });
 
 test("CU2 a canceled-at-period-end subscription (status active, canceled_at set to the period end) keeps access to the end of the paid month", async () => {

@@ -46,7 +46,7 @@
     <link rel="alternate" hreflang="en" href="https://pillb.github.io/vocal-singing-training/?lang=en" />
     <link rel="alternate" hreflang="x-default" href="https://pillb.github.io/vocal-singing-training/" />
     <script src="js/boot-head.js?v=20261121d"></script>
-    <link rel="stylesheet" href="css/styles.css?v=20261123b" />
+    <link rel="stylesheet" href="css/styles.css?v=20261125a" />
     <link rel="stylesheet" href="css/exercise-viz.css?v=20261002a" />
     <link rel="stylesheet" href="css/session-sets.css?v=20261123a" />
     <link rel="stylesheet" href="css/voice-path.css?v=20261121f" />
@@ -329,16 +329,16 @@
              fetches it twice: npm run assets:bump rewrites both, and
              tests/node/boot-preload.test.mjs checks the two lists match. -->
         <link rel="preload" href="js/focus-trap.js?v=20261118a" as="script" />
-        <link rel="preload" href="js/i18n.js?v=20261125a" as="script" />
+        <link rel="preload" href="js/i18n.js?v=20261126a" as="script" />
         <link rel="preload" href="js/i18n-early.js?v=20261121a" as="script" />
         <link rel="preload" href="js/exercises-data.js?v=20261123b" as="script" />
         <link rel="preload" href="js/exercises-locale-es.js?v=20261123b" as="script" />
         <link rel="preload" href="js/practice-profiles.js?v=20261125a" as="script" />
         <link rel="preload" href="js/storage.js?v=20261118a" as="script" />
         <link rel="preload" href="js/practice-days.js?v=20261121b" as="script" />
-        <link rel="preload" href="js/billing-config.js?v=20261113a" as="script" />
-        <link rel="preload" href="js/license.js?v=20261103d" as="script" />
-        <link rel="preload" href="js/billing.js?v=20261118a" as="script" />
+        <link rel="preload" href="js/billing-config.js?v=20261125a" as="script" />
+        <link rel="preload" href="js/license.js?v=20261126a" as="script" />
+        <link rel="preload" href="js/billing.js?v=20261126a" as="script" />
         <link rel="preload" href="js/ads-config.js?v=20261113a" as="script" />
         <link rel="preload" href="js/ads.js?v=20261123a" as="script" />
         <link rel="preload" href="js/value-pulse.js?v=20261123a" as="script" />
@@ -351,7 +351,7 @@
         <link rel="preload" href="js/reminders.js?v=20261113a" as="script" />
         <link rel="preload" href="js/auth-users.generated.js?v=20261006a" as="script" />
         <link rel="preload" href="js/auth.js?v=20261006a" as="script" />
-        <link rel="preload" href="js/account.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/account.js?v=20261125a" as="script" />
         <link rel="preload" href="js/sync.js?v=20261125a" as="script" />
         <link rel="preload" href="js/piano.js?v=20261123a" as="script" />
         <link rel="preload" href="js/range-adapter.js?v=20261006a" as="script" />
@@ -379,7 +379,7 @@
         <link rel="preload" href="js/site-layout.js?v=20261111a" as="script" />
         <link rel="preload" href="js/tour.js?v=20261125a" as="script" />
         <link rel="preload" href="js/song-library.js?v=20261123c" as="script" />
-        <link rel="preload" href="js/app.js?v=20261125c" as="script" />
+        <link rel="preload" href="js/app.js?v=20261126a" as="script" />
         <link rel="preload" href="js/audio-recovery.js?v=20261103c" as="script" />
         <link rel="preload" href="js/wake-lock.js?v=20261112b" as="script" />
         <link rel="preload" href="js/boot-ready.js?v=20261117c" as="script" />
@@ -1176,6 +1176,15 @@
             Este sitio entra con Google, y el navegador no pudo cargarlo. Suele ser una extensión que bloquea scripts, o la red. Tu práctica se guarda en este navegador igual.
           </p>
 
+          <!-- VG-88: shown only after a Subscribe press sent them here and this
+               browser turned out unable to sign in, when the plan has a link. -->
+          <div class="account-pay-anyway" id="account-pay-anyway" hidden>
+            <p class="muted" data-i18n="auth.payWithoutAccount">
+              Puedes pagar igual desde este navegador. Tu Pro quedará en él, y en cuanto puedas entrar lo pasamos a tu cuenta.
+            </p>
+            <button type="button" class="btn btn-primary btn-sm" id="account-pay-anyway-btn" data-i18n="auth.payWithoutAccountBtn">Continuar al pago</button>
+          </div>
+
           <p class="muted" id="account-offline" hidden data-i18n="auth.signInOffline">
             No pudimos comprobar el acceso ahora mismo. Tu práctica se guarda en este navegador.
           </p>
@@ -1344,7 +1353,7 @@
             Exportar progreso (Pro)
           </button>
           <button type="button" class="btn btn-sm btn-ghost" id="btn-manage-billing" data-i18n="pricing.manage" hidden>
-            Gestionar suscripción
+            Gestionar o cancelar suscripción
           </button>
           <button type="button" class="btn btn-sm" id="btn-recheck-payment" data-i18n="pricing.recheck" hidden>
             Comprobar mi pago
@@ -1358,6 +1367,10 @@
           <!-- The fallback a reader gets if the scripts never run, so it has to be
                true on its own: today nobody can be charged, and "el portal del
                proveedor" named a cancellation route that does not exist. -->
+          <!-- Who sells the subscription, before the buyer pays (Creem merchant
+               terms 3.7). Filled and shown by renderPricingModal only while the
+               Creem rail is the one chosen and something is on sale. -->
+          <p class="muted pricing-note" id="pricing-mor-note" hidden></p>
           <p class="muted pricing-note" id="pricing-pay-note" data-i18n="pricing.notePrelaunch">
             La prueba gratis no pide tarjeta. Cuando termina, sigues en el plan Gratis y no se cobra nada.
           </p>
@@ -1373,16 +1386,16 @@
     </div>
 
     <script src="js/focus-trap.js?v=20261118a"></script>
-    <script src="js/i18n.js?v=20261125a"></script>
+    <script src="js/i18n.js?v=20261126a"></script>
     <script src="js/i18n-early.js?v=20261121a"></script>
     <script src="js/exercises-data.js?v=20261123b"></script>
     <script src="js/exercises-locale-es.js?v=20261123b"></script>
     <script src="js/practice-profiles.js?v=20261125a"></script>
     <script src="js/storage.js?v=20261118a"></script>
     <script src="js/practice-days.js?v=20261121b"></script>
-    <script src="js/billing-config.js?v=20261113a"></script>
-    <script src="js/license.js?v=20261103d"></script>
-    <script src="js/billing.js?v=20261118a"></script>
+    <script src="js/billing-config.js?v=20261125a"></script>
+    <script src="js/license.js?v=20261126a"></script>
+    <script src="js/billing.js?v=20261126a"></script>
     <script src="js/ads-config.js?v=20261113a"></script>
     <script src="js/ads.js?v=20261123a"></script>
     <script src="js/value-pulse.js?v=20261123a"></script>
@@ -1400,7 +1413,7 @@
     <script src="js/reminders.js?v=20261113a"></script>
     <script src="js/auth-users.generated.js?v=20261006a"></script>
     <script src="js/auth.js?v=20261006a"></script>
-    <script src="js/account.js?v=20261113a"></script>
+    <script src="js/account.js?v=20261125a"></script>
     <script src="js/sync.js?v=20261125a"></script>
     <script src="js/piano.js?v=20261123a"></script>
     <script src="js/range-adapter.js?v=20261006a"></script>
@@ -1428,7 +1441,7 @@
     <script src="js/site-layout.js?v=20261111a"></script>
     <script src="js/tour.js?v=20261125a"></script>
     <script src="js/song-library.js?v=20261123c"></script>
-    <script src="js/app.js?v=20261125c"></script>
+    <script src="js/app.js?v=20261126a"></script>
     <script src="js/audio-recovery.js?v=20261103c"></script>
     <script src="js/wake-lock.js?v=20261112b"></script>
     <script src="js/boot-ready.js?v=20261117c"></script>

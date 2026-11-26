@@ -20,7 +20,7 @@
  * the statements themselves (db.js `schemaFingerprint`), so a forgotten bump
  * or two branches choosing the same number cannot skip a table.
  */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 /**
  * Table and index definitions, in dependency order.
@@ -140,6 +140,23 @@ export const SCHEMA_STATEMENTS = [
      created_at INTEGER NOT NULL
    )`,
   `CREATE INDEX IF NOT EXISTS idx_license_links_account ON license_links (account_id)`,
+
+  // A checkout the worker opened itself (checkout.js): the reference sent to
+  // the provider as `request_id`, whose account asked for it, and the
+  // provider's own id for that checkout, which is the only checkout the
+  // reference may bind. `license_id` and `bound_at` are filled by the webhook.
+  // Swept 30 days after creation; the link it made lives in license_links.
+  `CREATE TABLE IF NOT EXISTS checkout_refs (
+     ref TEXT PRIMARY KEY,
+     account_id TEXT NOT NULL,
+     plan TEXT,
+     provider TEXT NOT NULL,
+     checkout_id TEXT NOT NULL,
+     created_at INTEGER NOT NULL,
+     license_id TEXT,
+     bound_at INTEGER
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_checkout_refs_created ON checkout_refs (created_at)`,
 
   `CREATE TABLE IF NOT EXISTS progress (
      account_id TEXT NOT NULL,

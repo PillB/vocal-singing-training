@@ -86,6 +86,11 @@ customer's Pro for good.
 
 - `suspended` (Stripe `unpaid` or `paused`): paying the open invoice, or
   resuming, makes it active again;
+- `past_due` once its paid period is over: a renewal in dunning that the
+  provider is still retrying. Creem's `subscription.expired` is this ("Payment
+  retries can happen at this stage"), and when a retry goes through,
+  `subscription.paid` gives Pro back to the same browser (red team rt2,
+  truth-1);
 - a delayed payment that failed, with nothing paid since: Stripe keeps the
   subscription and its invoice can still be paid (`/v1/claim` answers 402 too,
   so the site keeps the checkout and claims it again on each visit for a week,
@@ -93,9 +98,22 @@ customer's Pro for good.
 - a Mercado Pago subscription still `authorized` whose period ended when a
   charge's money went back (a refund or a chargeback): it charges again.
 
+- a Creem subscription that still reads `active`, not set to cancel, whose
+  period is over: its renewal has not been paid yet. A renewal that failed
+  reads `active` from its period end until Creem's daily check sends
+  `subscription.expired` ("Creem checks once a day for subscriptions whose
+  `current_period_end_date` fell on the previous day"), and every other event
+  in the retry period carries the same `active` snapshot. It used to answer
+  403 there, and a browser without an account that asked in that window
+  forgot the licence it gets Pro back with when the retry goes through
+  (found reviewing the merge, 2026-11-23).
+
 403 for everything else that is refused: a deleted Stripe subscription, a
-paused or cancelled Mercado Pago one, a one-off payment that failed, was never
-paid or was refunded, a setup session, and a period that ran out.
+cancelled Creem one or one set to cancel (`scheduled_cancel`, or an `active`
+snapshot carrying `canceled_at`: no payment undoes it), a Creem period a
+refund or a chargeback ended, a paused or cancelled Mercado Pago one, a
+one-off payment that failed, was never paid or was refunded, a setup session,
+and a Stripe period that ran out while the subscription still reads `active`.
 
 **What a suspended customer keeps.** No new token is issued, but the site's
 client keeps the token it already holds until that token expires: at most
@@ -127,8 +145,10 @@ routes above are untouched):
 | POST | `/v1/auth/email/verify` | `{email, code}` → `{token, account, entitlement, licenseToken}`. |
 | POST | `/v1/auth/google` | `{credential}` — a Google ID token, verified against Google's JWKS. |
 | POST | `/v1/auth/logout` | Drops the bearer session. |
-| GET | `/v1/me` | The account, its entitlement, and a fresh license token when entitled. |
+| GET | `/v1/me` | The account, its entitlement, and a fresh license token when entitled. `billingRails` names each rail on which the account has an open subscription that is not waiting for its first charge (`isManagedSubscription` in `src/license.js`): a renewal being retried after the paid period is there, so the page can offer "Manage or cancel"; a one-off payment, a preapproval nobody authorized and a cancelled subscription are not. |
 | POST | `/v1/me/link` | `{provider, sessionId}` — attaches a checkout the visitor paid for anonymously. |
+| POST | `/v1/me/checkout` | `{plan, returnPath}` → `{url}`. Opens a Creem checkout for the signed-in account: a random `request_id` (`vtr_` + 22 base64url characters) is stored in D1 `checkout_refs` for 30 days, and the `checkout.completed` webhook binds the licence to that account (VG-83). `503 checkout_unconfigured` until `CREEM_API_KEY`, the webhook secret and a product id are set. `409 {ok:false, reason:"subscription_open", provider}` while the account already has an open subscription on any rail (`isOpenSubscription` in `src/license.js`, the same test as `billingRails`, plus one whose first charge is on its way), so the worker does not open a second subscription that would charge beside the first. A plan change goes through the provider's own pages. A refunded or charged-back Creem subscription is open until Creem says it is cancelled, in `subscription.canceled` or in the subscription the refund or dispute embeds. Not covered: a static payment link, which never reaches the worker, and two checkouts opened before either is paid. |
+| POST | `/v1/me/billing-portal` | → `{url}`. Creem's customer portal for the account's own Creem customer, where a subscriber manages or cancels (VG-86). `503 portal_unconfigured` without `CREEM_API_KEY`. |
 | POST | `/v1/me/trial` | Starts the one free trial. `409 {reason:"trial_used"}` the second time. |
 | POST | `/v1/me/redeem` | `{code}` — redeems a gift code. |
 | GET/PUT/DELETE | `/v1/me/progress` | Saved progress for one profile. `PUT` takes `{profileId, doc, baseRev}` and answers `409` with the server's copy when the revision moved. |
@@ -223,6 +243,7 @@ Public, committed in `wrangler.toml`:
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_YEARLY` | Optional price → plan mapping. Filling either one in also makes it an **allow-list** — see below. |
 | `MP_PLAN_PRO_MONTHLY` / `MP_PLAN_PRO_YEARLY` | Optional `preapproval_plan_id` → plan mapping. |
 | `CREEM_PRODUCT_PRO_MONTHLY` / `CREEM_PRODUCT_PRO_YEARLY` | Optional Creem product id → plan mapping. Filling either one in makes it an **allow-list** too, as the Stripe prices do. Creem metadata is never read for the plan (a buyer can write it). |
+| `CREEM_PRODUCT_PRO_MONTHLY_EUR` / `CREEM_PRODUCT_PRO_YEARLY_EUR` | The same two plans priced in euros, VAT included, for the European Union (VG-85). Mapped to their plans and counted in the allow-list like the dollar ones, so a euro purchase becomes Pro. `POST /v1/me/checkout` with `currency: "EUR"` opens these, and refuses with 409 `currency_unavailable` for a plan with none (never falling back to dollars). `/v1/health` reports `creemEurConfigured` only with both set and everything `creemCheckoutConfigured` needs; the page shows a European € only then. |
 | `CREEM_ALLOW_TEST_MODE` | `"true"` lets a Creem event whose `mode` is `test`, `sandbox` or `local` entitle. Defaults off: a test purchase moves no money, so honouring one hands out the paid tier for nothing. Switch it on to prove the rail end to end, and off again before the first real sale. An unrecognised mode entitles either way, so a live value Creem renames cannot silently stop every sale. |
 | `TRIAL_DAYS` | Length of the free trial, in days. One per account, ever. Default 7. |
 | `TRIAL_LEN_EXPERIMENT` | `"on"` runs the trial-length A/B test (`trial_len_2026_11`): each account's trial is 7 or 14 days, assigned from its account id. **It overrides `TRIAL_DAYS`** — with the test on, that setting is ignored. Off (the default) everybody gets `TRIAL_DAYS`. It also needs `LICENSE_ID_KEY` or `LICENSE_PRIVATE_KEY_PKCS8_B64` to key the assignment with; without one the test stays off, because an arm anyone can predict is an arm anyone can pick. The browser cannot switch this on: the `enabled` flag in `js/experiments-config.js` governs only what the statistics record. |
@@ -240,6 +261,7 @@ Secrets — **never** in this repo, only `wrangler secret put`:
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` for *this* endpoint (test and live differ). |
 | `MP_WEBHOOK_SECRET` | Mercado Pago webhook signing secret. |
 | `CREEM_WEBHOOK_SECRET` | Creem webhook signing secret, from Developers → Webhook. Empty refuses every Creem webhook with `secret_not_configured` rather than trusting an unsigned body. |
+| `CREEM_API_KEY` | Creem API key, for `/v1/me/checkout` and `/v1/me/billing-portal`. A `creem_test_…` key sends those calls to `test-api.creem.io`, a live key to `api.creem.io`; `/v1/health` reports `creemCheckoutConfigured`, `creemEurConfigured` and `creemPortalConfigured`. |
 | `MP_ACCESS_TOKEN` | Mercado Pago access token, used only for server-side reads. |
 | `LICENSE_PRIVATE_KEY_PKCS8_B64` | base64 PKCS#8 P-256 private key. |
 | `LICENSE_ID_KEY` | Optional. The key a new license id is derived under, so two webhooks for one new customer agree on one license. Without it a key derived from `LICENSE_PRIVATE_KEY_PKCS8_B64` is used; with neither, a new license gets a random id. Set it to keep derivation stable across a signing-key rotation. Any long random string. |
@@ -326,6 +348,7 @@ node scripts/generate-keys.mjs k1
 wrangler secret put STRIPE_WEBHOOK_SECRET
 wrangler secret put MP_WEBHOOK_SECRET
 wrangler secret put CREEM_WEBHOOK_SECRET
+wrangler secret put CREEM_API_KEY         # Creem checkouts bound to the account, and the portal
 wrangler secret put MP_ACCESS_TOKEN
 wrangler secret put LICENSE_PRIVATE_KEY_PKCS8_B64
 wrangler secret put RESEND_API_KEY        # accounts only, matching EMAIL_PROVIDER
@@ -384,8 +407,8 @@ Consequences worth understanding before you ship:
 
 - **A missed renewal webhook ends access at `periodEnd`, by design.** We prefer
   a paying customer losing Pro over a cancelled customer keeping it forever.
-  A period that ran out answers 403, and the site's client forgets its license
-  on a 403, so this loss is brief only for a signed-in account (its next check
+  A Stripe period that ran out answers 403 (Creem and Mercado Pago answer
+  402 there, above), and the site's client forgets its license on a 403, so this loss is brief only for a signed-in account (its next check
   after the provider catches up restores it); a browser with no account keeps
   it until the customer signs in or support steps in.
 - **The providers' own retries are what keep `periodEnd` moving.** Stripe
@@ -663,14 +686,20 @@ Subscribe exactly these events:
 | `subscription.trialing` | A Creem-side trial. Entitles, like Stripe's `trialing` |
 | `subscription.update` | The subscription's own answer for its period, so a downgrade shortens it |
 | `subscription.paused` | Nothing is being charged: suspended until a payment brings it back |
-| `subscription.canceled` | Cancelled. The period already paid for is kept |
-| `subscription.expired` | Over. Terminal: Creem gives a new purchase a new subscription id |
-| `refund.created` | Money going back. A **full** refund ends the access its transaction bought |
-| `dispute.created` | A chargeback. Ends access the day it is raised |
+| `subscription.canceled` | Cancelled, and terminal: nothing after it reopens the subscription. The period already paid for is kept. Creem: "the subscription status will be terminal only when status is changed to `canceled`" |
+| `subscription.expired` | The paid period ended without a payment, and Creem may still retry the card ("Payment retries can happen at this stage", docs.creem.io/code/webhooks). Not terminal: no Pro after the period end, the subscription stays open (named in `billingRails`, no second checkout, `/v1/license` answers 402 so a browser without an account keeps its licence), and a later `subscription.paid` brings Pro back. A snapshot that still says active is read as `past_due`. One that says `scheduled_cancel` is the cancellation the customer asked for taking effect ("after which it transitions to `canceled`"), so it is read as cancelled and terminal |
+| `refund.created` | Money going back. A **full** refund ends the access its transaction bought. When the subscription it embeds says `canceled` (as in Creem's own example), the subscription is cancelled here too, terminal, so the customer can subscribe again without waiting for `subscription.canceled`. A refund that is not full is not read at all, so its cancellation comes through `subscription.canceled` |
+| `dispute.created` | A chargeback. Ends access the day it is raised. An embedded subscription that says `canceled` cancels it here too; one that says active (Creem's example) stays open, because it may still charge |
 
-Then create **two products** — monthly and yearly — because Creem has no single
-link that offers both, and put their ids in `CREEM_PRODUCT_PRO_MONTHLY` and
-`CREEM_PRODUCT_PRO_YEARLY`. Filling either one in makes it an allow-list as
+Then create **four products**: monthly and yearly, because Creem has no single
+link that offers both, each in US dollars (everywhere outside the European
+Union) and in euros (the Union, VG-85), all with `tax_mode` `"inclusive"`. Put
+their ids in `CREEM_PRODUCT_PRO_MONTHLY`, `CREEM_PRODUCT_PRO_YEARLY`,
+`CREEM_PRODUCT_PRO_MONTHLY_EUR` and `CREEM_PRODUCT_PRO_YEARLY_EUR`. The page
+asks `/v1/me/checkout` for the currency its card showed (`currency`, `"USD"`
+when absent), and the worker charges that currency or refuses: a euro request
+for a plan with no euro product is a 409 `currency_unavailable`, never a dollar
+checkout. Filling any one in makes it an allow-list as
 well as a label, so a donation or a one-off lesson sold from the same Creem
 account cannot become Pro. Unlike Stripe, `metadata.plan` is no way past that
 list, or a way to name a plan at all: a Creem payment link takes
@@ -682,7 +711,7 @@ on the monthly link count one monthly charge as a year (red-team WH-2,
 18 November 2026). A product of ours missing from the list is fixed by adding
 its id.
 Paste each product's share link into `js/billing-config.js` under
-`providers.creem.links`.
+`providers.creem.links`, and the euro products' under `providers.creem.linksEur`.
 
 Five things about this rail are not like Stripe's, and each one is a way to
 get it wrong:
@@ -724,6 +753,15 @@ get it wrong:
   entitles, deliberately: refusing an unknown one would mean a production value
   Creem renames stops every real payment, silently, which is the worse way to
   be wrong.
+- **Live mode is a second setup, not a switch.** Products, webhook
+  registrations and their signing secrets made in Creem's test mode do not
+  exist in live mode. Going live means creating the products again, registering
+  `/v1/webhooks/creem` again in the live dashboard, and putting in **that**
+  registration's `CREEM_WEBHOOK_SECRET` with the live `CREEM_API_KEY`. The
+  worker holds one secret, so a test secret left in refuses every live event:
+  the buyer is charged and no licence is written. `creemKeyMode` in
+  `/v1/health` reads only the key and cannot see this, so the proof is one
+  real purchase that shows Pro arriving, refunded at once (gate step 4).
 
 The payment identity on this rail is the **transaction id** (`tran_…`). Creem
 names it on the paying events and names the same one again when the money goes
@@ -806,11 +844,11 @@ because if a hit still passed a `429` would only mean "miss". That is the
 price of the ceiling: whoever spends it holds one-off payments back for the
 rest of the hour, and since buyers' own lookups count against it too, more
 than fifty buyers an hour would hold each other back. A held-back claim
-waits and is claimed on a later load; a held-back account link is lost,
-because the site sends `/v1/me/link` once and drops any answer but success,
-so a signed-in payer refused there ends without Pro on the account. That is
-VG-83, which a late webhook already triggers, and which has to be fixed
-before one-off payments are sold. Subscriptions, claimed by their
+waits and is claimed on a later load; a held-back account link used to be lost.
+Since 2026-11-21 the site keeps a pending link and
+retries it on load, after sign-in and at 4, 12, 30 and 90 seconds, and
+links by the licence id once the claim lands, which this throttle does not
+count (VG-83). Subscriptions, claimed by their
 preapproval id, are never held back. The block's bucket and the number's
 record are named after keyed daily pseudonyms, never the address or the
 number itself, and like every `rate_limits` row they are swept a day after

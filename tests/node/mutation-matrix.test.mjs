@@ -66,8 +66,10 @@ test("every mutation set runs in CI: the Node sets in contracts and node-mutatio
 
 // Seconds per mutant in CI's contracts job, the slower of its two runs on 2026-11-25/26 (b9e30d2, job 139557670886,
 // and 331e83b, job 139594679565), rounded up: each KILLED line's time less the one before it, so a set's first
-// mutant carries its start. A set with no rate fails the budget below until one CI run of it is timed.
-export const SECONDS_PER_MUTANT = { audio: 5.6, pitch: 1.2, lint: 2.2, coaching: 0.2, sets: 0.2, ledger: 0.6, claims: 0.2, path: 0.6, curriculum: 0.2, guards: 4.8 };
+// mutant carries its start. A set with no rate fails the budget below until one CI run of it is timed. mpPaid
+// (PR #54's Mercado Pago set) is timed the same way on that branch's two contracts runs of 2026-11-26 (22d949e,
+// job 139595001563, 0.93 s; 41d11d6, job 139642247558, 0.87 s).
+export const SECONDS_PER_MUTANT = { audio: 5.6, pitch: 1.2, lint: 2.2, coaching: 0.2, sets: 0.2, ledger: 0.6, mpPaid: 1, claims: 0.2, path: 0.6, curriculum: 0.2, guards: 4.8 };
 
 /** A run's expected minutes from its mutants and the measured rates, and the sets it runs that have no rate. */
 export function estimate(sets, counts, rates) {

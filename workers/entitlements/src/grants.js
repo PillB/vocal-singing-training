@@ -22,7 +22,7 @@
 "use strict";
 
 import { getEntitlement } from "./store.js";
-import { isTokenIssuable, licenseIdSecret, PLAN_IDS } from "./license.js";
+import { isManagedSubscription, isOpenSubscription, isTokenIssuable, licenseIdSecret, PLAN_IDS } from "./license.js";
 import { changedRows, hmacSha256Hex, mintId, nowSec } from "./db.js";
 
 /** Grant kinds an operator (or the trial flow) can create. */
@@ -815,6 +815,49 @@ export async function listLinkedLicenses(db, accountId) {
 }
 
 /**
+ * The account's linked licences, read once: the ones that give Pro now, and
+ * the rails with a subscription that is still open, whether or not it gives
+ * Pro right now (license.js `isManagedSubscription`). A renewal being retried
+ * after the paid period still charges a card, and its subscriber still needs
+ * the page's "Manage or cancel". A one-off payment, a preapproval nobody
+ * authorized and a cancelled or deleted subscription charge nothing, so they
+ * name no rail (red team rt2, money-7).
+ * @param {D1Database} db D1.
+ * @param {KVNamespace|null} kv The entitlement ledger.
+ * @param {string} accountId Account.
+ * @param {number} at Unix seconds.
+ * @returns {Promise<{paid: object[], billingRails: Set<string>}>}
+ */
+async function readLinkedRecords(db, kv, accountId, at) {
+  const paid = [];
+  const billingRails = new Set();
+  for (const licenseId of await listLinkedLicenses(db, accountId)) {
+    const record = kv ? await getEntitlement(kv, licenseId) : null;
+    if (!record) continue;
+    if (isTokenIssuable(record, at)) paid.push(record);
+    if (isManagedSubscription(record)) billingRails.add(record.provider);
+  }
+  return { paid, billingRails };
+}
+
+/**
+ * The newest licence linked to an account whose subscription is still open
+ * (license.js `isOpenSubscription`), on any rail, or null. What
+ * `/v1/me/checkout` asks before it opens another subscription.
+ * @param {D1Database} db D1.
+ * @param {KVNamespace|null} kv The entitlement ledger.
+ * @param {string} accountId Account.
+ * @returns {Promise<Object|null>} The open subscription's record, or null.
+ */
+export async function findOpenSubscription(db, kv, accountId) {
+  for (const licenseId of await listLinkedLicenses(db, accountId)) {
+    const record = kv ? await getEntitlement(kv, licenseId) : null;
+    if (isOpenSubscription(record)) return record;
+  }
+  return null;
+}
+
+/**
  * Resolve everything an account is entitled to into one answer.
  *
  * Reads both sides — grants in D1, paid entitlements in KV — and returns the
@@ -836,14 +879,7 @@ export async function resolveEntitlement(db, kv, accountId, now) {
   const grantRows = await listGrants(db, accountId, { includeRevoked: true, limit: 200 });
   const activeGrants = grantRows.filter((row) => grantIsActive(row, at));
 
-  const licenseIds = await listLinkedLicenses(db, accountId);
-  const paid = [];
-  for (const licenseId of licenseIds) {
-    const record = kv ? await getEntitlement(kv, licenseId) : null;
-    if (record && isTokenIssuable(record, at)) {
-      paid.push(record);
-    }
-  }
+  const { paid, billingRails } = await readLinkedRecords(db, kv, accountId, at);
 
   /** @type {{pro: boolean, plan: string|null, status: string, source: string|null,
    *          periodEnd: number|null, provider: string|null, licenseId: string|null,
@@ -901,6 +937,7 @@ export async function resolveEntitlement(db, kv, accountId, now) {
 
   return {
     ...best,
+    billingRails: [...billingRails].sort(),
     grants: grantRows.map((row) => toPublicGrant(row, at)),
     paid: paid.map((record) => ({
       licenseId: record.licenseId,

@@ -20,6 +20,9 @@ let schemaReady = new WeakSet();
  */
 export const EVENT_RETENTION_SECONDS = 180 * 86400;
 
+/** How long a checkout the worker opened is remembered (checkout.js); the sweep removes older rows. */
+export const CHECKOUT_REF_TTL_SECONDS = 30 * 86400;
+
 /**
  * A report we are done with — fixed, declined or a duplicate — is deleted by
  * `sweepExpired` this long after it was last touched (180 days, the same
@@ -572,8 +575,8 @@ export const SWEEP_CHUNK_ROWS = 5000;
  * Statements one table gets per sweep. Three of 5,000 rows is 15,000 a day,
  * above the events table's 10,000-a-day intake cap (events.js
  * EVENTS_DAILY_CAP), so the daily cron keeps up with the busiest table, and
- * eight tables at three each stay inside the free plan's 50 queries an
- * invocation.
+ * nine tables at three each (27, plus the admin route's three of its own)
+ * stay inside the free plan's 50 queries an invocation.
  */
 export const SWEEP_MAX_CHUNKS = 3;
 
@@ -604,7 +607,11 @@ function sweepTargets(at) {
     // license records have no expiry and are never swept. A KV copy of the
     // same key, from before the ledger moved, was written earlier with the
     // same TTL, so it has expired too and cannot show through.
-    ["ledger_kv", "expires_at IS NOT NULL AND expires_at <= ?1", at]
+    ["ledger_kv", "expires_at IS NOT NULL AND expires_at <= ?1", at],
+    // Checkouts the worker opened (checkout.js): 30 days, bound or not. A
+    // bound one's link lives on in license_links; an unbound one is a
+    // checkout nobody paid for.
+    ["checkout_refs", "created_at < ?1", at - CHECKOUT_REF_TTL_SECONDS]
   ];
 }
 

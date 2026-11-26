@@ -386,7 +386,11 @@ export function isTokenIssuable(entitlement, nowSeconds) {
  * That is a "pending" record, or one the provider already treats as live (a
  * subscription can turn active while a delayed payment is still settling)
  * whose payment has not been confirmed. A payment that failed is not on its
- * way, whatever status a later event left the record in.
+ * way, whatever status a later event left the record in, and neither is a
+ * Mercado Pago subscription whose first charge was turned down or whose money
+ * went back: that is a refusal Mercado Pago may still undo by charging again
+ * (402, see `isSuspended`), and told "about an hour" the buyer would wait for
+ * a card that keeps failing (VG-84 review).
  * @param {Object} entitlement Stored entitlement record.
  * @returns {boolean} Whether the payment is still expected.
  */
@@ -401,7 +405,59 @@ export function isAwaitingPayment(entitlement) {
     return true;
   }
   return entitlement.paid === false
-    && (entitlement.status === "active" || entitlement.status === "past_due");
+    && (entitlement.status === "active" || entitlement.status === "past_due")
+    && !(entitlement.provider === "mercadopago"
+      && (declinedSinceLastCharge(entitlement) || Number.isFinite(entitlement.reversedAt)));
+}
+
+/**
+ * True while a licence is a subscription its provider has not ended: one that
+ * can still charge a card (a renewal on schedule, a renewal being retried
+ * after the paid period, a first charge on its way) or be resumed. Whether it
+ * gives Pro right now does not matter: a renewal being retried after the paid
+ * period gives none and still charges.
+ *
+ * It is the one test of "open" behind both answers that depend on it:
+ * `/v1/me/checkout` refuses a second checkout for an account that has one
+ * (two subscriptions would both charge every month), and `/v1/me` names its
+ * rail in `billingRails` (through `isManagedSubscription` below) so the page
+ * can offer "Manage or cancel".
+ *
+ * Open means all four:
+ *   - a subscription id: a one-off payment (Mercado Pago Checkout Pro, a
+ *     payment link) has none, and nothing ever charges it again;
+ *   - not "canceled": the provider ended it. Creem: "the subscription status
+ *     will be terminal only when status is changed to `canceled`"
+ *     (docs.creem.io/code/webhooks, read 23 November 2026);
+ *   - not "pending": a Mercado Pago preapproval nobody authorized has no card
+ *     behind it, so nothing will be charged;
+ *   - no `endedAt`: a deletion on record (Stripe's, or Creem's cancellation).
+ * @param {Object} entitlement Stored entitlement record.
+ * @returns {boolean} Whether the subscription is still open.
+ */
+export function isOpenSubscription(entitlement) {
+  if (!entitlement || typeof entitlement !== "object" || !entitlement.provider || !entitlement.subscriptionId) {
+    return false;
+  }
+  return entitlement.status !== "canceled"
+    && entitlement.status !== "pending"
+    && !Number.isFinite(entitlement.endedAt);
+}
+
+/**
+ * True when `/v1/me` should name a licence's rail in `billingRails`: an open
+ * subscription (`isOpenSubscription`) that is not still waiting for its money.
+ * The page reads a rail there, while Pro is off, as "your subscription is
+ * still open, but Pro is off: usually a payment that didn't go through". A
+ * subscription whose first charge is on its way (`isAwaitingPayment`: a
+ * Mercado Pago one is charged about an hour after it is authorized) has not
+ * lapsed, so it is left out. It still counts as open for the checkout guard,
+ * because that charge will be taken and a second checkout would be another.
+ * @param {Object} entitlement Stored entitlement record.
+ * @returns {boolean} Whether the page should offer it for managing.
+ */
+export function isManagedSubscription(entitlement) {
+  return isOpenSubscription(entitlement) && !isAwaitingPayment(entitlement);
 }
 
 /**
@@ -414,13 +470,45 @@ export function isAwaitingPayment(entitlement) {
  *   - status "suspended": it stopped paying without being cancelled (Stripe
  *     "unpaid" or "paused"), and paying the open invoice or resuming it
  *     makes it active again;
+ *   - status "past_due": a renewal in dunning whose paid period is over.
+ *     The provider is still retrying the card, and when a retry goes through
+ *     Pro comes back. (A Stripe subscription in past_due has its period
+ *     rolled forward and keeps Pro until that period is over, so it gets
+ *     this answer only after that.) Creem
+ *     reports exactly this with `subscription.expired` ("Payment retries can
+ *     happen at this stage", docs.creem.io/code/webhooks, read 23 November
+ *     2026), and a buyer who paid without an account has only this browser's
+ *     licence id to get Pro back with (red team rt2, truth-1);
  *   - a payment that failed with nothing paid since (a delayed payment method
  *     that did not clear): the subscription's invoice can still be paid;
- *   - a Mercado Pago subscription still authorized whose period ended when a
- *     charge's money went back (a refund, a chargeback): it charges again.
+ *   - a Mercado Pago subscription still authorized, whatever ended its
+ *     period: the paid interval running out before the next charge is
+ *     processed, a charge turned down, or a charge's money going back (a
+ *     refund, a chargeback). Mercado Pago charges an authorized subscription
+ *     again (it retries a declined instalment and goes on generating the next
+ *     ones) until it cancels it, which arrives as its own notice. Its renewal
+ *     can be processed after the paid interval ends, and answered 403 then,
+ *     a paying subscriber's browser forgot its license at the renewal (VG-84
+ *     review).
+ *   - a Creem subscription that still reads "active" and was not set to
+ *     cancel, whose period is over: its renewal has not been paid yet. A
+ *     renewal that failed reads "active" from its period end until Creem's
+ *     daily check sends `subscription.expired` ("Creem checks once a day for
+ *     subscriptions whose `current_period_end_date` fell on the previous
+ *     day"), and any other event in the retry period carries the same
+ *     "active" snapshot ("Status remains 'active' during retry period"). It
+ *     answered 403 there, and a buyer who paid without an account, whose
+ *     browser asked in that window, lost the licence id they get Pro back
+ *     with when the retry goes through (found reviewing the merge,
+ *     2026-11-23). A cancellation the customer scheduled reads "active" too
+ *     until `subscription.canceled` arrives, and no payment undoes it, so the
+ *     record keeps `cancelScheduled` from Creem's own `scheduled_cancel` (or
+ *     an "active" snapshot carrying `canceled_at`) and that one is refused,
+ *     as is a period a refund or a chargeback ended.
  * Never a one-off payment (nothing charges it again), a deleted Stripe
- * subscription, a paused or cancelled Mercado Pago one, or a period that ran
- * out.
+ * subscription, a paused or cancelled Mercado Pago one, a Creem one set to
+ * cancel, or a Stripe period that ran out while the subscription still
+ * reads "active".
  * @param {Object} entitlement Stored entitlement record.
  * @param {number} nowSeconds Unix seconds.
  * @returns {boolean} Whether the refusal can still be undone by a payment.
@@ -430,16 +518,55 @@ export function isSuspended(entitlement, nowSeconds) {
     || Number.isFinite(entitlement.endedAt) || isTokenIssuable(entitlement, nowSeconds)) {
     return false;
   }
-  if (entitlement.status === "suspended") {
+  if (entitlement.status === "suspended" || entitlement.status === "past_due") {
     return true;
   }
   if (entitlement.paymentFailed === true && entitlement.paid !== true) {
     return true;
   }
-  return entitlement.provider === "mercadopago"
-    && entitlement.status === "active"
-    && Number.isFinite(entitlement.reversedAt)
-    && entitlement.periodEnd === entitlement.reversedAt;
+  return entitlement.status === "active" && chargedAgainByItself(entitlement);
+}
+
+/**
+ * Whether the provider of a subscription that still reads "active" goes on
+ * charging it by itself: a Mercado Pago one until Mercado Pago cancels it, a
+ * Creem one unless the customer set it to cancel or its period was ended by
+ * money going back (a refund or a chargeback caps the period at the
+ * reversal, `endReversedPeriod`; nothing says Creem charges that card again).
+ * @param {Object} entitlement Stored entitlement record.
+ * @returns {boolean}
+ */
+function chargedAgainByItself(entitlement) {
+  if (entitlement.provider === "mercadopago") {
+    return true;
+  }
+  const endedByReversal = Number.isFinite(entitlement.reversedAt) && entitlement.periodEnd <= entitlement.reversedAt;
+  return entitlement.provider === "creem" && entitlement.cancelScheduled !== true && !endedByReversal;
+}
+
+/**
+ * True when a refused Mercado Pago subscription is off because a charge was
+ * turned down and none has gone through since, so the routes say "declined"
+ * rather than "suspended" and the buyer can be told to check the card,
+ * rather than to wait. Only meaningful for a record `isSuspended` holds.
+ * @param {Object} entitlement Stored entitlement record.
+ * @returns {boolean} Whether the refusal is an outstanding decline.
+ */
+export function isDeclined(entitlement) {
+  return Boolean(entitlement) && entitlement.provider === "mercadopago"
+    && entitlement.status === "active" && declinedSinceLastCharge(entitlement);
+}
+
+/**
+ * Whether a charge was turned down after the latest one that went through,
+ * or with none ever through. A charge and a decline dated the same instant
+ * are the same invoice turned down and then collected on its debit date: the
+ * charge counts as since.
+ * @param {Object} entitlement Stored entitlement record.
+ * @returns {boolean} Whether a decline is outstanding.
+ */
+function declinedSinceLastCharge(entitlement) {
+  return Number.isFinite(entitlement.declinedAt) && !(entitlement.chargedAt >= entitlement.declinedAt);
 }
 
 /**

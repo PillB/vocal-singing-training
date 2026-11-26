@@ -77,33 +77,130 @@
     }
   }
 
+  /**
+   * The European Union's 27 member states (ISO 3166-1 alpha-2). The Creem
+   * products charge them euros, VAT included, and every other market on that
+   * rail US dollars, Europe outside the Union too (VG-85, decided 2026-11-22).
+   */
+  const EU_REGIONS = Object.freeze([
+    "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE",
+    "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE"
+  ]);
+
+  /**
+   * Each member state's IANA time zones, with the state. The Canaries, Ceuta,
+   * Madeira, the Azores and Åland are in the Union too, so their zones are here,
+   * and so are France's outermost regions (French Guiana, Guadeloupe,
+   * Martinique, Réunion, Mayotte and Saint-Martin: parts of a member state
+   * under TFEU arts. 349 and 355(1), paying in euros; js/region-gate.js lists
+   * the same zones). Left out with reason: Saint-Barthélemy, Saint-Pierre and
+   * the Pacific territories, which are overseas countries outside the Union.
+   * So are the three old link names a browser may still report for a member
+   * state (js/region-gate.js lists them for the same reason): "Poland",
+   * "Portugal" and "Eire" name a place, and without them an "en-US" browser
+   * reporting "Poland" was read as American and shown dollars.
+   */
+  const EU_TIME_ZONES = new Map([
+    ["Europe/Vienna", "AT"], ["Europe/Brussels", "BE"], ["Europe/Sofia", "BG"], ["Europe/Zagreb", "HR"],
+    ["Europe/Nicosia", "CY"], ["Asia/Nicosia", "CY"], ["Asia/Famagusta", "CY"], ["Europe/Prague", "CZ"],
+    ["Europe/Copenhagen", "DK"], ["Europe/Tallinn", "EE"], ["Europe/Helsinki", "FI"], ["Europe/Mariehamn", "FI"],
+    ["Europe/Paris", "FR"], ["Europe/Berlin", "DE"], ["Europe/Busingen", "DE"], ["Europe/Athens", "GR"],
+    ["Europe/Budapest", "HU"], ["Europe/Dublin", "IE"], ["Europe/Rome", "IT"], ["Europe/Riga", "LV"],
+    ["Europe/Vilnius", "LT"], ["Europe/Luxembourg", "LU"], ["Europe/Malta", "MT"], ["Europe/Amsterdam", "NL"],
+    ["Europe/Warsaw", "PL"], ["Europe/Lisbon", "PT"], ["Atlantic/Azores", "PT"], ["Atlantic/Madeira", "PT"],
+    ["Europe/Bucharest", "RO"], ["Europe/Bratislava", "SK"], ["Europe/Ljubljana", "SI"], ["Europe/Madrid", "ES"],
+    ["Atlantic/Canary", "ES"], ["Africa/Ceuta", "ES"], ["Europe/Stockholm", "SE"],
+    ["America/Cayenne", "FR"], ["America/Guadeloupe", "FR"], ["America/Martinique", "FR"],
+    ["Indian/Reunion", "FR"], ["Indian/Mayotte", "FR"], ["America/Marigot", "FR"],
+    ["Poland", "PL"], ["Portugal", "PT"], ["Eire", "IE"]
+  ]);
+
+  /**
+   * The region subtags of France's outermost regions, which ISO 3166 codes
+   * apart from France: "fr-RE" is Réunion, a part of France and of the Union.
+   */
+  const EU_OUTERMOST_SUBTAGS = new Map([["GF", "FR"], ["GP", "FR"], ["MQ", "FR"], ["RE", "FR"], ["YT", "FR"], ["MF", "FR"]]);
+
+  /**
+   * The member state this browser is in, or "" when it is not in the Union.
+   *
+   * The time zone decides whenever it names a place, because it says where
+   * the device is and so, more often than the language, where the card was
+   * issued: a member state's zone is that state (an "en-US" browser in
+   * Europe/Warsaw is Poland), and a zone anywhere else (London, Zurich, Lima,
+   * New York) is outside the Union whatever the language says. Only a zone
+   * that names no place, as UTC does in a hardened browser, "CET", or none at
+   * all, leaves it to the language's region subtag: "pl-PL" is Poland, a bare
+   * "pl" is nowhere in particular.
+   * @param {string} lang Lower-case language tag, e.g. "de-at".
+   * @param {string} tz IANA time zone, e.g. "Europe/Vienna".
+   * @returns {string} Two-letter member state, or "".
+   */
+  function euRegion(lang, tz) {
+    if (EU_TIME_ZONES.has(tz)) return EU_TIME_ZONES.get(tz);
+    if (tz.includes("/") && !tz.startsWith("Etc/")) return "";
+    const subtag = regionSubtag(lang);
+    const region = EU_OUTERMOST_SUBTAGS.get(subtag) || subtag;
+    return EU_REGIONS.includes(region) ? region : "";
+  }
+
+  /**
+   * A language tag's region subtag, upper case, or "": "AT" in "de-at", "RS"
+   * in "sr-latn-rs". It comes before any extension, so the "ca" of
+   * "en-u-ca-gregory" (a calendar) is not Canada.
+   * @param {string} lang Language tag.
+   * @returns {string}
+   */
+  function regionSubtag(lang) {
+    for (const part of String(lang || "").split(/[-_]/).slice(1)) {
+      if (part.length === 1) return "";
+      if (/^[a-z]{2}$/i.test(part)) return part.toUpperCase();
+    }
+    return "";
+  }
+
+  /**
+   * The other markets a browser is read into, tried in this order after the
+   * European Union: the first whose time zone contains one of its zone names,
+   * or whose language ends in one of its region suffixes. A table rather than
+   * a line per market, so detectRegion stays within the complexity ceiling
+   * (it was 36, in the legacy baseline, and editing it drops the exemption).
+   */
+  const REGION_SIGNS = [
+    ["PE", ["Lima"], ["-pe"]],
+    ["MX", ["Mexico"], ["-mx"]],
+    ["AR", ["Buenos_Aires"], ["-ar"]],
+    ["CL", ["Santiago"], ["-cl"]],
+    ["CO", ["Bogota"], ["-co"]],
+    ["BR", ["Sao_Paulo"], ["-br"]],
+    ["GB", ["London"], ["-gb"]],
+    ["US", ["New_York", "Los_Angeles", "Chicago"], ["-us"]],
+    ["CA", ["Toronto", "Vancouver"], ["-ca"]],
+    ["AU", ["Sydney", "Melbourne"], ["-au"]],
+    ["PH", ["Manila"], ["-ph"]],
+    ["IN", ["Kolkata", "Calcutta"], ["-in"]]
+  ];
+
   function detectRegion() {
     try {
       const lang = (navigator.language || "en").toLowerCase();
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-      if (tz.includes("Lima") || lang.endsWith("-pe") || lang === "es-pe") return "PE";
-      if (tz.includes("Mexico") || lang.endsWith("-mx")) return "MX";
-      if (tz.includes("Buenos_Aires") || lang.endsWith("-ar")) return "AR";
-      if (tz.includes("Santiago") || lang.endsWith("-cl")) return "CL";
-      if (tz.includes("Bogota") || lang.endsWith("-co")) return "CO";
-      if (tz.includes("Sao_Paulo") || lang.endsWith("-br")) return "BR";
-      if (lang.endsWith("-es") || tz.includes("Madrid")) return "ES";
-      if (lang.endsWith("-gb") || tz.includes("London")) return "GB";
-      if (lang.endsWith("-de") || tz.includes("Berlin")) return "DE";
-      if (lang.endsWith("-fr") || tz.includes("Paris")) return "FR";
-      if (lang.endsWith("-it") || tz.includes("Rome")) return "IT";
-      if (
-        lang.endsWith("-us") ||
-        tz.includes("New_York") ||
-        tz.includes("Los_Angeles") ||
-        tz.includes("Chicago")
-      )
-        return "US";
-      if (lang.endsWith("-ca") || tz.includes("Toronto") || tz.includes("Vancouver")) return "CA";
-      if (lang.endsWith("-au") || tz.includes("Sydney") || tz.includes("Melbourne")) return "AU";
-      if (lang.endsWith("-ph") || tz.includes("Manila")) return "PH";
-      if (lang.endsWith("-in") || tz.includes("Kolkata") || tz.includes("Calcutta")) return "IN";
-      if (lang.startsWith("es")) return "PE";
+      // A Peruvian locale is Peru wherever the device is, before the Union's
+      // time zones: it is a setting somebody chose, and Peru is the market
+      // whose buyers must be shown soles (Ley 29571 art. 6) and can pay with
+      // Mercado Pago. The price of it: a Peruvian living in Madrid who kept
+      // es-PE is offered soles first, and the card rail in US$, not euros.
+      if (lang.endsWith("-pe")) return "PE";
+      const eu = euRegion(lang, tz);
+      if (eu) return eu;
+      const sign = REGION_SIGNS.find(([, zones, suffixes]) =>
+        zones.some((zone) => tz.includes(zone)) || suffixes.some((suffix) => lang.endsWith(suffix)));
+      if (sign) return sign[0];
+      // Anything else is the worldwide market, Spanish locales too: Peru is
+      // the Lima time zone or a Peruvian locale, never a whole language. The
+      // catch-all that sent every other Spanish speaker to Peru told a buyer
+      // in Montevideo or Quito "Tu región: Perú" and sold them the Peruvian
+      // Mercado Pago plan by default (red team money-6).
       return "WW";
     } catch {
       return "WW";
@@ -129,6 +226,31 @@
   }
 
   /**
+   * The region whose prices a rail's cards show, and so the money a press on
+   * that rail is charged in: the visitor's own on the visitor's own rail, and
+   * on any other the rail's own money. A Peruvian who picks the card rail pays
+   * Creem, which cannot charge soles; an Argentine who picks Mercado Pago pays
+   * a Peruvian plan in soles. A rail sold in one country (its config
+   * `regions`) is priced as there, any other at the worldwide dollar price.
+   * Moved here from js/app.js so the checkout asks for the money the card
+   * showed, read from the same function (VG-85).
+   * @param {string} rail Provider id.
+   * @param {string} [region] The visitor's region; the detected one when left out.
+   * @returns {string} Region code.
+   */
+  function priceRegion(rail, region) {
+    const own = region || detectRegion();
+    if (rail === preferredRail(own)) return own;
+    const regions = cfg().providers?.[rail]?.regions || [];
+    return regions.length === 1 ? regions[0] : "WW";
+  }
+
+  /** The paid plans' ids, in config order. */
+  function paidPlanIds() {
+    return (cfg().plans || []).filter((p) => p.interval).map((p) => p.id);
+  }
+
+  /**
    * The rails the Pro dialog offers, the region's own first: every rail a
    * market sells on, each marked sellable when a paid plan has a checkout link
    * on it. Read from the markets rather than drawn as a fixed pair, because the
@@ -141,12 +263,30 @@
    */
   function checkoutRails(region) {
     const c = cfg();
-    const named = (c.markets || []).map((m) => m.rail).filter((r) => CHECKOUT_RAILS.has(r));
-    const paid = (c.plans || []).filter((p) => p.interval).map((p) => p.id);
+    const named = (c.markets || []).map((m) => m.rail).filter((r) => CHECKOUT_RAILS.has(r) && railSellsIn(r, region));
+    const paid = paidPlanIds();
     return [...new Set([preferredRail(region), ...named])].map((rail) => ({
       rail,
-      sellable: paid.some((id) => !!checkoutUrl(id, rail))
+      sellable: apiCheckoutEnabled(rail) || paid.some((id) => !!checkoutUrl(id, rail))
     }));
+  }
+
+  /**
+   * Whether a rail is offered to a buyer in `region` beside the region's own.
+   * A rail whose provider lists the regions it sells in, without "WW"
+   * (worldwide), sells only there: Mercado Pago's plans are a Peruvian seller
+   * account's, in soles, paid with a Peruvian account or card, so its button
+   * drawn for an Argentine offered a plan they could not pay (money-6). A
+   * provider listing none, or "WW", sells everywhere; Creem's list names
+   * where it is recommended first, and "WW".
+   * @param {string} rail Provider id.
+   * @param {string} region Two-letter region code.
+   * @returns {boolean}
+   */
+  function railSellsIn(rail, region) {
+    const regions = ((cfg().providers || {})[rail] || {}).regions;
+    if (!Array.isArray(regions) || !regions.length || regions.includes("WW")) return true;
+    return regions.includes(region);
   }
 
   function nowMs() {
@@ -182,6 +322,18 @@
       }
     }
     return started;
+  }
+
+  /**
+   * The worker's final word on the checkout this browser is waiting on,
+   * "inactive" (failed, refunded or over) or "not_found", or null while there
+   * is none. The Pro dialog says what it was rather than "Pago aún sin
+   * confirmar", which promised an answer that had already come (F14).
+   */
+  function claimRefusal() {
+    const st = read();
+    const reason = st && st.status === "unclaimed" ? st.claimReason : null;
+    return TERMINAL_CLAIM_REASONS.has(reason) ? reason : null;
   }
 
   /** True when a checkout is still waiting on its license and can be retried. */
@@ -490,12 +642,51 @@
       ? [providerId]
       : Object.keys(c.providers || {});
     for (const rail of rails) {
-      const links = (c.providers || {})[rail]?.links || {};
-      if (String(links.pro_monthly || "").trim() || String(links.pro_yearly || "").trim()) {
+      // A euro link sells as much as a dollar one (VG-85).
+      if (["links", "linksEur"].some((table) => hasPaidLink((c.providers || {})[rail]?.[table]))) {
         return true;
       }
+      // A rail whose checkouts the worker opens has no link to paste and is on
+      // sale all the same: the terms, the health line and the pricing panel
+      // must read it that way.
+      if (apiCheckoutEnabled(rail)) return true;
     }
     return false;
+  }
+
+  /** Whether a table of links holds a link for either paid plan. */
+  function hasPaidLink(links) {
+    return !!links && (!!String(links.pro_monthly || "").trim() || !!String(links.pro_yearly || "").trim());
+  }
+
+  /**
+   * Whether this build opens a rail's checkouts through the worker
+   * (`POST /v1/me/checkout`), bound to the signed-in account, instead of
+   * sending the buyer to a pasted payment link. Creem only: it is the one
+   * rail whose create-checkout API the worker calls (VG-83). Ships false;
+   * turning it on is the commit that opens sales on that rail.
+   * @param {string} rail Provider id.
+   * @returns {boolean}
+   */
+  function apiCheckoutEnabled(rail) {
+    return rail === "creem" && cfg().providers?.creem?.apiCheckout === true;
+  }
+
+  /**
+   * Whether the visitor could sign in from this browser right now, read the
+   * way the account panel reads it (js/app.js accountSignIn): an emailed code,
+   * or Google with a client id and a script that has not been refused. While
+   * the worker has not said which methods it offers, the answer is yes, so
+   * the gate holds rather than letting a payment through that sign-in could
+   * have owned (VG-88).
+   * @param {object} account `VTAccount.getState()`.
+   * @returns {boolean}
+   */
+  function signInOffered(account) {
+    const m = account && account.methods;
+    if (!m || m.ok === false) return true;
+    const google = !!m.google && !!m.googleClientId && account.googleReady !== false;
+    return !!m.email || google;
   }
 
   /**
@@ -619,14 +810,36 @@
     return { ok: true, url: u.toString() };
   }
 
+  /**
+   * A page the worker sends the buyer to on Creem's behalf, a bound checkout
+   * or the customer portal: https on creem.io or one of its subdomains, with
+   * no user name or password in it, the worker's own isCreemPageUrl rule, and
+   * on the operator's checkout host list as well. validateCheckoutUrl alone is
+   * the list for pasted links, which also holds every Stripe and Mercado Pago
+   * checkout host, so a worker answer naming a payment page there was followed
+   * from "Manage or cancel subscription" (red team round two, truth-6).
+   * @returns {{ ok: boolean, url?: string, reason?: string }}
+   */
+  function validateCreemPageUrl(url) {
+    const v = validateCheckoutUrl(url);
+    if (!v.ok) return v;
+    const u = new URL(v.url);
+    const host = u.hostname.toLowerCase();
+    if (u.username || u.password) return { ok: false, reason: "credentials" };
+    if (host !== "creem.io" && !host.endsWith(".creem.io")) return { ok: false, reason: "not_creem", host };
+    return v;
+  }
+
+  /**
+   * A plan's pasted link on a rail, in the money its card shows: the euro
+   * product's (`linksEur`) where the card shows €, else the rail's own. A
+   * card in euros with no euro link has no link: the dollar one would charge
+   * a price the card does not show (VG-85).
+   */
   function checkoutUrl(planId, providerId) {
-    const c = cfg();
-    const region = detectRegion();
-    const rail = providerId || preferredRail(region);
-    const prov = (c.providers || {})[rail];
-    if (!prov) return null;
-    const link = (prov.links || {})[planId];
-    if (!link || !String(link).trim()) return null;
+    const rail = providerId || preferredRail(detectRegion());
+    const link = linkOf(planId, rail, checkoutCurrency(planId, rail));
+    if (!link) return null;
     const v = validateCheckoutUrl(link);
     if (!v.ok) {
       console.warn("[VTBilling] checkout URL rejected:", v.reason, link);
@@ -635,10 +848,38 @@
     return v.url;
   }
 
+  /**
+   * A plan's link on a rail in a currency ("EUR" reads `linksEur`), trimmed
+   * and not yet checked, or "".
+   * @param {string} planId Plan.
+   * @param {string} rail Provider id.
+   * @param {string} currency "EUR", or anything else for the rail's own links.
+   * @returns {string}
+   */
+  function linkOf(planId, rail, currency) {
+    const prov = (cfg().providers || {})[rail] || {};
+    const links = (currency === "EUR" ? prov.linksEur : prov.links) || {};
+    return String(links[planId] || "").trim();
+  }
+
+  /**
+   * The currency a press of a plan on a rail is charged in: the one its card
+   * shows, read through the same two functions that drew the card.
+   * @param {string} planId Plan.
+   * @param {string} rail Provider id.
+   * @returns {string} "USD", "EUR" or "PEN".
+   */
+  function checkoutCurrency(planId, rail) {
+    const plan = (cfg().plans || []).find((p) => p.id === planId) || {};
+    return formatPrice(plan, priceRegion(rail)).currency;
+  }
+
   function startCheckout(planId, providerId) {
     if (!PLAN_IDS.has(planId) || planId === "trial") {
       return { ok: false, mode: "invalid_plan", message: "Invalid plan id" };
     }
+    const viaWorker = workerCheckout(planId, providerId);
+    if (viaWorker) return viaWorker;
     const url = checkoutUrl(planId, providerId);
     if (url) {
       const refusal = checkoutRefusal(planId, providerId);
@@ -658,6 +899,278 @@
       message:
         "Checkout isn’t available yet. Keep practicing free."
     };
+  }
+
+  /**
+   * The checkout the worker opens for the signed-in account, when this rail
+   * is sold that way: a refusal now, or `mode: "opening"` with `done`, a
+   * promise of the same shape `startCheckout` returns once the worker has
+   * answered (it navigates on success). Null when the rail is not sold
+   * through the worker, or when nobody is signed in and nobody can sign in
+   * from this browser: then the pasted link, if there is one, is the way to
+   * pay, and the licence is linked when they do sign in (VG-88).
+   * @param {string} planId Plan.
+   * @param {string|undefined} providerId Rail asked for, if any.
+   * @returns {Object|null}
+   */
+  function workerCheckout(planId, providerId) {
+    const rail = providerId || preferredRail(detectRegion());
+    if (!apiCheckoutEnabled(rail)) return null;
+    const account = accountState();
+    if (!account || !account.configured) return null;
+    if (!account.signedIn && !signInOffered(account) && checkoutUrl(planId, rail)) return null;
+    const refusal = checkoutRefusal(planId, rail);
+    if (refusal) return refusal;
+    if (!account.signedIn) {
+      // signInOffered is false and there is no link to fall back on.
+      return { ok: false, mode: "signin_required", plan: planId, provider: rail };
+    }
+    const rails = accountRails();
+    if (rails && rails.creemCheckout === false) {
+      return { ok: false, mode: "provider_unavailable", plan: planId, provider: rail };
+    }
+    // One checkout at a time: a press while one is opening (the pricing panel
+    // redrawn under the busy button) joins it rather than asking the worker
+    // for a second checkout. In this page only (another tab has its own), and
+    // for this sign-in only: one asked for by somebody who has since signed
+    // out is not the next person's to join (red team authz-2).
+    if (!checkoutOpening()) beginOpening(planId, rail);
+    return { ok: true, mode: "opening", plan: workerOpening.plan, provider: workerOpening.provider, done: workerOpening.done };
+  }
+
+  /**
+   * Ask the worker for the checkout, or go back to the one this page last
+   * opened for the same choice, and hold every other press until it answers
+   * or the page has had time to leave.
+   */
+  function beginOpening(planId, rail) {
+    const done = reopenLastCheckout(planId, rail) || openWorkerCheckout(planId, rail);
+    const entry = { plan: planId, provider: rail, done };
+    workerOpening = entry;
+    openingSession = sessionNow();
+    done.then((out) => {
+      // Navigating away holds it until the page has gone; anything else frees
+      // the next press at once (the pressed button's own handler redraws it).
+      if (out && out.mode === "redirect") holdWhileLeaving(entry);
+      else releaseOpening(entry, false);
+    });
+  }
+
+  /**
+   * How long a page that was sent to the checkout may still be here before
+   * the navigation counts as not having happened: Stop or Esc while the
+   * checkout page loads on a slow phone, "Stay" on the page's own leave
+   * prompt, an in-app browser that refuses the move. The page never learns of
+   * any of those, and holding the plans until a reload left every Subscribe
+   * dead (red team money-4, states-5). Generous, because the other mistake is
+   * milder: a checkout slower than this gets its buttons back while it is
+   * still loading, and a second press opens a second, unpaid checkout.
+   */
+  const LEAVE_GRACE_MS = 8000;
+
+  /** After `location.assign`: let the hold go if the page is still here once LEAVE_GRACE_MS has passed. */
+  function holdWhileLeaving(entry) {
+    // pagehide is the page really leaving (or going into the back/forward
+    // cache, which pageshow below answers): from then on nothing is let go.
+    const left = () => clearTimeout(timer);
+    const timer = setTimeout(() => {
+      global.removeEventListener?.("pagehide", left);
+      releaseOpening(entry, true);
+    }, LEAVE_GRACE_MS);
+    global.addEventListener?.("pagehide", left, { once: true });
+  }
+
+  /**
+   * Free the next press. With `repaint`, tell the page, which draws the open
+   * Pro dialog again with every plan button idle: the button that was pressed
+   * still read "Opening secure checkout…" and stayed disabled.
+   * @param {Object|null} entry The opening to let go; null for whichever there is.
+   * @param {boolean} repaint Whether the page has to draw its buttons again.
+   */
+  function releaseOpening(entry, repaint) {
+    if (!workerOpening || (entry && workerOpening !== entry)) return;
+    workerOpening = null;
+    if (repaint) emit();
+  }
+
+  /**
+   * The checkout the worker is opening for this page and this sign-in, if
+   * any: {plan, provider, done}. Keyed to the session that asked for it
+   * rather than cleared by the sign-out code, so it ends the moment that
+   * session does: on a sign-out, and on a session lost to a 401, which never
+   * goes through sign-out. The next person to sign in neither joins it nor
+   * waits on it (red team authz-2).
+   */
+  function checkoutOpening() {
+    return workerOpening && openingSession === sessionNow() ? workerOpening : null;
+  }
+
+  /** The session signed in now, to tell one sign-in's checkout from the next one's. */
+  function sessionNow() {
+    try {
+      return global.VTAccount?.getSessionToken?.() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** The worker checkout this page is opening, so a second press cannot open another. */
+  let workerOpening = null;
+  /** The session it was asked for under. */
+  let openingSession = null;
+  /**
+   * The checkout the worker last sent this page to, as
+   * {plan, provider, session, url, at}, until it is gone back to once.
+   */
+  let lastRedirect = null;
+
+  /**
+   * How long after the worker opened a checkout a press of the same plan goes
+   * back to it. Creem documents an "expired" status for a checkout but not
+   * its lifetime; Stripe's checkout sessions last 30 minutes at the least and
+   * 24 hours by default, so this stays at that floor. A checkout that has
+   * expired sooner costs one wasted trip, because each is gone back to once.
+   */
+  const REOPEN_CHECKOUT_MS = 30 * 60000;
+
+  /**
+   * Back to the checkout the worker last opened for this page, when it is for
+   * this plan, this rail, this sign-in and the money the card shows now, and
+   * was opened less than REOPEN_CHECKOUT_MS ago; else null, and the worker is
+   * asked. After Stop on a slow load, or back from the checkout page, the next
+   * press of the same plan asked the worker for a second Creem checkout, which
+   * spent one of the account's twelve an hour and left two open (red team
+   * money-4).
+   *
+   * The money: a press made before /v1/health answered opened a US$ checkout,
+   * and a card that has since turned to € is not sent back to it (VG-85, the
+   * price shown is the price charged). And the account: the worker refuses a
+   * second checkout while a subscription is open, and going back skips that
+   * question, so /v1/me is asked first; a subscription opened meanwhile (paid
+   * on another device) sends the press to the worker, which answers
+   * subscription_open. Both found reviewing the merge, 2026-11-23.
+   * @returns {Promise<Object>|null} The outcome, in startCheckout's shape.
+   */
+  function reopenLastCheckout(planId, rail) {
+    const last = lastRedirect;
+    if (!last || last.plan !== planId || last.provider !== rail) return null;
+    lastRedirect = null;
+    if (last.session !== sessionNow() || nowMs() - last.at >= REOPEN_CHECKOUT_MS) return null;
+    if (last.currency !== checkoutCurrency(planId, rail)) return null;
+    return nothingOpenNow().then((clear) => (clear ? goBackTo(last) : openWorkerCheckout(planId, rail)));
+  }
+
+  /**
+   * Whether /v1/me, asked now, still lists no open subscription for this
+   * account. Any doubt (offline, an error, a sign-out meanwhile) is a no, and
+   * the worker, asked instead, decides.
+   * @returns {Promise<boolean>}
+   */
+  function nothingOpenNow() {
+    const refresh = global.VTAccount?.refresh;
+    if (typeof refresh !== "function") return Promise.resolve(false);
+    return Promise.resolve(refresh())
+      .then((res) => !!(res && res.ok) && !(accountState()?.billingRails || []).length)
+      .catch(() => false);
+  }
+
+  /** Go back to the checkout `last` names, in startCheckout's shape. */
+  function goBackTo(last) {
+    rememberCheckoutIntent(last.plan, last.provider);
+    window.location.assign(last.url);
+    return { ok: true, mode: "redirect", url: last.url, plan: last.plan, provider: last.provider };
+  }
+
+  try {
+    // Back from the checkout through the back/forward cache: the page that
+    // navigated away is not opening anything any more, and the dialog it
+    // kept still shows the pressed plan busy, so it is drawn again.
+    global.addEventListener?.("pageshow", (e) => {
+      if (e && e.persisted) releaseOpening(null, true);
+    });
+  } catch {
+    /* ignore */
+  }
+
+  /** What the page does with each refusal from `/v1/me/checkout`, by its reason. */
+  const WORKER_CHECKOUT_REFUSALS = {
+    no_session: "signin_required",
+    session_expired: "signin_required",
+    invalid_session: "signin_required",
+    rate_limited: "rate_limited",
+    // Answered after the person who asked signed out: nobody is told anything,
+    // and nobody is sent to that checkout.
+    signed_out: "signed_out",
+    // An open subscription (paid, or a renewal being retried): a second
+    // checkout would charge twice, so the page sends them to Manage instead.
+    subscription_open: "subscription_open",
+    checkout_unconfigured: "provider_unavailable",
+    plan_unavailable: "provider_unavailable",
+    // The euro product is missing on the worker. The page shows € only where
+    // /v1/health says it is there, so this is the net under that check.
+    currency_unavailable: "provider_unavailable",
+    accounts_not_configured: "provider_unavailable"
+  };
+
+  /**
+   * Ask the worker to open the checkout, then go there.
+   * @param {string} planId Plan.
+   * @param {string} rail Provider id.
+   * @returns {Promise<Object>} The `startCheckout`-shaped outcome.
+   */
+  function openWorkerCheckout(planId, rail) {
+    const ask = global.VTAccount?.openCheckout;
+    if (typeof ask !== "function") {
+      return Promise.resolve({ ok: false, mode: "provider_unavailable", plan: planId, provider: rail });
+    }
+    const asker = sessionNow();
+    const currency = checkoutCurrency(planId, rail);
+    return ask({ plan: planId, provider: rail, returnPath: returnPathHere(), currency })
+      .then((answer) => followWorkerAnswer(answerForAsker(answer, asker), planId, rail, currency))
+      .catch(() => ({ ok: false, mode: "checkout_failed", plan: planId, provider: rail, reason: "error" }));
+  }
+
+  /**
+   * The worker's answer, unless it is a checkout and whoever asked for it has
+   * signed out since: a checkout is bound to the account that asked, and the
+   * next person on this browser is never sent to it (red team authz-2). A
+   * refusal keeps its own reason (a 401 has just signed the asker out, and
+   * they are asked to sign in again).
+   */
+  function answerForAsker(answer, asker) {
+    if (answer && answer.ok && sessionNow() !== asker) return { ok: false, reason: "signed_out" };
+    return answer;
+  }
+
+  /**
+   * Go to the checkout the worker opened, or say why there is none, in
+   * startCheckout's shape. The worker opens Creem checkouts only
+   * (apiCheckoutEnabled), so its answer is followed only to a Creem page.
+   * `currency` is the money the worker was asked to charge, kept so that the
+   * checkout is gone back to only under a card showing the same.
+   */
+  function followWorkerAnswer(res, planId, rail, currency) {
+    const target = res && res.ok ? validateCreemPageUrl(res.url) : null;
+    if (target && target.ok) {
+      rememberCheckoutIntent(planId, rail);
+      lastRedirect = { plan: planId, provider: rail, session: sessionNow(), currency, url: target.url, at: nowMs() };
+      window.location.assign(target.url);
+      return { ok: true, mode: "redirect", url: target.url, plan: planId, provider: rail };
+    }
+    const mode = WORKER_CHECKOUT_REFUSALS[res && res.reason] || "checkout_failed";
+    const out = { ok: false, mode, plan: planId, provider: rail, reason: (res && res.reason) || "error" };
+    if (res && res.provider) out.openProvider = res.provider;
+    if (res && res.retryAfter) out.retryAfter = res.retryAfter;
+    return out;
+  }
+
+  /** This page's path, which is where the checkout sends the buyer back to (the worker adds the rest). */
+  function returnPathHere() {
+    try {
+      return window.location.pathname || "/";
+    } catch {
+      return "/";
+    }
   }
 
   /**
@@ -681,8 +1194,14 @@
     // sign somebody in, it has to, before the money moves. The free trial
     // already works this way (trial_result outcome "needs_account" in
     // js/app.js); this is the same gate on the paid path.
+    // Only where sign-in can actually be offered in this browser, though: a
+    // content blocker that refuses Google's script on a deployment with no
+    // emailed codes used to leave the buyer with no way to pay at all, while
+    // the trial, asking the same question, let them through (VG-88). There the
+    // anonymous claim is the way in, and the page links the licence once they
+    // sign in (js/account.js adopt).
     const account = accountState();
-    if (account && account.configured && !account.signedIn) {
+    if (account && account.configured && !account.signedIn && signInOffered(account)) {
       return { ok: false, mode: "signin_required", plan: planId, provider: providerId || null };
     }
     // A rail the worker cannot honour is not a rail. Mercado Pago's webhook
@@ -735,8 +1254,10 @@
 
   /**
    * Ask the worker for the license behind a checkout, and store it on success.
+   * A refusal that is final comes back marked `terminal`, so the page can say
+   * so instead of promising a retry that will never change the answer (F14).
    * @param {{plan: string, provider: string, sessionId: string}} intent
-   * @returns {Promise<{ok: boolean, reason?: string, claims?: object}>}
+   * @returns {Promise<{ok: boolean, reason?: string, claims?: object, terminal?: boolean}>}
    */
   function claimLicense(intent) {
     const plan = intent.plan;
@@ -755,23 +1276,47 @@
             expiresAt: res.claims?.periodEnd
               ? new Date(res.claims.periodEnd * 1000).toISOString()
               : null,
-            sessionId: sessionId ? String(sessionId).slice(0, 128) : null,
+            // The checkout id has done its job, and kept it is a key: whoever
+            // holds it can claim the licence or link it to their own account
+            // (/v1/claim, /v1/me/link), and this record travels (F8). Pending
+            // and unclaimed records keep theirs, which is what they retry with.
+            sessionId: null,
             verified: true
           });
         }
-        if (!res.ok && TERMINAL_CLAIM_REASONS.has(res.reason)) {
+        const terminal = !res.ok && TERMINAL_CLAIM_REASONS.has(res.reason);
+        if (terminal) {
           const st = read();
           if (st && (st.status === "pending" || st.status === "unclaimed")) {
             write({ ...st, status: "unclaimed", claimReason: res.reason });
           }
         }
         emit();
-        return res;
+        return terminal ? { ...res, terminal: true } : res;
       })
       .catch(() => {
         emit();
         return { ok: false, reason: "error" };
       });
+  }
+
+  /**
+   * Drop a checkout still waiting for its licence, on sign-out: claimed
+   * afterwards, it would be linked to whoever signs in next on this browser
+   * (js/account.js dropPendingClaim). The account that bought it keeps its own
+   * pending link, which only that account retries.
+   */
+  function forgetPendingClaim() {
+    // A claim already running would store the licence after this returns.
+    global.VTLicense?.cancelClaims?.();
+    const st = read();
+    if (!st || (st.status !== "pending" && st.status !== "unclaimed")) return;
+    try {
+      localStorage.removeItem(LS_KEY);
+    } catch {
+      /* ignore */
+    }
+    emit();
   }
 
   /**
@@ -978,17 +1523,128 @@
     return Number.isInteger(n) ? String(n) : n.toFixed(2);
   }
 
+  /**
+   * The symbol a price is written with. A bare "$" is the local peso in Mexico,
+   * Argentina, Chile and Colombia, so "$7.99" there reads as 7.99 pesos: the
+   * dollar carries its country everywhere but the United States.
+   * @param {string} cur Currency charged.
+   * @param {string} marketCode The market the price is shown in.
+   * @returns {string}
+   */
+  function currencySymbol(cur, marketCode) {
+    if (cur === "PEN") return "S/ ";
+    return marketCode === "US" ? "$" : "US$ ";
+  }
+
+  /**
+   * A price as the reader's language writes it. The euro follows the page:
+   * "7,99 €" in Spanish (decimal comma, the sign after the number, as the
+   * RAE's Ortografía and Fundéu set it out; a no-break space keeps the sign
+   * on the number's line) and "€7.99" in English. Soles and dollars keep the
+   * form Peru and the dollar markets read: "S/ 19.90", "US$ 7.99", "$7.99".
+   * @param {string} cur Currency charged.
+   * @param {number} amount Amount.
+   * @param {string} marketCode The market the price is shown in.
+   * @returns {string}
+   */
+  function priceText(cur, amount, marketCode) {
+    if (cur !== "EUR") return currencySymbol(cur, marketCode) + money(amount);
+    return pageLang() === "en" ? "€" + money(amount) : money(amount).replace(".", ",") + "\u00a0€";
+  }
+
+  /** The page's language, "es" unless it is English. */
+  function pageLang() {
+    return global.VTI18n?.lang === "en" ? "en" : "es";
+  }
+
+  /**
+   * Whether a rail can charge euros on the path a press takes, so that a
+   * European is shown the price they will be charged (the Price Indication
+   * Directive 98/6/EC art. 2(a): the selling price, VAT and all other taxes
+   * included; Peru's Ley 29571 art. 6 says the same for Peruvians). Euros are
+   * Creem's only, and on Creem:
+   * - while no press can take money (salesClosed: the dialog's own
+   *   pre-launch, whose plan buttons say "not available yet"): yes, the
+   *   planned price, since no charge can follow it;
+   * - checkouts the worker opens: only once /v1/health has said
+   *   `creemEurConfigured`, so dollars until it answers;
+   * - pasted links: only with a euro link for every paid plan, so one dialog
+   *   never shows two currencies.
+   * @param {string} rail Provider id.
+   * @returns {boolean}
+   */
+  function euroChargeable(rail) {
+    if (rail !== "creem") return false;
+    if (salesClosed()) return true;
+    if (apiCheckoutEnabled(rail) && accountState()?.configured) return accountRails()?.creemEur === true;
+    return paidPlanIds().every((id) => validateCheckoutUrl(linkOf(id, rail, "EUR")).ok);
+  }
+
+  /**
+   * Whether no press can take money yet: not safe to sell (getBillingHealth)
+   * and no QA unlock standing in. It is the same reading as the dialog's own
+   * pre-launch (js/app.js isCheckoutPrelaunch), whose plan buttons then say
+   * "not available yet". Not `!ok` alone: with demo mode on, or entitlements
+   * unverified, a press can still reach a pasted link, and a European shown
+   * the planned 7,99 € was then charged the dollar link or unlocked by demo.
+   * @returns {boolean}
+   */
+  function salesClosed() {
+    const h = getBillingHealth();
+    return !h.ok && !h.demoUnlock;
+  }
+
+  /**
+   * Whether every plan has a euro price. All or none, like the euro links: a
+   * plan without one would leave its card in dollars beside the others in
+   * euros, and the region line names one money for the whole dialog.
+   * @returns {boolean}
+   */
+  function euroPriced() {
+    return (cfg().plans || []).every((p) => p.priceEur != null);
+  }
+
+  /**
+   * The money a plan is charged in for a market: the market's own where the
+   * plan is priced in it and its rail can charge it, else US dollars.
+   * @param {object} plan A plan from the billing config.
+   * @param {object} m Its market.
+   * @returns {string}
+   */
+  function chargedCurrency(plan, m) {
+    if (m.currency === "PEN" && plan.pricePen != null) return "PEN";
+    if (m.currency === "EUR" && plan.priceEur != null && euroPriced() && euroChargeable(preferredRail(m.code))) return "EUR";
+    return "USD";
+  }
+
+  /**
+   * Whether the money this visitor's cards show waits on the worker's
+   * /v1/health answer: a visitor in a euro market while Creem is sold through
+   * the worker and sales are open (euroChargeable reads `creemEur` then). The
+   * page asks for that answer early for them, and nobody else, so their Pro
+   * dialog opens on the money a press will charge rather than turning from
+   * US$ to € in front of them (VG-85).
+   * @returns {boolean}
+   */
+  function pricesWaitOnRails() {
+    const m = marketFor(detectRegion());
+    if (m.currency !== "EUR" || !apiCheckoutEnabled(preferredRail(m.code))) return false;
+    return !!accountState()?.configured && !salesClosed();
+  }
+
+  /**
+   * A plan's price in the currency it is charged in, with that currency's
+   * symbol. The free plan gets one too: a bare "0" under "Gratis" read as a
+   * broken price (customer-research think-aloud, 2026-11-21).
+   * @param {object} plan A plan from the billing config.
+   * @param {string} [region] Market code; the detected one when left out.
+   * @returns {{text: string, currency: string, amount: number}}
+   */
   function formatPrice(plan, region) {
     const m = marketFor(region || detectRegion());
-    const cur = m.currency || "USD";
-    if (plan.priceUsd === 0) return { text: "0", currency: cur };
-    if (cur === "PEN" && plan.pricePen != null) {
-      return { text: `S/ ${money(plan.pricePen)}`, currency: "PEN", amount: plan.pricePen };
-    }
-    if (cur === "EUR" && plan.priceEur != null) {
-      return { text: `€${money(plan.priceEur)}`, currency: "EUR", amount: plan.priceEur };
-    }
-    return { text: `$${money(plan.priceUsd)}`, currency: "USD", amount: plan.priceUsd };
+    const cur = chargedCurrency(plan, m);
+    const amount = { PEN: plan.pricePen, EUR: plan.priceEur, USD: plan.priceUsd }[cur];
+    return { text: priceText(cur, amount, m.code), currency: cur, amount };
   }
 
   /**
@@ -1073,17 +1729,54 @@
     return !!map[feature];
   }
 
-  function exportProgressJson() {
-    if (!can("export_progress")) return null;
-    const pulse =
-      typeof global.VTValuePulse?.compute === "function" ? global.VTValuePulse.compute() : null;
-    const isEs =
-      (global.VTI18n && global.VTI18n.lang === "es") ||
-      (typeof document !== "undefined" && (document.documentElement.lang || "").startsWith("es"));
-    const narrative =
-      typeof global.VTValuePulse?.narrative === "function"
-        ? global.VTValuePulse.narrative(pulse, isEs)
-        : null;
+  /**
+   * What the progress export says about the plan (F8): what a teacher reading
+   * the file can use, and nothing that proves the purchase. The app tells
+   * people to hand this file on, and the stored record holds a checkout id
+   * that claims and links the subscription for whoever presents it, so the
+   * export names its fields: one added to the record later stays out of the
+   * file until it is added here.
+   */
+  const EXPORTED_ENTITLEMENT_FIELDS = ["tier", "plan", "status", "source", "pro", "provider", "expiresAt"];
+
+  function exportedEntitlement(ent) {
+    const out = {};
+    for (const field of EXPORTED_ENTITLEMENT_FIELDS) out[field] = ent?.[field] ?? null;
+    return out;
+  }
+
+  /** One of js/value-pulse.js's readers, asked as a method, or `fallback` when the module lacks it. */
+  function askPulse(name, args, fallback) {
+    const pulse = global.VTValuePulse;
+    return typeof pulse?.[name] === "function" ? pulse[name](...args) : fallback;
+  }
+
+  /** The records the progress export carries, each with what it says when storage has none. */
+  const EXPORTED_RECORDS = [
+    ["profile", "getActiveProfile", null],
+    ["goals", "getGoals", null],
+    ["progress", "getProgress", {}],
+    ["holdLogs", "getHoldLogs", []],
+    ["weekPlan", "getWeekPlan", null],
+    ["settings", "getSettings", {}]
+  ];
+
+  function storedForExport() {
+    const store = global.VTStorage;
+    const out = {};
+    for (const [key, getter, fallback] of EXPORTED_RECORDS) {
+      out[key] = (typeof store?.[getter] === "function" ? store[getter]() : null) || fallback;
+    }
+    return out;
+  }
+
+  function exportInSpanish() {
+    if (global.VTI18n && global.VTI18n.lang === "es") return true;
+    return typeof document !== "undefined" && (document.documentElement.lang || "").startsWith("es");
+  }
+
+  /** The export's own achievement: set before the achievements are read, so the file counts it. */
+  function markExported() {
     try {
       const flags = global.VTStorage?.getAchievementFlags?.() || {};
       flags.exported = true;
@@ -1091,28 +1784,31 @@
     } catch {
       /* ignore */
     }
-    const achievements =
-      typeof global.VTValuePulse?.achievements === "function"
-        ? global.VTValuePulse.achievements(pulse)
-        : [];
-    const coachFocus =
-      typeof global.VTValuePulse?.coachFocus === "function"
-        ? global.VTValuePulse.coachFocus(pulse, isEs)
-        : null;
+  }
+
+  function exportProgressJson() {
+    if (!can("export_progress")) return null;
+    const pulse = askPulse("compute", [], null);
+    const isEs = exportInSpanish();
+    const narrative = askPulse("narrative", [pulse, isEs], null);
+    markExported();
+    const achievements = askPulse("achievements", [pulse], []);
+    const coachFocus = askPulse("coachFocus", [pulse, isEs], null);
+    const stored = storedForExport();
     const payload = {
       exportedAt: new Date().toISOString(),
       product: "Vocal Studio Pro",
-      profile: global.VTStorage?.getActiveProfile?.() || null,
-      entitlement: getEntitlement(),
+      profile: stored.profile,
+      entitlement: exportedEntitlement(getEntitlement()),
       valuePulse: pulse,
       coachSummary: narrative,
       coachFocus,
       achievements,
-      goals: global.VTStorage?.getGoals?.() || null,
-      progress: global.VTStorage?.getProgress?.() || {},
-      holdLogs: global.VTStorage?.getHoldLogs?.() || [],
-      weekPlan: global.VTStorage?.getWeekPlan?.() || null,
-      settings: global.VTStorage?.getSettings?.() || {}
+      goals: stored.goals,
+      progress: stored.progress,
+      holdLogs: stored.holdLogs,
+      weekPlan: stored.weekPlan,
+      settings: stored.settings
     };
     return JSON.stringify(payload, null, 2);
   }
@@ -1147,6 +1843,7 @@
     detectRegion,
     marketFor,
     preferredRail,
+    priceRegion,
     checkoutRails,
     getEntitlement,
     isPro,
@@ -1156,14 +1853,23 @@
     clearEntitlement,
     startCheckout,
     checkoutUrl,
+    checkoutCurrency,
     validateCheckoutUrl,
+    validateCreemPageUrl,
     linksConfigured,
+    apiCheckoutEnabled,
     getBillingHealth,
     handleReturnFromCheckout,
     resumePendingClaim,
     hasPendingClaim,
+    claimRefusal,
+    forgetPendingClaim,
+    checkoutOpening,
     formatPrice,
     annualSavingPct,
+    EU_REGIONS,
+    euRegion,
+    pricesWaitOnRails,
     exportProgressJson,
     onChange,
     trialEndsAt,

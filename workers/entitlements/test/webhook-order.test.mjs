@@ -126,7 +126,7 @@ const writer = new AsyncLocalStorage();
  * The prefixes of the KV keys a license's state is kept under (`src/store.js`;
  * `LICENSE_FAMILY` in src/ledger.js). The first write of any of them is where
  * a writer on KV is held: the record is not the only one, and a Stripe
- * deletion writes its `ended:` key before the record.
+ * deletion or a Creem cancellation writes its `ended:` key before the record.
  */
 const LICENSE_KEYS = ["lic:", "paid:", "ended:", "reversed:", "charged:"];
 
@@ -327,7 +327,12 @@ const RAILS = {
     older: creemEvent("cevt_old_pastdue", "subscription.update", OLD_AT, creemSub("past_due")),
     newer: creemEvent("cevt_new_canceled", "subscription.canceled", NEW_AT, creemSub("canceled", { canceled_at: iso(NEW_AT) })),
     olderStatus: "past_due",
-    kvOlderLast: "past_due"
+    // A Creem cancellation is the end of the subscription, dated by its
+    // canceled_at (PR #54, red-team round two: only `canceled` ends one), so,
+    // like a Stripe deletion, it writes its `ended:` key, which the older
+    // write does not touch: without the ledger the row is the older one's, and
+    // what the worker reads is still the cancellation.
+    kvOlderLast: "canceled"
   },
   mercadopago: {
     provider: "mercadopago",

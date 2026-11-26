@@ -18,7 +18,7 @@
       content="Privacidad de Estudio Vocal: práctica en el navegador, micrófono local, pagos seguros."
     />
     <title>Privacidad · Estudio Vocal</title>
-    <link rel="stylesheet" href="css/styles.css?v=20261123b" />
+    <link rel="stylesheet" href="css/styles.css?v=20261125a" />
     <style>
       .privacy-wrap {
         max-width: 42rem;
@@ -104,7 +104,7 @@
     <main class="privacy-wrap">
       <p class="lang-switch muted"><a href="#en">English</a> · <strong>Español</strong></p>
       <h1>Tu privacidad, en claro</h1>
-      <p><strong>Actualizado:</strong> 21 nov 2026</p>
+      <p><strong>Actualizado:</strong> 23 nov 2026</p>
 
       <h2>Qué es esta app</h2>
       <p>
@@ -133,6 +133,9 @@
         espacio (por ejemplo es-ES), también nos pregunta al cargar la página
         desde qué país entras, mientras no haya una respuesta guardada a la
         pregunta de estadísticas.
+        Si estás en la Unión Europea y Pro ya está a la venta, también nos
+        pregunta, cuando la página queda en reposo, si podemos cobrar en euros,
+        para mostrarte el precio que se te cobraría.
         Hacer los ejercicios no envía nada más: ni tu voz, ni tus grabaciones, ni
         lo que cantas.
       </p>
@@ -168,8 +171,12 @@
       <p>
         Entonces sí guardamos una copia de tu progreso en nuestro servidor, que es
         el punto de tener cuenta: lo recuperas en otro navegador o en el teléfono.
-        Guardamos tu correo, tu progreso y qué plan tienes. No vendemos ni
-        compartimos nada de eso, y no hay publicidad basada en ello. Si entras con
+        Guardamos tu correo, tu progreso y qué plan tienes. No vendemos nada de
+        eso ni hay publicidad basada en ello. Solo lo reciben quienes lo
+        necesitan para darte el servicio, y todos están nombrados abajo, en
+        <a href="#quien-recibe">«Quién más los recibe, y dónde están»</a>: por
+        ejemplo, al abrir un pago con tarjeta, tu correo va a Creem, que te vende
+        la suscripción. Si entras con
         Google, Google te identifica ante nosotros y nos da tu correo y tu nombre;
         no vemos tu contraseña ni tenemos acceso a tu cuenta de Google.
       </p>
@@ -215,7 +222,7 @@
         eso se borran a los 180 días y por eso puedes apagarlas y borrarlas hoy.
       </p>
 
-      <h2>Quién más los recibe, y dónde están</h2>
+      <h2 id="quien-recibe">Quién más los recibe, y dónde están</h2>
       <p>
         El sitio se sirve desde <strong>GitHub Pages</strong> (GitHub, Estados
         Unidos): pedir la página le muestra tu dirección IP, como a cualquier
@@ -223,14 +230,20 @@
         recibe y las guarda un Worker de <strong>Cloudflare</strong> (Estados
         Unidos), en su base de datos D1 y en su almacén KV. Si entras con
         <strong>Google</strong>, Google te identifica ante nosotros. Si contratas
-        Pro, el cobro lo hace <strong>Mercado Pago</strong> (Perú y
-        Latinoamérica) o, con tarjeta internacional, <strong>Creem</strong>
-        (Armitage Labs OÜ, Estonia), en sus propias páginas. Creem te vende en
+        Pro, el cobro lo hace, en sus propias páginas, el medio que elijas:
+        <strong>Mercado Pago</strong> o, con tarjeta, estés en Perú o en otro
+        país, <strong>Creem</strong> (Armitage Labs OÜ, Estonia). Creem te vende en
         su propio nombre, como comerciante registrado (<em>merchant of
         record</em>): recibe lo que escribes en su página de pago —tu correo, tu
         tarjeta, tu país— como responsable de esos datos, según
         <a href="https://www.creem.io/privacy" rel="noopener">su aviso de privacidad</a>.
-        Nadie más recibe nada.
+        Cuando abres un pago con tu sesión iniciada, nuestro Worker le pide a
+        Creem esa página de pago y le pasa el correo de tu cuenta, para que el
+        recibo, el portal donde cancelas y tu cuenta usen el mismo, junto con una
+        referencia al azar que no dice nada de ti; guardamos esa referencia 30
+        días para saber qué cuenta pagó. Si cancelas desde la app, el Worker le
+        pide a Creem el enlace a tu portal, con el identificador de cliente que
+        Creem nos dio al cobrarte. Nadie más recibe nada.
       </p>
       <p>
         Es decir: tus datos se procesan fuera del Perú. Es un flujo
@@ -319,7 +332,7 @@
 
       <section lang="en" aria-labelledby="en">
         <h2 id="en" class="part-title">Privacy (English)</h2>
-        <p><strong>Updated:</strong> 2026-11-21</p>
+        <p><strong>Updated:</strong> 2026-11-23</p>
         <p>
           Vocal Studio is a browser practice tool. From the first visit it sends the
           anonymous usage statistics described below to our server, so we can tell
@@ -384,21 +397,28 @@
           off and delete them today.
         </p>
 
-        <p>
+        <p id="who-receives">
           Who else receives any of it, and where it is: the site is served from
           <strong>GitHub Pages</strong> (GitHub, United States), which sees your IP
           address when you ask for the page, as any web server does. Accounts,
           plans and the anonymous statistics are received and stored by a
           <strong>Cloudflare</strong> Worker (United States), in its D1 database and
           KV store. Signing in with <strong>Google</strong> identifies you to us
-          through Google. Paying uses <strong>Mercado Pago</strong> (Peru and
-          Latin America) or, by international card, <strong>Creem</strong>
-          (Armitage Labs OÜ, Estonia), on their own pages. Creem sells to you in
+          through Google. When you pay for Pro, the charge is made, on its own
+          pages, by the way you choose: <strong>Mercado Pago</strong> or, by card,
+          in Peru or anywhere else, <strong>Creem</strong> (Armitage Labs OÜ,
+          Estonia). Creem sells to you in
           its own name, as the merchant of record: it receives what you type on
           its checkout page — your email, your card, your country — as the
           controller of that data, under
           <a href="https://www.creem.io/privacy" rel="noopener">its privacy notice</a>.
-          Nobody else receives anything. So your
+          When you open a checkout while signed in, our Worker asks Creem for that
+          checkout page and passes it your account's email, so the receipt, the
+          portal you cancel from and your account share one address, along with a
+          random reference that says nothing about you; we keep that reference
+          for 30 days to know which account paid. If you cancel from the app, the
+          Worker asks Creem for your portal link, with the customer id Creem gave
+          us when it charged you. Nobody else receives anything. So your
           data is processed outside Peru — a cross-border transfer, which Peru's Ley
           29733 asks us to tell you about beforehand.
         </p>
@@ -443,9 +463,16 @@
           time zone does not make clear you are outside the European Economic Area,
           or its language names a country there (es-ES, for example), it also asks
           us on page load which country you are visiting from, while no answer to
-          the statistics question is stored. Once signed in, we keep your email address, your progress
-          and which plan you are on. We do not sell or share any of it and there is no
-          advertising based on it. Signing in with Google tells us your email address
+          the statistics question is stored. If you are in the European Union and
+          Pro is on sale, it also asks us, once the page is idle, whether we can
+          charge in euros, so the price you are shown is the one you would be
+          charged. Once signed in, we keep your email address, your progress
+          and which plan you are on. We do not sell any of it and there is no
+          advertising based on it. Only those who need it to provide the service
+          receive it, and every one of them is named above in
+          <a href="#who-receives">"Who else receives any of it"</a>: for example,
+          when you open a card checkout, your email address goes to Creem, which
+          sells you the subscription. Signing in with Google tells us your email address
           and name; we never see your password and have no access to your Google
           account.
         </p>

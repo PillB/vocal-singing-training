@@ -303,17 +303,21 @@ test.describe("Billing & subscriptions", () => {
     expect(r.canExport).toBe(false);
   });
 
-  test("pricing modal opens from header without leaving home", async ({ page }) => {
-    await boot(page);
-    await expect(page.locator("#btn-pricing")).toBeVisible();
-    await page.click("#btn-pricing");
-    await expect(page.locator("#pricing-modal")).toBeVisible();
-    await expect(page.locator("#pricing-grid .plan-card")).toHaveCount(3);
-    await expect(page.locator("#pricing-rails .rail-btn")).toHaveCount(2);
-    // Modal centered overlay — close works
-    await page.click("#pricing-close");
-    await expect(page.locator("#pricing-modal")).toBeHidden();
-    await expect(page.locator("#view-home")).toHaveClass(/active/);
+  test.describe("in Peru, where both rails sell", () => {
+    // money-6: Mercado Pago's plans are a Peruvian account's, drawn only there.
+    test.use({ locale: "es-PE", timezoneId: "America/Lima" });
+    test("pricing modal opens from header without leaving home", async ({ page }) => {
+      await boot(page);
+      await expect(page.locator("#btn-pricing")).toBeVisible();
+      await page.click("#btn-pricing");
+      await expect(page.locator("#pricing-modal")).toBeVisible();
+      await expect(page.locator("#pricing-grid .plan-card")).toHaveCount(3);
+      await expect(page.locator("#pricing-rails .rail-btn")).toHaveCount(2);
+      // Modal centered overlay — close works
+      await page.click("#pricing-close");
+      await expect(page.locator("#pricing-modal")).toBeHidden();
+      await expect(page.locator("#view-home")).toHaveClass(/active/);
+    });
   });
 
   test("demo unlock button is hidden in a public build", async ({ page }) => {

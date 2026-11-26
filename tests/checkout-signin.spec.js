@@ -20,6 +20,12 @@ const { patchBillingConfig } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 const LINK = "https://buy.stripe.com/test_gate";
+/**
+ * Google offered the way the account panel offers it: a client id from the
+ * worker, and a script nobody has refused. `{google: true}` alone is a worker
+ * with Google switched on and no client id, where the panel shows no button.
+ */
+const GOOGLE = { ok: true, email: false, google: true, googleClientId: "test.apps.googleusercontent.com" };
 
 /**
  * Open the app with the pricing panel's dependencies in a known state.
@@ -70,7 +76,7 @@ async function boot(page, account) {
 
 test.describe("sign in before paying", () => {
   test("a signed-out visitor is sent to sign in, not to the checkout", async ({ page }) => {
-    await boot(page, { configured: true, signedIn: false, methods: { google: true } });
+    await boot(page, { configured: true, signedIn: false, methods: GOOGLE });
     const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "stripe"));
     expect(res.ok).toBe(false);
     expect(res.mode).toBe("signin_required");
@@ -79,7 +85,7 @@ test.describe("sign in before paying", () => {
   });
 
   test("the panel press closes pricing and opens the account panel", async ({ page }) => {
-    await boot(page, { configured: true, signedIn: false, methods: { google: true } });
+    await boot(page, { configured: true, signedIn: false, methods: GOOGLE });
     await page.evaluate(() => window.VTBilling.getPlans?.());
     await page.locator("#btn-pro, #btn-pricing, [data-open-pricing]").first().click();
     const cta = page.locator('#pricing-modal .plan-cta[data-plan="pro_monthly"]');
@@ -92,7 +98,7 @@ test.describe("sign in before paying", () => {
   });
 
   test("a signed-in visitor still reaches the checkout", async ({ page }) => {
-    await boot(page, { configured: true, signedIn: true, methods: { google: true } });
+    await boot(page, { configured: true, signedIn: true, methods: GOOGLE });
     const mode = await page.evaluate(
       () => window.VTBilling.startCheckout("pro_monthly", "stripe").mode
     );
@@ -100,6 +106,41 @@ test.describe("sign in before paying", () => {
     // The real branch sets location.href, so the stubbed host is where it lands.
     await page.waitForURL(LINK);
     expect(page.url()).toBe(LINK);
+  });
+
+  // VG-88. The gate is there so a payment can be owned by an account. Where no
+  // way to sign in can be shown in this browser (a content blocker refused
+  // Google's script, and this deployment sends no emailed codes), holding the
+  // payment for a sign-in that cannot happen left the buyer with no way to pay
+  // at all, while the trial, asking the same question, let them through. There
+  // the link is the way in, and the licence is linked once they do sign in.
+  test("VG-88 where no sign-in can be shown in this browser, the link is the way to pay", async ({ page }) => {
+    await boot(page, { configured: true, signedIn: false, methods: GOOGLE, googleReady: false });
+    const mode = await page.evaluate(
+      () => window.VTBilling.startCheckout("pro_monthly", "stripe").mode
+    );
+    expect(mode).toBe("redirect");
+    await page.waitForURL(LINK);
+  });
+
+  test("VG-88 control: with Google's script loaded, or still loading, the gate holds", async ({ page }) => {
+    for (const googleReady of [true, null]) {
+      await boot(page, { configured: true, signedIn: false, methods: GOOGLE, googleReady });
+      const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "stripe"));
+      expect(res.mode, `googleReady ${googleReady}`).toBe("signin_required");
+    }
+  });
+
+  test("VG-88 control: emailed codes are a way in even when Google is refused", async ({ page }) => {
+    await boot(page, { configured: true, signedIn: false, methods: { ...GOOGLE, email: true }, googleReady: false });
+    const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "stripe"));
+    expect(res.mode).toBe("signin_required");
+  });
+
+  test("VG-88 control: before the worker has said which ways in it offers, the gate holds", async ({ page }) => {
+    await boot(page, { configured: true, signedIn: false, methods: null });
+    const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "stripe"));
+    expect(res.mode).toBe("signin_required");
   });
 
   test("a build with no account layer is not blocked", async ({ page }) => {

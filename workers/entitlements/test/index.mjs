@@ -93,6 +93,29 @@ import "./address-block.test.mjs";
 // off account refused before any session or licence, and nosniff on every
 // answer (red team 2026-11-18, AUTHN-1/2/7).
 import "./sign-in-identity.test.mjs";
+// Checkouts the worker opens for a signed-in account, bound to it by the
+// request_id it chose, so a purchase reaches every device from the webhook
+// alone (VG-83), and the billing portal a subscriber cancels from.
+import "./checkout-bound.test.mjs";
+
+// VG-84: Mercado Pago entitles for money that arrived, not for an authorised
+// mandate, and a turned-down instalment ends Pro with the month paid for.
+import "./mp-paid-first.test.mjs";
+
+// Euros for the European Union, dollars elsewhere (VG-85): the currency a
+// checkout is charged in, and the euro products in the allow-list and health.
+import "./checkout-currency.test.mjs";
+
+// Red team round 2 on the worker: Creem's subscription.expired is a renewal
+// being retried, not an ending (truth-1), and one test of an open subscription
+// behind both the checkout guard and /v1/me's billingRails (money-3, states-1,
+// money-7).
+import "./rt2-creem-expired.test.mjs";
+import "./rt2-open-subscription.test.mjs";
+// A refund or chargeback that embeds a subscription Creem already cancelled
+// ends it here too (verification of money-3).
+import "./rt2-creem-reversal.test.mjs";
+
 // Two webhooks for one subscription at once, or out of order: the race forced
 // on all three rails on D1 and on KV, and the two clocks the stale check was
 // handed wrong (a refund's; a Mercado Pago charge's last edit). 2026-11-25.

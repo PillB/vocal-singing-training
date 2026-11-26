@@ -30,13 +30,13 @@
  * would have signed, with that rail in its claims.
  */
 const { test, expect } = require("@playwright/test");
-const { mintLicense, installLicense, waitForLicenseState } = require("./helpers/billing");
+const { mintLicense, installLicense, waitForLicenseState, patchBillingConfig } = require("./helpers/billing");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:8765";
 
 /** The rails money can actually come in on, and the words each route is known by. */
 const RAILS = {
-  stripe: { says: /Gestionar suscripci|Manage subscription/i, never: [/Creem/, /Mercado Pago/] },
+  stripe: { says: /Gestionar o cancelar suscripci|Manage or cancel subscription/i, never: [/Creem/, /Mercado Pago/] },
   creem: { says: /correo|email/i, never: [/Stripe/, /Mercado Pago/] },
   mercadopago: { says: /Mercado Pago/, never: [/Stripe/, /Creem/] }
 };
@@ -85,6 +85,11 @@ test.describe("How to cancel says the true thing for the rail you paid on", () =
   for (const [rail, want] of Object.entries(RAILS)) {
     test(`${rail}: a subscriber on this rail is given this rail's route and no other`, async ({ page }) => {
       const license = await mintLicense({ origin: BASE, provider: rail });
+      // The Stripe line names the Manage button, so it is only shown where a
+      // portal is configured and the button is drawn (red team round two,
+      // states-7: the shipped config has none, and the line named a hidden
+      // button). tests/rt2-p2-lapsed.spec.js holds the case without one.
+      if (rail === "stripe") await patchBillingConfig(page, { customerPortalUrl: "https://billing.stripe.com/p/login/test_cancel_route" });
       await boot(page);
       await installLicense(page, license);
       await page.reload({ waitUntil: "domcontentloaded" });
@@ -94,7 +99,11 @@ test.describe("How to cancel says the true thing for the rail you paid on", () =
       expect(r.pro, "the signed licence grants Pro").toBe(true);
       expect(r.provider, "and the entitlement reports the rail from its claims").toBe(rail);
       expect(r.hidden, "a paying subscriber is told how to cancel").toBe(false);
-      expect(r.key, "the line shown is the one for this rail").toBe("pricing.cancel." + rail);
+      // Signed out, a Creem subscriber has no in-app portal (it is opened for
+      // the signed-in account's own customer), so the line names Creem's
+      // emailed link rather than a button that is not drawn.
+      const key = rail === "creem" ? "pricing.cancel.creemEmail" : "pricing.cancel." + rail;
+      expect(r.key, "the line shown is the one for this rail").toBe(key);
       expect(r.text, "and it names this rail's route").toMatch(want.says);
       for (const other of want.never) {
         expect(r.text, `${rail}'s line must not send them to another rail`).not.toMatch(other);

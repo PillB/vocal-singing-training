@@ -57,6 +57,11 @@ MP_PLAN_PRO_YEARLY = ""
 # Stripe merchant.
 CREEM_PRODUCT_PRO_MONTHLY = ""
 CREEM_PRODUCT_PRO_YEARLY = ""
+# The same two plans priced in euros, VAT included, sold in the European Union
+# (VG-85). Both must be set for /v1/health to say `creemEurConfigured`, which
+# is what lets the page show a European € instead of US$.
+CREEM_PRODUCT_PRO_MONTHLY_EUR = ""
+CREEM_PRODUCT_PRO_YEARLY_EUR = ""
 # Whether a Creem event from a non-production environment may entitle. Creem's
 # `mode` is test, prod or sandbox in its API docs and `local` in its webhook
 # examples; a purchase in any of the three non-production ones moves no money,
@@ -110,6 +115,9 @@ REPORTS_ENABLED = "true"
 #   MP_WEBHOOK_SECRET              Mercado Pago webhook signing secret
 #   MP_ACCESS_TOKEN                Mercado Pago access token (server-side API reads)
 #   CREEM_WEBHOOK_SECRET           Creem webhook signing secret (Developers > Webhook)
+#   CREEM_API_KEY                  Creem API key: checkouts bound to the signed-in
+#                                  account and the billing portal. creem_test_... goes
+#                                  to test-api.creem.io, a live key to api.creem.io
 #   LICENSE_PRIVATE_KEY_PKCS8_B64  base64 PKCS#8 P-256 private key
 #                                  (scripts/generate-keys.mjs prints it)
 # Accounts only, and only for the provider named in EMAIL_PROVIDER:

@@ -295,6 +295,12 @@ export async function getEntitlement(kv, licenseId) {
   // given back still ends the period it paid for.
   if (!Number.isFinite(record.endedAt)) {
     applyChargedKey(record, await readCharged(kv, licenseId));
+    // A Mercado Pago subscription runs to exactly what that charge bought, on
+    // every read too: on KV a notice processed alongside the charge can have
+    // written the record without it, with its next charge date as the period.
+    if (record.provider === "mercadopago") {
+      holdToPaidPeriod(record);
+    }
   }
   // And money given back. Both providers report it: Mercado Pago on the
   // payment itself, Stripe as a refunded charge or a dispute. The key is read
@@ -754,8 +760,9 @@ function noteCharge(record, update) {
 
 /**
  * Remember when the latest charge that was turned down was due. Applied
- * whatever order the notifications arrive in. Records stored before this
- * existed have none.
+ * whatever order the notifications arrive in. It moves no period: it is what
+ * lets a refusal say the card was declined (`isDeclined` in license.js).
+ * Records stored before this existed have none.
  * @param {Object} record Record being built.
  * @param {Object} update Entitlement update descriptor.
  * @returns {void}
@@ -771,23 +778,46 @@ function noteDecline(record, update) {
 }
 
 /**
- * End a stopped subscription's period when it stopped, if a charge was turned
- * down before it stopped and none has gone through since. The period its
- * authorization set (the next charge date) was never paid for. It keeps
- * whatever an earlier charge paid for, and a charge that goes through later
- * still buys its own interval.
- * @param {Object} record Record being built.
- * @param {unknown} stoppedAt Unix seconds it stopped, or anything else to
- *   leave the period alone.
+ * Hold a Mercado Pago subscription's period to what its latest approved charge
+ * bought: one plan interval from it, as this store counts a charge everywhere
+ * (31 days for a month, to the same date next year for a year). No longer,
+ * and no shorter, whatever the subscription's own notices say.
+ *
+ * Not longer: the next charge date a preapproval carries is when Mercado Pago
+ * will try again, and it moves with no money behind it. A subscription paused
+ * and reactivated, or cancelled while its next charge date had already moved
+ * on and the charge was called off, held Pro to that date on one paid month
+ * (VG-84 review). Nor does a turned-down instalment have to be heard of, or
+ * dated right, for Pro to stop when the money does: Mercado Pago moves a
+ * declined instalment to its next retry date, and a decline lost to a
+ * concurrent write on KV used to leave the next charge date standing.
+ *
+ * Not shorter: a preapproval notice processed after the charge used to put
+ * the period back to the next charge date, so every renewal ran out at the
+ * instant Mercado Pago was due to charge, before its approval could be
+ * processed, and a paying subscriber was refused at every renewal. A charge's
+ * interval is at least the next charge date in a 28 to 31-day month.
+ *
+ * A subscription with no charge known keeps what its notices say, which
+ * entitles nothing (`paid: false`), and no later than a charge turned down:
+ * the period it reports to the page is then not a year nobody paid for. A
+ * refund of the charge still ends the period afterwards (`endReversedPeriod`).
+ * Only a subscription: a one-off payment's licence already runs one interval
+ * from its charge, and an end set on it (`endsAt`) must stay where it is. No
+ * Mercado Pago subscription update carries an `endsAt`.
+ * @param {Object} record Mercado Pago record being built, not deleted.
  * @returns {void}
  */
-function endDeclinedPeriod(record, stoppedAt) {
-  if (!Number.isFinite(record.declinedAt) || !Number.isFinite(stoppedAt)
-    || record.chargedAt >= record.declinedAt || record.declinedAt > stoppedAt) {
+function holdToPaidPeriod(record) {
+  if (!record.subscriptionId) {
     return;
   }
   const paidThrough = periodEndForPlan(record.plan, record.chargedAt);
-  capPeriodEnd(record, paidThrough !== null && paidThrough > stoppedAt ? paidThrough : stoppedAt);
+  if (paidThrough !== null) {
+    record.periodEnd = paidThrough;
+  } else {
+    capPeriodEnd(record, record.declinedAt);
+  }
 }
 
 /**
@@ -1046,10 +1076,10 @@ export function isStaleUpdate(record, update) {
  * and are still applied. The latest such charge is kept on the record
  * (`chargedAt`, and in `charged:` against a concurrent write) and counted
  * again on the plan an update brings, since a subscription's charge does not
- * say its plan. The latest Mercado Pago charge that was turned down is kept
- * too (`declinedAt`, in the record only): a subscription that stopped after
- * it, with no charge gone through since, keeps none of the period its
- * authorization set. A Stripe deletion that ended a period it did not know to
+ * say its plan. A Mercado Pago subscription's period is that interval and
+ * nothing its own notices say (`holdToPaidPeriod`). The latest Mercado Pago
+ * charge that was turned down is kept too (`declinedAt`, in the record only),
+ * so a refusal can say the card was declined. A Stripe deletion that ended a period it did not know to
  * be paid keeps that period's end (`periodEndIfPaid`, also in `ended:`), and a
  * payment made before the deletion but processed after it restores it. So
  * does one processed at the same moment as the deletion: `paid:` keeps when
@@ -1062,7 +1092,7 @@ export function isStaleUpdate(record, update) {
  *   subscriptionId, periodEnd, periodEndFromCharge, endsAt, endedAt, paid,
  *   paymentFailed, reversedAt, reversedChargeAt, reverseLatestCharge,
  *   declinedAt, terminal, claimId, paymentId, requireExisting, planSource,
- *   occurredAt.
+ *   cancelScheduled, occurredAt.
  * @param {{now?: number, generateId?: function(): string, idSecret?: string}} [options]
  *   `now` and `generateId` are injectables for tests. `idSecret` is the key
  *   license ids are derived under (see `licenseIdSecret`); without it a new
@@ -1197,14 +1227,13 @@ function applyUpdate(record, update, existing, now) {
   if (ended && update.paid === true) {
     restored = restoreDeletedPeriod(record, update, now);
   }
-  // A Mercado Pago subscription that stopped after a charge was turned down,
-  // with none gone through since, keeps none of the period its authorization
-  // set (Mercado Pago may leave the next charge date on it), whichever of the
-  // decline and the stop is processed first. A stopped record's clock is the
-  // stopped subscription's own: a charge that does not go through never moves
-  // it.
-  if (!ended && record.provider === "mercadopago" && record.status === "canceled") {
-    endDeclinedPeriod(record, record.occurredAt);
+  // A Mercado Pago subscription, authorized, paused or cancelled, runs to
+  // what its latest approved charge bought, whichever order its notices are
+  // processed in: Pro stops when that runs out, while Mercado Pago retries a
+  // turned-down instalment, and comes back when a charge goes through (VG-84;
+  // no grace, as the terms say).
+  if (!ended && record.provider === "mercadopago") {
+    holdToPaidPeriod(record);
   }
   // Which payment bought the period now held, judged against what the period
   // was before this update. Before the reversal below, which reads it.
@@ -1275,6 +1304,7 @@ function applyCurrentState(record, update, existing, now) {
   const planBefore = record.plan;
   applyIfPresent(record, "plan", update.plan);
   applyIfPresent(record, "status", update.status);
+  applyIfPresent(record, "cancelScheduled", update.cancelScheduled);
   applyIfPresent(record, "planSource", update.planSource);
   applyPeriodEnd(record, update, planBefore);
   // The provider says access ended at a given time: it ended a subscription

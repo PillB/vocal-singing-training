@@ -142,6 +142,18 @@ test("health reports booleans and the site origin, never key material", async ()
     // The merchant-of-record rail. One secret, because its webhook carries
     // everything the store needs and nothing has to be read back.
     creemConfigured: true,
+    // Opening a checkout bound to an account needs the API key and D1 as
+    // well; this payments-only environment has neither, so both are false
+    // and the page keeps to its static links (checkout-bound.test.mjs CK11
+    // holds the true case).
+    creemCheckoutConfigured: false,
+    creemPortalConfigured: false,
+    // Euros need that checkout and both euro products as well (VG-85;
+    // checkout-currency.test.mjs CK45 holds the true case).
+    creemEurConfigured: false,
+    // No API key here, so no mode; "test" or "live" by the key's prefix
+    // otherwise, never any of the key itself (asserted below).
+    creemKeyMode: null,
     signingKeyConfigured: true,
     // The account layer reports itself here too. `createTestEnv` has no D1
     // binding and no auth configuration, which is exactly the shape a
@@ -158,6 +170,13 @@ test("health reports booleans and the site origin, never key material", async ()
   const text = JSON.stringify(body);
   assert.equal(text.includes(env.LICENSE_PRIVATE_KEY_PKCS8_B64), false);
   assert.equal(text.includes(env.STRIPE_WEBHOOK_SECRET), false);
+
+  // The mode names which Creem API a key reaches, and nothing else of it.
+  for (const [key, mode] of [["creem_test_sEcReT123", "test"], ["creem_sEcReT456", "live"]]) {
+    const withKey = await (await handleRequest(new Request(`${BASE}/v1/health`), createTestEnv({ CREEM_API_KEY: key }))).json();
+    assert.equal(withKey.creemKeyMode, mode);
+    assert.equal(JSON.stringify(withKey).includes("sEcReT"), false);
+  }
 
   const unconfigured = await handleRequest(
     new Request(`${BASE}/v1/health`),
@@ -608,11 +627,14 @@ test("a Mercado Pago notification is confirmed against the API before it is stor
     postJson("/v1/claim", { provider: "mercadopago", sessionId: "pre_router" }),
     env
   );
-  assert.equal(claim.status, 200);
+  // What the API said is what was stored. An authorized mandate is not money,
+  // so it waits for its first charge rather than signing (VG-84).
+  assert.equal(claim.status, 202);
   const body = await claim.json();
+  assert.equal(body.reason, "pending");
+  assert.equal(body.token, undefined);
   assert.equal(body.entitlement.status, "active");
   assert.equal(body.entitlement.plan, "pro_yearly");
-  assert.equal((await verifyLicenseToken(body.token, env)).valid, true);
 });
 
 test("a Mercado Pago notification with a bad signature never reaches the API", async () => {
@@ -795,9 +817,20 @@ test("a Mercado Pago renewal charge that has not gone through leaves the subscri
     date_last_updated: isoIn(-20 * DAY),
     payer_id: 5
   });
+  // The year it renews from was paid for: a mandate alone entitles nothing (VG-84).
+  await deliverMercadoPago(env, "subscription_authorized_payment", {
+    id: "AP-RENEW-PAID",
+    preapproval_id: "PRE-RENEW",
+    status: "processed",
+    date_created: isoIn(-364 * DAY),
+    debit_date: isoIn(-364 * DAY),
+    date_last_updated: isoIn(-364 * DAY),
+    payment: { id: 800, status: "approved", date_approved: isoIn(-364 * DAY) }
+  });
   const before = await claimFor(env, "mercadopago", "PRE-RENEW");
   assert.equal(before.status, 200);
   assert.equal(before.body.entitlement.plan, "pro_yearly");
+  assert.ok(before.body.entitlement.periodEnd >= paidThrough, "the year paid for runs at least to the next charge");
 
   for (const status of ["rejected", "in_process"]) {
     await deliverMercadoPago(env, "payment", {
@@ -812,7 +845,8 @@ test("a Mercado Pago renewal charge that has not gone through leaves the subscri
     const after = await claimFor(env, "mercadopago", "PRE-RENEW");
     assert.equal(after.status, 200, `${status}: the period already paid for still holds`);
     assert.equal(after.body.entitlement.status, "active", `${status}: Mercado Pago retries; the charge is not a cancellation`);
-    assert.equal(after.body.entitlement.periodEnd, paidThrough, `${status}: a charge that did not go through buys no time`);
+    assert.equal(after.body.entitlement.periodEnd, before.body.entitlement.periodEnd,
+      `${status}: a charge that did not go through buys no time, and takes none of the year already paid for`);
     assert.equal(after.body.entitlement.plan, "pro_yearly", `${status}: the charge's text cannot change the plan`);
   }
 });
@@ -868,13 +902,21 @@ test("a Mercado Pago charge that has not gone through, delivered before its subs
       date_last_updated: isoIn(-60),
       payer_id: 5
     });
+    // No charge went through, so the authorized subscription waits for one and
+    // signs nothing at all (VG-84; it used to sign up to its next charge date).
+    // A first charge already turned down is not waited on "about an hour": it
+    // answers 402 "declined", so the page can say to check the card.
     const claim = await claimFor(env, "mercadopago", preapprovalId);
-    assert.equal(claim.status, 200, charge.label);
-    assert.equal(claim.body.entitlement.periodEnd, paidThrough, `${charge.label}: the subscription still sets the period`);
-    const verified = await verifyLicenseToken(claim.body.token, env);
-    assert.equal(verified.valid, true, charge.label);
-    assert.equal(verified.payload.periodEnd, paidThrough, `${charge.label}: the token has a finite end`);
-    assert.ok(verified.payload.exp <= paidThrough, charge.label);
+    const declined = charge.label === "rejected";
+    assert.equal(claim.status, declined ? 402 : 202, charge.label);
+    assert.equal(claim.body.reason, declined ? "declined" : "pending", charge.label);
+    assert.equal(claim.body.token, undefined, `${charge.label}: no money, no token`);
+    const end = claim.body.entitlement.periodEnd;
+    if (charge.label === "rejected") {
+      assert.ok(end <= Math.floor(Date.now() / 1000), "rejected: a turned-down first charge leaves no period");
+    } else {
+      assert.equal(end, paidThrough, `${charge.label}: the subscription still sets the period`);
+    }
   }
 });
 
@@ -966,10 +1008,6 @@ test("a refunded Mercado Pago subscription charge ends access until a charge goe
     date_last_updated: isoIn(-10 * DAY),
     payer_id: 5
   });
-  const { body } = await claimFor(env, "mercadopago", "PRE-REFUND");
-  const licenseId = body.licenseId;
-  assert.equal(typeof licenseId, "string");
-
   const charge = {
     id: "AP-REFUND",
     preapproval_id: "PRE-REFUND",
@@ -978,6 +1016,16 @@ test("a refunded Mercado Pago subscription charge ends access until a charge goe
     date_last_updated: isoIn(-120),
     payment: { id: 991, status: "refunded", date_approved: isoIn(-10 * DAY) }
   };
+  // The charge as it was when it went through: a mandate alone is not paid (VG-84).
+  await deliverMercadoPago(env, "subscription_authorized_payment", {
+    ...charge,
+    date_last_updated: isoIn(-10 * DAY),
+    payment: { ...charge.payment, status: "approved" }
+  });
+  const { body } = await claimFor(env, "mercadopago", "PRE-REFUND");
+  const licenseId = body.licenseId;
+  assert.equal(typeof licenseId, "string");
+
   await deliverMercadoPago(env, "subscription_authorized_payment", charge);
   const refused = await handleRequest(postJson("/v1/license", { licenseId }), env);
   assert.equal(refused.status, 402, "a refunded charge keeps none of the period it paid for");
@@ -1903,17 +1951,23 @@ test("a Mercado Pago subscription whose first charge was turned down keeps nothi
     assert.equal(claim.body.token, undefined, label);
   }
 
-  // Until it stops, an authorized subscription still runs to its next charge
-  // date, whether or not its charge went through.
+  // Before it stops, an authorized subscription whose only charge was turned
+  // down signs nothing. It used to run to its next charge date, a year away,
+  // on a card that never paid (VG-84). It is not "waiting" either (202, "about
+  // an hour"): its card was turned down, and Mercado Pago retries it, so it
+  // answers 402 "declined" and the browser keeps asking (VG-84 review).
   const env = createTestEnv();
   const steps = declinedFirstChargeSteps("PRE-DECLINED-RUNNING", start);
   for (const name of ["pending", "declined", "authorized"]) {
     await deliverMercadoPago(env, ...steps[name]);
   }
   const running = await claimFor(env, "mercadopago", "PRE-DECLINED-RUNNING");
-  assert.equal(running.status, 200);
+  assert.equal(running.status, 402);
+  assert.equal(running.body.reason, "declined");
   assert.equal(running.body.entitlement.status, "active");
-  assert.equal(running.body.entitlement.periodEnd, Date.parse(steps.authorized[1].next_payment_date) / 1000);
+  assert.equal(running.body.token, undefined);
+  assert.ok(running.body.entitlement.periodEnd < Date.parse(steps.authorized[1].next_payment_date) / 1000,
+    "the next charge date is not a period anybody paid for");
 });
 
 test("a Mercado Pago subscription whose first charge goes through on a retry keeps the year, even once it stops", async () => {

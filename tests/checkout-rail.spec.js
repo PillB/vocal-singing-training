@@ -298,9 +298,27 @@ test.describe("a rail the worker cannot honour", () => {
     const known = await page.evaluate(() => window.VTAccount.knownRails());
     expect(known.mercadopago).toBe(null);
     expect(known.stripe).toBe(null);
-    expect(known.creem).toBe(null);
     const res = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "mercadopago"));
     expect(res.mode).toBe("redirect");
+  });
+
+  test("a worker older than the Creem route stops a Creem sale, and only that one", async ({ page }) => {
+    // The live worker before its redeploy (VG-97): health with no Creem field,
+    // and Creem's webhook answered 404. A payment through a pasted Creem link
+    // there is money that can never become Pro. Each Creem field arrived with
+    // its route, so a worker that answers without it has no such route.
+    const { navigations } = await boot(page, { health: healthBody({ mercadopagoConfigured: true, stripeConfigured: false }) });
+    await askTheWorker(page);
+    const known = await page.evaluate(() => window.VTAccount.knownRails());
+    expect(known.creem, "no Creem field in an answer is a no").toBe(false);
+    expect(known.creemCheckout).toBe(false);
+    expect(known.creemPortal).toBe(false);
+    const creem = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "creem"));
+    expect(creem.mode, "wrong: sent to pay where the payment is never seen").toBe("provider_unavailable");
+    expect(navigations).toEqual([]);
+    // Control: the same answer still sells on the rail it does report.
+    const mp = await page.evaluate(() => window.VTBilling.startCheckout("pro_monthly", "mercadopago"));
+    expect(mp.mode).toBe("redirect");
   });
 
   test("a worker answering nonsense is not a no", async ({ page }) => {
@@ -427,7 +445,9 @@ test.describe("the Pro dialog's choice of how to pay, outside Peru", () => {
   test("offers the rails the markets sell on, marks the region's own, and its card button reaches Creem", async ({ page }) => {
     const { navigations } = await liveRails(page);
     expect(await page.evaluate(() => window.VTBilling.preferredRail(window.VTBilling.detectRegion()))).toBe("creem");
-    expect(await railRow(page)).toEqual(["creem*", "mercadopago"]);
+    // Mercado Pago's plans are a Peruvian seller account's, so outside Peru
+    // its button is not drawn (red team money-6): the card rail is the one.
+    expect(await railRow(page)).toEqual(["creem*"]);
     await page.locator('#pricing-rails [data-rail="creem"]').click();
     await page.locator('#pricing-modal .plan-cta[data-plan="pro_monthly"]').click();
     await expect.poll(() => navigations.join(" ")).toContain("checkout.creem.io");
@@ -449,9 +469,26 @@ test.describe("the Pro dialog's choice of how to pay, in Peru", () => {
     // Creem cannot charge soles: the card rail shows the price it charges.
     await expect(monthly).toContainText("$");
     await expect(monthly).not.toContainText("S/");
-    await expect(page.locator("#pricing-region-label")).toContainText("USD");
+    // The region line follows the money on the cards: dollars, not soles.
+    await expect(page.locator("#pricing-region-label")).toContainText("dólares de EE. UU.");
+    await expect(page.locator("#pricing-region-label")).not.toContainText("soles");
     await page.locator('#pricing-modal .plan-cta[data-plan="pro_monthly"]').click();
     await expect.poll(() => navigations.join(" ")).toContain("checkout.creem.io");
+  });
+
+  test("Peru's own rail is drawn first even when the card rail's market is listed before Peru's", async ({ page }) => {
+    // The shipped list happens to name Peru first, so the order above could
+    // come from the list rather than from the region. An operator's list
+    // need not: here the worldwide market comes first. Wrong: the card rail
+    // leads, and is the one a Peruvian lands on.
+    await patchBillingConfig(page, {
+      markets: [
+        { code: "WW", name: "Worldwide", currency: "USD", rail: "creem", priority: 3 },
+        { code: "PE", name: "Perú", currency: "PEN", rail: "mercadopago", priority: 1 }
+      ]
+    });
+    await liveRails(page);
+    expect(await railRow(page)).toEqual(["mercadopago*", "creem"]);
   });
 
   test("control: with Mercado Pago not linked yet, the one rail that can sell is the one offered and used", async ({ page }) => {

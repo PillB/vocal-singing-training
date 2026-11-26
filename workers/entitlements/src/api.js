@@ -233,6 +233,7 @@ export async function buildMePayload(env, account, now) {
     },
     grants: resolution.grants,
     paid: resolution.paid,
+    billingRails: resolution.billingRails || [],
     trialDays: trial.days,
     trialArm: trial.arm,
     licenseId: minted ? minted.payload.sub : null,

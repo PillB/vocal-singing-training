@@ -1371,7 +1371,11 @@ export const MUTANTS = {
     ["LF12 one reminder a day: the morning time spends the evening one (QA-80)", "js/reminders.js", "    if (cfg.lastNotifiedDay !== dayKey(now)) return true;\n    const told = Number.isFinite(cfg.lastNotifiedSlot) ? cfg.lastNotifiedSlot : Infinity;\n    return slot > told;\n", "    return cfg.lastNotifiedDay !== dayKey(now);\n", "QA-80 two times", "tests/redteam-home-retention.spec.js"],
     ["LF13 a told reminder keeps no time: it counts for the whole day, and the evening one is never told (QA-80)", "js/reminders.js", "    c.lastNotifiedSlot = slot == null ? -1 : slot;\n", "    delete c.lastNotifiedSlot;\n", "QA-80 two times", "tests/redteam-home-retention.spec.js"],
     ["LF14 the second time comes filled at 09:00 and is saved as if chosen (QA-80)", "js/app.js", '    if (t2) t2.value = cfg.times[1] || "";', '    if (t2) t2.value = cfg.times[1] || "09:00";', "QA-80 a Pro learner", "tests/redteam-home-retention.spec.js"],
-    ["LF15 the reminder's way in names only the first of two times (QA-80)", "js/app.js", 'tt("retain.openOn", { time: reminderTimes(cfg.times) })', 'tt("retain.openOn", { time: clockTime(cfg.times[0]) })', "QA-80 two times", "tests/redteam-home-retention.spec.js"]
+    ["LF15 the reminder's way in names only the first of two times (QA-80)", "js/app.js", 'tt("retain.openOn", { time: reminderTimes(cfg.times) })', 'tt("retain.openOn", { time: clockTime(cfg.times[0]) })', "QA-80 two times", "tests/redteam-home-retention.spec.js"],
+    // A month of use, every surface after every step (tests/usage-calendar.spec.js): each says what was done.
+    ["LF16 a second tab keeps the record it loaded: Inicio there still reads yesterday", "js/app.js", "      redrawTimer = setTimeout(() => showSyncedRecord(), 120);\n", "", "first visit, then seven days", "tests/usage-calendar.spec.js"],
+    ["LF17 the week's takes are the last seven days, not Monday's week: a new week starts with last week's", "js/value-pulse.js", "    const day = (now.getDay() + 6) % 7; // Mon=0\n", "    const day = 6;\n", "first visit, then seven days", "tests/usage-calendar.spec.js"],
+    ["LF18 a rest day reads as a day practised on Inicio's week", "js/practice-days.js", '      if (bag.rest.used.includes(key)) return "rest";', '      if (bag.rest.used.includes(key)) return "done";', "first visit, then seven days", "tests/usage-calendar.spec.js"]
   ].map(([name, file, from, to, grep, spec]) => ({
     name,
     file,

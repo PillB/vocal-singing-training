@@ -291,6 +291,8 @@
       "pricing.trialUsed": "Ya usaste la prueba en este navegador",
       "pricing.verifying": "Confirmando tu pago con el proveedor…",
       "pricing.unverified": "Pago aún sin confirmar",
+      "pricing.claimInactive": "Este pago no se completó o ya no está activo",
+      "pricing.claimNotFound": "No encontramos este pago · escribe a soporte",
       "pricing.verifyUnavailable": "Los pagos están en pausa hasta que la verificación esté activa.",
       "pricing.feat.all_exercises": "Todos los ejercicios, gratis y sin límite de minutos",
       "pricing.feat.pitch_highway": "Ves tu afinación en vivo y cantas con un piano que se ajusta a tu voz",
@@ -599,7 +601,13 @@
         "Mercado Pago no pudo cobrar con tu tarjeta y volverá a intentarlo durante unos 10 días. Revisa tu medio de pago en Mercado Pago; cuando el cobro entre, Pro se activa al volver a abrir la app o al pulsar «Comprobar mi pago».",
       "pricing.toast.verifyOk": "¡Pago verificado! Pro activo en este navegador.",
       "pricing.toast.verifyFailed":
-        "Todavía no podemos confirmar el pago. Seguimos reintentando; si ya te cobraron, escribe a soporte con el comprobante.",
+        "Todavía no recibimos la confirmación del proveedor. Lo volvemos a comprobar cada vez que abres la app, hasta 7 días después del pago, y cuando pulsas «Comprobar mi pago». Si ya te cobraron y Pro no se activa, escribe a soporte con el comprobante.",
+      "pricing.toast.verifyInactive":
+        "El proveedor nos dice que este pago no se completó o ya no está activo, así que Pro no se activó. Si ves el cobro en tu tarjeta o tu cuenta, escribe a soporte con el comprobante; si no, puedes suscribirte de nuevo.",
+      "pricing.toast.verifyNotFound":
+        "No encontramos este pago. No vuelvas a pagar: escribe a soporte con el comprobante y lo revisamos.",
+      "pricing.toast.verifySuspended":
+        "El proveedor tiene tu suscripción en espera, así que Pro aún no está activo. Cuando un cobro entre, Pro se activa al volver a abrir la app o al pulsar «Comprobar mi pago». Si no lo esperabas, revisa tu medio de pago con el proveedor.",
       "nav.lang": "English",
       "nav.tour": "Ver el tour",
       // —— Design: phone-header —— Pro, Cuenta, idioma and Tour behind one button
@@ -1502,6 +1510,8 @@
       "pricing.trialUsed": "Trial already used in this browser",
       "pricing.verifying": "Confirming your payment with the provider…",
       "pricing.unverified": "Payment not confirmed yet",
+      "pricing.claimInactive": "This payment didn’t go through or is no longer active",
+      "pricing.claimNotFound": "We couldn’t find this payment · contact support",
       "pricing.verifyUnavailable": "Checkout is paused until payment verification is live.",
       "pricing.feat.all_exercises": "All exercises, free with no daily time limit",
       "pricing.feat.pitch_highway": "See your pitch live and sing with a piano that adjusts to your voice",
@@ -1805,7 +1815,13 @@
         "Mercado Pago couldn’t charge your card and will try again for about 10 days. Check your payment method in Mercado Pago; once a charge goes through, Pro switches on the next time you open the app, or when you tap “Check my payment”.",
       "pricing.toast.verifyOk": "Payment verified — Pro is active in this browser.",
       "pricing.toast.verifyFailed":
-        "We can’t confirm the payment yet. We’ll keep retrying; if you were charged, contact support with your receipt.",
+        "The provider hasn’t confirmed the payment yet. We check again each time you open the app, for up to 7 days after the payment, and when you tap “Check my payment”. If you were charged and Pro doesn’t switch on, contact support with your receipt.",
+      "pricing.toast.verifyInactive":
+        "The provider tells us this payment didn’t go through or is no longer active, so Pro didn’t switch on. If you see the charge on your card or account, contact support with your receipt; if not, you can subscribe again.",
+      "pricing.toast.verifyNotFound":
+        "We couldn’t find this payment. Please don’t pay again: contact support with your receipt and we’ll look into it.",
+      "pricing.toast.verifySuspended":
+        "The provider has your subscription on hold, so Pro isn’t on yet. Once a charge goes through, Pro switches on the next time you open the app, or when you tap “Check my payment”. If you weren’t expecting this, check your payment method with the provider.",
       "nav.lang": "Español",
       "nav.tour": "Take the tour",
       // —— Design: phone-header —— Pro, Account, language and Tour behind one button

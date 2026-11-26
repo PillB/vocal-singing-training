@@ -9882,6 +9882,9 @@
   /** The Pro dialog's status line for somebody holding no plan: verifying, unverified, ended or free. */
   function unheldPricingStatus(ent, prelaunch) {
     if (ent.status === "pending") return tt("pricing.verifying");
+    // The provider has answered, finally: "aún sin confirmar" said it had not (F14).
+    const refusal = window.VTBilling?.claimRefusal?.();
+    if (refusal) return tt(refusal === "inactive" ? "pricing.claimInactive" : "pricing.claimNotFound");
     if (ent.status === "unverified") return tt("pricing.unverified");
     if (ent.status === "expired" || (!prelaunch && trialSpent())) {
       // A month that has run out is not the same state as never having had
@@ -11502,18 +11505,30 @@
    * whose charge Mercado Pago turned down (the worker's 402 "declined") is
    * told so, and to check the card, not to wait. Both are long, so they stay
    * up for the toast's own reading rate (about 20 characters a second).
+   *
+   * A final answer (js/billing.js claimLicense marks it `terminal`) was told
+   * "Seguimos reintentando", the opposite of what had happened (F14): a
+   * payment the provider calls inactive is said to be so, with the two ways
+   * on; one the worker cannot find asks for the receipt and not for a second
+   * payment, since the purchase may be real. A subscription the provider
+   * holds (402 "suspended") is told it is on hold; anything else is told
+   * what the page will actually do, and until when.
    */
-  function claimResultToast(res, provider) {
-    const mp = provider === "mercadopago";
-    if (res?.ok) {
-      toast(tt("pricing.toast.verifyOk"), { durationMs: 3600 });
-    } else if (mp && res?.reason === "pending") {
-      toast(tt("pricing.toast.verifyPendingMp"), { durationMs: 9000 });
-    } else if (mp && res?.reason === "declined") {
-      toast(tt("pricing.toast.verifyDeclinedMp"), { durationMs: 12000 });
-    } else {
-      toast(tt("pricing.toast.verifyFailed"), { durationMs: 6000 });
+  function claimToast(res, mp) {
+    const reason = res?.reason;
+    if (res?.ok) return ["pricing.toast.verifyOk", 3600];
+    if (mp && reason === "pending") return ["pricing.toast.verifyPendingMp", 9000];
+    if (mp && reason === "declined") return ["pricing.toast.verifyDeclinedMp", 12000];
+    if (res?.terminal) {
+      return reason === "inactive" ? ["pricing.toast.verifyInactive", 12000] : ["pricing.toast.verifyNotFound", 9000];
     }
+    if (reason === "suspended") return ["pricing.toast.verifySuspended", 12000];
+    return ["pricing.toast.verifyFailed", 12000];
+  }
+
+  function claimResultToast(res, provider) {
+    const [key, durationMs] = claimToast(res, provider === "mercadopago");
+    toast(tt(key), { durationMs });
   }
 
   /** "Ya pagué": ask the worker again for the payment the browser is waiting on. */
@@ -11521,7 +11536,7 @@
     const provider = window.VTBilling?.getEntitlement?.()?.raw?.provider || null;
     const claiming = window.VTBilling?.resumePendingClaim?.({ force: true });
     if (!claiming) {
-      toast(tt("pricing.toast.verifyFailed"), { durationMs: 5200 });
+      toast(tt("pricing.toast.verifyFailed"), { durationMs: 12000 });
       return;
     }
     toast(tt("pricing.toast.verifyPending"), { durationMs: 3600 });

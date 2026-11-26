@@ -117,12 +117,12 @@ async function pressRecheck(page, flow) {
 }
 
 const COPY = {
-  es: { hour: /alrededor de una hora/, declined: /no pudo cobrar con tu tarjeta/, alarm: /soporte|comprobante/, generic: /Todavía no podemos confirmar el pago/,
+  es: { hour: /alrededor de una hora/, declined: /no pudo cobrar con tu tarjeta/, alarm: /soporte|comprobante/, generic: /Todavía no recibimos la confirmación del proveedor/,
     // The button the page names must be the one it shows; "cuota" reads in
     // Peru as card instalments; "en cuanto entre" promised a switch-on the
     // page does not do on its own (VG-84 review).
     names: "«Comprobar mi pago»", misleading: /cuota|en cuanto entre/ },
-  en: { hour: /about an hour/, declined: /couldn’t charge your card/, alarm: /support|receipt/, generic: /We can’t confirm the payment yet/,
+  en: { hour: /about an hour/, declined: /couldn’t charge your card/, alarm: /support|receipt/, generic: /The provider hasn’t confirmed the payment yet/,
     names: "“Check my payment”", misleading: /as soon as it goes through/ }
 };
 

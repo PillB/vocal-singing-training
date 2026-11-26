@@ -345,6 +345,12 @@ undo is the step itself — treat it as unfinished until the flag is `"false"`.
 
 ### Step 5 — Switch the Creem checkout on. Cost: this is the gate.
 
+**Before this step, close VG-108** (docs/VALUE-GAP-REGISTRY.md): an open tab's
+licence goes stale after its 72-hour token, and a paying subscriber then reads
+"Pago aún sin confirmar" or "Pro en espera" until they reload. Before pasting
+any Creem link for browsers that cannot sign in, close VG-110 as well: a buyer
+with no account who already holds a licence has the new purchase dropped.
+
 ```js
 // js/billing-config.js
 providers.creem.apiCheckout = true
@@ -397,6 +403,12 @@ charging in Creem, and the cancel button keeps working for them; see step 3's
 undo.
 
 ### Step 6 — Mercado Pago Perú, for Peru. Cost: per transaction.
+
+**Before pasting a Mercado Pago link, close VG-109 and VG-112**
+(docs/VALUE-GAP-REGISTRY.md): a stale tab, or a missing account snapshot,
+offers "Suscribirse" to someone already subscribed, and on a pasted link that
+press starts a second subscription. Creem's worker checkout refuses it; a
+pasted Mercado Pago link has nothing that does.
 
 A Mercado Pago seller account belongs to one country, and this one is
 Peruvian: its plans charge soles, and a buyer needs a Peruvian Mercado Pago

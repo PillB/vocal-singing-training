@@ -434,6 +434,7 @@ export const PLAN_USES = {
     answerCheckout: ["VTBilling:1 openAccount:1", "what a press to pay says when it did not leave: someone not signed in is sent to the account, the plan and its money kept for the offer to pay anyway"],
     answerOpenSubscription: ["VTBilling:1 getEntitlement:1", "a checkout refused for a subscription already open: the portal of its rail, or where to manage it; only after a press to pay"],
     pricingStatusLine: ["trialDaysLeft:1", "the pricing dialog's status line"],
+    unheldPricingStatus: ["VTBilling:1", "that status line for someone holding no plan: asks only whether the worker has given a checkout its final answer, to say it (F14)"],
     openPricing: ["#pricing-modal:open:1 openPricing:1", "the pricing dialog's own opener"],
     prefetchRailsForPrices: ["VTBilling:1", "asks /v1/health once the page is idle, only for a visitor whose prices wait on it, so the pricing dialog opens on the money a press charges; it opens nothing"],
     paintPayAnyway: ["VTBilling:2", "the account panel's offer to pay without an account, shown after a plan's press where this browser cannot sign in and the plan has a link, with how to cancel on its rail"],

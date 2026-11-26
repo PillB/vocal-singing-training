@@ -324,6 +324,18 @@
     return started;
   }
 
+  /**
+   * The worker's final word on the checkout this browser is waiting on,
+   * "inactive" (failed, refunded or over) or "not_found", or null while there
+   * is none. The Pro dialog says what it was rather than "Pago aún sin
+   * confirmar", which promised an answer that had already come (F14).
+   */
+  function claimRefusal() {
+    const st = read();
+    const reason = st && st.status === "unclaimed" ? st.claimReason : null;
+    return TERMINAL_CLAIM_REASONS.has(reason) ? reason : null;
+  }
+
   /** True when a checkout is still waiting on its license and can be retried. */
   function hasPendingClaim() {
     const st = read();
@@ -1242,8 +1254,10 @@
 
   /**
    * Ask the worker for the license behind a checkout, and store it on success.
+   * A refusal that is final comes back marked `terminal`, so the page can say
+   * so instead of promising a retry that will never change the answer (F14).
    * @param {{plan: string, provider: string, sessionId: string}} intent
-   * @returns {Promise<{ok: boolean, reason?: string, claims?: object}>}
+   * @returns {Promise<{ok: boolean, reason?: string, claims?: object, terminal?: boolean}>}
    */
   function claimLicense(intent) {
     const plan = intent.plan;
@@ -1262,18 +1276,23 @@
             expiresAt: res.claims?.periodEnd
               ? new Date(res.claims.periodEnd * 1000).toISOString()
               : null,
-            sessionId: sessionId ? String(sessionId).slice(0, 128) : null,
+            // The checkout id has done its job, and kept it is a key: whoever
+            // holds it can claim the licence or link it to their own account
+            // (/v1/claim, /v1/me/link), and this record travels (F8). Pending
+            // and unclaimed records keep theirs, which is what they retry with.
+            sessionId: null,
             verified: true
           });
         }
-        if (!res.ok && TERMINAL_CLAIM_REASONS.has(res.reason)) {
+        const terminal = !res.ok && TERMINAL_CLAIM_REASONS.has(res.reason);
+        if (terminal) {
           const st = read();
           if (st && (st.status === "pending" || st.status === "unclaimed")) {
             write({ ...st, status: "unclaimed", claimReason: res.reason });
           }
         }
         emit();
-        return res;
+        return terminal ? { ...res, terminal: true } : res;
       })
       .catch(() => {
         emit();
@@ -1710,17 +1729,54 @@
     return !!map[feature];
   }
 
-  function exportProgressJson() {
-    if (!can("export_progress")) return null;
-    const pulse =
-      typeof global.VTValuePulse?.compute === "function" ? global.VTValuePulse.compute() : null;
-    const isEs =
-      (global.VTI18n && global.VTI18n.lang === "es") ||
-      (typeof document !== "undefined" && (document.documentElement.lang || "").startsWith("es"));
-    const narrative =
-      typeof global.VTValuePulse?.narrative === "function"
-        ? global.VTValuePulse.narrative(pulse, isEs)
-        : null;
+  /**
+   * What the progress export says about the plan (F8): what a teacher reading
+   * the file can use, and nothing that proves the purchase. The app tells
+   * people to hand this file on, and the stored record holds a checkout id
+   * that claims and links the subscription for whoever presents it, so the
+   * export names its fields: one added to the record later stays out of the
+   * file until it is added here.
+   */
+  const EXPORTED_ENTITLEMENT_FIELDS = ["tier", "plan", "status", "source", "pro", "provider", "expiresAt"];
+
+  function exportedEntitlement(ent) {
+    const out = {};
+    for (const field of EXPORTED_ENTITLEMENT_FIELDS) out[field] = ent?.[field] ?? null;
+    return out;
+  }
+
+  /** One of js/value-pulse.js's readers, asked as a method, or `fallback` when the module lacks it. */
+  function askPulse(name, args, fallback) {
+    const pulse = global.VTValuePulse;
+    return typeof pulse?.[name] === "function" ? pulse[name](...args) : fallback;
+  }
+
+  /** The records the progress export carries, each with what it says when storage has none. */
+  const EXPORTED_RECORDS = [
+    ["profile", "getActiveProfile", null],
+    ["goals", "getGoals", null],
+    ["progress", "getProgress", {}],
+    ["holdLogs", "getHoldLogs", []],
+    ["weekPlan", "getWeekPlan", null],
+    ["settings", "getSettings", {}]
+  ];
+
+  function storedForExport() {
+    const store = global.VTStorage;
+    const out = {};
+    for (const [key, getter, fallback] of EXPORTED_RECORDS) {
+      out[key] = (typeof store?.[getter] === "function" ? store[getter]() : null) || fallback;
+    }
+    return out;
+  }
+
+  function exportInSpanish() {
+    if (global.VTI18n && global.VTI18n.lang === "es") return true;
+    return typeof document !== "undefined" && (document.documentElement.lang || "").startsWith("es");
+  }
+
+  /** The export's own achievement: set before the achievements are read, so the file counts it. */
+  function markExported() {
     try {
       const flags = global.VTStorage?.getAchievementFlags?.() || {};
       flags.exported = true;
@@ -1728,28 +1784,31 @@
     } catch {
       /* ignore */
     }
-    const achievements =
-      typeof global.VTValuePulse?.achievements === "function"
-        ? global.VTValuePulse.achievements(pulse)
-        : [];
-    const coachFocus =
-      typeof global.VTValuePulse?.coachFocus === "function"
-        ? global.VTValuePulse.coachFocus(pulse, isEs)
-        : null;
+  }
+
+  function exportProgressJson() {
+    if (!can("export_progress")) return null;
+    const pulse = askPulse("compute", [], null);
+    const isEs = exportInSpanish();
+    const narrative = askPulse("narrative", [pulse, isEs], null);
+    markExported();
+    const achievements = askPulse("achievements", [pulse], []);
+    const coachFocus = askPulse("coachFocus", [pulse, isEs], null);
+    const stored = storedForExport();
     const payload = {
       exportedAt: new Date().toISOString(),
       product: "Vocal Studio Pro",
-      profile: global.VTStorage?.getActiveProfile?.() || null,
-      entitlement: getEntitlement(),
+      profile: stored.profile,
+      entitlement: exportedEntitlement(getEntitlement()),
       valuePulse: pulse,
       coachSummary: narrative,
       coachFocus,
       achievements,
-      goals: global.VTStorage?.getGoals?.() || null,
-      progress: global.VTStorage?.getProgress?.() || {},
-      holdLogs: global.VTStorage?.getHoldLogs?.() || [],
-      weekPlan: global.VTStorage?.getWeekPlan?.() || null,
-      settings: global.VTStorage?.getSettings?.() || {}
+      goals: stored.goals,
+      progress: stored.progress,
+      holdLogs: stored.holdLogs,
+      weekPlan: stored.weekPlan,
+      settings: stored.settings
     };
     return JSON.stringify(payload, null, 2);
   }
@@ -1803,6 +1862,7 @@
     handleReturnFromCheckout,
     resumePendingClaim,
     hasPendingClaim,
+    claimRefusal,
     forgetPendingClaim,
     checkoutOpening,
     formatPrice,

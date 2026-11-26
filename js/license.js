@@ -323,7 +323,11 @@
     if (res.status === 202 || res.status === 0) return null;
     state = "none";
     emit();
-    return { ok: false, reason: res.data?.reason || "not_found" };
+    // Only the worker's own word is final. An answer without one (a proxy's
+    // 503 page, a body that is not JSON) is a failure to ask again about, not
+    // "not_found", which js/billing.js reads as "this checkout will never be a
+    // licence" and stops retrying.
+    return { ok: false, reason: res.data?.reason || "error" };
   }
 
   /** Stop every claim running in this page; see claim(). */

@@ -135,12 +135,6 @@
     },
     {
       "file": "js/billing.js",
-      "sha": "ca0a3deacf87dca47010deaf725c309bee7a2bb55e63866e91d8b8e65adce9fb",
-      "complexity": 38,
-      "name": "Function 'exportProgressJson'"
-    },
-    {
-      "file": "js/billing.js",
       "sha": "d65d4da2255af3214bb31938fd4d7aa1d54cfda34290739b87e14f8b293d899e",
       "complexity": 32,
       "name": "Function 'getBillingHealth'"

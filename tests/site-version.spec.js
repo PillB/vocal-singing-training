@@ -25,22 +25,6 @@ const LS_KEY = "vt_site_version_v1";
  * @param {{human?: boolean, path?: string, stored?: unknown, layoutWeights?: number[], sessions?: number}} [opts]
  * @returns {Promise<{bodies: object[]}>} What was posted.
  */
-/**
- * Press a catalogue filter chip and wait until it is the one pressed. The chip
- * is brought into view at once first: closing a group shortens the page, and
- * WebKit then scrolled up to the chip with the page's smooth scrolling, still
- * moving under Playwright's click, which landed beside the chip and filtered
- * nothing (safari-layout on PRs #54 and #56, 2026-11-25). Playwright's own
- * click notes say an element still moving can be clicked "at the wrong
- * element" and that it "does not detect this case and does not throw".
- */
-async function pressTierChip(page, tier) {
-  const chip = page.locator(`.tier-chip[data-tier="${tier}"]`);
-  await chip.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }));
-  await chip.click();
-  await expect(chip).toHaveAttribute("aria-pressed", "true");
-}
-
 async function boot(page, opts = {}) {
   await stubAuthMethods(page);
   const sent = { bodies: [] };
@@ -474,17 +458,25 @@ test.describe("Design B: the same things, regrouped", () => {
     await expect(folds.nth(1)).toHaveAttribute("aria-expanded", "true");
     expect(await page.locator("#exercise-list .card-ex:visible").count()).toBe(total);
 
-    // Closed again, then a filter: the filtered list is whole, and narrower
-    // than the catalogue (a press that filtered nothing showed 24 of 24).
+    // Closed again, then a filter: the filtered list is whole. The chips are pressed from the keyboard:
+    // closing a group shortens the page, and in macOS WebKit a pointer click then chased the chip between
+    // the sticky header and the bottom edge for 5 s and landed on the list (QA-74). Enter fires the same
+    // click handler wherever the chip has scrolled to.
     await folds.nth(1).click();
-    await pressTierChip(page, "advanced");
+    const press = async (tier) => {
+      const chip = page.locator(`.tier-chip[data-tier="${tier}"]`);
+      await chip.focus();
+      await page.keyboard.press("Enter");
+      await expect(chip).toHaveAttribute("aria-pressed", "true");
+    };
+    await press("advanced");
     const advanced = await page.locator("#exercise-list .card-ex").count();
     expect(advanced).toBeGreaterThan(0);
     expect(advanced).toBeLessThan(total);
-    expect(await page.locator("#exercise-list .card-ex:visible").count()).toBe(advanced);
+    await expect(page.locator("#exercise-list .card-ex:visible")).toHaveCount(advanced);
 
     // The other track has its own groups, the first open.
-    await pressTierChip(page, "all");
+    await press("all");
     await page.click("#tab-singing");
     await expect(page.locator("#exercise-list .group-fold").first()).toHaveAttribute("aria-expanded", "true");
     expect(await page.locator("#exercise-list .card-ex:visible").count()).toBeGreaterThan(0);

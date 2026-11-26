@@ -1430,7 +1430,14 @@ export const MUTANTS = {
     ["SY51 the handover record does not name the sign-in it was noted for", "js/sync.js", "since: new Date().toISOString(), tok } : null);", "since: new Date().toISOString() } : null);", "voice-path"],
     ["SY52 a record nobody waits on is never cleared once the owner is known", "js/sync.js", "      if (readHandover()?.owner === who.me) writeHandover(null);\n", "", "sync-handover"],
     ["SY53 the owner signing out puts her own practice aside for a newcomer who left unseen", "js/sync.js", "    if (leaving && !handoverIsFor(h, leaving)) return;\n", "", "sync-handover"],
-    ["SY54 sync does not say whose session is leaving", "js/sync.js", "      if (token !== seenToken) forgetAccount(seenToken);", "      if (token !== seenToken) forgetAccount(null);", "sync-handover"]
+    ["SY54 sync does not say whose session is leaving", "js/sync.js", "      if (token !== seenToken) forgetAccount(seenToken);", "      if (token !== seenToken) forgetAccount(null);", "sync-handover"],
+    ["SY55 a tab does not follow a sign-in or sign-out made in another tab of the browser (QA-76)", "js/account.js", "      if (e.key === LS_KEY || e.key === null) followStoredSession();", "      void e;", "sync-cross-tab"],
+    ["SY56 the closing write goes out without asking whose the practice is (QA-76)", "js/sync.js", "    if (ownerState().state !== \"mine\") return;\n", "", "sync-cross-tab"],
+    ["SY57 a stale tab's refused session deletes the session another tab has just stored (QA-76)", "js/account.js", "        if ((readSession()?.token || null) !== token) followStoredSession();\n        else forget();", "        forget();", "sync-cross-tab"],
+    ["SY58 a page back from the back-forward cache keeps the session it had before it was stored (QA-76)", "js/account.js", "      if (e.persisted) followStoredSession();", "      void e;", "sync-cross-tab"],
+    ["SY59 a tab that follows another's sign-in keeps naming the account it held until the worker answers (QA-76)", "js/account.js", "    session = stored;\n    snapshot = null;\n", "    session = stored;\n", "sync-cross-tab"],
+    ["SY60 'use only my account' pressed again in a second window pulls the account's copy over the take made since (QA-76)", "js/sync.js", "    if (ownerState().state !== \"other\") {\n      emit();\n      return { ok: true, reason: \"answered\" };\n    }\n", "", "sync-cross-tab"],
+    ["SY61 a window still asking whose the practice is never hears it was answered in another (QA-76)", "js/sync.js", "      if (e.key === LS_OWNER || e.key === LS_HANDOVER || e.key === null) emit();", "      void e;", "sync-cross-tab"],
   ].map(([name, file, from, to, test, grep]) => ({
     name,
     file,

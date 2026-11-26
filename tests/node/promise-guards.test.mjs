@@ -380,6 +380,7 @@ export const PLAN_USES = {
     refresh: ["VTLicense:1", "asks the worker for the account and its licence again"],
     getState: ["VTLicense:1", "the account's state: Pro when the account holds a signed licence"],
     init: ["VTLicense:1", "hands the licence its way to refresh itself"],
+    followStoredSession: ["VTLicense:1", "a session another tab stored: hands the licence its way to refresh, as init does (QA-76)"],
     "(top)": ["vt_pro_paid_first_v1:1", "the key of the first paid plan's event, sent once"]
   },
   "js/ads.js": {
@@ -506,6 +507,7 @@ export const ACCOUNT_USES = {
     getState: ["VTLicense:1 signedIn:1", "the account itself: its state"],
     getSessionToken: ["getSessionToken:1", "the account itself: its session"],
     init: ["VTLicense:1", "the account itself: hands the licence its way to refresh"],
+    followStoredSession: ["VTLicense:1", "the account itself: follows the session another tab stored, as init reads it (QA-76)"],
     "(top)": ["VTAccount:1 getSessionToken:2 renderGoogleButton:2 signInWithGoogle:2 startEmailSignIn:2 vt_account_plan_v1:1 vt_account_session_v1:1", "the account's storage keys and its exports"]
   },
   "js/admin-layouts.js": {

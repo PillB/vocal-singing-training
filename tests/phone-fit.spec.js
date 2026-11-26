@@ -61,8 +61,23 @@ function settle(page) {
 }
 
 async function open(page, id) {
+  const known = await page.evaluate(
+    (x) => [...(window.VT_EXERCISES.vocal || []), ...(window.VT_EXERCISES.singing || [])].some((e) => e.id === x),
+    id
+  );
+  expect(known, `${id} left the catalogue: give this test another exercise of the same kind`).toBe(true);
   await page.evaluate((x) => window.VTApp.openExercise(x), id);
   await expect(page.locator("#view-exercise")).toHaveClass(/active/);
+  // The view slides in (css fadeIn, 0.22 s) and the app fits the stage once more when that ends: wait
+  // for the animation itself, not for a number of ms that happens to be longer.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getElementById("view-exercise")
+        .getAnimations()
+        .map((a) => a.finished.catch(() => {}))
+    )
+  );
   await settle(page);
 }
 
@@ -119,8 +134,6 @@ function facts(page) {
       scrollY: Math.round(scrollY),
       live,
       relief: stage.getAttribute("data-relief") || "",
-      // Where the top rail ends, in px from the stage's top (the app's own measure, --rail-t)
-      railTop: parseFloat(stage.style.getPropertyValue("--rail-t")) || 0,
       stage: box(stage),
       button: box(button),
       buttonTappable: tappable(button),
@@ -150,9 +163,12 @@ function reachable(f) {
  * The shortest page, at this width, on which the take's button (Empezar, or Detener during a take) is
  * whole with everything on the stage shown: one px less and it is under the page. Found by halving,
  * so it is right for whatever font the machine gives the page: the words' widths decide how many rows
- * the rails take, and with them where the button ends (375x629 with one font is 375x655 with another).
- * On this page the stage is at its content floor, so a rail's new row has nowhere to come from but
- * the page under it.
+ * the rails take, and with them where the button ends. On this page the stage is at its content
+ * floor, so a rail's new row has nowhere to come from but the page under it.
+ *
+ * On a page under 640 px wide the bottom rail gains a row at 700 px of height (css: the microphone
+ * takes a row of its own), so "the button fits" is not one step across 700: the search stays on the
+ * side of it where the answer is.
  */
 async function tightestPage(page, width) {
   const fits = async (height) => {
@@ -161,10 +177,12 @@ async function tightestPage(page, width) {
     const f = await facts(page);
     return f.relief === "" && f.scrollY === 0 && reachable(f) && f.button.bottom <= f.vh - 2;
   };
-  let hi = 900;
-  let lo = 501; // a page of 500 px or less is "on its side": the stage has no content floor there
-  expect(await fits(hi), `the button is on a ${width}x${hi} page`).toBe(true);
-  expect(await fits(lo), `the button is under a ${width}x${lo} page`).toBe(false);
+  const under700 = await fits(699);
+  // a page of 500 px or less is "on its side": the stage has no content floor there
+  let lo = under700 ? 501 : 699;
+  let hi = under700 ? 699 : 1100;
+  if (under700) expect(await fits(lo), `the button is under a ${width}x${lo} page`).toBe(false);
+  else expect(await fits(hi), `the button is on a ${width}x${hi} page`).toBe(true);
   while (hi - lo > 1) {
     const mid = Math.floor((lo + hi) / 2);
     if (await fits(mid)) hi = mid;
@@ -172,6 +190,21 @@ async function tightestPage(page, width) {
   }
   expect(await fits(hi), `the button is on the ${width}x${hi} page that was found`).toBe(true);
   return hi;
+}
+
+/**
+ * A top rail that gains a row at Empezar, whatever the font. In the song exercise it does so by itself
+ * where "En vivo" and the note no longer fit beside the tuning readout (in Spanish at 375 px with one
+ * font, not with another), and the readout's own width changes as one sings. So the readout is given
+ * a row of its own from the start, which takes that out of the picture, and the row that arrives is
+ * one this adds: 8 px that exist only during a take.
+ */
+function railGainsARowAtEmpezar(page) {
+  return page.addStyleTag({
+    content:
+      "#pitch-game-hud { flex-basis: 100%; }" +
+      'body.practice-live #hud-top-rail::before { content: ""; flex: 1 1 100%; height: 8px; order: -99; }'
+  });
 }
 
 test.describe("stage-relief: Detener stays on the page during a take", () => {
@@ -189,9 +222,7 @@ test.describe("stage-relief: Detener stays on the page during a take", () => {
       const ids = (await catalogue(page)).map((e) => e.id);
       expect(ids, `${SONG} left the catalogue: use the pitch exercise with the tallest coach strip`).toContain(SONG);
       await open(page, SONG);
-      // The root cause, made certain: from Empezar on the readout takes a row of its own. It does so by
-      // itself where "En vivo" and the note no longer fit beside it, which depends on the font.
-      await page.addStyleTag({ content: "body.practice-live #pitch-game-hud { flex-basis: 100%; }" });
+      await railGainsARowAtEmpezar(page);
       await tightestPage(page, 375);
 
       const before = await facts(page);
@@ -204,7 +235,7 @@ test.describe("stage-relief: Detener stays on the page during a take", () => {
 
       await startTake(page);
       const during = await facts(page);
-      expect(during.railTop - before.railTop, "the premise: the top rail is a row taller than before the take").toBeGreaterThan(10 - before.cue.h);
+      expect(during.corner.top - before.corner.top, "the premise: a row arrived over the status corner at Empezar").toBeGreaterThanOrEqual(8);
       expect(during.scrollY, "the page did not scroll to get there").toBe(0);
       expect(during.button.bottom, "Detener ends on the page").toBeLessThanOrEqual(during.vh - 2);
       expect(during.buttonTappable, "a tap at Detener's centre reaches it").toBe(true);
@@ -253,6 +284,71 @@ test.describe("stage-relief: Detener stays on the page during a take", () => {
     expect(during.relief, "the cue yields to the new row").toBe("cue");
     expect(during.button.bottom, "Detener ends on the page").toBeLessThanOrEqual(during.vh - 2);
     expect(during.buttonTappable, "a tap at Detener's centre reaches it").toBe(true);
+  });
+
+  // Wrong behaviour: Detener is judged where the scroll has put it. The stage is sized for the top of
+  // the page; someone who had scrolled a little when they pressed Empezar (to the microphone row, back
+  // from the song list) has Detener in view just then, so nothing yields, and at the top of the page
+  // it is under it for the rest of the take.
+  test("a take started with the page scrolled a little: the cue yields all the same, and at the top Detener is on the page", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 900 });
+    await ready(page, "es");
+    await open(page, SONG);
+    await railGainsARowAtEmpezar(page);
+    await tightestPage(page, 375);
+    const atTop = await facts(page);
+    // Far enough to lift Empezar by more than the row that is coming (the stage sticks for the first px)
+    await page.evaluate(() => window.scrollTo(0, 200));
+    await settle(page);
+    const scrolled = await facts(page);
+    expect(atTop.button.bottom - scrolled.button.bottom, "the premise: the scroll lifted Empezar well clear of the page's edge").toBeGreaterThanOrEqual(40);
+    expect(reachable(scrolled), "Empezar can be pressed where the scroll has put it").toBe(true);
+    await startTake(page);
+    // Still scrolled, by a little less: the browser holds what is in view where it was when the cue above it goes.
+    expect((await facts(page)).scrollY, "the page is still scrolled during the take").toBeGreaterThan(60);
+
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await settle(page);
+    const during = await facts(page);
+    expect(during.scrollY).toBe(0);
+    expect(during.relief, "the cue yielded").toBe("cue");
+    expect(during.button.bottom, "Detener ends on the page").toBeLessThanOrEqual(during.vh - 2);
+    expect(during.buttonTappable, "a tap at Detener's centre reaches it").toBe(true);
+  });
+
+  // Wrong behaviour: the relief is decided against a pinch-zoomed viewport. Zoomed in to twice the size
+  // a reader sees half the page, Detener is outside that half, and the sentence they zoomed in on is
+  // taken away. No layout can serve a zoomed viewport; the page is judged as it is unzoomed.
+  test("a reader who pinch-zooms during a take keeps the cue", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await ready(page, "es");
+    await open(page, SONG);
+    await startTake(page);
+    const before = await facts(page);
+    expect(before.relief).toBe("");
+    expect(before.cue.h, "the cue is shown").toBeGreaterThanOrEqual(12);
+    // What a browser reports at twice the size: half the height, scale 2. Headless browsers have no
+    // pinch, so the page is handed these numbers; the app reads window.visualViewport on every fit.
+    await page.evaluate(() => {
+      const zoomed = {
+        width: innerWidth / 2,
+        height: innerHeight / 2,
+        scale: 2,
+        offsetTop: 0,
+        offsetLeft: 0,
+        pageTop: 0,
+        pageLeft: 0,
+        addEventListener() {},
+        removeEventListener() {}
+      };
+      Object.defineProperty(window, "visualViewport", { configurable: true, get: () => zoomed });
+      window.dispatchEvent(new Event("resize"));
+    });
+    await settle(page);
+    const during = await facts(page);
+    expect(await page.evaluate(() => window.visualViewport.scale), "the premise: the page reads as zoomed").toBe(2);
+    expect(during.relief, "nothing yields to a zoomed viewport").toBe("");
+    expect(during.cue.h, "the cue is still shown").toBeGreaterThanOrEqual(12);
   });
 
   for (const run of [

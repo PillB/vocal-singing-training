@@ -847,15 +847,17 @@
    */
   function stageVisualBottom() {
     const { vh, offsetTop } = getViewportMetrics();
-    const consentH =
-      parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--region-consent-h")) || 0;
-    return offsetTop + vh - consentH;
+    return offsetTop + vh - consentBarHeight();
+  }
+
+  /** Px the statistics question takes from the bottom of the screen while it is up. */
+  function consentBarHeight() {
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--region-consent-h")) || 0;
   }
 
   /**
    * One fit of the stage to the screen, from scratch.
    * @param {HTMLElement} stage #highway-stage.
-   * @returns {number} The visual bottom of the usable screen, in viewport px.
    */
   function fitStageOnce(stage) {
     // A refit measures layout; only explicit navigation may move the reader.
@@ -879,7 +881,6 @@
     // Fitting the screen came first; the stage is never shorter than what is
     // on it, so a very small screen scrolls instead of losing its lanes.
     syncStageInsets();
-    return visualBottom;
   }
 
   /* —— Design: stage-relief ——
@@ -905,22 +906,43 @@
     stage.removeAttribute("data-relief");
   }
 
-  /** True while a take's Detener ends under the usable screen. */
-  function stopUnderPage(visualBottom) {
+  /**
+   * The screen Detener is judged against: its height and bottom edge in px, as
+   * they are unzoomed. A reader who pinch-zooms sees a part of the page no
+   * layout can serve (at twice the size, half of it), and the sentence they
+   * zoomed in on must not be taken away for it.
+   */
+  function restScreen() {
+    const { vh, offsetTop } = getViewportMetrics();
+    const vv = window.visualViewport;
+    const zoom = vv && vv.scale > 1.01 ? vv.scale : 1;
+    return { vh: vh * zoom, bottom: (zoom > 1 ? vh * zoom : offsetTop + vh) - consentBarHeight() };
+  }
+
+  /**
+   * True while a take's Detener ends under the screen. Judged where the stage
+   * rests, which is the position it is sized for (stageRestTop): someone who
+   * had scrolled a little when they pressed Empezar has Detener in view just
+   * then, and at the top of the page it is under it for the rest of the take.
+   * @param {HTMLElement} stage #highway-stage.
+   */
+  function stopUnderPage(stage) {
     const stop = document.getElementById("btn-practice-stop");
     if (!stop || stop.hidden) return false;
     const b = stop.getBoundingClientRect();
-    return b.height >= 1 && b.bottom > visualBottom - 2;
+    if (b.height < 1) return false;
+    const screen = restScreen();
+    const restBottom = stageRestTop(stage, screen.vh) + (b.bottom - stage.getBoundingClientRect().top);
+    return restBottom > screen.bottom - 2;
   }
 
   /**
    * Hide the coach strip's cue when Detener would otherwise be under the page.
    * @param {HTMLElement} stage #highway-stage, just fitted.
-   * @param {number} visualBottom From fitStageOnce.
    * @returns {boolean} True when the cue was given up, so the stage must be fitted again.
    */
-  function applyStageRelief(stage, visualBottom) {
-    if (!stopUnderPage(visualBottom) || !cueOnStage()) return false;
+  function applyStageRelief(stage) {
+    if (!stopUnderPage(stage) || !cueOnStage()) return false;
     stage.setAttribute("data-relief", "cue");
     return true;
   }
@@ -940,7 +962,7 @@
   function reliefDueMidTake() {
     const stage = document.getElementById("highway-stage");
     if (!stage || stage.hasAttribute("data-relief") || !cueOnStage()) return false;
-    return stopUnderPage(stageVisualBottom());
+    return stopUnderPage(stage);
   }
 
   function fitHighwayToViewport() {
@@ -953,8 +975,8 @@
         clearStageFit(stage);
         return;
       }
-      const visualBottom = fitStageOnce(stage);
-      if (applyStageRelief(stage, visualBottom)) fitStageOnce(stage);
+      fitStageOnce(stage);
+      if (applyStageRelief(stage)) fitStageOnce(stage);
       redrawPitchForStage();
     } catch {
       /* ignore */

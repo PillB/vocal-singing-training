@@ -30,8 +30,8 @@ Observed root cause, two things stacked:
 
 | Route | What an expert would reject | Verdict |
 | --- | --- | --- |
-| A. During a take, when Detener would end under the page, the coach strip's cue line (the exercise's one fixed sentence, on screen since the exercise opened) is hidden to the eye and kept for screen readers; the stage is fitted again. Frees 53 px of the 35 needed. | The sentence cannot be read again without stopping. The layout differs between two phones of nearly the same size. | **Selected.** The cue is the only thing on the stage that is neither a control nor live: `openExercise` writes it once from the profile. It comes back at Detener. |
-| B. Scroll the page to show Detener. | A refit must not move the reader (the fit's own rule); the live status and clock go under the sticky header; `anchorStageTop` would fight it. | Rejected. |
+| A. During a take, when Detener would end under the page, the coach strip's cue line (the exercise's one fixed sentence, on screen since the exercise opened) is hidden to the eye and kept for screen readers; the stage is fitted again. Frees 53 px of the 35 needed. | The sentence cannot be read again without stopping. The layout differs between two phones of nearly the same size. | **Selected.** The cue is the only thing on the stage that is neither a control nor live: `renderExercise` writes it from the profile when the exercise opens, and again only when the language changes. It comes back at Detener. |
+| B. Scroll the page to show Detener. | A refit must not move the reader (the fit's own rule); the live status and clock go under the sticky header; the stage is sized for the top of the page (`stageRestTop`), so the next fit would size it against the scroll. | Rejected. |
 | C. A bottom rail that sticks to the page's bottom edge. | It would cover the lanes it belongs to; a second sticky layer over a sticky stage on iOS Safari is where the earlier VG-30 faults came from. | Rejected. |
 | D. Shrink the song panel for good (smaller chips, one row). | Breaks the 44 px tap floor (start-floor), or loses the cue before the take, when it is needed. | Rejected. |
 | E. Keep the status and the readout on one row in Spanish (abbreviate "Afinación", or narrow the clock). | Saves exactly the 35 px needed and leaves 2 px; the next longer word breaks it again; abbreviations cost clarity on every phone to fix two. | Rejected as the fix. The guard in A is what makes the layout safe against the next long word. |
@@ -39,7 +39,10 @@ Observed root cause, two things stacked:
 | G. Drop the cue during every take on a phone, by a media query. | Removes content from phones where it fits. Content yields only where it has to. | Rejected. |
 
 Trade-offs of A, stated: on those phones, in that exercise and language, the
-cue cannot be read during the take. Once it has yielded in a take it stays
+cue cannot be read during the take. Someone who is scrolled down when they
+press Empezar loses it too, although Detener is in view for them just then:
+the stage is sized for the top of the page, and the relief is decided for the
+same place. Once it has yielded in a take it stays
 down until the take ends or the page changes size, also if the row that pushed
 it goes away again: a sentence that comes and goes with the tuning readout
 would be worse than one that waits for Detener. The microphone row stays under the page
@@ -89,10 +92,12 @@ test below fails).
 - Accessibility: the cue stays in the accessibility tree (clipped, not
   `display: none`). No control is hidden, moved in the tab order or made
   smaller than 44 px. Text sizes are unchanged.
-- Deployment: `js/app.js` and two stylesheets change, so `npm run assets:bump`.
-  A client holding the old script with the new stylesheet keeps today's layout:
-  the new rules read values only the new script sets (`data-relief`, `--pic-t`,
-  `--pic-l`), with today's values as their fallbacks.
+- Deployment: `js/app.js` and three stylesheets change, so `npm run assets:bump`.
+  A client holding the old script with the new stylesheets keeps today's stage:
+  the new rules in `css/styles.css` and `css/exercise-viz.css` read values only
+  the new script sets (`data-relief`, `data-beside`, `--pic-t`, `--pic-l`), with
+  today's values as their fallbacks. The rule in `css/scenes/resonance.css` (the
+  A/B buttons' columns) waits for nothing: it is the fix, with either script.
 
 ### Predicted failures (compared with what was observed, below)
 
@@ -136,11 +141,40 @@ Roboto):
   that carry the regression now build the case for the font they run with:
   `tightestPage` finds, by halving, the shortest page on which the button is
   still whole, and the row is forced by the test. The tests at the phones' own
-  sizes judge the outcome only. All 20 pass with Inter, DejaVu Sans and
+  sizes judge the outcome only. All pass with Inter, DejaVu Sans and
   Liberation Sans in Chromium.
 - This is also the argument for route A over route E: a guard that measures
   where Detener ends is right for any font; words tuned to fit are right for
   the font they were tuned with.
+
+Not predicted, found by an independent review of the pull request (four
+readers, one angle each, every finding checked by a second reader, then
+reproduced here before anything was changed):
+
+- **A take started with the page scrolled got no relief.** The stage is sized
+  for the top of the page (`stageRestTop`), but Detener was judged where the
+  scroll had put it. Someone who had scrolled 120 px or more when they pressed
+  Empezar (to the microphone row, back from the song list) had Detener in view
+  just then, nothing yielded, and at the top of the page Detener was at
+  614..662 on a 629 px page for the rest of the take: the fault itself.
+  Reproduced at 375x629. Fixed: `stopUnderPage` judges Detener where the stage
+  rests; mutant PH20.
+- **A reader who pinch-zooms lost the cue.** The relief was decided against the
+  visual viewport, which at twice the size is half the page: Detener is outside
+  it on every phone, so the sentence a low-vision reader had zoomed in on was
+  taken away. Reproduced with a real pinch in Chromium (390x664 at scale 2:
+  `data-relief="cue"`, the cue 1 px). Fixed: the relief reads the screen as it
+  is unzoomed (`restScreen`); mutant PH21. The fit itself still sizes the stage
+  for the zoomed viewport, as it did before this work.
+- **A test could read too early.** `open` waited two frames and 200 ms; the
+  fit at the end of the view's 220 ms entrance could come after the read.
+  `open` now waits for the animation itself.
+- `tightestPage` halved across 700 px of height, where a narrow page's bottom
+  rail gains a row, so "the button fits" was not one step. It now searches on
+  the side of 700 where the answer is.
+- The record named a function that no longer exists, misnamed who writes the
+  cue, counted two stylesheets where there are three and said a removed
+  exercise breaks nothing. All four are corrected above.
 
 Not predicted, found by the new tests:
 
@@ -169,6 +203,7 @@ Not predicted, found by the new tests:
 | `setPracticeUI(false)` now fits | Every Stop: the review card, the rating, a routine's next step | `exercise-viz-stage` (after Stop), `finish-rating`, `redteam-exercise-take`, `daily-session` |
 | The rail observer also watches the status corner | Every exercise | `phone-fit` "a longer status word" |
 | The rail observer fits the stage when a take's Detener has gone under the page and the cue has not yielded yet | A take on one of the ten pitch exercises, once per take at most (nothing while `data-relief` is set). A stage with no cue, every picture exercise, is left to the observer as before | `phone-fit` "in the middle of a take"; `redteam-exercise-take`, `mic-hud-layout`, `rail-small-screens` |
+| `stopUnderPage` judges Detener at the stage's rest position and on the unzoomed screen (`restScreen`) | Every take on a pitch exercise: scrolled, pinch-zoomed, with the EEA bar up | `phone-fit` "scrolled a little", "pinch-zooms", and every relief test at scroll 0; mutants PH5, PH6, PH20, PH21 |
 | `stageVisualBottom`, taken out of the fit so the observer reads the same edge | The EEA statistics bar (`--region-consent-h`), the visual viewport's offset | `stage-design`, `viewport-overflow`; mutants anchored on the fit still find their lines |
 | css: the A/B buttons' columns are as wide as their words on a page on its side | The placement A/B exercise only (`.vz-resonance .ab-btns`) | `exercise-viz-resonance`; `phone-fit` "on opening" (words wider than their button) |
 | A fit when the exercise view's animation ends | Every exercise opening | `phone-fit` "resting height"; the specs above, which had been fitting by hand after opening |
@@ -184,11 +219,12 @@ Not predicted, found by the new tests:
 - Something new in a picture stage's top rail: the script withdraws
   `data-beside` and the stage is laid out as before this design (PH11, PH15).
 - The song exercise leaves the catalogue: the test fails saying which
-  exercise to use instead. Every other list is read from the catalogue at run
-  time, so a new exercise is covered and a removed one breaks nothing.
-- A stale script with the new stylesheet, or the reverse: today's layout. The
-  new rules need attributes only the new script sets, and the new script's
-  attributes do nothing without the new rules.
+  exercise to use instead. The sweeps read their lists from the catalogue at
+  run time, so a new exercise is covered; a test that opens one exercise by its
+  id fails saying which exercise left the catalogue (`open` in the spec).
+- A stale script with the new stylesheets, or the reverse: today's stage. The
+  new stage rules need attributes only the new script sets, and the new
+  script's attributes do nothing without the new rules.
 - A browser without `:has()` (before Safari 15.4, Firefox 121): the sideways
   rule is ignored and the picture stays under the rail, as today.
 - Storage, sync and older clients: nothing persisted, so nothing to merge.

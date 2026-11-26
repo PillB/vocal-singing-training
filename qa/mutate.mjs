@@ -521,6 +521,10 @@ export const MUTANTS = {
     ["L65 guards leaves the contracts step for a job whose matrix never names it: its mutants run nowhere", ".github/workflows/quality.yml", "        set: [audio, guards]", "        set: [audio]", ["tests/node/mutation-matrix.test.mjs"]],
     ["L66 the Node sets' own job has no time limit, so a hung mutant holds its runner six hours", ".github/workflows/quality.yml", "  node-mutation:\n    needs: contracts\n    runs-on: ubuntu-24.04\n    timeout-minutes: 25\n", "  node-mutation:\n    needs: contracts\n    runs-on: ubuntu-24.04\n", ["tests/node/mutation-matrix.test.mjs"]],
     ["L68 the contracts step leaves out mpPaid, so PR #54's Mercado Pago mutants run nowhere once the Node sets are named one by one (QA-75)", ".github/workflows/quality.yml", "sets ledger mpPaid claims path", "sets ledger claims path", ["tests/node/mutation-matrix.test.mjs"]],
+    // The anchor check (tests/node/mutant-anchors.test.mjs) reads qa/mutate.mjs's own rule; its anchor is
+    // written with an escape so this row does not count as a second occurrence of the line it edits.
+    ["L69 the anchor check lets an anchor found twice through, so a mutant may land on the wrong copy of its text (PR #54)", "qa/mutate.mjs", "    if (src.split(e.from).length !\u003d= 2) return null;", "    if (src.split(e.from).length < 2) return null;", ["tests/node/mutant-anchors.test.mjs"]],
+    ["L70 the anchor check lets a lost anchor through, so a stale mutant is found only half an hour into its set's job (PR #54)", "qa/mutate.mjs", "    if (src.split(e.from).length !\u003d= 2) return null;", "    if (src.split(e.from).length > 2) return null;", ["tests/node/mutant-anchors.test.mjs"]],
     ["L7 empty wait-may-fail reason accepted", "qa/lint-playwright-waits.mjs", "/wait-may-fail:\\s*\\S/", "/wait-may-fail:/"]
   // A mutant that edits a hashed asset (js/css) turns "every versioned asset matches its recorded content" red whatever
   // else is wrong, so it names the one test it is meant to be judged by (red-team: L25 and L26 were killed by the manifest).
@@ -1330,11 +1334,11 @@ export const MUTANTS = {
     ["B206 the dialog is not drawn again when /v1/health answers, so its first opening keeps a portal button the worker cannot open", "js/app.js", "      else repaintPricingOnHealth();\n", "", ["tests/rt2-p2-lapsed.spec.js", "tests/manage-cancel-route.spec.js", "-g", "first opening"]],
     ["B207 Pro goes on sale while the terms still send cancellations and complaints to the public repository", "js/billing-config.js", "        apiCheckout: false", "        apiCheckout: true", ["tests/terms-page.spec.js", "-g", "once anything is on sale"]],
     // VG-84's copy: a Mercado Pago buyer waits about an hour for the first charge, and a turned-down card is told so.
-    ["MPB1 every rail gets Mercado Pago's wait-an-hour wording", "js/app.js", "const mp = provider === \"mercadopago\";", "const mp = true;", ["tests/mp-first-charge-wait.spec.js"]],
+    ["MPB1 every rail gets Mercado Pago's wait-an-hour wording", "js/app.js", "const [key, durationMs] = claimToast(res, provider === \"mercadopago\");", "const [key, durationMs] = claimToast(res, true);", ["tests/mp-first-charge-wait.spec.js"]],
     ["MPB2 «Comprobar mi pago» loses the rail, so a Mercado Pago buyer gets the generic wording", "js/app.js", "const provider = window.VTBilling?.getEntitlement?.()?.raw?.provider || null;", "const provider = null;", ["tests/mp-first-charge-wait.spec.js"]],
     ["MPB3 the return from the checkout loses the rail, so a Mercado Pago buyer gets the generic wording", "js/app.js", "claimResultToast(res, ret.provider);", "claimResultToast(res, null);", ["tests/mp-first-charge-wait.spec.js"]],
-    ["MPB4 a turned-down Mercado Pago card gets the generic failure", "js/app.js", "} else if (mp && res?.reason === \"declined\") {", "} else if (false) {", ["tests/mp-first-charge-wait.spec.js"]],
-    ["MPB5 a turned-down Mercado Pago card is told to wait about an hour", "js/app.js", "} else if (mp && res?.reason === \"pending\") {", "} else if (mp && (res?.reason === \"pending\" || res?.reason === \"declined\")) {", ["tests/mp-first-charge-wait.spec.js"]],
+    ["MPB4 a turned-down Mercado Pago card gets the generic failure", "js/app.js", "    if (mp && reason === \"declined\") return [\"pricing.toast.verifyDeclinedMp\", 12000];\n", "", ["tests/mp-first-charge-wait.spec.js"]],
+    ["MPB5 a turned-down Mercado Pago card is told to wait about an hour", "js/app.js", "if (mp && reason === \"pending\") return", "if (mp && (reason === \"pending\" || reason === \"declined\")) return", ["tests/mp-first-charge-wait.spec.js"]],
     ["MPB6 the wait copy goes back to 'cuota' and 'en cuanto entre'", "js/i18n.js", "Mercado Pago hace el primer cobro alrededor de una hora después de suscribirte. Cuando entre, Pro se activa al volver a abrir la app o al pulsar «Comprobar mi pago».", "Mercado Pago cobra la primera cuota alrededor de una hora después de suscribirte. Pro se activa en cuanto entre; lo comprobamos otra vez cuando vuelvas a abrir la app.", ["tests/mp-first-charge-wait.spec.js"]],
     ["MPB7 the English wait copy names a button the page does not have", "js/i18n.js", "Once it goes through, Pro switches on the next time you open the app, or when you tap “Check my payment”.", "Once it goes through, Pro switches on the next time you open the app, or when you tap “I paid”.", ["tests/mp-first-charge-wait.spec.js"]],
     // VG-85 decided 2026-11-22: euros in the European Union, US dollars elsewhere; the price shown is the price charged.
@@ -2503,6 +2507,26 @@ function mutantEdits(m, root) {
 }
 
 /**
+ * The text of every file a mutant edits, as the mutant leaves it, or null when
+ * an anchor does not occur exactly once in the text it is applied to (`also`
+ * edits are applied to what the edits before them left). tryMutant writes
+ * this; tests/node/mutant-anchors.test.mjs reads it for every mutant, so a
+ * stale anchor fails in the contracts job instead of half an hour into its
+ * set's job (PR #54).
+ * @returns {Map<string, string>|null}
+ */
+export function mutatedTexts(m, root = process.cwd()) {
+  const edits = mutantEdits(m, root);
+  const mutated = new Map(edits.map((e) => [e.file, readFileSync(e.file, "utf8")]));
+  for (const e of edits) {
+    const src = mutated.get(e.file);
+    if (src.split(e.from).length !== 2) return null;
+    mutated.set(e.file, src.replace(e.from, e.to));
+  }
+  return mutated;
+}
+
+/**
  * A mutant changes one file, or the same text in every file of a list (a defect
  * made on all four pages at once, which a "the pages agree" check cannot see).
  * `also` adds further edits made together with it: a defect that only shows
@@ -2514,12 +2538,8 @@ function mutantEdits(m, root) {
 export function tryMutant(m, root = process.cwd()) {
   const edits = mutantEdits(m, root);
   const originals = new Map(edits.map((e) => [e.file, readFileSync(e.file, "utf8")]));
-  const mutated = new Map(originals);
-  for (const e of edits) {
-    const src = mutated.get(e.file);
-    if (src.split(e.from).length !== 2) return "ANCHOR";
-    mutated.set(e.file, src.replace(e.from, e.to));
-  }
+  const mutated = mutatedTexts(m, root);
+  if (!mutated) return "ANCHOR";
   mutated.forEach((src, f) => writeFileSync(f, src));
   try {
     return runTests(m.cmd, root) ? "SURVIVED" : "KILLED";

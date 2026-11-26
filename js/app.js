@@ -898,7 +898,7 @@
      middle of a take (the tuning readout and the chord change width as one
      sings), so the rail observer asks the same question (reliefDueMidTake);
      once given up in a take the cue stays down, so it cannot flicker with
-     the readout. docs/57-PHONE-FIT.md. */
+     the readout. docs/58-PHONE-FIT.md. */
 
   /** Every fit starts with all of the stage's content shown. */
   function clearStageRelief(stage) {

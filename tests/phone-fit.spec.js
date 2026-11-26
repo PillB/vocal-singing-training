@@ -1,6 +1,6 @@
 /**
  * Phone fit: what a person can reach and see at the page sizes real phones give
- * a web page (docs/57-PHONE-FIT.md). The sizes are from Playwright's device
+ * a web page (docs/58-PHONE-FIT.md). The sizes are from Playwright's device
  * registry: the page inside the browser's bars, not the screen.
  *
  *  - stage-relief: during a take Detener stays on the page. In the song

@@ -2008,7 +2008,7 @@ export const MUTANTS = {
       ? node([grep])
       : [...PIANO_SPEC.slice(0, 3), "tests/browser-language.spec.js", "--project=chromium", "--workers=4", "--reporter=dot", "-g", grep]
   })),
-  // Phone fit (docs/57-PHONE-FIT.md): Detener on the page during a take (stage-relief), and a picture whole on a
+  // Phone fit (docs/58-PHONE-FIT.md): Detener on the page during a take (stage-relief), and a picture whole on a
   // phone on its side (landscape-beside). Each is judged by the test in tests/phone-fit.spec.js written to catch
   // it, named by its title. CI runs this set as its own job.
   phones: [

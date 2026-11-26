@@ -396,11 +396,29 @@ Consequences worth understanding before you ship:
   expiries — watch for repeated non-2xx in the Stripe/MP dashboards, and
   replay events from there.
 - **Out-of-order delivery cannot resurrect a dead entitlement.** Every update
-  carries `occurredAt` (Stripe's `event.created`; Mercado Pago's
-  `date_last_updated`/`last_modified`), stored on the record. An update older
+  that can change state carries `occurredAt` (Stripe's `event.created`,
+  Creem's `created_at`; Mercado Pago's `date_last_updated`/`last_modified`
+  for a preapproval and a one-off payment), stored on the record. An update older
   than the stored one may not change plan, status or `periodEnd` — so a late or
   retried `invoice.paid` arriving after `customer.subscription.deleted` is
-  filed, not applied. Identity fields, a confirmed or failed payment, money
+  filed, not applied. Two kinds of update are dated differently, because the
+  obvious date put the wrong event last. Money going back carries no
+  `occurredAt` when it is a Stripe or Creem refund or dispute, or a Mercado
+  Pago subscription's charge refunded: none of these changes a status, and
+  when the first two moved the record's clock a pause or an `unpaid` made
+  before the refund and delivered after it was refused, so the subscription
+  kept Pro (and a resume was refused the same way). A one-off Mercado Pago
+  payment is its own lifecycle, so its refund is dated by its last edit. A Mercado Pago subscription's
+  charge that went through is dated by the approval date it states, never
+  later than its last edit: Mercado Pago edits a payment long after (a partial
+  refund leaves it approved), and dated by that edit a charge made before a
+  cancellation turned the cancelled subscription back to active. Only a stated
+  approval counts: a debit or creation date is passed days before a retried
+  charge is approved, and dating by it let an older preapproval snapshot put
+  the unpaid due date back. A charge that states no approval (the
+  authorized-payment topic, as documented) keeps its last edit as its clock,
+  so an authorized payment edited after a cancellation can still undo it; its
+  payment's own notification, which does state one, cannot. Identity fields, a confirmed or failed payment, money
   given back, and the claim/subscription indexes are order-independent and
   are still written. So is the one interval a charge that went through buys
   (a Mercado Pago charge, a one-time Stripe checkout): a subscription paused
@@ -450,7 +468,26 @@ Consequences worth understanding before you ship:
   does a payment the deletion already knew of (`paidAtWhenEnded`, also in
   `ended:`): the subscription was in dunning or unpaid with it on record.
   Status and everything else stay as the deletion left them.
-- **What concurrency can still do.** Two webhooks for one license processed at
+- **What concurrency can still do: with D1, no more than delivery order can.**
+  With the `DB` binding, which every production deploy has, each webhook runs
+  as one optimistic transaction in D1 (`src/ledger.js`): every key it read is
+  checked at commit, and if another webhook changed one in between, nothing is
+  written and it runs again on fresh reads. Two webhooks for one license then
+  end as if processed one after the other, so nothing is lost, and the
+  out-of-order rule above decides which status stands.
+  `test/webhook-order.test.mjs` forces the race on all three rails (a newer
+  cancellation and an older past-due or active event, with either one
+  reading first and the older one committing last) and fails if either half
+  is taken away. What D1 does not do
+  is pick the provider's order: the race ends as if the two had been delivered
+  in whichever order they committed, so anything that still depends on
+  delivery order depends on the race too. One thing does (VG-100, a `todo` test
+  in that file): a Stripe or Creem subscription cancelled while it was past
+  due keeps none of the unpaid period only when the past due is processed
+  first; processed after the cancellation, it is refused as stale, and the
+  unpaid period stays open until it ends. What follows is the KV-only
+  fallback, a worker deployed without D1.
+  Two webhooks for one license processed at
   the same moment both read the record, and the later write wins. A confirmed
   payment, a deletion, a charge that went through (so a subscriber who pays
   and cancels at once keeps the interval it bought, on Stripe too: `paid:`
@@ -484,9 +521,8 @@ Consequences worth understanding before you ship:
   agree with no registry and no extra read. An id is still looked up through
   the indexes first, so nothing stored before this is affected, and without
   either secret a new license still gets a random id.
-  Closing the rest of this needs one writer per license (a Durable Object, or
-  a D1 row updated only when its stored `occurredAt` is older), which this
-  worker does not have.
+  Closing the rest of this is what the D1 ledger does, and why production
+  needs the `DB` binding for payments and not only for accounts.
 - **A period an event names only counts if it was still running when the
   charge was taken.** Every rail answers "what did this money buy?" twice: the
   event names a period, and the charge inside it implies one. The named period

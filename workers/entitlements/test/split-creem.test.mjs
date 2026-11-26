@@ -258,8 +258,10 @@ test("money going back is dated by the envelope, else by the refund's own create
   };
   // Wrong: the refund's own date outranks the envelope's.
   const stamped = map("refund.created", refund, {}, 1793880000000).update;
-  assert.equal(stamped.occurredAt, 1793880000);
   assert.equal(stamped.reversedAt, 1793880000);
+  // And the refund stays off the record's clock, which orders status changes
+  // a refund does not make (test/webhook-order.test.mjs has the consequence).
+  assert.equal(stamped.occurredAt, null);
   // Wrong: with no envelope date there is no reversal date at all, and the
   // store would date it "now", which a delayed delivery makes arbitrarily late.
   const unstamped = map("refund.created", refund, {}, undefined).update;

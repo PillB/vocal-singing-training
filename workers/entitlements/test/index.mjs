@@ -115,3 +115,8 @@ import "./rt2-open-subscription.test.mjs";
 // A refund or chargeback that embeds a subscription Creem already cancelled
 // ends it here too (verification of money-3).
 import "./rt2-creem-reversal.test.mjs";
+
+// Two webhooks for one subscription at once, or out of order: the race forced
+// on all three rails on D1 and on KV, and the two clocks the stale check was
+// handed wrong (a refund's; a Mercado Pago charge's last edit). 2026-11-25.
+import "./webhook-order.test.mjs";

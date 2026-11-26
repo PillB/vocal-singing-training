@@ -768,6 +768,11 @@ function stampCreemUpdate(update, event, object) {
   update.occurredAt = epochSeconds(event.created_at);
   if (update.isReversal) {
     update.reversedAt = update.occurredAt ?? epochSeconds(object.created_at);
+    // A refund or a dispute carries no status, plan or period, so it stays
+    // off the clock those are ordered by, as on the Mercado Pago rail. On it,
+    // a pause (or a resume) made before the refund but delivered after it was
+    // refused as stale, and the subscription kept the state the pause ended.
+    update.occurredAt = null;
   }
   if (update.status === "canceled" && !Number.isFinite(update.endedAt)) {
     update.endedAt = update.occurredAt;

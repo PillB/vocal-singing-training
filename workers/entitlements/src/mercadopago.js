@@ -515,6 +515,9 @@ export function mapPaymentResource(payment, env) {
   // below ends the period it paid for, without moving the subscription's clock.
   const silent = Boolean(subscriptionId) && !approved;
   const named = silent ? {} : paymentPlan(p, subscriptionId);
+  // A one-off payment is its own lifecycle, so its last update is its clock.
+  // A subscription's charge is not: see `chargeClock`.
+  const stateAt = subscriptionId ? chargeClock(isoToUnixSeconds(p.date_approved), occurredAt) : occurredAt;
   return {
     provider: "mercadopago",
     // A payment's id is Mercado Pago's operation number: sequential, and
@@ -543,8 +546,37 @@ export function mapPaymentResource(payment, env) {
     // arrived buys time: an unpaid voucher or a turned-down card gets none.
     periodEndFromCharge: approved ? chargeTime(p, null) : null,
     ...paymentReversal(p, subscriptionId, occurredAt),
-    occurredAt: silent ? null : occurredAt
+    occurredAt: silent ? null : stateAt
   };
+}
+
+/**
+ * The clock of a subscription's charge that went through: when the provider
+ * says it was approved, never later than the resource's last update; with no
+ * approval date, the last update, as before.
+ *
+ * What such a charge says about the subscription ("it was being paid") was
+ * true when the money arrived, and is not made newer by a later edit of the
+ * charge. Mercado Pago edits a payment long after it is approved (a partial
+ * refund keeps it `approved`; the money is released), and dated by that edit
+ * a charge made before a cancellation counted as newer than it, so its
+ * "active" overwrote the cancellation and the cancellation's own redelivery
+ * was then refused as stale.
+ *
+ * Only a stated approval date stands in. A debit date or a creation date is
+ * when the charge was scheduled or opened, and a charge turned down and
+ * retried is approved days after both (the authorized-payment resource, as
+ * documented, carries no approval date at all): dated by them, a preapproval
+ * snapshot from before the money arrived counted as newer and put back the
+ * unpaid due date as the period end. Nor is the approval date trusted with no
+ * last update to bound it: a future one would make every later state change
+ * look old.
+ * @param {number|null} approvedAt Unix seconds the provider says the charge was approved, if it says.
+ * @param {number|null} updatedAt Unix seconds the resource last changed, if known.
+ * @returns {number|null} Unix seconds or null.
+ */
+function chargeClock(approvedAt, updatedAt) {
+  return Number.isFinite(approvedAt) && Number.isFinite(updatedAt) ? Math.min(approvedAt, updatedAt) : updatedAt;
 }
 
 /**
@@ -718,7 +750,10 @@ export function mapAuthorizedPaymentResource(authorized, env) {
     reversedAt: reversed ? occurredAt : undefined,
     reversedChargeAt: reversed ? chargeTime(payment, dueAt) : undefined,
     declinedAt: instalmentDeclinedAt(a, payment, dueAt, occurredAt),
-    occurredAt: approved ? occurredAt : null
+    // Dated by its approval when the payment states one, as on the payment
+    // topic; as documented it states none, and its last edit stays the clock
+    // (`chargeClock`).
+    occurredAt: approved ? chargeClock(isoToUnixSeconds(payment.date_approved), occurredAt) : null
   };
 }
 

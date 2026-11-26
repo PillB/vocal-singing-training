@@ -282,7 +282,7 @@ export const SIGN_IN_READERS = {
 export const REVIEWED = {
   accountDate: ["e115090f7375", "handed the plan's end: words it as a date"],
   accountPlanState: ["04ad386e9bd4", "handed the account's plan: names its kind, days left and end for the header"],
-  "bindPageLifecycle document": ["34f1aa01e16c", "when the tab is hidden, a signed-in visitor's progress is sent; it touches no take and no control"],
+  "bindPageLifecycle document": ["258a5cd0c1de", "when the tab is hidden, a signed-in visitor's progress is sent and the take's credit clock pauses until the tab is shown again (QA-77); it stops no take and touches no control"],
   "bindPageLifecycle window": ["98854a941fd2", "the same when the page closes, after the take is kept here"],
   browserPlanState: ["a81248caa813", "handed the browser's plan: names its kind, days left and end for the header"],
   fillProgressionSelect: ["427d041d4d03", "handed the progressions the piano offers, Pro's among them: fills their picker"],
@@ -299,7 +299,7 @@ export const REVIEWED = {
   renderProSpark: ["b70d065fe419", "handed whether this is Pro: the board's spark bars, dimmed or not"],
   renderProStudio: ["36bc138d2d7e", "handed whether this is Pro: draws the board's Pro panels, and Tu camino's card beside them (free, not handed the answer), and nothing else"],
   renderProGoalPicker: ["623363793da6", "Pro's goal picker, shown locked to a free visitor"],
-  renderReminderSettings: ["ed9fb6c72da7", "the reminders card's second time field, Pro's"],
+  renderReminderSettings: ["25550dc9ef36", "the reminders card's second time field, Pro's, empty unless chosen (QA-80)"],
   renderRetentionChrome: ["7ad87c5e4427", "the reminders card: Pro's second reminder"],
   renderValuePulse: ["9b25f6afc411", "the progress board's Pro panel, its tag and the trial line"],
   showValueBanner: ["8a681379dce0", "the trial's days left on the note"],

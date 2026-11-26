@@ -84,8 +84,8 @@
     "sha": "6ddbb40663db0968"
   },
   "js/app.js": {
-    "v": "20261125c",
-    "sha": "73311c5fb5bebec6"
+    "v": "20261126a",
+    "sha": "cb4bfac12d2d5dd9"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",
@@ -208,8 +208,8 @@
     "sha": "0f564ccb9e300624"
   },
   "js/reminders.js": {
-    "v": "20261113a",
-    "sha": "dbc37be738c9fcbd"
+    "v": "20261126a",
+    "sha": "4cba0702ead791e9"
   },
   "js/reports.js": {
     "v": "20261113d",

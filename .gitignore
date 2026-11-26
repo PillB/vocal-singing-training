@@ -6,6 +6,9 @@ test-results/
 *.log
 .env
 .env.*
+# Private ownership records, binding IDs and deployment receipts.
+.deployment-local/
+docs/SERVICE-ACCOUNTS.local.md
 # Wrangler local secrets and local state for workers/entitlements
 .dev.vars
 .dev.vars.*

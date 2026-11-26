@@ -247,7 +247,21 @@ SUBDOMAIN=$(cf_subdomain)
 # Generated, piped into wrangler, and dropped. The private half is never
 # written to a file and never printed. Only the public JWK comes back out.
 JWK_OUT=jwk.public.json
-if [ "$ROTATE_KEY" != "1" ] && wr secret list 2>/dev/null | grep -q LICENSE_PRIVATE_KEY_PKCS8_B64; then
+# An API failure is not evidence that the signing key is absent.
+SECRET_LIST=$(wr secret list) || die \
+  "Could not list existing secrets. Stopped without generating or replacing a signing key. Fix Cloudflare access and retry."
+KEY_EXISTS=$(printf '%s' "$SECRET_LIST" | node -e '
+  let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+    s=s.replace(/\x1b\[[0-9;]*m/g,"").trim();let rows;
+    // Parse a complete top-level value, never a nested [] inside an error.
+    for(let at=0;at<s.length;at++){
+      if(!"[{".includes(s[at]))continue;
+      try{rows=JSON.parse(s.slice(at));break}catch{/* optional CLI banner */}
+    }
+    if(!Array.isArray(rows)||rows.some(x=>!x||typeof x.name!=="string"))process.exit(1);
+    process.stdout.write(String(rows.some(x=>x.name==="LICENSE_PRIVATE_KEY_PKCS8_B64")));
+  })') || die "Secret inventory was malformed. Stopped without changing the signing key."
+if [ "$ROTATE_KEY" != "1" ] && [ "$KEY_EXISTS" = "true" ]; then
   say "Licence signing key: one already exists, keeping it"
   echo "every licence already issued stays valid. Pass --rotate-key to replace it."
   # The file is not regenerated: the public half must keep matching the private

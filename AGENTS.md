@@ -299,6 +299,15 @@ un-run test is **unverified**, not passed.
 Avoid committing `.env`, account secrets or recordings; never auto-correct
 historical scores without a trustworthy provenance signal and learner consent.
 
+Deployment/account changes must update `docs/53-DEPLOYMENT-OWNERSHIP-AND-RECOVERY.md`
+and the ignored `docs/SERVICE-ACCOUNTS.local.md` / `.deployment-local/` records.
+Record the verified login, account/resource ownership, exact main source SHA,
+live version, rollback target and backup reference; unknown ownership stays
+unknown. A successful listing with zero rows differs from an API failure.
+Use `wrangler.sh` for existing-worker updates; never run setup or rotate a
+signing key merely because authentication, inventory or DNS failed. Private
+records need a durable encrypted backup outside git; do not invent one.
+
 ## QA / red-team thread protocol
 
 A separate QA thread checks other threads' work. It works in two modes:

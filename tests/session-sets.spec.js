@@ -237,6 +237,17 @@ test.describe("Goal sets: the picker", () => {
 test.describe("Goal sets: running one", () => {
   test("a set runs as a set: its name, its timers, a mark per step, no other track's label", async ({ page }) => {
     await boot(page, { tab: "vocal", toasts: true });
+    // Every line the toast says, kept as it is said. The toast's own timer runs on the page's clock, which
+    // moves with the wall: on a slow host (macOS WebKit in CI took 4.3 s to handle Empezar) the line
+    // had come and gone before a look at #toast could see it (QA-74).
+    await page.evaluate(() => {
+      const box = document.getElementById("toast");
+      window.__said = [];
+      new MutationObserver(() => {
+        const line = box.textContent.trim();
+        if (line) window.__said.push(line);
+      }).observe(box, { childList: true, characterData: true, subtree: true });
+    });
     await startSet(page, "v-aftertalk");
     await expect(page.locator("#sets-sheet")).toBeHidden();
     const s = await session(page);
@@ -245,7 +256,8 @@ test.describe("Goal sets: running one", () => {
     expect(s.track).toBe("vocal");
     expect(s.order).toEqual(["s17-jaw-neck-release", "v22-voice-recovery"]);
     // One short line, said once: the set and its size.
-    await expect(page.locator("#toast")).toHaveText("Después de hablar mucho: 2 pasos");
+    const said = () => page.evaluate(() => window.__said.filter((l) => l.includes("Después de hablar mucho")));
+    await expect.poll(said).toEqual(["Después de hablar mucho: 2 pasos"]);
 
     await expect(page.locator("#session-banner-text")).toHaveText("Ejercicio 1 de 2 · Después de hablar mucho");
     // The set's 1:45, not the exercise's own 2:00.

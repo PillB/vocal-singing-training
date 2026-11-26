@@ -458,15 +458,25 @@ test.describe("Design B: the same things, regrouped", () => {
     await expect(folds.nth(1)).toHaveAttribute("aria-expanded", "true");
     expect(await page.locator("#exercise-list .card-ex:visible").count()).toBe(total);
 
-    // Closed again, then a filter: the filtered list is whole.
+    // Closed again, then a filter: the filtered list is whole. The chips are pressed from the keyboard:
+    // closing a group shortens the page, and in macOS WebKit a pointer click then chased the chip between
+    // the sticky header and the bottom edge for 5 s and landed on the list (QA-74). Enter fires the same
+    // click handler wherever the chip has scrolled to.
     await folds.nth(1).click();
-    await page.locator('.tier-chip[data-tier="advanced"]').click();
+    const press = async (tier) => {
+      const chip = page.locator(`.tier-chip[data-tier="${tier}"]`);
+      await chip.focus();
+      await page.keyboard.press("Enter");
+      await expect(chip).toHaveAttribute("aria-pressed", "true");
+    };
+    await press("advanced");
     const advanced = await page.locator("#exercise-list .card-ex").count();
     expect(advanced).toBeGreaterThan(0);
-    expect(await page.locator("#exercise-list .card-ex:visible").count()).toBe(advanced);
+    expect(advanced).toBeLessThan(total);
+    await expect(page.locator("#exercise-list .card-ex:visible")).toHaveCount(advanced);
 
     // The other track has its own groups, the first open.
-    await page.locator('.tier-chip[data-tier="all"]').click();
+    await press("all");
     await page.click("#tab-singing");
     await expect(page.locator("#exercise-list .group-fold").first()).toHaveAttribute("aria-expanded", "true");
     expect(await page.locator("#exercise-list .card-ex:visible").count()).toBeGreaterThan(0);

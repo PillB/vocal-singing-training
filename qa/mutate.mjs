@@ -6,7 +6,7 @@
  * suite that stays green on a mutant is not testing that behaviour, however
  * high its coverage. Ported from the QA thread's mutate.py (2026-11-01).
  *
- *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets, ledger, path)
+ *   node qa/mutate.mjs            # every Node set (DEFAULT_SETS); CI runs them in the contracts job and node-mutation
  *   node qa/mutate.mjs audio      # one set
  *   node qa/mutate.mjs stage a11y flows regress boot billing scoring controls audit toast designs splits syncing inject learner authwall promises promises-time-2 promises-time-3 promises-voice promises-account-ads lang pathui curriculumui  # browser sets: need Playwright's Chromium; the same list as CI's mutation matrix (tests/node/mutation-matrix.test.mjs holds the two together)
  *
@@ -496,6 +496,9 @@ export const MUTANTS = {
     ["L61 a mutation job uploads its traces only when it is green", ".github/workflows/quality.yml", "      - name: Preserve a red set's traces\n        if: failure()\n", "      - name: Preserve a red set's traces\n", ["tests/node/mutation-matrix.test.mjs"]],
     ["L62 every mutation job uploads under one name: the second red set's traces are refused", ".github/workflows/quality.yml", "          name: mutation-failures-${{ matrix.set }}\n", "          name: mutation-failures\n", ["tests/node/mutation-matrix.test.mjs"]],
     ["L63 the harness's usage line drops the time limit's middle third, so the documented command skips its 15 mutants", "qa/mutate.mjs", "authwall promises promises\u002Dtime-2 promises-time-3", "authwall promises promises-time-3", ["tests/node/mutation-matrix.test.mjs"]],
+    ["L64 audio and guards go back into the contracts step, the shape that ran out of its 25 minutes on 331e83b (QA-75)", ".github/workflows/quality.yml", "        run: node qa/mutate.mjs pitch lint coaching sets ledger claims path curriculum\n\n  # The two Node sets that take minutes, one job each, after the contracts they mutate are green. They need no\n  # browser. tests/node/mutation-matrix.test.mjs holds every Node job's estimate (its mutants at CI's measured\n  # seconds per mutant) under half its limit, so a set that grows past it turns that test red before CI cancels it.\n  node-mutation:\n    needs: contracts\n    runs-on: ubuntu-24.04\n    timeout-minutes: 25\n    strategy:\n      fail-fast: false\n      matrix:\n        set: [audio, guards]", "        run: node qa/mutate.mjs\n\n  # The two Node sets that take minutes, one job each, after the contracts they mutate are green. They need no\n  # browser. tests/node/mutation-matrix.test.mjs holds every Node job's estimate (its mutants at CI's measured\n  # seconds per mutant) under half its limit, so a set that grows past it turns that test red before CI cancels it.\n  node-mutation:\n    needs: contracts\n    runs-on: ubuntu-24.04\n    timeout-minutes: 25\n    strategy:\n      fail-fast: false\n      matrix:\n        set: []", ["tests/node/mutation-matrix.test.mjs"]],
+    ["L65 guards leaves the contracts step for a job whose matrix never names it: its mutants run nowhere", ".github/workflows/quality.yml", "        set: [audio, guards]", "        set: [audio]", ["tests/node/mutation-matrix.test.mjs"]],
+    ["L66 the Node sets' own job has no time limit, so a hung mutant holds its runner six hours", ".github/workflows/quality.yml", "  node-mutation:\n    needs: contracts\n    runs-on: ubuntu-24.04\n    timeout-minutes: 25\n", "  node-mutation:\n    needs: contracts\n    runs-on: ubuntu-24.04\n", ["tests/node/mutation-matrix.test.mjs"]],
     ["L7 empty wait-may-fail reason accepted", "qa/lint-playwright-waits.mjs", "/wait-may-fail:\\s*\\S/", "/wait-may-fail:/"]
   // A mutant that edits a hashed asset (js/css) turns "every versioned asset matches its recorded content" red whatever
   // else is wrong, so it names the one test it is meant to be judged by (red-team: L25 and L26 were killed by the manifest).
@@ -2107,11 +2110,15 @@ function main(sets) {
       bad++;
       continue;
     }
+    const began = performance.now();
     for (const m of MUTANTS[set]) {
       const r = tryMutant(m);
       if (r !== "KILLED") bad++;
       console.log(`${r.padEnd(8)} [${set}] ${m.name}`);
     }
+    // The rate the Node jobs' time budget is kept with (SECONDS_PER_MUTANT in tests/node/mutation-matrix.test.mjs, QA-75).
+    const each = (performance.now() - began) / 1000 / MUTANTS[set].length;
+    console.log(`TIME     [${set}] ${MUTANTS[set].length} mutants, ${each.toFixed(2)} s each`);
   }
   console.log(bad ? `FAIL: ${bad} mutant(s) survived or lost their anchor.` : "PASS: every mutant was killed.");
   process.exitCode = bad ? 1 : 0;

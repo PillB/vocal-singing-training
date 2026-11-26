@@ -8,7 +8,7 @@
  *
  *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets, ledger, path)
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage a11y flows regress boot billing scoring controls audit toast designs splits syncing inject learner authwall promises promises-time-2 promises-time-3 promises-voice promises-account-ads lang pathui curriculumui  # browser sets: need Playwright's Chromium; the same list as CI's mutation matrix (tests/node/mutation-matrix.test.mjs holds the two together)
+ *   node qa/mutate.mjs stage a11y flows regress boot billing scoring controls audit toast designs splits syncing inject learner authwall promises promises-time-2 promises-time-3 promises-voice promises-account-ads lang pathui curriculumui phones  # browser sets: need Playwright's Chromium; the same list as CI's mutation matrix (tests/node/mutation-matrix.test.mjs holds the two together)
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -2007,6 +2007,36 @@ export const MUTANTS = {
     cmd: grep.startsWith("tests/node/")
       ? node([grep])
       : [...PIANO_SPEC.slice(0, 3), "tests/browser-language.spec.js", "--project=chromium", "--workers=4", "--reporter=dot", "-g", grep]
+  })),
+  // Phone fit (docs/57-PHONE-FIT.md): Detener on the page during a take (stage-relief), and a picture whole on a
+  // phone on its side (landscape-beside). Each is judged by the test in tests/phone-fit.spec.js written to catch
+  // it, named by its title. CI runs this set as its own job.
+  phones: [
+    ["PH1 nothing yields during a take: Detener goes under the page with the stage (33 px on an iPhone mini)", "js/app.js", "      if (applyStageRelief(stage, visualBottom)) fitStageOnce(stage);\n", "", "song exercise in Spanish, iPhone 12 mini"],
+    ["PH2 the cue yields but the stage is not fitted again: it keeps the height it grew to, Detener still under the page", "js/app.js", "if (applyStageRelief(stage, visualBottom)) fitStageOnce(stage);", "applyStageRelief(stage, visualBottom);", "every pitch exercise, Spanish, iPhone mini"],
+    ["PH3 the cue is taken out of the page, not hidden to the eye: a screen reader loses the sentence for the take", "css/styles.css", ".highway-stage[data-relief~=\"cue\"] .stage-coach .mode-cue {\n", ".highway-stage[data-relief~=\"cue\"] .stage-coach .mode-cue {\n  display: none;\n", "song exercise in Spanish, iPhone 11 Pro"],
+    ["PH4 the relief outlives the take: the cue never comes back after Detener", "js/app.js", "      clearStageRelief(stage);\n      if (!document.body.classList.contains(\"view-exercise\")) {", "      if (!document.body.classList.contains(\"view-exercise\")) {", "song exercise in Spanish, iPhone 12 mini"],
+    ["PH16 a take stopped early is not fitted again: the cue it gave up stays hidden", "js/app.js", "      if (wasLive) leaveLivePractice();\n", "", "song exercise in Spanish, iPhone 11 Pro"],
+    ["PH5 the cue is dropped during every take, also where the take fits with it", "js/app.js", "return b.height >= 1 && b.bottom > visualBottom - 2;", "return b.height >= 1;", "song exercise in English"],
+    ["PH6 the cue is dropped to lift Empezar too, before anyone has read it", "js/app.js", "    const stop = document.getElementById(\"btn-practice-stop\");\n    if (!stop || stop.hidden) return false;\n    const b = stop.getBoundingClientRect();\n    return b.height >= 1 && b.bottom > visualBottom - 2;", "    const live = document.getElementById(\"btn-practice-stop\");\n    const stop = live && !live.hidden ? live : document.getElementById(\"btn-practice-start\");\n    if (!stop || stop.hidden) return false;\n    const b = stop.getBoundingClientRect();\n    return b.height >= 1 && b.bottom > visualBottom - 2;", "before a take nothing yields"],
+    ["PH19 only the fit at Empezar looks: a row that arrives in the middle of a take (a longer chord, a bigger score) takes Detener under the page", "js/app.js", "        if (reliefDueMidTake()) {\n          fitHighwayToViewport();\n          return;\n        }\n", "", "in the middle of a take"],
+    ["PH7 on its side a picture starts under the status corner again: cut, on opening and during a take", "css/exercise-viz.css", "    top: var(--pic-t, var(--rail-t, 10%));\n", "", "on opening, Pixel 5|first half"],
+    ["PH17 no fit when the view has arrived: the stage opens 5 px short and only gets its height at Empezar", "js/app.js", "      if (e.target === e.currentTarget) fitHighwayToViewport();\n", "", "on opening the stage has its resting height"],
+    ["PH8 the status corner keeps its row beside the picture: on the narrowest page the picture is left two thirds of the stage", "css/exercise-viz.css", "    flex-direction: column;\n    align-items: stretch;\n    gap: 0.1rem;", "    align-items: stretch;\n    gap: 0.1rem;", "on opening, iPhone SE"],
+    ["PH18 the A/B buttons' columns give way to the picture again: Toma lista loses its first letter on a phone on its side", "css/scenes/resonance.css", "grid-template-columns: repeat(2, minmax(min-content, auto));", "grid-template-columns: repeat(2, minmax(44px, auto));", "on opening, iPhone SE"],
+    ["PH9 the picture's left edge is a fixed number: it lies over a status word longer than today's", "js/app.js", "stage.style.setProperty(\"--pic-l\", `${Math.ceil(left) + BESIDE_GAP}px`);", "stage.style.setProperty(\"--pic-l\", \"99px\");", "a longer status word"],
+    ["PH10 the status corner is not watched: a new word leaves the picture where the last fit put it", "js/app.js", "    if (corner) ro.observe(corner);\n", "", "a longer status word"],
+    ["PH11 the picture starts at the top whatever else is in the rail, and lies over it", "js/app.js", "const alone = shown.length === 1 && shown[0].el.classList.contains(\"hud-tl\");", "const alone = shown.length >= 1 && shown[0].el.classList.contains(\"hud-tl\");", "anything else in the top rail"],
+    ["PH12 the rule reaches a folded phone's cover screen: a picture about 100 px wide", "css/exercise-viz.css", "@media (max-height: 500px) and (min-width: 540px) {", "@media (max-height: 500px) {", "folded phone's cover screen"],
+    ["PH13 the rule reaches an upright phone: the status stacks and the picture moves beside it there too", "css/exercise-viz.css", "@media (max-height: 500px) and (min-width: 540px) {", "@media (min-width: 0px) {", "not on an upright phone"],
+    ["PH15 the rule no longer waits for the script: with something else in the rail the corner still stacks, and the picture is under a rail 29 px taller", "css/exercise-viz.css", ".highway-stage[data-beside]:has(.mode-focus-live .mode-panel.has-viz) .hud-tl {\n    flex-direction: column;", ".highway-stage:has(.mode-focus-live .mode-panel.has-viz) .hud-tl {\n    flex-direction: column;", "anything else in the top rail"],
+    ["PH14 the rule reaches a pitch exercise on its side: its status row stacks over the lanes", "css/exercise-viz.css", ".highway-stage[data-beside]:has(.mode-focus-live .mode-panel.has-viz) .hud-tl {\n    flex-direction: column;", ".highway-stage .hud-tl {\n    flex-direction: column;", "not on an upright phone"]
+  ].map(([name, file, from, to, grep]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: [...PIANO_SPEC.slice(0, 3), "tests/phone-fit.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", grep]
   }))
 };
 

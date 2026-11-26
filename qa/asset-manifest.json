@@ -8,8 +8,8 @@
     "sha": "0e117cfde7d7f1dd"
   },
   "css/exercise-viz.css": {
-    "v": "20261002a",
-    "sha": "8a118da5afb38589"
+    "v": "20261126a",
+    "sha": "d06ed34b0b874af2"
   },
   "css/scenes/breath.css": {
     "v": "20261002a",
@@ -28,8 +28,8 @@
     "sha": "4d2cc24671844eb6"
   },
   "css/scenes/resonance.css": {
-    "v": "20261002a",
-    "sha": "41f7e30fe93b0f67"
+    "v": "20261126a",
+    "sha": "79b9ed5ddec7d928"
   },
   "css/scenes/speech-shape.css": {
     "v": "20261002a",
@@ -52,8 +52,8 @@
     "sha": "6d2cd87298d15518"
   },
   "css/styles.css": {
-    "v": "20261123b",
-    "sha": "57c7d15ec03c8898"
+    "v": "20261126a",
+    "sha": "399093953d1adbd6"
   },
   "css/voice-path.css": {
     "v": "20261121f",
@@ -84,8 +84,8 @@
     "sha": "6ddbb40663db0968"
   },
   "js/app.js": {
-    "v": "20261125c",
-    "sha": "73311c5fb5bebec6"
+    "v": "20261126d",
+    "sha": "1c34275a95c8da4c"
   },
   "js/audio-recovery.js": {
     "v": "20261103c",

@@ -29,12 +29,17 @@
   }
   .mode-focus.mode-focus-live .mode-panel.has-viz .ab-btns {
     display: grid;
-    grid-template-columns: repeat(2, minmax(44px, auto));
+    /* A column is never narrower than its label. At minmax(44px, auto) the
+       column gave way to the picture beside it, and "Toma lista ✓" lost its
+       first letter at every width from 568 to 802 px (69 px of words in a
+       60 px button). The 44 px floor is the button's own now. */
+    grid-template-columns: repeat(2, minmax(min-content, auto));
     align-content: center;
     gap: 0.3rem;
     margin-left: 0;
   }
   .mode-focus.mode-focus-live .mode-panel.has-viz .ab-btns .btn {
+    min-width: 44px;
     min-height: 44px;
     padding: 0 0.5rem;
     font-size: 0.8rem;

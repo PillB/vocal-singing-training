@@ -193,6 +193,39 @@
   }
 }
 
+/* —— Design: landscape-beside ——
+   A phone on its side under about 820 px of width has a stage of ~230 px with
+   a two-row bottom rail, and the stage does not grow there (Empezar must stay
+   on the page). Under the status row a picture got 55 px at 802x293, where
+   its own minimum is 84: cut by 9 to 47 px in 15 exercises. The status row is
+   a pill and a clock with ~590 px empty beside them. So here a picture starts
+   at the stage's top, beside the status corner, and the corner stacks its pill
+   over its clock to hand the picture most of that width back.
+   js syncPictureInset sets data-beside with where the corner ends (--pic-t,
+   --pic-l) while the corner is alone in the top rail; without it (anything
+   else in the rail, or a script from before this design) nothing here applies
+   and the picture stays under the rail. Not under 540 px of width: on a folded
+   phone's cover screen (about 320x300) a picture beside the corner would be
+   ~100 px wide. */
+@media (max-height: 500px) and (min-width: 540px) {
+  .highway-stage[data-beside]:has(.mode-focus-live .mode-panel.has-viz) .hud-top-rail {
+    align-items: flex-start;
+    max-height: none;
+  }
+  .highway-stage[data-beside]:has(.mode-focus-live .mode-panel.has-viz) .hud-tl {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.1rem;
+  }
+  .highway-stage[data-beside]:has(.mode-focus-live .mode-panel.has-viz) .hud-tl .timer-display {
+    text-align: center;
+  }
+  .highway-stage[data-beside]:has(.mode-focus-live .mode-panel.has-viz) .mode-focus.mode-focus-live {
+    top: var(--pic-t, var(--rail-t, 10%));
+    left: var(--pic-l, 0.5rem);
+  }
+}
+
 /* Pitch exercises put their panel in the stage's coach strip, over the lanes.
    On a rotated phone the lanes get ~190 px, so while singing the strip keeps
    to its words and the lanes keep the height; a panel's own picture (the trill

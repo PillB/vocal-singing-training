@@ -1,5 +1,5 @@
 // Every mutation set runs in CI. The light Node sets run as one step of the contracts job, the two that take
-// minutes (audio, guards) as jobs of their own in node-mutation (QA-75), and each browser set is a job of its
+// minutes (audio, guards) and deployment (ops) as jobs of their own in node-mutation (QA-75), and each browser set is a job of its
 // own in the mutation matrix of .github/workflows/quality.yml, so that none outgrows the time a job may take.
 // A set split off (as boot left regress, PR #42) and not added to a job would never run, and its mutants
 // would prove nothing.
@@ -66,8 +66,11 @@ test("every mutation set runs in CI: the Node sets in contracts and node-mutatio
 
 // Seconds per mutant in CI's contracts job, the slower of its two runs on 2026-11-25/26 (b9e30d2, job 139557670886,
 // and 331e83b, job 139594679565), rounded up: each KILLED line's time less the one before it, so a set's first
-// mutant carries its start. A set with no rate fails the budget below until one CI run of it is timed.
-export const SECONDS_PER_MUTANT = { audio: 5.6, pitch: 1.2, lint: 2.2, coaching: 0.2, sets: 0.2, ledger: 0.6, claims: 0.2, path: 0.6, curriculum: 0.2, guards: 4.8 };
+// mutant carries its start. ops uses a provisional 60-second allowance per mutant, not a measured rate:
+// the twelve ops checks get their own 25-minute job (12 of 12.5 budget minutes), pending a hosted timing sample.
+// Replace that allowance with the slower hosted rate once captured; do not describe it as observed performance.
+// Any other set with no rate fails the budget below until one CI run of it is timed.
+export const SECONDS_PER_MUTANT = { audio: 5.6, pitch: 1.2, lint: 2.2, coaching: 0.2, sets: 0.2, ledger: 0.6, claims: 0.2, path: 0.6, curriculum: 0.2, guards: 4.8, ops: 60 };
 
 /** A run's expected minutes from its mutants and the measured rates, and the sets it runs that have no rate. */
 export function estimate(sets, counts, rates) {

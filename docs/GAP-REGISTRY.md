@@ -3,6 +3,11 @@
 | ID | Phase | Gap | Severity | Status | Fix |
 |----|-------|-----|----------|--------|-----|
 | G0-1 | 0 | No licensed coach media | Med | Accepted | Text + generative piano |
+| OPS-INT-01 | 2026-11-26 | PR55 adds ops mutants; newer main's explicit CI set list omits them on integration | Med | Fixed locally; hosted CI pending | Separate ops Node matrix job, exact set coverage/budget oracle, L67 omission mutant. Provisional60s/mutant allowance needs hosted timing; see docs54. |
+| CF-FRONT-01 | 2026-11-26 | New frontend origin cannot inherit account/storage/OAuth authority from Pages | High | Explicit preview limitation; account cutover held | Static Worker deployed with local-only notice, empty API base, restrictive CSP and noindex. HTML/all77 assets verified; browser/device gates separate. See docs55. |
+| PAY-01 | 2026-11-26 | PR54 simultaneous pre-webhook checkout requests can create two subscriptions | High | Open payment-release gate | Reproduced two200 responses/two request IDs/two paid links; durable atomic attempt reservation and idempotency required. See docs/issues/checkout-concurrency.md. |
+| PAY-02 | 2026-11-26 | PR54 unbound bearer license claim can authorize another payer's billing portal | High | Open payment-release gate | Reproduced different verified account's portal200 and real payer's later claim409. Authoritative payer binding required; see docs/issues/portal-authorization.md. |
+| OPS-REC-01 | 2026-11-26 | Original Worker owner/key/data recovery unresolved; replica has new identity/state | High | Open cutover/recovery gate | Keep frontend on original; verify private owner/backup/restore and authenticated continuity before cutover. See docs/issues/backend-recovery.md. |
 | G0-2 | 0 | No ML pitch tracking | Med | Accepted | Self-rubrics + refs |
 | G0-3 | 0 | Piano without sample bank | Low | Mitigated | Additive multi-partial piano |
 | G1-1 | 1 | GH Pages base path | Low | Fixed | Relative asset paths |

@@ -1,5 +1,9 @@
 # Vocal & Singing Training
 
+Deployment and account recovery: [service map](docs/53-DEPLOYMENT-OWNERSHIP-AND-RECOVERY.md).
+Use `./wrangler.sh --plan` to verify an existing Worker's exact-main update;
+private account records live outside git, as described in that map.
+
 Self-paced practice website for **Vocal Training** (speaking foundations) and **Singing Training** (technique drills), built from the project homework file.
 
 **Homework source:** [`Vocal training and Singing training Homework.md`](./Vocal%20training%20and%20Singing%20training%20Homework.md)
@@ -80,6 +84,8 @@ Vanilla HTML / CSS / JS — no build step. Web Audio API (piano), MediaRecorder 
 - [The tour, the user guide and the A/B machinery](docs/36-TOUR-AND-USER-GUIDE.md)
 - [The daily loop: basics every day, rest days and surprises](docs/37-DAILY-LOOP.md)
 - [2026 production audit, issue ledger and release gates](docs/40-PRODUCTION-AUDIT-2026-11-01.md)
+- [Current release ledger and pending gates (2026-11-26)](docs/54-RELEASE-LEDGER-2026-11-26.md)
+- [Versioned project wiki and research](docs/wiki/Home.md)
 - [Evidence-based technical vocal protocol: breath, steady pitch, and song transfer (2026-11-06)](docs/44-PROTOCOLO-TECNICO-VOCAL-EVIDENCIA-2026-11-06.md)
 - [Bilingual eight-drill vocal pilot: evidence mapping, test oracle and root-cause ledger](docs/45-EVIDENCE-TO-EXERCISE-VALIDATION.md)
 - [**The go-live gate**: what is built and off, and the order to switch it on](docs/40-GO-LIVE-GATE.md)

@@ -40,6 +40,14 @@ For **every feature and meaningful design/implementation decision**:
 
 ## Before execution and after each round
 
+Maintain the durable handoff: `docs/54-RELEASE-LEDGER-2026-11-26.md`, the
+versioned wiki under `docs/wiki/`, and issue context under `docs/issues/`.
+Record the exact source SHA, evidence date/method, diagnosis, rejected route,
+trade-offs, negative control and remaining gate. Mark issue/wiki drafts as
+unpublished until read back from the remote service. Refresh PR heads and
+checks before merging; a green separate branch does not verify its integration
+with newer main. Preserve newer contributors' work and private ownership data.
+
 Compare at least two plausible implementation routes against the existing
 storage, session, localization, accessibility and deployment contracts. Record
 what an expert would reject about each, the selected route, and its explicit
@@ -298,6 +306,15 @@ un-run test is **unverified**, not passed.
 
 Avoid committing `.env`, account secrets or recordings; never auto-correct
 historical scores without a trustworthy provenance signal and learner consent.
+
+Deployment/account changes must update `docs/53-DEPLOYMENT-OWNERSHIP-AND-RECOVERY.md`
+and the ignored `docs/SERVICE-ACCOUNTS.local.md` / `.deployment-local/` records.
+Record the verified login, account/resource ownership, exact main source SHA,
+live version, rollback target and backup reference; unknown ownership stays
+unknown. A successful listing with zero rows differs from an API failure.
+Use `wrangler.sh` for existing-worker updates; never run setup or rotate a
+signing key merely because authentication, inventory or DNS failed. Private
+records need a durable encrypted backup outside git; do not invent one.
 
 ## QA / red-team thread protocol
 

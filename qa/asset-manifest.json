@@ -44,8 +44,8 @@
     "sha": "93d225ed63fd919a"
   },
   "css/session-sets.css": {
-    "v": "20261123a",
-    "sha": "fc457b5b343535c3"
+    "v": "20261127a",
+    "sha": "5269e9b959e19337"
   },
   "css/site-version.css": {
     "v": "20261123a",
@@ -152,8 +152,8 @@
     "sha": "c71728a23a6aaa7d"
   },
   "js/i18n.js": {
-    "v": "20261125a",
-    "sha": "09e0e512a090bb7a"
+    "v": "20261127a",
+    "sha": "e3b17b292b261e4d"
   },
   "js/license.js": {
     "v": "20261103d",
@@ -252,8 +252,8 @@
     "sha": "ebfbe0581056b2fa"
   },
   "js/session-sets.js": {
-    "v": "20261123f",
-    "sha": "72f62134443624d0"
+    "v": "20261127a",
+    "sha": "93d37d685fa38888"
   },
   "js/session.js": {
     "v": "20261113a",

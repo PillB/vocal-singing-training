@@ -972,7 +972,7 @@
       "sets.skillObserve": "Observa",
       "sets.skillTry": "Practica",
       "sets.skillTransfer": "Transfiere",
-      "sets.skillFallback": "Si incomoda"
+      "sets.skillFallback": "Si incomoda",
       "sets.title": "Rutinas por objetivo",
       "sets.subVocal": "Rutinas cortas para un momento concreto de tu voz al hablar.",
       "sets.subSinging": "Rutinas cortas para un momento concreto de tu voz al cantar.",
@@ -2134,7 +2134,7 @@
       "sets.skillObserve": "Observe",
       "sets.skillTry": "Try",
       "sets.skillTransfer": "Transfer",
-      "sets.skillFallback": "If uncomfortable"
+      "sets.skillFallback": "If uncomfortable",
       "sets.title": "Routines by goal",
       "sets.subVocal": "Short routines for one particular moment of your speaking voice.",
       "sets.subSinging": "Short routines for one particular moment of your singing voice.",

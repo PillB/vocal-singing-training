@@ -40,7 +40,7 @@ function releaseStatusProblems(feature, hasPath) {
 function featureProblems(feature, references, hasPath, doc) {
   const failures = [];
   const loc = feature.id || "?";
-  if (!/^BF-F\\d{2}$/.test(loc)) failures.push("invalid feature ID: " + loc);
+  if (!/^BF-F\d{2}$/.test(loc)) failures.push("invalid feature ID: " + loc);
   if (!Array.isArray(feature.evidence) || feature.evidence.length === 0 ||
       feature.evidence.some(id => !references.has(id))) {
     failures.push(loc + ": missing or unknown evidence");

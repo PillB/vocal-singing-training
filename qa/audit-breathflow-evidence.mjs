@@ -19,11 +19,28 @@ function sourceProblems(source, ids) {
   return failures;
 }
 
+/** Keep authoring statuses separate from content/evidence checks: no baseline exemptions. */
+function releaseStatusProblems(feature, hasPath) {
+  const errors = [];
+  const loc = feature.id || "?";
+  if (!STATUS.has(feature.status)) errors.push(loc + ": unknown release status");
+  if (feature.status === "main" && (!feature.path || !hasPath(feature.path))) {
+    errors.push(loc + ": claims main but path is missing");
+  }
+  if (feature.status === "draft" && (!feature.path || hasPath(feature.path) ||
+      !Number.isInteger(feature.pr))) {
+    errors.push(loc + ": draft/source drift: check PR, path and main merge status");
+  }
+  if (feature.status === "proposal" && feature.path) {
+    errors.push(loc + ": proposed exercise must not claim a shipped source path");
+  }
+  return errors;
+}
+
 function featureProblems(feature, references, hasPath, doc) {
   const failures = [];
   const loc = feature.id || "?";
-  if (!/^BF-F\d{2}$/.test(loc)) failures.push("invalid feature ID: " + loc);
-  if (!STATUS.has(feature.status)) failures.push(loc + ": unknown release status");
+  if (!/^BF-F\\d{2}$/.test(loc)) failures.push("invalid feature ID: " + loc);
   if (!Array.isArray(feature.evidence) || feature.evidence.length === 0 ||
       feature.evidence.some(id => !references.has(id))) {
     failures.push(loc + ": missing or unknown evidence");
@@ -32,17 +49,7 @@ function featureProblems(feature, references, hasPath, doc) {
     failures.push(loc + ": no independent observable success/failure oracle");
   }
   if (!doc.includes("[" + loc + "]")) failures.push(loc + ": not linked from design document");
-  if (feature.status === "main" && (!feature.path || !hasPath(feature.path))) {
-    failures.push(loc + ": claims main but path is missing");
-  }
-  if (feature.status === "draft" && (!feature.path || hasPath(feature.path) ||
-      !Number.isInteger(feature.pr))) {
-    failures.push(loc + ": draft/source drift: check PR, path and main merge status");
-  }
-  if (feature.status === "proposal" && feature.path) {
-    failures.push(loc + ": proposed exercise must not claim a shipped source path");
-  }
-  return failures;
+  return failures.concat(releaseStatusProblems(feature, hasPath));
 }
 
 export function auditEvidenceMatrix(matrix, doc, hasPath) {

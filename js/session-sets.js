@@ -1508,6 +1508,11 @@
    * card; anything else is left to the loop or the plain toast.
    * @returns {boolean} true when this file handled the ending
    */
+  function noteGoalCompletion(set, n) {
+    if (set.kind === "skill") return;
+    if (global.VTPath) global.VTPath.noteSet(set.id, n, set.order.length);
+  }
+
   function onComplete(session) {
     if (!session || session.path !== "set") return false;
     const set = resolve(session.set);
@@ -1516,7 +1521,7 @@
     track("set_complete", { set: set.id, track: set.track, practiced: n, steps: set.order.length });
     // Sets keep no record of their own; Tu camino keeps the one that a set was finished.
     // Only established goal routines earn their existing set milestone.
-    if (global.VTPath && set.kind !== "skill") global.VTPath.noteSet(set.id, n, set.order.length);
+    noteGoalCompletion(set, n);
     hooks.refresh?.();
     if (quiet()) return true;
     showDone(set);
@@ -1531,6 +1536,7 @@
     bound = true;
     $("#btn-sets")?.addEventListener("click", (e) => openSheet(e.currentTarget));
     $("#btn-skill-sets")?.addEventListener("click", (e) => openSheet(e.currentTarget, "skill"));
+    $("#btn-skill-first")?.addEventListener("click", (e) => openSheet(e.currentTarget, "skill"));
     $("#sets-list")?.addEventListener("click", (e) => {
       const b = e.target.closest?.("[data-set-start]");
       if (b) start(b.dataset.setStart);

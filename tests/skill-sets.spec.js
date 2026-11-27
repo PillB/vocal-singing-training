@@ -1,24 +1,34 @@
 const {test,expect}=require("@playwright/test");
 const BASE=process.env.BASE_URL||"http://127.0.0.1:8765";
-async function boot(page,lang="es",tab="singing"){
-  await page.addInitScript(({lang,tab})=>{
+async function boot(page,lang="es",tab="singing",returning=false){
+  await page.addInitScript(({lang,tab,returning})=>{
     localStorage.setItem("vt_tour_v1","1");
     localStorage.setItem("vt_lang",lang);
     localStorage.setItem("vt_settings_v1",JSON.stringify({lastTab:tab}));
     sessionStorage.setItem("vt_e2e","1");
     sessionStorage.setItem("vt_sets_e2e","1");
-  },{lang,tab});
+    if(returning) localStorage.setItem("vt_days_v1",JSON.stringify({v:1,days:{"2026-11-26":{sec:240,n:1,ex:["s4-lip-trills"]}},rest:{bank:1,earnedAt:0,used:[]},backfilled:true}));
+  },{lang,tab,returning});
   await page.goto(BASE+"/",{waitUntil:"domcontentloaded"});
-  await page.waitForFunction(()=>!!window.VTApp&&!!window.VTSets);
+  await page.waitForFunction(()=>!!window.VTApp&&!!window.VTSets&&!!window.VTLoop);
+  await page.waitForFunction((returning)=>returning
+    ? document.body.classList.contains("loop-on")&&!document.body.classList.contains("loop-first")
+    : document.body.classList.contains("loop-first"),returning);
 }
 async function showSkills(page){
-  const more=page.locator("#btn-more-ways");
-  if((await more.getAttribute("aria-expanded"))==="false") await more.click();
-  await page.locator("#btn-skill-sets").click();
+  const first=page.locator("#btn-skill-first");
+  if(await first.isVisible()) await first.click();
+  else {
+    const more=page.locator("#btn-more-ways");
+    await expect(more).toBeVisible();
+    if((await more.getAttribute("aria-expanded"))==="false") await more.click();
+    await page.locator("#btn-skill-sets").click();
+  }
   await expect(page.locator("#sets-sheet")).toBeVisible();
 }
 test("skill journey shows Observe, Try, Transfer and shares the actual session engine",async({page})=>{
   await boot(page);
+  await expect(page.locator("#btn-skill-first")).toBeVisible();
   await expect(page.locator("#btn-skill-sets")).toBeHidden();
   await showSkills(page);
   await expect(page.locator("#sets-title")).toHaveText("Entrenamiento por habilidad");
@@ -36,12 +46,15 @@ test("skill journey shows Observe, Try, Transfer and shares the actual session e
   expect(session.order).toEqual(["s18-costal-breath","s8-breath-support","s3-song-stanzas"]);
 });
 test("old goal picker remains ten and skill filter does not leak into goal filter",async({page})=>{
-  await boot(page);
+  await boot(page,"es","singing",true);
   await showSkills(page);
   await page.locator("#sets-focus").selectOption("breath");
   await expect(page.locator(".set-card")).toHaveCount(1);
   await expect(page.locator('[data-set="s-skill-breath"]')).toBeVisible();
   await page.locator("#sets-close").click();
+  const more=page.locator("#btn-more-ways");
+  await expect(more).toBeVisible();
+  if(await more.getAttribute("aria-expanded")==="false") await more.click();
   await page.locator("#btn-sets").click();
   await expect(page.locator("#sets-title")).toHaveText("Rutinas por objetivo");
   await expect(page.locator(".set-card")).toHaveCount(10);

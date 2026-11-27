@@ -428,3 +428,7 @@
 .set-skill-plan ol{margin:.25rem 0 .45rem;padding-inline-start:1.4rem;display:grid;gap:.3rem}
 .set-skill-plan li{font-size:.84rem;line-height:1.45;overflow-wrap:anywhere}
 .set-skill-safe{margin:0;font-size:.82rem;line-height:1.45;overflow-wrap:anywhere}
+
+/* Optional first-visit route: existing daily action remains primary. */
+.skill-first-entry { display: none; }
+body.loop-first #start-panel .skill-first-entry { display: inline-flex; min-height: var(--min-tap); margin-top: .6rem; }

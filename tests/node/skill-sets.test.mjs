@@ -74,9 +74,9 @@ test("new skills do not award an existing goal-set milestone",()=>{
   assert.equal(noted.length,1);
   // Fault injection: the exact bad call would credit an unvalidated skill set.
   const src=read("js/session-sets.js");
-  const needle='global.VTPath && set.kind !== "skill"';
+  const needle='if (set.kind === "skill") return;';
   assert.ok(src.includes(needle),"milestone source drift");
-  const broken=page(src.replace(needle,"global.VTPath"));
+  const broken=page(src.replace(needle,""));
   const undeserved=[];
   broken.win.VTPath={noteSet:(...args)=>undeserved.push(args),doneHtml:()=>""};
   broken.win.VTSets.onComplete({path:"set",set:"s-skill-breath"});

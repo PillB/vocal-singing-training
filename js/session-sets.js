@@ -1437,7 +1437,7 @@
     close.onclick = finish;
     wireModal(modal, finish);
     if (handle) wireDrag(card, handle, finish);
-    track("sets_open", { track: trackId, n: sets.length, kind: skills ? "skill" : "goal" });
+    track("sets_open", { track: trackId, n: sets.length });
   }
 
   /* —— The finishing card —— */

@@ -1395,6 +1395,15 @@
     paint();
   }
 
+  /** Keep label logic out of the eventful modal lifecycle (CC <= 15). */
+  function sheetLabels(trackId, skills) {
+    const title = skills ? "sets.skillTitle" : "sets.title";
+    const sub = skills
+      ? (trackId === "vocal" ? "sets.skillSubVocal" : "sets.skillSubSinging")
+      : (trackId === "vocal" ? "sets.subVocal" : "sets.subSinging");
+    return { title, sub };
+  }
+
   function openSheet(opener, kind = "goal") {
     const modal = $("#sets-sheet");
     if (!modal) return;
@@ -1402,10 +1411,9 @@
     const skills = kind === "skill";
     const sets = skills ? skillList(trackId) : list(trackId);
     const done = practisedToday();
-    $("#sets-title").textContent = tt(skills ? "sets.skillTitle" : "sets.title");
-    $("#sets-sub").textContent = tt(skills
-      ? (trackId === "vocal" ? "sets.skillSubVocal" : "sets.skillSubSinging")
-      : (trackId === "vocal" ? "sets.subVocal" : "sets.subSinging"));
+    const labels = sheetLabels(trackId, skills);
+    $("#sets-title").textContent = tt(labels.title);
+    $("#sets-sub").textContent = tt(labels.sub);
     drawFocusPicker(sets, done);
     const close = $("#sets-close");
     close.setAttribute("aria-label", tt("sets.close"));

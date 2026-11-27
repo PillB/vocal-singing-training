@@ -114,18 +114,32 @@
     return Number(m[1]) * 60 + Number(m[2]);
   }
 
-  /** True if any configured time has passed today and we haven't notified yet. */
+  /** The latest of the reminder's times that has passed today, in minutes since midnight, or null. */
+  function lastPassedSlot(cfg, now = new Date()) {
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    let best = null;
+    for (const t of cfg?.times || []) {
+      const m = timeToMinutes(t);
+      if (m != null && m <= nowMin && (best == null || m > best)) best = m;
+    }
+    return best;
+  }
+
+  /**
+   * True when a time has passed today that nobody was told about yet. Each
+   * time is told once: one flag for the day let the earlier time spend it, so
+   * a Pro learner's second reminder never came (QA-80). A record from before
+   * the time was kept (`lastNotifiedSlot`) counts for the whole day, as it did.
+   */
   function isDue(cfg, now = new Date()) {
     if (!cfg?.enabled) return false;
     if (!isDayEnabled(cfg, now)) return false;
     if (practicedToday()) return false;
-    if (cfg.lastNotifiedDay === dayKey(now)) return false;
-    const nowMin = now.getHours() * 60 + now.getMinutes();
-    const times = cfg.times || [];
-    return times.some((t) => {
-      const m = timeToMinutes(t);
-      return m != null && nowMin >= m;
-    });
+    const slot = lastPassedSlot(cfg, now);
+    if (slot == null) return false;
+    if (cfg.lastNotifiedDay !== dayKey(now)) return true;
+    const told = Number.isFinite(cfg.lastNotifiedSlot) ? cfg.lastNotifiedSlot : Infinity;
+    return slot > told;
   }
 
   /**
@@ -163,9 +177,12 @@
     return messageAt(pickMessageIndex(), isEs, min);
   }
 
-  function markNotified() {
+  /** Today's reminder was given, for every time that has passed so far (none yet: -1). */
+  function markNotified(now = new Date()) {
     const c = getConfig();
-    c.lastNotifiedDay = dayKey();
+    c.lastNotifiedDay = dayKey(now);
+    const slot = lastPassedSlot(c, now);
+    c.lastNotifiedSlot = slot == null ? -1 : slot;
     write(LS_KEY, c);
   }
 

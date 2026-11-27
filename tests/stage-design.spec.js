@@ -174,18 +174,27 @@ async function scrollIntoStuck(page) {
   });
 }
 
-/** The top rail's lowest edge and a box's top, relative to the viewport. */
+/**
+ * The top rail's lowest edge and a box's top, relative to the viewport, and
+ * which of the rail's children lie over the box. On a phone on its side a
+ * picture starts beside the status corner (design: landscape-beside), so
+ * "under the rail" is the upright layout and "covered by nothing" the rule.
+ */
 function railAndTop(sel) {
-  let rail = -Infinity;
-  [...document.getElementById("hud-top-rail").children].forEach((el) => {
-    const b = el.getBoundingClientRect();
-    if (b.height) rail = Math.max(rail, b.bottom);
-  });
   let el = document.querySelector(sel);
   // On a rotated phone a picture's panel drops its title (the page header
   // names the exercise): the picture itself is then the panel's top
   if (el && !el.getBoundingClientRect().height) el = el.closest(".mode-panel")?.querySelector(".vz") || el;
-  return { rail, top: el ? el.getBoundingClientRect().top : null };
+  const box = el ? el.getBoundingClientRect() : null;
+  let rail = -Infinity;
+  const over = [];
+  [...document.getElementById("hud-top-rail").children].forEach((kid) => {
+    const b = kid.getBoundingClientRect();
+    if (!b.height) return;
+    rail = Math.max(rail, b.bottom);
+    if (box && b.right > box.left && b.left < box.right && b.bottom > box.top && b.top < box.bottom) over.push(kid.id || kid.className);
+  });
+  return { rail, top: box ? box.top : null, height: box ? box.height : 0, over };
 }
 
 test.describe("Start floor: the stage's controls on a phone", () => {
@@ -439,12 +448,18 @@ test.describe("Coach strip: the mode and its cue on the stage", () => {
       // s4 has no chord menus; s18 and v2 are other panels without a canvas
       for (const id of ["s4-lip-trills", "s18-costal-breath", "v2-volume"]) {
         await open(page, id);
+        // Upright the panel is under the rail; on its side its picture is beside the status corner.
+        const upright = vp.height > 500;
         let r = await page.evaluate(railAndTop, "#mode-focus-panel .mode-title");
-        expect(r.top, `${id} idle`).toBeGreaterThanOrEqual(r.rail);
+        expect(r.height, `${id} idle: the title or the picture has a box`).toBeGreaterThan(10);
+        expect(r.over, `${id} idle: nothing of the rail over it`).toEqual([]);
+        if (upright) expect(r.top, `${id} idle`).toBeGreaterThanOrEqual(r.rail);
         await start(page);
         await page.clock.runFor(1200);
         r = await page.evaluate(railAndTop, "#mode-focus-panel .mode-title");
-        expect(r.top, `${id} live`).toBeGreaterThanOrEqual(r.rail);
+        expect(r.height, `${id} live: the title or the picture has a box`).toBeGreaterThan(10);
+        expect(r.over, `${id} live: nothing of the rail over it`).toEqual([]);
+        if (upright) expect(r.top, `${id} live`).toBeGreaterThanOrEqual(r.rail);
         // "En vivo" on one line
         expect(await page.evaluate(lineCount, "practice-status"), `${id}: En vivo on one line`).toBe(1);
         await page.locator("#btn-practice-stop").click();
@@ -742,7 +757,9 @@ test.describe("Landscape: a phone on its side", () => {
         continue;
       }
       expect(r.overlap, `${phase}: En vivo pill over the panel title`).toBe(false);
-      expect(r.title.top).toBeGreaterThanOrEqual(r.pill.bottom);
+      // On its side the picture starts beside the status corner, not under it (design: landscape-beside).
+      expect(r.title.height, `${phase}: the picture has a box`).toBeGreaterThan(10);
+      expect(r.title.left, `${phase}: the picture is clear of the pill, to its right`).toBeGreaterThanOrEqual(r.pill.right);
       expect(await page.evaluate(lineCount, "practice-status"), `${phase}: pill on one line`).toBe(1);
       expect(r.stage.top, `${phase}: stage under the header (scrollY ${r.scrollY})`).toBeGreaterThanOrEqual(r.exHeader.bottom - 1);
       expect(r.stage.bottom, `${phase}: stage inside the screen (VG-30)`).toBeLessThanOrEqual(r.vh);

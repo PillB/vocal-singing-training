@@ -1426,6 +1426,10 @@
         /* reported through getStatus */
       });
     }
+    // The closing write asks whose the practice is, as every other write does:
+    // another tab may have signed in someone else, whose record this now is,
+    // before this page heard of it (QA-76).
+    if (ownerState().state !== "mine") return;
     const active = global.VTStorage.getActiveProfileId();
     for (const profileId of [active, ...otherUnpushed(active)]) {
       const last = confirmed.get(profileId);
@@ -1528,7 +1532,7 @@
    * @param {string} [id] Profile to pull; the active one when omitted.
    * @returns {Promise<{ok: boolean, reason?: string}>} Result.
    */
-  async function pullOverwrite(id, asToken) {
+  async function pullOverwrite(id, asToken, keepDuringPull = false) {
     if (!isAvailable()) return { ok: false, reason: "signed_out" };
     // As one session, like a cycle: an answer landing after somebody else
     // signed in is the last account's copy, and kept here with its revision it
@@ -1536,14 +1540,14 @@
     const token = asToken || sessionToken();
     if (sessionMoved(token)) return sessionGone();
     const profileId = id || global.VTStorage.getActiveProfileId();
+    const before = JSON.stringify(global.VTStorage.readSyncBag(profileId));
     const pulled = await readAccount(profileId, token);
     if (sessionMoved(token)) return sessionGone();
     if (!pulled.ok) return { ok: false, reason: pulled.offline ? "offline" : "error" };
     if (!pulled.data?.doc) return { ok: false, reason: "empty" };
     if (deleted(profileId)) return { ok: false, reason: "deleted" };
     // Into the profile that asked, even if the learner has switched since.
-    global.VTStorage.writeSyncBag(pulled.data.doc, profileId);
-    pushedAt.set(profileId, version);
+    installPulledBag(profileId, pulled.data.doc, keepDuringPull ? before : null);
     writeRev(profileId, Number(pulled.data.rev) || 0);
     confirmed.set(profileId, { rev: Number(pulled.data.rev) || 0, doc: pulled.data.doc });
     lastError = null;
@@ -1551,6 +1555,20 @@
     dataChanged(profileId);
     emit();
     return { ok: true };
+  }
+
+  /** During account handover the old owner's copy is already aside; new local work belongs to this account. */
+  function installPulledBag(profileId, doc, before) {
+    const current = global.VTStorage.readSyncBag(profileId);
+    const changed = before !== null && JSON.stringify(current) !== before;
+    global.VTStorage.writeSyncBag(changed ? mergeBag(current, doc) : doc, profileId);
+    if (changed) {
+      version += 1;
+      changedAt.set(profileId, version);
+      schedule();
+    } else {
+      pushedAt.set(profileId, version);
+    }
   }
 
   /**
@@ -1695,6 +1713,13 @@
   async function useAccountOnly() {
     const me = accountId();
     if (!isAvailable() || !me) return { ok: false, reason: "signed_out" };
+    // Asked once: a second window still showing the question, pressed again
+    // after the first answer, would pull the account's copy over every profile
+    // and lose what was practised since (QA-76).
+    if (ownerState().state !== "other") {
+      emit();
+      return { ok: true, reason: "answered" };
+    }
     const token = sessionToken();
     const ids = localProfileIds();
     const kept = await setAsideOwners(me, ids);
@@ -1731,7 +1756,7 @@
       if (!res.ok && res.reason !== "empty" && result.ok) result = res;
     };
     for (const id of ids.filter((x) => !kept[x])) {
-      note(await pullOverwrite(id, token));
+      note(await pullOverwrite(id, token, true));
       if (sessionMoved(token)) return sessionGone();
     }
     if (restoreAside(me)) schedule();
@@ -1797,6 +1822,10 @@
     // A failed sync need not wait out its retry once the connection is back.
     global.addEventListener?.("online", () => {
       if (lastError) schedule();
+    });
+    // Whose the practice is, answered in another window: this one stops asking (QA-76).
+    global.addEventListener?.("storage", (e) => {
+      if (e.key === LS_OWNER || e.key === LS_HANDOVER || e.key === null) emit();
     });
   }
 })(window);

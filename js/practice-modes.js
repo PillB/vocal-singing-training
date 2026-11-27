@@ -603,7 +603,7 @@
       }
       this.viz?.draw();
     },
-    onStop() {
+    onStop(ctx) {
       const st = this.state;
       const K = global.VTViz?.speechTiming;
       if (st.rt && !st.review) {
@@ -617,7 +617,7 @@
       }
       const b = this.$("[data-next-rung]");
       if (b) b.disabled = true;
-      const sec = (performance.now() - (st.wallStart || st.startedAt)) / 1000;
+      const sec = Number.isFinite(ctx?.practicedSec) ? Math.max(0, ctx.practicedSec) : 0;
       const mins = Math.max(1, Math.round(sec / 60));
       const seq = (st.rungs || []).filter((r) => r.rel != null).map((r) => Math.round(r.rel * 100));
       // Only what was measured: the minutes. Clarity and rate control are the

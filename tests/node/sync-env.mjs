@@ -92,7 +92,7 @@ export function createWorker() {
 }
 
 /** A localStorage over a Map; `quota` (characters) makes a write past it throw as a full origin does. */
-function makeStorage(store, quota) {
+function makeStorage(store, quota, wrote = () => {}) {
   const used = (skip) => [...store].reduce((n, [k, v]) => n + (k === skip ? 0 : k.length + v.length), 0);
   return {
     getItem: (k) => (store.has(k) ? store.get(k) : null),
@@ -102,9 +102,13 @@ function makeStorage(store, quota) {
         e.name = "QuotaExceededError";
         throw e;
       }
+      const was = store.has(k) ? store.get(k) : null;
       store.set(k, String(v));
+      if (was !== String(v)) wrote(k);
     },
-    removeItem: (k) => store.delete(k),
+    removeItem: (k) => {
+      if (store.delete(k)) wrote(k);
+    },
     key: (i) => [...store.keys()][i] ?? null,
     get length() {
       return store.size;
@@ -115,14 +119,29 @@ function makeStorage(store, quota) {
 /**
  * One browser tab: its own storage, the three real modules, and a fetch to `worker`.
  * @param {object} worker From createWorker().
- * @param {{store?: Map, quota?: number, extra?: object, days?: boolean}} [opts] Shared
+ * @param {{store?: Map, quota?: number, extra?: object, days?: boolean, storageEvents?: boolean}} [opts] Shared
  *   storage (a reload, or a second tab), a quota in characters, more window globals
  *   (VT_WEEK_ELEMENTS), and the real day ledger (js/practice-days.js), which a take
- *   then records on as the app's save does.
+ *   then records on as the app's save does. storageEvents: this tab hears the storage writes of the other
+ *   tabs made with it on the same store, as a browser's storage event, and its page events through event().
  */
+/** The open tabs that hear each other's storage writes, by the storage they share (opts.storageEvents). */
+const TABS = new WeakMap();
+
 export function createBrowser(worker, opts = {}) {
   const store = opts.store || new Map();
-  const localStorage = makeStorage(store, opts.quota);
+  // A browser tells every other tab of the origin, never the writer, in a task of its own; a tab created
+  // without storageEvents (most of these tests: a reload, or a tab that never hears) neither hears nor tells.
+  const heard = new Map();
+  const hear = (key) => (heard.get("storage") || []).forEach((fn) => fn({ type: "storage", key }));
+  const tell = (key) => {
+    for (const other of TABS.get(store) || []) if (other !== hear) setImmediate(() => other(key));
+  };
+  const localStorage = makeStorage(store, opts.quota, opts.storageEvents ? tell : undefined);
+  if (opts.storageEvents) {
+    if (!TABS.has(store)) TABS.set(store, new Set());
+    TABS.get(store).add(hear);
+  }
   const log = [];
   const holds = [];
   // Requests the worker is still answering. Its crypto and its database run
@@ -173,10 +192,16 @@ export function createBrowser(worker, opts = {}) {
   const clearTimeout = (id) => timers.delete(id);
   const win = {
     VT_BILLING_CONFIG: { verification: { apiBaseUrl: API } },
-    addEventListener: () => {},
+    addEventListener: opts.storageEvents
+      ? (type, fn) => heard.set(type, [...(heard.get(type) || []), fn])
+      : () => {},
     dispatchEvent: () => true,
     ...(opts.extra || {})
   };
+  /** Deliver a page event (pageshow, pagehide) to what the modules listen with; only a tab with storageEvents listens. */
+  const event = (type, props = {}) => (heard.get(type) || []).forEach((fn) => fn({ type, ...props }));
+  /** The tab is closed: it no longer hears, nor tells. */
+  const close = () => TABS.get(store)?.delete(hear);
   win.window = win;
   const document = { documentElement: { dataset: {} } };
   const ctx = {
@@ -224,7 +249,7 @@ export function createBrowser(worker, opts = {}) {
     if (opts.days) win.VTDays.record({ exerciseId, sec: 60, saved: true, bump: true, source: "save", day: entry.day });
     return entry;
   }
-  return { win, store, log, gate, timers, fire, settle, signIn, take, localStorage };
+  return { win, store, log, gate, timers, fire, settle, signIn, take, localStorage, event, close };
 }
 
 /** The notes of every take in a sync bag or stored document, sorted. */

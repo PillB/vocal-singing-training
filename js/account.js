@@ -648,7 +648,10 @@
       }
       if (res.status === 401) {
         // The session is gone server-side: signed out elsewhere, or expired.
-        forget();
+        // Only this token is: another tab may have stored a newer one since,
+        // which is not this answer's to delete (QA-76).
+        if ((readSession()?.token || null) !== token) followStoredSession();
+        else forget();
         return { ok: false, reason: "signed_out" };
       }
       if (res.status === 0) return { ok: false, reason: "offline" };
@@ -818,6 +821,52 @@
     }
     await refresh();
     return getState();
+  }
+
+  /**
+   * Follow the session another tab of this browser stored: a sign-in, a
+   * sign-out or a new account. The session is kept in localStorage, one for
+   * every tab, and each tab holds it in memory; a tab that did not follow went
+   * on as whoever it read at load, and its sync wrote that account's practice
+   * into the record the browser now keeps for another, closing write included
+   * (QA-76). Storage is read again rather than the event's value, so an event
+   * that arrives late applies what is stored now, not what was. One signed-in
+   * account per browser, every tab told, is how Firebase Auth's local
+   * persistence behaves.
+   */
+  function followStoredSession() {
+    const stored = readSession();
+    const token = stored?.token || null;
+    if (token === (session?.token || null)) return;
+    if (!token) {
+      // The tab that signed out already cleared what is stored; forget() only
+      // removes it again here, and empties this tab's memory.
+      forget();
+      return;
+    }
+    session = stored;
+    snapshot = null;
+    lastPlan = undefined;
+    try {
+      global.VTLicense?.setRefresher?.(() => refresh());
+    } catch {
+      /* ignore */
+    }
+    // Signed in, account not yet known: listeners (sync) see the new token now,
+    // and the answer about whose it is follows.
+    emit();
+    refresh().catch(() => {});
+  }
+
+  if (typeof document !== "undefined") {
+    global.addEventListener?.("storage", (e) => {
+      if (e.storageArea && e.storageArea !== global.localStorage) return;
+      if (e.key === LS_KEY || e.key === null) followStoredSession();
+    });
+    // A page brought back from the back-forward cache missed every event while it was stored.
+    global.addEventListener?.("pageshow", (e) => {
+      if (e.persisted) followStoredSession();
+    });
   }
 
   global.VTAccount = {

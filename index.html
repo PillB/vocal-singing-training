@@ -46,8 +46,8 @@
     <link rel="alternate" hreflang="en" href="https://pillb.github.io/vocal-singing-training/?lang=en" />
     <link rel="alternate" hreflang="x-default" href="https://pillb.github.io/vocal-singing-training/" />
     <script src="js/boot-head.js?v=20261121d"></script>
-    <link rel="stylesheet" href="css/styles.css?v=20261123b" />
-    <link rel="stylesheet" href="css/exercise-viz.css?v=20261002a" />
+    <link rel="stylesheet" href="css/styles.css?v=20261126a" />
+    <link rel="stylesheet" href="css/exercise-viz.css?v=20261126a" />
     <link rel="stylesheet" href="css/session-sets.css?v=20261123a" />
     <link rel="stylesheet" href="css/voice-path.css?v=20261121f" />
     <link rel="stylesheet" href="css/scenes/speech.css?v=20261002a" />
@@ -57,7 +57,7 @@
     <link rel="stylesheet" href="css/scenes/breath.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/pitch.css?v=20261002a" />
     <link rel="stylesheet" href="css/scenes/dynamics.css?v=20261002a" />
-    <link rel="stylesheet" href="css/scenes/resonance.css?v=20261002a" />
+    <link rel="stylesheet" href="css/scenes/resonance.css?v=20261126a" />
     <link rel="stylesheet" href="css/site-version.css?v=20261123a" />
     <!-- In <head> and not deferred: it paints the visitor's design of the site
          before the first frame. A file, because the policy above allows no
@@ -329,7 +329,7 @@
              fetches it twice: npm run assets:bump rewrites both, and
              tests/node/boot-preload.test.mjs checks the two lists match. -->
         <link rel="preload" href="js/focus-trap.js?v=20261118a" as="script" />
-        <link rel="preload" href="js/i18n.js?v=20261125a" as="script" />
+        <link rel="preload" href="js/i18n.js?v=20261127a" as="script" />
         <link rel="preload" href="js/i18n-early.js?v=20261121a" as="script" />
         <link rel="preload" href="js/exercises-data.js?v=20261123b" as="script" />
         <link rel="preload" href="js/exercises-locale-es.js?v=20261123b" as="script" />
@@ -348,11 +348,11 @@
         <link rel="preload" href="js/experiments.js?v=20261112a" as="script" />
         <link rel="preload" href="js/privacy-switch.js?v=20261111a" as="script" />
         <link rel="preload" href="js/reports.js?v=20261113d" as="script" />
-        <link rel="preload" href="js/reminders.js?v=20261113a" as="script" />
+        <link rel="preload" href="js/reminders.js?v=20261126a" as="script" />
         <link rel="preload" href="js/auth-users.generated.js?v=20261006a" as="script" />
         <link rel="preload" href="js/auth.js?v=20261006a" as="script" />
-        <link rel="preload" href="js/account.js?v=20261113a" as="script" />
-        <link rel="preload" href="js/sync.js?v=20261125a" as="script" />
+        <link rel="preload" href="js/account.js?v=20261126a" as="script" />
+        <link rel="preload" href="js/sync.js?v=20261127a" as="script" />
         <link rel="preload" href="js/piano.js?v=20261123a" as="script" />
         <link rel="preload" href="js/range-adapter.js?v=20261006a" as="script" />
         <link rel="preload" href="js/pitch-visualizer.js?v=20261112c" as="script" />
@@ -369,7 +369,7 @@
         <link rel="preload" href="js/scenes/pitch.js?v=20261112b" as="script" />
         <link rel="preload" href="js/scenes/dynamics.js?v=20261102a" as="script" />
         <link rel="preload" href="js/scenes/resonance.js?v=20261113a" as="script" />
-        <link rel="preload" href="js/practice-modes.js?v=20261118a" as="script" />
+        <link rel="preload" href="js/practice-modes.js?v=20261127a" as="script" />
         <link rel="preload" href="js/recorder.js?v=20261102a" as="script" />
         <link rel="preload" href="js/metrics.js?v=20260924c" as="script" />
         <link rel="preload" href="js/session.js?v=20261113a" as="script" />
@@ -379,7 +379,7 @@
         <link rel="preload" href="js/site-layout.js?v=20261111a" as="script" />
         <link rel="preload" href="js/tour.js?v=20261125a" as="script" />
         <link rel="preload" href="js/song-library.js?v=20261123c" as="script" />
-        <link rel="preload" href="js/app.js?v=20261125c" as="script" />
+        <link rel="preload" href="js/app.js?v=20261127b" as="script" />
         <link rel="preload" href="js/audio-recovery.js?v=20261103c" as="script" />
         <link rel="preload" href="js/wake-lock.js?v=20261112b" as="script" />
         <link rel="preload" href="js/boot-ready.js?v=20261117c" as="script" />
@@ -831,6 +831,7 @@
               </label>
               <span class="pro-goal-progress muted" id="pro-goal-progress">0/3</span>
             </div>
+            <p class="muted" data-i18n="pro.goalUnits">Varias sesiones en un mismo día cuentan como un solo día de práctica en Inicio.</p>
             <!-- Year-style practice heatmap (habit apps / GitHub contribution vibe) -->
             <div class="practice-heatmap-wrap" id="practice-heatmap-wrap">
               <div class="practice-heatmap-head">
@@ -1024,7 +1025,7 @@
           </label>
           <label class="retain-field" for="rem-time-2" id="rem-time-2-wrap" hidden>
             <span data-i18n="retain.time2">2ª hora (Pro)</span>
-            <input type="time" id="rem-time-2" value="09:00" />
+            <input type="time" id="rem-time-2" />
           </label>
           <label class="retain-check muted">
             <input type="checkbox" id="chk-browser-notify" />
@@ -1373,7 +1374,7 @@
     </div>
 
     <script src="js/focus-trap.js?v=20261118a"></script>
-    <script src="js/i18n.js?v=20261125a"></script>
+    <script src="js/i18n.js?v=20261127a"></script>
     <script src="js/i18n-early.js?v=20261121a"></script>
     <script src="js/exercises-data.js?v=20261123b"></script>
     <script src="js/exercises-locale-es.js?v=20261123b"></script>
@@ -1397,11 +1398,11 @@
     <script src="js/experiments.js?v=20261112a"></script>
     <script src="js/privacy-switch.js?v=20261111a"></script>
     <script src="js/reports.js?v=20261113d"></script>
-    <script src="js/reminders.js?v=20261113a"></script>
+    <script src="js/reminders.js?v=20261126a"></script>
     <script src="js/auth-users.generated.js?v=20261006a"></script>
     <script src="js/auth.js?v=20261006a"></script>
-    <script src="js/account.js?v=20261113a"></script>
-    <script src="js/sync.js?v=20261125a"></script>
+    <script src="js/account.js?v=20261126a"></script>
+    <script src="js/sync.js?v=20261127a"></script>
     <script src="js/piano.js?v=20261123a"></script>
     <script src="js/range-adapter.js?v=20261006a"></script>
     <script src="js/pitch-visualizer.js?v=20261112c"></script>
@@ -1418,7 +1419,7 @@
     <script src="js/scenes/pitch.js?v=20261112b"></script>
     <script src="js/scenes/dynamics.js?v=20261102a"></script>
     <script src="js/scenes/resonance.js?v=20261113a"></script>
-    <script src="js/practice-modes.js?v=20261118a"></script>
+    <script src="js/practice-modes.js?v=20261127a"></script>
     <script src="js/recorder.js?v=20261102a"></script>
     <script src="js/metrics.js?v=20260924c"></script>
     <script src="js/session.js?v=20261113a"></script>
@@ -1428,7 +1429,7 @@
     <script src="js/site-layout.js?v=20261111a"></script>
     <script src="js/tour.js?v=20261125a"></script>
     <script src="js/song-library.js?v=20261123c"></script>
-    <script src="js/app.js?v=20261125c"></script>
+    <script src="js/app.js?v=20261127b"></script>
     <script src="js/audio-recovery.js?v=20261103c"></script>
     <script src="js/wake-lock.js?v=20261112b"></script>
     <script src="js/boot-ready.js?v=20261117c"></script>

@@ -78,3 +78,45 @@ test("English translation and 320px controls remain visible without horizontal o
   expect(layout.width).toBeLessThanOrEqual(320);
   expect(layout.button).toBeGreaterThanOrEqual(44);
 });
+
+test("day, week, month and navigation share one ledger across pages and tabs",async({page,context})=>{
+  await page.clock.install({time:new Date("2026-11-27T12:00:00-05:00")});
+  await page.addInitScript(()=>{
+    localStorage.setItem("vt_lang","es");
+    localStorage.setItem("vt_tour_v1","1");
+    localStorage.setItem("vt_settings_v1",JSON.stringify({lastTab:"singing"}));
+    localStorage.setItem("vt_days_v1",JSON.stringify({v:1,days:{
+      "2026-10-31":{sec:120,n:1,ex:["s7-humming"]},
+      "2026-11-02":{sec:180,n:1,ex:["s4-lip-trills"]},
+      "2026-11-26":{sec:240,n:1,ex:["s9-pitch-match"]}
+    },rest:{bank:1,earnedAt:0,used:[]},backfilled:true}));
+    sessionStorage.setItem("vt_e2e","1");
+    sessionStorage.setItem("vt_sets_e2e","1");
+  });
+  await page.goto(BASE+"/");
+  await page.waitForFunction(()=>!!window.VTDays&&!!window.VTSets&&document.body.classList.contains("loop-on"));
+  const before=await page.evaluate(()=>({
+    s:window.VTDays.summary(),oct:window.VTDays.countDays("2026-10-01","2026-10-31"),
+    nov:window.VTDays.countDays("2026-11-01","2026-11-30")
+  }));
+  expect(before.s.practiceDays).toBe(3);
+  expect(before.s.weekDays).toBe(1);
+  expect(before.oct).toBe(1);
+  expect(before.nov).toBe(2);
+  const more=page.locator("#btn-more-ways");
+  if(await more.getAttribute("aria-expanded")==="false") await more.click();
+  await page.locator("#btn-skill-sets").click();
+  await page.locator("#sets-focus").selectOption("breath");
+  await page.locator("#sets-close").click();
+  await expect.poll(async()=>page.evaluate(()=>window.VTDays.summary().practiceDays)).toBe(3);
+  for(const [button,view] of [["#btn-history","#view-history"],["#btn-plan","#view-plan"],["#btn-nav-home","#view-home"]]){
+    await page.locator(button).click();
+    await expect(page.locator(view)).toHaveClass(/active/);
+    expect(await page.evaluate(()=>window.VTDays.summary().practiceDays)).toBe(3);
+  }
+  const second=await context.newPage();
+  await second.goto(BASE+"/");
+  await second.waitForFunction(()=>!!window.VTDays);
+  expect(await second.evaluate(()=>window.VTDays.summary().practiceDays)).toBe(3);
+  await second.close();
+});

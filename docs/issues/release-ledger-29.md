@@ -1,7 +1,9 @@
 # Update for existing issue29 — 2026-11-26
 
-Append this update after checking the current issue; preserve historical rows.
-Draft only, not posted.
+Historical draft below. It was superseded by the posted
+[deployment/diagnoses update](https://github.com/PillB/vocal-singing-training/issues/29#issuecomment-7209423608).
+Keep the draft's earlier limitations as history; current deployment results
+are in docs55 and the latest issue discussion.
 
 Canonical current context: [release ledger](../54-RELEASE-LEDGER-2026-11-26.md).
 Main snapshot `8c87acc4627b0308bd19c5145fdce37ef1cd4e9c` includes PR52's

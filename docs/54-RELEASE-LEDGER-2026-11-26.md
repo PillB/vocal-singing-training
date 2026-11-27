@@ -39,6 +39,19 @@ the deployment packager's passing functional controls. [Node's execution model](
 documents parallel file processes; a single isolated pass does not erase the
 parallel failure.
 
+Final deployed-site evidence: Cloudflare live Chromium9/9 passed in
+[job140302364504](https://github.com/PillB/vocal-singing-training/actions/runs/45936989152/job/140302364504),
+including local-only configuration and no external requests. Both the
+Cloudflare package and existing Pages index/all77 assets matched their
+respective expected bytes. Issue contexts were published as
+[60](https://github.com/PillB/vocal-singing-training/issues/60),
+[61](https://github.com/PillB/vocal-singing-training/issues/61) and
+[62](https://github.com/PillB/vocal-singing-training/issues/62); issue29 has
+the linked deployment update. PR55 carries the implementation; require its
+exact-head CI before merge. The GitHub wiki itself is still unpublished;
+versioned wiki content is preserved with the code. Physical/mobile/zoom and
+authenticated cutover gates are not closed by desktop Chromium.
+
 This is an evidence snapshot, not a claim that all features are production ready.
 Public topology: [deployment and recovery](53-DEPLOYMENT-OWNERSHIP-AND-RECOVERY.md).
 Research: [learning routes](wiki/Research-and-learning-routes.md).

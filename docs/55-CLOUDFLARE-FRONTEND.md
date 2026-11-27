@@ -84,7 +84,14 @@ Do not auto-retry an uncertain deployment.
   was reordered so it fails on an actual attempted server-file publication,
   not merely a changed error message.
 
-Browser validation is a separate gate. `Deployed Pages verification` now has
+Hosted Chromium **9/9 passed** on the actual preview, including disabled
+sign-in and no off-origin requests: [run45936989152, job140302364504](https://github.com/PillB/vocal-singing-training/actions/runs/45936989152/job/140302364504).
+That job also rebuilt the declared source and verified deployed bytes.
+The existing GitHub Pages site independently matched current main's HTML and
+all77 assets. Actual iOS, acoustic audio, mobile/zoom/assistive-technology
+inspection and authenticated migration remain unverified.
+
+`Deployed Pages verification` now has
 a `cloudflare-preview` target and exact `source_sha` input. It rebuilds that
 ancestor commit, checks deployed bytes, and runs the live Playwright suite.
 The configuration test requires the local-practice notice, disabled sign-in

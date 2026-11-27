@@ -25,3 +25,5 @@ The rules you will be held to, in short (AGENTS.md has the detail and code):
 Before execution compare alternative routes; after each round record the
 observed root cause, shared-path regressions and simulated source drift, as
 required by [`AGENTS.md`](./AGENTS.md), repository path `vocal-singing-training/AGENTS.md`.
+
+For focused skills read [agent.md](./agent.md) (repository path vocal-singing-training/agent.md) and [docs/57-SKILL-FOCUSED-SETS.md](./docs/57-SKILL-FOCUSED-SETS.md). Apply independent negative controls for every round, never award mastery from a set or mic-only score.

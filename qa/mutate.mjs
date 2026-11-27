@@ -6,7 +6,7 @@
  * suite that stays green on a mutant is not testing that behaviour, however
  * high its coverage. Ported from the QA thread's mutate.py (2026-11-01).
  *
- *   node qa/mutate.mjs            # the Node sets (audio, pitch, lint, coaching, sets, ledger, path)
+ *   node qa/mutate.mjs            # every Node set (DEFAULT_SETS); CI runs them in the contracts job and node-mutation
  *   node qa/mutate.mjs audio      # one set
  *   node qa/mutate.mjs stage a11y flows regress boot billing scoring controls audit toast designs splits syncing inject learner authwall promises promises-time-2 promises-time-3 promises-voice promises-account-ads lang pathui curriculumui  # browser sets: need Playwright's Chromium; the same list as CI's mutation matrix (tests/node/mutation-matrix.test.mjs holds the two together)
  *
@@ -279,7 +279,10 @@ export const MUTANTS = {
     ["OP6 stale deployed HTML is accepted", "tests/helpers/live-release.mjs", "if (actual !== expected)", "if (false)", "tests/node/live-release.test.mjs", "actual HTTP release"],
     ["OP7 stale same-version assets are accepted", "tests/helpers/live-release.mjs", "if (deployed !== info.sha)", "if (false)", "tests/node/live-release.test.mjs", "actual HTTP release"],
     ["OP8 final health failure hides the newly deployed analytics version", "workers/entitlements/scripts/deploy-main.mjs", "record.deployedVersion = verifiedVersion(cwd, target, next, record.eventsOffVersion);\n    writeFileSync(receipt, JSON.stringify(record, null, 2), { mode: 0o600 });", "record.deployedVersion = verifiedVersion(cwd, target, next, record.eventsOffVersion);", "tests/node/deploy-main.test.mjs", "analytics phase2-health"],
-    ["OP9 phase two overwrites another operator's deployment", "workers/entitlements/scripts/deploy-main.mjs", "if (currentVersion(cwd, target) !== record.eventsOffVersion)", "if (false)", "tests/node/deploy-main.test.mjs", "another deployment during phase-one"]
+    ["OP9 phase two overwrites another operator's deployment", "workers/entitlements/scripts/deploy-main.mjs", "if (currentVersion(cwd, target) !== record.eventsOffVersion)", "if (false)", "tests/node/deploy-main.test.mjs", "another deployment during phase-one"],
+    ["OP10 the static preview still contacts the original account backend", "qa/build-cloudflare-site.mjs", "const closed = source.replace(needle, 'apiBaseUrl: \"\"');", "const closed = source;", "tests/node/cloudflare-site.test.mjs", "static package"],
+    ["OP11 a future manifest can publish committed server files", "qa/build-cloudflare-site.mjs", "if (!/^(?:js|css|qa)\\/(?:[\\w-][\\w.-]*\\/)*[\\w-][\\w.-]*\\.(?:js|css)$/.test(path))", "if (false)", "tests/node/cloudflare-site.test.mjs", "future unsafe manifest"],
+    ["OP12 the preview CSP allows arbitrary outgoing API requests", "qa/build-cloudflare-site.mjs", "connect-src 'self'; frame-src", "connect-src *; frame-src", "tests/node/cloudflare-site.test.mjs", "static package"]
   ].map(([name, file, from, to, spec, pattern]) => ({ name, file, from, to, cmd: node(["--test-name-pattern", pattern, spec]) })),
   curriculum: [
     ["CUR1 skill filter silently shows every routine", "js/session-sets.js", 'sets.filter((set) => set.focus === focus)', 'sets'],
@@ -507,6 +510,10 @@ export const MUTANTS = {
     ["L61 a mutation job uploads its traces only when it is green", ".github/workflows/quality.yml", "      - name: Preserve a red set's traces\n        if: failure()\n", "      - name: Preserve a red set's traces\n", ["tests/node/mutation-matrix.test.mjs"]],
     ["L62 every mutation job uploads under one name: the second red set's traces are refused", ".github/workflows/quality.yml", "          name: mutation-failures-${{ matrix.set }}\n", "          name: mutation-failures\n", ["tests/node/mutation-matrix.test.mjs"]],
     ["L63 the harness's usage line drops the time limit's middle third, so the documented command skips its 15 mutants", "qa/mutate.mjs", "authwall promises promises\u002Dtime-2 promises-time-3", "authwall promises promises-time-3", ["tests/node/mutation-matrix.test.mjs"]],
+    ["L64 audio and guards go back into the contracts step, the shape that ran out of its 25 minutes on 331e83b (QA-75)", ".github/workflows/quality.yml", "        run: node qa/mutate.mjs pitch lint coaching sets ledger claims path curriculum\n\n  # Isolated Node sets, one job each, after the contracts they mutate are green. They need no\n  # browser. tests/node/mutation-matrix.test.mjs holds every Node job's estimate (its mutants at CI's measured\n  # seconds per mutant) under half its limit, so a set that grows past it turns that test red before CI cancels it.\n  node-mutation:\n    needs: contracts\n    runs-on: ubuntu-24.04\n    timeout-minutes: 25\n    strategy:\n      fail-fast: false\n      matrix:\n        set: [audio, guards, ops]", "        run: node qa/mutate.mjs\n\n  # Isolated Node sets, one job each, after the contracts they mutate are green. They need no\n  # browser. tests/node/mutation-matrix.test.mjs holds every Node job's estimate (its mutants at CI's measured\n  # seconds per mutant) under half its limit, so a set that grows past it turns that test red before CI cancels it.\n  node-mutation:\n    needs: contracts\n    runs-on: ubuntu-24.04\n    timeout-minutes: 25\n    strategy:\n      fail-fast: false\n      matrix:\n        set: []", ["tests/node/mutation-matrix.test.mjs"]],
+    ["L65 guards leaves the contracts step for a job whose matrix never names it: its mutants run nowhere", ".github/workflows/quality.yml", "        set: [audio, guards, ops]", "        set: [audio]", ["tests/node/mutation-matrix.test.mjs"]],
+    ["L66 the Node sets' own job has no time limit, so a hung mutant holds its runner six hours", ".github/workflows/quality.yml", "  node-mutation:\n    needs: contracts\n    runs-on: ubuntu-24.04\n    timeout-minutes: 25\n", "  node-mutation:\n    needs: contracts\n    runs-on: ubuntu-24.04\n", ["tests/node/mutation-matrix.test.mjs"]],
+    ["L67 ops is omitted when the deployment branch meets the explicit CI matrix", ".github/workflows/quality.yml", "        set: [audio, guards, ops]", "        set: [audio, guards]", ["tests/node/mutation-matrix.test.mjs"]],
     ["L7 empty wait-may-fail reason accepted", "qa/lint-playwright-waits.mjs", "/wait-may-fail:\\s*\\S/", "/wait-may-fail:/"]
   // A mutant that edits a hashed asset (js/css) turns "every versioned asset matches its recorded content" red whatever
   // else is wrong, so it names the one test it is meant to be judged by (red-team: L25 and L26 were killed by the manifest).
@@ -1865,7 +1872,27 @@ export const MUTANTS = {
     ["LB19 an injected sleep is ignored", "src/ledger.js", "if (typeof options.sleep === \"function\") {", "if (false) {", "ledger-boundaries"],
     ["LB20 one attempt cannot be asked for", "src/ledger.js", "opts.maxAttempts >= 1", "opts.maxAttempts > 1", "ledger-boundaries"],
     ["LB21 a key written blind is read and validated, so a change to it is a false conflict", "src/ledger.js", "familyOf(key).filter((k) => !this.reads.has(k) && !this.writes.has(k));", "familyOf(key).filter((k) => !this.reads.has(k));", "ledger-boundaries"],
-    ["LB22 a license's charged: key is fetched in a second query", "src/ledger.js", "const LICENSE_FAMILY = [\"lic:\", \"paid:\", \"ended:\", \"reversed:\", \"charged:\"];", "const LICENSE_FAMILY = [\"lic:\", \"paid:\", \"ended:\", \"reversed:\"];", "ledger-boundaries"]
+    ["LB22 a license's charged: key is fetched in a second query", "src/ledger.js", "const LICENSE_FAMILY = [\"lic:\", \"paid:\", \"ended:\", \"reversed:\", \"charged:\"];", "const LICENSE_FAMILY = [\"lic:\", \"paid:\", \"ended:\", \"reversed:\"];", "ledger-boundaries"],
+    ["WO1 the stale guard never refuses an older event: a late past_due overwrites a cancellation (found in another project, Nov 2026)", "src/store.js", "  if (update.occurredAt !== record.occurredAt) {\n    return update.occurredAt < record.occurredAt;\n  }", "  if (update.occurredAt !== record.occurredAt) {\n    return false;\n  }", "webhook-order"],
+    ["WO2 the first validation chunk always passes: the older webhook's write lands last on D1", "src/ledger.js", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed})", "SELECT ?1, ?3 WHERE NOT EXISTS (${changed}) OR 1", "webhook-order"],
+    ["WO3 a D1-bound worker runs its webhooks on KV, where the race is open", "src/ledger.js", "return Boolean(env && env.DB && typeof env.DB.prepare === \"function\" && typeof env.DB.batch === \"function\");", "return false;", "webhook-order"],
+    ["WO4 a Stripe refund or dispute moves the record's clock: an earlier unpaid or pause delivered after it is refused", "src/stripe.js", "    // and one it had resumed stayed shut out. `reversedAt` keeps the moment.\n    update.occurredAt = null;\n", "", "webhook-order"],
+    ["WO5 a Creem refund or dispute moves the record's clock: an earlier pause or resume delivered after it is refused", "src/creem.js", "    // refused as stale, and the subscription kept the state the pause ended.\n    update.occurredAt = null;\n", "", "webhook-order"],
+    ["WO6 a Mercado Pago subscription charge is dated by its last edit: edited after a cancellation, it undoes it", "src/mercadopago.js", "const stateAt = subscriptionId ? chargeClock(isoToUnixSeconds(p.date_approved), occurredAt) : occurredAt;", "const stateAt = occurredAt;", "webhook-order"],
+    ["WO7 a Mercado Pago authorized payment is dated by its last edit even when it states its approval", "src/mercadopago.js", "occurredAt: approved ? chargeClock(isoToUnixSeconds(payment.date_approved), occurredAt) : null", "occurredAt: approved ? occurredAt : null", "webhook-order"],
+    ["WO8 a one-off Mercado Pago payment is dated by its approval, so its own refund on the same resource looks old", "src/mercadopago.js", "const stateAt = subscriptionId ? chargeClock(isoToUnixSeconds(p.date_approved), occurredAt) : occurredAt;", "const stateAt = chargeClock(isoToUnixSeconds(p.date_approved), occurredAt);", "webhook-order"],
+    ["WO9 a charge approved after its own last edit locks the record at that later time", "src/mercadopago.js", "? Math.min(approvedAt, updatedAt) : updatedAt;", "? approvedAt : updatedAt;", "webhook-order"],
+    ["WO10 a charge with no readable last edit is dated by its approval unbounded, so a future one locks the record", "src/mercadopago.js", "? Math.min(approvedAt, updatedAt) : updatedAt;", "? Math.min(approvedAt, updatedAt) : (Number.isFinite(approvedAt) ? approvedAt : updatedAt);", "webhook-order"],
+    ["WO11 a retried installment is dated by its debit date: an older preapproval snapshot puts the unpaid due date back", "src/mercadopago.js", "occurredAt: approved ? chargeClock(isoToUnixSeconds(payment.date_approved), occurredAt) : null", "occurredAt: approved ? chargeClock(isoToUnixSeconds(payment.date_approved) || chargeDueAt(a, null), occurredAt) : null", "webhook-order"],
+    ["WO12 a subscription charge with no approval date is dated by its creation, which a later approval has passed", "src/mercadopago.js", "const stateAt = subscriptionId ? chargeClock(isoToUnixSeconds(p.date_approved), occurredAt) : occurredAt;", "const stateAt = subscriptionId ? chargeClock(chargeTime(p, null), occurredAt) : occurredAt;", "webhook-order"],
+    // The race test's own gate (test/webhook-order.test.mjs). Its first version held a KV writer at the record
+    // alone and knew it by the time in it: a Stripe deletion's ended: key was read by the other writer, whose record
+    // then carried another time and passed unrecognised, and the gate waited for it (CI hang, 2026-11-25).
+    ["WO13 the race gate holds a writer at its record write alone, so the other reads its side key first", "test/webhook-order.test.mjs", 'const LICENSE_KEYS = ["lic:", "paid:", "ended:", "reversed:", "charged:"];', 'const LICENSE_KEYS = ["lic:"];', "webhook-order"],
+    ["WO14 a writer that ends without writing leaves the other held at the race gate for ever", "test/webhook-order.test.mjs", "    turn.done.resolve();\n    startOnceAllAreIn();\n  }", "    turn.done.resolve();\n  }", "webhook-order"],
+    ["WO15 the race runner ignores which writer it was told reads first, so every case runs one way round", "test/webhook-order.test.mjs", "  start(first);\n  await gate.reached(first);", "  first = \"older\";\n  start(first);\n  await gate.reached(first);", "webhook-order"],
+    ["WO16 the race gate holds puts alone, so a writer's delete of a license key is read by the other first", "test/webhook-order.test.mjs", 'for (const method of ["put", "delete"])', 'for (const method of ["put"])', "webhook-order"],
+    ["WO17 the race gate forgets one of the license's keys (charged:), so a writer's write of it goes unheld", "test/webhook-order.test.mjs", '"reversed:", "charged:"];', '"reversed:"];', "webhook-order"],
   ].map(([name, file, from, to, test]) => ({
     name,
     file: `workers/entitlements/${file}`,
@@ -2098,11 +2125,15 @@ function main(sets) {
       bad++;
       continue;
     }
+    const began = performance.now();
     for (const m of MUTANTS[set]) {
       const r = tryMutant(m);
       if (r !== "KILLED") bad++;
       console.log(`${r.padEnd(8)} [${set}] ${m.name}`);
     }
+    // The rate the Node jobs' time budget is kept with (SECONDS_PER_MUTANT in tests/node/mutation-matrix.test.mjs, QA-75).
+    const each = (performance.now() - began) / 1000 / MUTANTS[set].length;
+    console.log(`TIME     [${set}] ${MUTANTS[set].length} mutants, ${each.toFixed(2)} s each`);
   }
   console.log(bad ? `FAIL: ${bad} mutant(s) survived or lost their anchor.` : "PASS: every mutant was killed.");
   process.exitCode = bad ? 1 : 0;

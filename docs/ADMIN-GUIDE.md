@@ -1044,6 +1044,29 @@ before quoting the privacy page's "no IP address is stored" about logs.
 
 ### 8.10 Undo a bad deploy
 
+**Read this first once checkout is open.** Never roll back to a version created
+before your first deploy of the payment ledger, which is your first deploy
+after 17 November 2026 (write that deploy's date in your private notes when you
+make it, and compare it with the `Created:` times below). Code from before it
+keeps payments in the licence store (KV) only, and the newer code reads each
+licence from the database instead:
+
+- while rolled back, the old code cannot see a licence bought or changed since
+  that deploy, so new subscribers lose Pro and recent cancellations get it
+  back;
+- a payment webhook the old code accepts is written where the newer code no
+  longer looks, so it is lost when you deploy forward again (a Creem or
+  Mercado Pago cancellation can be undone and the subscription served again);
+- resending those webhooks from Stripe, Creem or Mercado Pago afterwards does
+  not repair it: they are answered as duplicates. Note which subscriptions
+  changed during the rollback and ask for help: a payment that was lost can be
+  given back with **Dar Pro** on the admin page, but a lost cancellation has
+  to be put right in the database by hand.
+
+While checkout is closed there is no payment to lose, and any version is
+safe. If a deploy after the ledger breaks payments, fix forward, or roll back
+only to a version created on or after that first ledger deploy.
+
 Go back to the id you noted before the deploy (8.7, step 1). If you don't have
 it, this shows the history, oldest first, so the last entry is the one live
 now. Pick the newest entry from before the bad deploy: its `Created:` time

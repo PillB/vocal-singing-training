@@ -40,6 +40,14 @@ For **every feature and meaningful design/implementation decision**:
 
 ## Before execution and after each round
 
+Maintain the durable handoff: `docs/54-RELEASE-LEDGER-2026-11-26.md`, the
+versioned wiki under `docs/wiki/`, and issue context under `docs/issues/`.
+Record the exact source SHA, evidence date/method, diagnosis, rejected route,
+trade-offs, negative control and remaining gate. Mark issue/wiki drafts as
+unpublished until read back from the remote service. Refresh PR heads and
+checks before merging; a green separate branch does not verify its integration
+with newer main. Preserve newer contributors' work and private ownership data.
+
 Compare at least two plausible implementation routes against the existing
 storage, session, localization, accessibility and deployment contracts. Record
 what an expert would reject about each, the selected route, and its explicit
@@ -245,8 +253,11 @@ ends (QA-28); `VTStorage.createProfile` defaults to the Pro cap (QA-30).
 
 - `npm run test:core` — lint, catalog regression, Node/Worker unit and
   contract tests (`tests/node/*.test.mjs`, `workers/entitlements/test`).
-- `node qa/mutate.mjs` — mutation check of the Node sets (audio, lint); CI
-  runs it on every PR. `node qa/mutate.mjs stage a11y flows regress billing audit`
+- `node qa/mutate.mjs` — mutation check of every Node set (`DEFAULT_SETS`);
+  CI runs it on every PR, the light sets in the contracts job and audio and
+  guards as `node-mutation`, one job each. Each Node job's estimate (mutants
+  times CI's measured seconds per mutant, printed as `TIME` per set) must stay
+  under half its time limit (`tests/node/mutation-matrix.test.mjs`, QA-75). `node qa/mutate.mjs stage a11y flows regress billing audit`
   runs the browser sets (sticky stage and piano, one h1 and the language of
   each half on every page, the per-exercise flow test, the console routes to
   Pro, the forensic audit's own probes, and `regress`: storage of the wrong

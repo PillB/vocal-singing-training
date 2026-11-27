@@ -2,6 +2,24 @@ name: Deployed Pages verification
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: Static deployment to verify
+        type: choice
+        options: [pages, cloudflare-preview]
+        default: pages
+      source_sha:
+        description: Exact committed source used by the Cloudflare preview
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      target:
+        type: string
+        default: pages
+      source_sha:
+        type: string
+        default: ''
   workflow_run:
     workflows: ["pages build and deployment"]
     types: [completed]
@@ -10,7 +28,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: deployed-pages-verification
+  group: deployed-pages-verification-${{ inputs.target || 'pages' }}
   cancel-in-progress: true
 
 jobs:
@@ -18,17 +36,31 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 12
+    env:
+      LIVE_URL: ${{ inputs.target == 'cloudflare-preview' && 'https://vocal-studio.pablo-illescas-buendia.workers.dev/' || 'https://pillb.github.io/vocal-singing-training/' }}
+      CF_PREVIEW_SHA: ${{ inputs.source_sha }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
       - run: npm ci --ignore-scripts
       - name: Deployed HTML and every versioned asset match this release
+        if: inputs.target != 'cloudflare-preview'
         run: node tests/helpers/live-release.mjs
+      - name: Cloudflare preview matches its exact packaged source
+        if: inputs.target == 'cloudflare-preview'
+        run: |
+          if [ -z "$CF_PREVIEW_SHA" ]; then
+            CF_PREVIEW_SHA="$(node -p 'require("./qa/cloudflare-preview-release.json").sourceSha')"
+          fi
+          node qa/build-cloudflare-site.mjs "$CF_PREVIEW_SHA" "$RUNNER_TEMP/vocal-preview-release"
+          git merge-base --is-ancestor "$CF_PREVIEW_SHA" HEAD
+          node --input-type=module -e 'import {checkLiveRelease} from "./tests/helpers/live-release.mjs"; console.log(await checkLiveRelease(process.env.RUNNER_TEMP + "/vocal-preview-release/public", process.env.LIVE_URL));'
       - run: npx playwright install --with-deps chromium
       - name: Real Pages navigation and practice controls
         env:

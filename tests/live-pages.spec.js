@@ -65,6 +65,26 @@ describeLive("Live Pages validation", () => {
     expect(shipped.hasManualGrace).toBe(true);
   });
 
+  test("deployed account configuration matches the selected site", async ({ page }) => {
+    const external = [];
+    page.on("request", (request) => {
+      if (new URL(request.url()).protocol === "https:" && new URL(request.url()).origin !== new URL(LIVE).origin) external.push(request.url());
+    });
+    await bootLive(page);
+    const api = await page.evaluate(() => window.VT_BILLING_CONFIG.verification.apiBaseUrl);
+    const preview = new URL(LIVE).hostname === "vocal-studio.pablo-illescas-buendia.workers.dev";
+    if (preview) {
+      expect(api).toBe("");
+      await expect(page.locator("aside[role=note]")).toContainText("Local practice preview");
+      await page.locator("#btn-account").click();
+      await expect(page.locator("#account-unconfigured")).toBeVisible();
+      await expect(page.locator("#account-signin")).toBeHidden();
+      expect(external).toEqual([]);
+    } else {
+      expect(api).toBe("https://vocal-studio-entitlements.vocalstudio-pe.workers.dev");
+    }
+  });
+
   test("the user guide is published alongside the app", async ({ page }) => {
     // guide.html is a separate file: it can be missing from a deploy without
     // anything on the home page looking wrong.
@@ -154,7 +174,7 @@ describeLive("Live Pages validation", () => {
       const scripts = [...document.querySelectorAll("script[src]")].map((s) => s.src);
       const bad = [];
       for (const src of scripts) {
-        if (!src.includes("pillb.github.io") && !src.includes("vocal-singing")) continue;
+        if (new URL(src).origin !== location.origin) continue;
         try {
           const t = await fetch(src).then((r) => r.text());
           if (/(?:sk_live_|rk_live_)[a-zA-Z0-9]{16,}|whsec_[A-Za-z0-9]{16,}/.test(t)) {

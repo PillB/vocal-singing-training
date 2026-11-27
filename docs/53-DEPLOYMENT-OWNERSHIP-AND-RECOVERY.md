@@ -1,6 +1,6 @@
 # Deployment, accounts and recovery map
 
-Last evidence review: **2026-11-25**. Recheck after every deployment, account
+Last evidence review: **2026-11-26**. Recheck after every deployment, account
 change, key rotation, domain change or provider activation. A configured client
 ID, repository author or reachable URL does not identify a service's owner.
 
@@ -30,6 +30,7 @@ migration is a separate release, tracked by subscription PR54.
 | Existing production Worker | `vocal-studio-entitlements.vocalstudio-pe.workers.dev` | Configured in `js/billing-config.js` and CSP. Historical live health confirms service existence. **Source account owner is unresolved.** | Private inventory: source account ID, membership, versions, bindings and signing-key backup reference. |
 | Selected Cloudflare account | Authenticated login record is private | Wrangler verified the selected login on 2026-11-25. Its subdomain is `pablo-illescas-buendia`. Successful complete API listings found **zero Workers, KV namespaces, D1 databases and Pages projects** before replication. This does not prove the source Worker is absent from other accounts. | `.deployment-local/cloudflare.json`; `docs/SERVICE-ACCOUNTS.local.md`. |
 | Replica Worker | [Replica health](https://vocal-studio-entitlements.pablo-illescas-buendia.workers.dev/v1/health?probe=1) | Created from main `43374b7`; version `e05e4a17-53c0-430e-82d5-93d08a20d61d`. D1/KV/writes probes passed; fresh signing key, Google configured, trial7, reports on, events off, payment rails off. **Frontend still uses the original Worker.** | Destination account/bindings, source SHA, version, health and JWKS fingerprint. |
+| Cloudflare frontend preview | [vocal-studio static Worker](https://vocal-studio.pablo-illescas-buendia.workers.dev/) | Created2026-11-26 from main8c87acc, version29b171b5-afc0-495d-a9b7-5f64d520a4b8. HTML/all77 assets and security headers verified. Explicitly local practice; API/accounts/payments/sync off. Not a production account migration. | [Frontend release record](55-CLOUDFLARE-FRONTEND.md); ignored frontend inventory/deployment receipts. |
 | KV `ENTITLEMENTS` | Worker binding, not a GitHub file | Paid entitlements, bearer-license indexes, webhook deduplication and health flags. Checked-in IDs are placeholders. Resource titles are not proof of ownership. | Exact namespace ID and preview ID in private deployment record; preview must differ. |
 | D1 `DB` | `vocal-studio-accounts` database | Accounts, identities, hashed sessions, trials/grants, progress revisions, reports and anonymous events. Schema is in `workers/entitlements/src/schema.js`. | Exact database ID, account, backup/export reference and restore test. |
 | Google Cloud OAuth | Project number prefix `636631700114`; public web client in `wrangler.toml` | Public client ID is configured; owner email/project ID are **not established** by the client ID. Verify IAM and OAuth Clients in Cloud Console. | Private inventory: project ID/number, owner members, consent support email and authorized origins. |

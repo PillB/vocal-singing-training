@@ -28,6 +28,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  cloudflare-preview:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/live-pages.yml
+    with:
+      target: cloudflare-preview
+
   # Run affected integration flows before the longer core/mutation dependency.
   integration-focus:
     runs-on: ubuntu-24.04
@@ -99,8 +105,31 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: node qa/lint-complexity.mjs --baseline-ref "origin/$BASE_REF"
-      - name: Mutation check (every planted audio and lint defect must turn a test red)
-        run: node qa/mutate.mjs
+      # The light Node sets. audio and guards, about 18 of this step's 23 minutes, run in node-mutation below: with
+      # them the step took 22.8 of the job's 25 minutes on b9e30d2 and was cancelled at 23.9 on 331e83b (QA-75).
+      - name: Mutation check (the light Node sets, every planted defect must turn a test red)
+        run: node qa/mutate.mjs pitch lint coaching sets ledger claims path curriculum
+
+  # Isolated Node sets, one job each, after the contracts they mutate are green. They need no
+  # browser. tests/node/mutation-matrix.test.mjs holds every Node job's estimate (its mutants at CI's measured
+  # seconds per mutant) under half its limit, so a set that grows past it turns that test red before CI cancels it.
+  node-mutation:
+    needs: contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        set: [audio, guards, ops]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: "Mutation check (${{ matrix.set }}): every planted defect must turn a test red"
+        run: node qa/mutate.mjs ${{ matrix.set }}
 
   browser-contracts:
     needs: contracts

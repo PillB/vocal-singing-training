@@ -15,7 +15,7 @@
   };
   const state = {
     phase: "setup", lines: [], plan: [], actual: [], mid: [],
-    idx: 0, start: 0, owner: "", saved: false,
+    idx: 0, start: 0, owner: "", saved: false, receipt: null,
     mic: "off", epoch: 0, stream: null, context: null, source: null, analyser: null,
     samples: null, bands: null, raf: 0, floor: 0.008, calibration: [],
     heardVoiceAt: 0, breathTicks: 0, candidateLatch: false, candidates: 0, lastHintAt: 0
@@ -140,6 +140,7 @@
     state.idx = 0;
     state.start = performance.now();
     state.saved = false;
+    state.receipt = null;
     state.candidates = 0;
     show("active");
     runView();
@@ -168,6 +169,7 @@
     stopMic();
     show("setup");
     state.saved = false;
+    state.receipt = null;
     state.owner = "";
     note("");
     planView();
@@ -191,15 +193,21 @@
       note("No está disponible el calendario de práctica. No se ha registrado nada.");
       return;
     }
-    const sec = Math.max(0, Math.min(900, Math.round((performance.now() - state.start) / 1000)));
+    persistRound(comfort);
+  }
+
+  function persistRound(comfort) {
     try {
-      const rec = global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });
-      if (global.VTStorage?.isUnsaved?.()) {
-        note("El navegador rechazó guardar el progreso. Queda visible solo mientras esta pestaña siga abierta.");
+      if (!state.receipt) {
+        const sec = Math.max(0, Math.min(900, Math.round((performance.now() - state.start) / 1000)));
+        state.receipt = global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });
+      }
+      if (!global.VTStorage?.retryDaysSave?.()) {
+        note("El navegador rechazó guardar el progreso. Queda visible solo mientras esta pestaña siga abierta. Libera espacio y vuelve a guardar; no se contará otra ronda.");
         return;
       }
       state.saved = true;
-      $("flow-done-text").textContent = rec.becameDay
+      $("flow-done-text").textContent = state.receipt.becameDay
         ? "Sumaste un nuevo día de práctica al calendario compartido. Tu comodidad: " + comfortLabel(comfort) + "."
         : "Tu día ya estaba registrado; esta ronda también quedó anotada. Tu comodidad: " + comfortLabel(comfort) + ".";
       show("done");
@@ -319,6 +327,8 @@
       micStatus("Este navegador no ofrece audio en esta página. Sigue con los botones manuales.");
       return;
     }
+    // Reciprocal exclusion: the example must stop before capture/permission.
+    global.VTBreathTeach?.stopSound?.();
     const token = ++state.epoch;
     state.mic = "requesting";
     $("flow-mic").textContent = "Solicitando permiso…";

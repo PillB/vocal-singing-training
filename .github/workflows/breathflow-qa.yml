@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   teaching-flows:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +39,10 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Teaching, body checkpoints, saving, denied/late mic, mobile
         run: npx playwright test tests/breathflow.spec.js --project=chromium --workers=2 --reporter=line
+        env:
+          CI: '1'
+      - name: Guide links and panel preservation beside the teaching entry
+        run: npx playwright test tests/practice-design.spec.js tests/redteam-exercise-language.spec.js --project=chromium --workers=2 --reporter=line -g 'guide link|open panels and the scroll position|stage refit respects'
         env:
           CI: '1'
       - name: "Source-drift contract: WebKit must actually select BreathFlow tests"
@@ -56,7 +60,7 @@ jobs:
           if-no-files-found: ignore
 
   webkit-learning:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

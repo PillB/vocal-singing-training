@@ -168,3 +168,33 @@ No stand-alone Postgres connection pool exists in the documented app stack. D1 i
 - Cloudflare D1 Workers API: https://developers.cloudflare.com/d1/worker-api/d1-database/
 - Cloudflare database connection patterns: https://developers.cloudflare.com/workers/databases/connecting-to-databases/
 - Existing project research: `docs/37-DAILY-LOOP.md`, `docs/44-PROTOCOLO-TECNICO-VOCAL-EVIDENCIA-2026-11-06.md`, `docs/47-SESSION-SETS.md`, and PR #47 `docs/48-TU-CAMINO.md`.
+
+## 10. QA round 2026-11-25: settled scroll before the refit oracle
+
+| Issue / screen / state | Actual versus expected | Evidence and root cause | Defense and verification |
+|---|---|---|---|
+| BF-QA-SCROLL-BOUNDARY; exercise stage; idle `s9-pitch-match`, 390×844, guide/metrics/piano open | The refit test attributed 700→762 px to its refit. Expected: compare a settled reading position before and after the actual fitter, with the original 2 px tolerance. | PR #52 run `45537755187`, `integration-focus`: the trace reads 700 at 9853.446 ms, but its **before-refit** snapshot already records 762 at 9863.903 ms. Stage height remains 641 px, maximum 710 px, rails 197/276 px. The piano's `is-settled` class ends its CSS transition; its callback then starts a separate smooth reveal. Scroll was still moving 48→58→89 before the test's instant scroll. The original forced-anchor bug and this test sampling race are different failures. | Observe `scrollY` until unchanged for 150 ms, fail with the last position after 5 s. Wait after panel navigation, after the deliberate reading scroll and after the real double refit. Preserve `before > 300`, stage height ≥120, and absolute delta ≤2 px. Shared matrix: pitch/speech at 1280×800 and 390×844; retain the original language-switch flow. |
+
+The [CSSOM View scrolling algorithm](https://www.w3.org/TR/cssom-view-1/#scrolling)
+defines completion by the absence of pending scroll updates. A panel class is
+not evidence that the subsequent viewport navigation finished. Increasing the
+pixel tolerance or disabling browser scroll anchoring would hide the measured
+failure; neither is changed here. The trade-off is up to three 150 ms quiet
+windows per case, with a bounded diagnostic failure instead of a fixed sleep.
+
+Validation on base `89eccc7` plus this test change: lint and `test:core` passed
+(1,269 passed, zero failures, two pre-existing Worker TODOs). Deterministic
+controls executed the actual helper against independent position sequences:
+stable 700 succeeded; 48→762 movement resolved only after 368 ms; perpetual
+movement rejected at 5 s. A premature-stability mutation returned 79 instead
+of 762 and failed the oracle. These controls validate the test boundary, not
+the application layout. The existing restored-anchor browser mutant remains
+the product negative control; its new CI run is required.
+
+Five desk review passes considered malformed/nonsettling input, asynchronous
+panel navigation, keyboard/mobile continuity, unchanged numerical thresholds,
+and CI failure diagnostics. Desktop/mobile/zoom/locale rendering and actual
+browser mutation outcomes remain unverified locally: Chromium failed during
+launch with macOS `MachPortRendezvous`/`KERN_SUCCESS` failure, before any of the
+six focused tests ran. No product CSS, navigation, scoring, pose instruction,
+audio or storage behavior changes in this round.

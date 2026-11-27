@@ -452,6 +452,26 @@
       writeSynced(LS.days, bag);
     },
 
+    /** Retry only this profile's pending day write, without recording again.
+     * An unrelated failed settings/lesson write must not change this outcome. */
+    retryDaysSave() {
+      const key = scopedKey(LS.days);
+      if (!unsaved.has(key)) return true;
+      try {
+        if (!global.VTDays?.merge) return false;
+        // read() prefers the cache; only direct localStorage sees another tab.
+        const persisted = JSON.parse(localStorage.getItem(key) || "null");
+        const bag = global.VTDays.merge(JSON.parse(unsaved.get(key)), persisted);
+        const raw = JSON.stringify(bag);
+        unsaved.set(key, raw);
+        localStorage.setItem(key, raw);
+        unsaved.delete(key);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
     /** Daily-loop memory; shape owned by js/daily-loop.js. */
     getLoop() {
       return read(scopedKey(LS.loop), null);

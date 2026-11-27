@@ -56,7 +56,7 @@ test("BASE_URL, VT_BASE and VT_TEST_PORT agree, so every spec tests the same ser
       execFileSync(
         process.execPath,
         ["-e", "require('./playwright.config.js'); console.log(JSON.stringify([process.env.BASE_URL || null, process.env.VT_BASE || null]))"],
-        { cwd: new URL("../..", import.meta.url), env: { PATH: process.env.PATH, ...env } }
+        { cwd: new URL("../..", import.meta.url), env: { PATH: process.env.PATH, HOME: process.env.HOME, ...env } }
       ).toString()
     );
   assert.deepEqual(bases({}), [null, null], "the default :8765 is left to each spec's own fallback");

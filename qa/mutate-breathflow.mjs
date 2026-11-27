@@ -11,10 +11,42 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { behaviorDetected } from "./breathflow-oracle.mjs";
+import { behaviorDetected, diagnosticTail } from "./breathflow-oracle.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cases = [
+  {
+    id: "BF-M18 layout refit overrides a reader",
+    path: "js/app.js",
+    anchor: 'const top = stageRestTop(stage, vh);',
+    broken: 'document.getElementById("ex-title").scrollIntoView({ block: "start", behavior: "instant" });\n      const top = stageRestTop(stage, vh);',
+    spec: 'tests/redteam-exercise-language.spec.js',
+    name: 'stage refit respects a learner reading below the stage'
+  },
+
+  {
+    id: "BF-M16 cached retry erases a newer tab",
+    path: "js/storage.js",
+    anchor: 'const bag = global.VTDays.merge(JSON.parse(unsaved.get(key)), persisted);',
+    broken: 'const bag = JSON.parse(unsaved.get(key));',
+    name: "retry merges newer practice from another tab"
+  },
+
+  {
+    id: "BF-M14 guide continues into microphone permission",
+    path: "js/breathflow.js",
+    anchor: '    global.VTBreathTeach?.stopSound?.();',
+    broken: '',
+    name: "microphone tap cancels guide playback before requesting capture"
+  },
+  {
+    id: "BF-M15 retry counts another round",
+    path: "js/breathflow.js",
+    anchor: '      if (!state.receipt) {',
+    broken: '      if (true) {',
+    name: "retry after quota recovery persists exactly the original round"
+  },
+
   {
     id: "BF-M1 readiness bypass",
     path: "js/breathflow.js",
@@ -53,14 +85,14 @@ const cases = [
   {
     id: "BF-M6 duplicate ledger write",
     path: "js/breathflow.js",
-    anchor: '      const rec = global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });',
-    broken: '      const rec = global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });\n      global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });',
+    anchor: '        state.receipt = global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });',
+    broken: '        state.receipt = global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });\n      global.VTDays.record({ exerciseId: EXERCISE_ID, sec, saved: true, source: "breathflow" });',
     name: "one manual round updates the same day, week and month ledger used by main"
   },
   {
     id: "BF-M7 unsaved browser falsely reports success",
     path: "js/breathflow.js",
-    anchor: '      if (global.VTStorage?.isUnsaved?.()) {',
+    anchor: '      if (!global.VTStorage?.retryDaysSave?.()) {',
     broken: '      if (false) {',
     name: "refused browser storage never confirms a day was saved across a reload"
   },
@@ -127,7 +159,7 @@ function replaceOnlyOnce(original, anchor, broken, id) {
 function runMutant(item) {
   const command = item.node ? process.execPath : "npx";
   const args = item.node ? ["--test", "tests/node/playwright-projects.test.mjs"] : [
-    "--no-install", "playwright", "test", "tests/breathflow.spec.js",
+    "--no-install", "playwright", "test", item.spec || "tests/breathflow.spec.js",
     "--project=chromium", "--workers=1", "--reporter=line", "-g", item.name
   ];
   const result = spawnSync(command, args, { cwd: root, encoding: "utf8",
@@ -146,7 +178,7 @@ function evaluateMutant(item) {
     if (result.error || !diedForBehavior) {
       throw new Error(item.id + ": mutant not killed by behavioral oracle. " +
         "status=" + result.status + " signal=" + result.signal + " error=" +
-        (result.error?.message || "none") + "\n" + log.slice(-5500));
+        (result.error?.message || "none") + "\n" + diagnosticTail(log));
     }
     process.stdout.write("KILLED " + item.id + " by: " + item.name + "\n");
   } finally {
@@ -158,4 +190,4 @@ function evaluateMutant(item) {
 }
 
 for (const item of cases) evaluateMutant(item);
-process.stdout.write("PASS: all fourteen BreathFlow behavioral mutants killed and restored\n");
+process.stdout.write(`PASS: all ${cases.length} BreathFlow behavioral mutants killed and restored\n`);

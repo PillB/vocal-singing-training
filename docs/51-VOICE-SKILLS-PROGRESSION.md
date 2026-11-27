@@ -89,3 +89,36 @@ Competidores: Yousician, Simply Sing, Vocal Image y aplicaciones de afinación p
 Repositorio y docs: github.com/PillB/vocal-singing-training, `docs/`, `AGENTS.md`, `agent.md`, `CLAUDE.md`; web en GitHub Pages desde `main`; Worker en `workers/entitlements/`, Cloudflare D1/KV; progreso localStorage e IndexedDB; GitHub Actions CI. Sin PostgreSQL dedicado en este módulo: no crear pool. Outbox solo ante efectos secundarios transaccionales (pagos/notificaciones) y con consumidor idempotente; sync de progreso necesita resolución de conflictos por revisión, no last-write-wins ciego.
 
 No fusionar/desplegar por un verde anterior a la última versión. Se requiere CI completo y específico del SHA final, Safari físico con cambios de dispositivo y permisos, VoiceOver/zoom real, revisión de docente, usuarios novatos y sincronización cruzada. Una decisión correcta en pantalla demuestra comprensión declarativa, **no** técnica vocal correcta.
+
+## Independent review repair — 2026-11-23
+
+Two reproduced blockers repaired on a separate PR targeting this draft:
+
+- Guide playback is stopped synchronously before optional microphone permission
+  is requested. The opposite-order guard already existed; both orders need a
+  regression and mutation.
+- A refused day write retains the original round receipt. Retry flushes only
+  that profile's pending day value; it does not call VTDays.record a second
+  time. Unrelated unsaved settings/lesson keys do not decide the day's status.
+  Record once, fail/retry twice, recover and reload must preserve n1 and the
+  original seconds. Profiles cannot cross the pending round's owner check.
+
+The real-storage Node regression passes. Chromium/WebKit acceptance and mutants
+must run on the repaired draft head; local macOS browser launch remains blocked.
+These repairs do not close physical iOS/acoustic, bilingual, instructor/novice or
+real sync gates. Before merging to main, define bf-breathflow as a supplemental
+breath/phrasing activity in the skill-area policy and test it without pretending
+it is one of the52 catalogue exercises. Do not silently drop it from area counts.
+
+Retry merges the latest persisted day bag via VTDays.merge before flushing,
+so a newer tab’s distinct days/exercise IDs are retained. This inherits the
+existing same-day max(n,sec) union policy; it does not add concurrent counts
+and cannot promise exact take totals across simultaneous offline devices.
+
+Hosted reconciliation: pin supported Ubuntu24.04 after an Ubuntu26 Microsoft
+apt403; scope the guide-link test to its actual practice-anchor link alongside
+the new teaching link. A stale-retry mutant must fail an assertion on a missing
+day rather than crash with TypeError, so the oracle now reads that day safely.
+The language/scroll trace revealed a shared stage-refit title-navigation bug;
+remove that navigation and retain explicit exercise-entry scrolling, with
+speaking/singing and phone/desktop regressions plus a restored-jump mutant.

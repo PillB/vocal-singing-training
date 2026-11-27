@@ -29,3 +29,6 @@ Comandos por tarea/ronda (ejecutar o registrar bloqueo, nunca simular resultados
     npx playwright test tests/breathflow.spec.js --project=chromium
 
 **chore(lint):** el gate existente en qa/lint-complexity.mjs exige McCabe modified <=15 para cada función nueva/modificada; no ampliar la baseline. El gate fuente y mutantes deben rechazar que una función/propuesta en PR se anuncie en main y errores de oracle que conviertan tests rotos en éxitos. La regla canónica y más extensa sigue en [AGENTS.md](./AGENTS.md).
+
+Skill-focus implementation handoff: [docs/57-SKILL-FOCUSED-SETS.md](./docs/57-SKILL-FOCUSED-SETS.md).
+Every task and round: source fault + correct observable case; no tautologies; npm run lint (chore(lint) modified CC <=15), npm run test:core, node --test tests/node/skill-sets.test.mjs, and browser skill flows. Red-team science, race/ledger, accessibility/mobile, gamification/privacy and catalog drift. Unrun physical/device checks remain unverified.

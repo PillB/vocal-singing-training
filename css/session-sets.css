@@ -421,3 +421,14 @@
 .song-library { grid-column: 1 / -1; min-width: 0; }
 .song-study { margin-block: 0.75rem; padding: 1rem; }
 .song-study a { display: inline-flex; align-items: center; min-height: var(--min-tap); overflow-wrap: anywhere; }
+
+/* Skill repair: readable and reflowing instructions, with no mastery badge. */
+.set-skill-plan{padding:.55rem .7rem;background:var(--bg-elevated);border-inline-start:3px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+.set-skill-label{margin:0 0 .25rem;font-size:.76rem;font-weight:750}
+.set-skill-plan ol{margin:.25rem 0 .45rem;padding-inline-start:1.4rem;display:grid;gap:.3rem}
+.set-skill-plan li{font-size:.84rem;line-height:1.45;overflow-wrap:anywhere}
+.set-skill-safe{margin:0;font-size:.82rem;line-height:1.45;overflow-wrap:anywhere}
+
+/* Optional first-visit route: existing daily action remains primary. */
+.skill-first-entry { display: none; }
+body.loop-first #start-panel .skill-first-entry { display: inline-flex; min-height: var(--min-tap); margin-top: .6rem; }

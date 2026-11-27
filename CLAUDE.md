@@ -2,8 +2,8 @@
 
 **See [`AGENTS.md`](./AGENTS.md)** — repository path
 **`vocal-singing-training/AGENTS.md`** — and read it before any task. It is
-the canonical agent contract. The requested `agent.md` lives at
-**`vocal-singing-training/agent.md`** and points to the same file.
+the canonical agent contract. The requested [`agent.md`](./agent.md) lives at
+**`vocal-singing-training/agent.md`** and points to the same file. Read that path directly for the [BreathFlow scientific design](./docs/56-BREATHFLOW-EVIDENCE-BASED-DESIGN.md), its research gates and counterexample tests.
 
 The rules you will be held to, in short (AGENTS.md has the detail and code):
 

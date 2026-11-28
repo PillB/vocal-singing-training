@@ -17,6 +17,8 @@
      * Official Payment Links: https://docs.stripe.com/payment-links
      */
     demoUnlockEnabled: false,
+    /** Explicit launch preview. Set true only with the reviewed paid/trial release. */
+    skillSetsRequirePro: false,
     /**
      * Require session_id (or payment_id) on the ?billing=success return before we
      * even try to claim a license. Cheap first filter; the real check is the
@@ -214,6 +216,7 @@
           "ad_free",
           "export_progress",
           "coach_pack",
+          "skill_sets",
           "pro_insights",
           "multi_profile",
           "studio_goals",

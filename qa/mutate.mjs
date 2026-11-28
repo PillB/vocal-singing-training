@@ -8,7 +8,7 @@
  *
  *   node qa/mutate.mjs            # every Node set (DEFAULT_SETS); CI runs them in the contracts job and node-mutation
  *   node qa/mutate.mjs audio      # one set
- *   node qa/mutate.mjs stage a11y flows regress boot billing scoring controls audit toast designs splits syncing inject learner authwall promises promises-time-2 promises-time-3 promises-voice promises-account-ads lang pathui curriculumui  # browser sets: need Playwright's Chromium; the same list as CI's mutation matrix (tests/node/mutation-matrix.test.mjs holds the two together)
+ *   node qa/mutate.mjs stage a11y flows regress boot billing scoring controls audit toast designs splits syncing inject learner authwall promises promises-time-2 promises-time-3 promises-voice promises-account-ads lang pathui curriculumui phones  # browser sets: need Playwright's Chromium; the same list as CI's mutation matrix (tests/node/mutation-matrix.test.mjs holds the two together)
  *
  * Exit code 1 when any mutant survives or an anchor no longer matches (so a
  * refactor that moves the code cannot silently retire its mutant).
@@ -635,7 +635,7 @@ export const MUTANTS = {
         // Round-4 red team: the take's summary and a toast that follows the page
         ["A11 the take's summary introduced as the recording again (\"Tu grabación Sin ritmo…\")", "js/app.js", 'el.textContent = summary ? `${tt("rate.takeSum")} ${summary}` : "";', 'el.textContent = summary ? `${tt("rate.take")} ${summary}` : "";'],
         ["A12 a new take leaves the last take's numbers on the card", "js/app.js", "      clearTakeSummary();\n    }\n    paintPracticeControls(live);", "    }\n    paintPracticeControls(live);"],
-        ["A13 a take ended without the Stop announcement keeps the last take's numbers", "js/app.js", "    state.rate.summary = modeResult?.summary || null;\n    if (!silent) announceStop(modeResult);", "    if (!silent) state.rate.summary = modeResult?.summary || null;\n    if (!silent) announceStop(modeResult);"],
+        ["A13 a take ended without the Stop announcement keeps the last take's numbers", "js/app.js", "    if (hadTake) state.rate.summary = modeResult?.summary || null;\n    if (!silent) announceStop(modeResult);", "    if (hadTake && !silent) state.rate.summary = modeResult?.summary || null;\n    if (!silent) announceStop(modeResult);"],
         ["A14 a toast is placed once and never again", "js/app.js", "    watchToastPlace();\n    const span", "    const span"],
         ["A15 no 2,8 s floor: a short message goes in under 2 s", "js/app.js", "Math.max(2800, 1500 + text.length * 50)", "Math.max(0, 1500 + text.length * 50)"],
         ["A16 the title stays hidden after the toast has gone", "js/app.js", '    $("#toast")?.classList.remove("show");\n    $(".exercise-header-compact")?.classList.remove("toast-over");', '    $("#toast")?.classList.remove("show");'],
@@ -1375,7 +1375,32 @@ export const MUTANTS = {
     // FLOW-3: a dialog taller than a phone's window wrapped focus to a control scrolled out of sight.
     ["LF3 a trap's wrap focuses without bringing the control into view", "js/focus-trap.js", '    if (moved && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" });\n', "", "wrap brings the control into view", "tests/focus-trap.spec.js"],
     ["LF4 Tab past the last control wraps to a first one out of sight", "js/focus-trap.js", "      moveTo(first);\n", "      focus(first);\n", "wrap brings the control into view", "tests/focus-trap.spec.js"],
-    ["LF5 Shift+Tab past the first control wraps to a last one out of sight", "js/focus-trap.js", "      moveTo(last);\n", "      focus(last);\n", "wrap brings the control into view", "tests/focus-trap.spec.js"]
+    ["LF5 Shift+Tab past the first control wraps to a last one out of sight", "js/focus-trap.js", "      moveTo(last);\n", "      focus(last);\n", "wrap brings the control into view", "tests/focus-trap.spec.js"],
+    ["LF6 a hidden page's time is credited as practice: half an hour away reads 31:00 de 5:00 (QA-77)", "js/app.js", "      if (state.view === \"exercise\") recordPracticeIfDue(\"hidden\");\n      pausePracticeClock();\n", "      if (state.view === \"exercise\") recordPracticeIfDue(\"hidden\");\n", "QA-77", "tests/practice-hidden-time.spec.js"],
+    ["LF7 a take shown again keeps no clock: what is sung after the return is not credited (QA-77)", "js/app.js", "    if (state.practiceLive && sp.liveSince == null) sp.liveSince = performance.now();\n", "", "QA-77", "tests/practice-hidden-time.spec.js"],
+    ["LF8 the card counts the timer's run through the hidden time: a minute sung reads 5:00 de 5:00 ✓ (QA-77)", "js/app.js", "total - state.timer.remaining - hiddenSec()", "total - state.timer.remaining", "QA-77", "tests/practice-hidden-time.spec.js"],
+    ["LF9 every stop asks the mode to end the take again: the rate ladder saves 7 minutes for a 3-minute take (QA-78)", "js/app.js", "    const modeResult = hadTake ? takeModeResult() : null;", "    const modeResult = takeModeResult();", "QA-78", "tests/practice-hidden-time.spec.js"],
+    ["LF10 a stop with no take wipes the take's own words off the rating card (QA-78)", "js/app.js", "    if (hadTake) state.rate.summary = modeResult?.summary || null;", "    state.rate.summary = modeResult?.summary || null;", "QA-78", "tests/practice-hidden-time.spec.js"],
+    ["LF11 the last take plays on through the next one, which hears and records it (QA-79)", "js/app.js", "    setExerciseEnded(false);\n    pauseTakePlayers();\n", "    setExerciseEnded(false);\n", "QA-79", "tests/practice-hidden-time.spec.js"],
+    // QA-80: one flag for the day let the morning time spend the evening one, and the second field came filled.
+    ["LF12 one reminder a day: the morning time spends the evening one (QA-80)", "js/reminders.js", "    if (cfg.lastNotifiedDay !== dayKey(now)) return true;\n    const told = Number.isFinite(cfg.lastNotifiedSlot) ? cfg.lastNotifiedSlot : Infinity;\n    return slot > told;\n", "    return cfg.lastNotifiedDay !== dayKey(now);\n", "QA-80 two times", "tests/redteam-home-retention.spec.js"],
+    ["LF13 a told reminder keeps no time: it counts for the whole day, and the evening one is never told (QA-80)", "js/reminders.js", "    c.lastNotifiedSlot = slot == null ? -1 : slot;\n", "    delete c.lastNotifiedSlot;\n", "QA-80 two times", "tests/redteam-home-retention.spec.js"],
+    ["LF14 the second time comes filled at 09:00 and is saved as if chosen (QA-80)", "js/app.js", '    if (t2) t2.value = cfg.times[1] || "";', '    if (t2) t2.value = cfg.times[1] || "09:00";', "QA-80 a Pro learner", "tests/redteam-home-retention.spec.js"],
+    ["LF15 the reminder's way in names only the first of two times (QA-80)", "js/app.js", 'tt("retain.openOn", { time: reminderTimes(cfg.times) })', 'tt("retain.openOn", { time: clockTime(cfg.times[0]) })', "QA-80 two times", "tests/redteam-home-retention.spec.js"],
+    // A month of use, every surface after every step (tests/usage-calendar.spec.js): each says what was done.
+    ["LF16 a second tab keeps the record it loaded: Inicio there still reads yesterday", "js/app.js", "      redrawTimer = setTimeout(() => showSyncedRecord(), 120);\n", "", "first visit, then seven days", "tests/usage-calendar.spec.js"],
+    ["LF17 the week's takes are the last seven days, not Monday's week: a new week starts with last week's", "js/value-pulse.js", "    const day = (now.getDay() + 6) % 7; // Mon=0\n", "    const day = 6;\n", "first visit, then seven days", "tests/usage-calendar.spec.js"],
+    ["LF18 a rest day reads as a day practised on Inicio's week", "js/practice-days.js", '      if (bag.rest.used.includes(key)) return "rest";', '      if (bag.rest.used.includes(key)) return "done";', "first visit, then seven days", "tests/usage-calendar.spec.js"],
+    ["LF19 late microphone permission starts hidden practice credit", "js/app.js", "state.sessionPractice.liveSince == null && !document.hidden", "state.sessionPractice.liveSince == null", "permission granted after hiding", "tests/practice-hidden-time.spec.js"],
+    ["LF20 rate ladder scores wall time including time hidden", "js/practice-modes.js", "const sec = Number.isFinite(ctx?.practicedSec) ? Math.max(0, ctx.practicedSec) : 0;", "const sec = (performance.now() - (st.wallStart || st.startedAt)) / 1000;", "rate ladder's minutes exclude hidden", "tests/practice-hidden-time.spec.js"],
+    ["LF27 zoomed skill sheet ignores its available grid height", "css/session-sets.css", "max-height: min(calc(100dvh - 2rem), 100%);", "max-height: calc(100dvh - 2rem);", "200% CSS layout scale", "tests/skill-discovery-access.spec.js"],
+    ["LF28 desktop Stop shrinks below the practice hit target", "css/styles.css", "  padding: 0.4rem 0.75rem;\n  min-height: var(--min-tap);", "  padding: 0.4rem 0.75rem;\n  min-height: 40px;", "pitch graph off/on", "tests/skill-teaching.spec.js"],
+    ["LF23 skill training overwhelms the first visit", "js/session-sets.js", "entry.hidden = !discovery.eligible;", "entry.hidden = false;", "first website session", "tests/skill-discovery-access.spec.js"],
+    ["LF24 reloading the same tab counts as a return visit", "js/session-sets.js", 'if (session === "first" || session === "return") return { eligible: session === "return", celebrate: false };', "", "first website session", "tests/skill-discovery-access.spec.js"],
+    ["LF25 optional quiet feedback never hides the trace", "css/session-sets.css", ".skill-feedback-quiet #pitch-canvas,", ".skill-feedback-quiet #removed-pitch-canvas,", "pitch graph off/on", "tests/skill-teaching.spec.js"],
+    ["LF26 skill task disappears after opening the exercise", "js/app.js", "    renderExercise();\n    renderSkillTeaching();", "    renderExercise();", "a running set retains", "tests/skill-teaching.spec.js"],
+    ["LF22 hidden late permission is subtracted from the visible timer card", "js/app.js", "    if (document.hidden && state.sessionPractice.hiddenSince == null) {\n      state.sessionPractice.hiddenSince = performance.now();\n    }\n", "", "permission granted after hiding", "tests/practice-hidden-time.spec.js"],
+    ["LF21 a synced custom weekly session target is shown as the old default", "js/app.js", "      goalSel.value = t;", "      goalSel.value = \"3\";", "weekly units stay distinct", "tests/weekly-goal-units.spec.js"]
   ].map(([name, file, from, to, grep, spec]) => ({
     name,
     file,
@@ -1424,7 +1449,7 @@ export const MUTANTS = {
     ["SY30 a sign-in does not note when the browser stopped being the last owner's", "js/sync.js", "        noteHandover();\n", "", "sync-handover"],
     ["SY31 the handover is never stored: a reload before answering forgets it", "js/sync.js", "      if (h) localStorage.setItem(LS_HANDOVER, JSON.stringify(h));", "      if (h) throw new Error(\"not kept\");", "sync-handover"],
     ["SY32 leaving without answering leaves the leaver's takes as the last owner's, for her next sync to send", "js/sync.js", "    setAsideLeaver(leaving);\n    writeHandover(null);", "    writeHandover(null);", "sync-handover"],
-    ["SY33 what the newcomer keeps is overwritten by the account's copy instead of merged into it", "js/sync.js", "      note(await syncNow(id));", "      note(await pullOverwrite(id, token));", "sync-handover"],
+    ["SY33 what the newcomer keeps is overwritten by the account's copy instead of merged into it", "js/sync.js", "      note(await syncNow(id));", "      note(await pullOverwrite(id, token, true));", "sync-handover"],
     ["SY34 the last owner's row keeps the count of the newcomer's takes", "js/sync.js", "      const count = Math.max(early.length, row.completedCount - late.length);", "      const count = Math.max(early.length, row.completedCount);", "sync-handover"],
     ["SY35 the newcomer's part has no day ledger: the day they practised is not counted", "js/sync.js", "    after.days = daysOf(after);", "    after.days = null;", "sync-handover"],
     ["SY36 the last owner's day ledger keeps the newcomer's time", "js/sync.js", "      days: lessDays(b.days, after.days)", "      days: b.days", "sync-handover"],
@@ -1437,7 +1462,7 @@ export const MUTANTS = {
     ["SY43 leaving without answering leaves the leaver's recordings for the last owner to see", "js/sync.js", "    recordingsAside(h.me, { from: ms(h.since) });\n", "", "sync-shared-browser.spec.js", "recordings go with"],
     ["SY44 the leaver's recordings are taken with everything recorded before them", "js/storage.js", "        if (r.asideFor || (range.from && at < range.from) || (range.to && at >= range.to)) return null;", "        if (r.asideFor || (range.to && at >= range.to)) return null;", "sync-shared-browser.spec.js", "recordings go with"],
     ["SY45 a recording set aside still plays by its id", "js/storage.js", "          if (!shown(r, active)) return resolve(null);", "          if (!r || recordingProfile(r) !== active) return resolve(null);", "sync-shared-browser.spec.js", "recordings go with"],
-    ["SY46 a profile the newcomer practised in syncs before the pulls: its cycle restores what was left aside, and a pull overwrites it", "js/sync.js", "    for (const id of ids.filter((x) => !kept[x])) {\n      note(await pullOverwrite(id, token));\n      if (sessionMoved(token)) return sessionGone();\n    }\n    if (restoreAside(me)) schedule();\n    for (const id of ids.filter((x) => kept[x])) {\n      note(await syncNow(id));\n      if (sessionMoved(token)) return sessionGone();\n    }\n", "    for (const id of ids.filter((x) => kept[x])) {\n      note(await syncNow(id));\n      if (sessionMoved(token)) return sessionGone();\n    }\n    for (const id of ids.filter((x) => !kept[x])) {\n      note(await pullOverwrite(id, token));\n      if (sessionMoved(token)) return sessionGone();\n    }\n    if (restoreAside(me)) schedule();\n", "sync-handover"],
+    ["SY46 a profile the newcomer practised in syncs before the pulls: its cycle restores what was left aside, and a pull overwrites it", "js/sync.js", "    for (const id of ids.filter((x) => !kept[x])) {\n      note(await pullOverwrite(id, token, true));\n      if (sessionMoved(token)) return sessionGone();\n    }\n    if (restoreAside(me)) schedule();\n    for (const id of ids.filter((x) => kept[x])) {\n      note(await syncNow(id));\n      if (sessionMoved(token)) return sessionGone();\n    }\n", "    for (const id of ids.filter((x) => kept[x])) {\n      note(await syncNow(id));\n      if (sessionMoved(token)) return sessionGone();\n    }\n    for (const id of ids.filter((x) => !kept[x])) {\n      note(await pullOverwrite(id, token, true));\n      if (sessionMoved(token)) return sessionGone();\n    }\n    if (restoreAside(me)) schedule();\n", "sync-handover"],
     ["SY47 the handover is waited on for any sign-in, the owner's own made on admin.html included", "js/sync.js", "waiting: !!h && h.owner === s.owner && handoverIsFor(h, sessionToken()) }", "waiting: !!h && h.owner === s.owner }", "voice-path"],
     ["SY48 once the account is known, every owner waits as if asked", "js/sync.js", "      if (s.state !== \"unknown\") return { other: s.state === \"other\", waiting: s.state === \"other\" };", "      if (s.state !== \"unknown\") return { other: s.state === \"other\", waiting: true };", "voice-path"],
     ["SY49 a signed-out browser waits on a record left behind", "js/sync.js", "      if (!isAvailable()) return { other: false, waiting: false };\n", "", "voice-path"],
@@ -1445,7 +1470,15 @@ export const MUTANTS = {
     ["SY51 the handover record does not name the sign-in it was noted for", "js/sync.js", "since: new Date().toISOString(), tok } : null);", "since: new Date().toISOString() } : null);", "voice-path"],
     ["SY52 a record nobody waits on is never cleared once the owner is known", "js/sync.js", "      if (readHandover()?.owner === who.me) writeHandover(null);\n", "", "sync-handover"],
     ["SY53 the owner signing out puts her own practice aside for a newcomer who left unseen", "js/sync.js", "    if (leaving && !handoverIsFor(h, leaving)) return;\n", "", "sync-handover"],
-    ["SY54 sync does not say whose session is leaving", "js/sync.js", "      if (token !== seenToken) forgetAccount(seenToken);", "      if (token !== seenToken) forgetAccount(null);", "sync-handover"]
+    ["SY54 sync does not say whose session is leaving", "js/sync.js", "      if (token !== seenToken) forgetAccount(seenToken);", "      if (token !== seenToken) forgetAccount(null);", "sync-handover"],
+    ["SY55 a tab does not follow a sign-in or sign-out made in another tab of the browser (QA-76)", "js/account.js", "      if (e.key === LS_KEY || e.key === null) followStoredSession();", "      void e;", "sync-cross-tab"],
+    ["SY56 the closing write goes out without asking whose the practice is (QA-76)", "js/sync.js", "    if (ownerState().state !== \"mine\") return;\n", "", "sync-cross-tab"],
+    ["SY57 a stale tab's refused session deletes the session another tab has just stored (QA-76)", "js/account.js", "        if ((readSession()?.token || null) !== token) followStoredSession();\n        else forget();", "        forget();", "sync-cross-tab"],
+    ["SY58 a page back from the back-forward cache keeps the session it had before it was stored (QA-76)", "js/account.js", "      if (e.persisted) followStoredSession();", "      void e;", "sync-cross-tab"],
+    ["SY59 a tab that follows another's sign-in keeps naming the account it held until the worker answers (QA-76)", "js/account.js", "    session = stored;\n    snapshot = null;\n", "    session = stored;\n", "sync-cross-tab"],
+    ["SY60 'use only my account' pressed again in a second window pulls the account's copy over the take made since (QA-76)", "js/sync.js", "    if (ownerState().state !== \"other\") {\n      emit();\n      return { ok: true, reason: \"answered\" };\n    }\n", "", "sync-cross-tab"],
+    ["SY61 a window still asking whose the practice is never hears it was answered in another (QA-76)", "js/sync.js", "      if (e.key === LS_OWNER || e.key === LS_HANDOVER || e.key === null) emit();", "      void e;", "sync-cross-tab"],
+    ["SY62 pending account pull overwrites a new take from another tab", "js/sync.js", "    const changed = before !== null && JSON.stringify(current) !== before;", "    const changed = false;", "sync-pull-concurrency"],
   ].map(([name, file, from, to, test, grep]) => ({
     name,
     file,
@@ -2045,6 +2078,38 @@ export const MUTANTS = {
     cmd: grep.startsWith("tests/node/")
       ? node([grep])
       : [...PIANO_SPEC.slice(0, 3), "tests/browser-language.spec.js", "--project=chromium", "--workers=4", "--reporter=dot", "-g", grep]
+  })),
+  // Phone fit (docs/58-PHONE-FIT.md): Detener on the page during a take (stage-relief), and a picture whole on a
+  // phone on its side (landscape-beside). Each is judged by the test in tests/phone-fit.spec.js written to catch
+  // it, named by its title. CI runs this set as its own job.
+  phones: [
+    ["PH1 nothing yields during a take: Detener goes under the page with the stage (33 px on an iPhone mini)", "js/app.js", "      if (applyStageRelief(stage)) fitStageOnce(stage);\n", "", "gains a row at Empezar, Spanish"],
+    ["PH2 the cue yields but the stage is not fitted again: it keeps the height it grew to, Detener still under the page", "js/app.js", "if (applyStageRelief(stage)) fitStageOnce(stage);", "applyStageRelief(stage);", "gains a row at Empezar, English"],
+    ["PH3 the cue is taken out of the page, not hidden to the eye: a screen reader loses the sentence for the take", "css/styles.css", ".highway-stage[data-relief~=\"cue\"] .stage-coach .mode-cue {\n", ".highway-stage[data-relief~=\"cue\"] .stage-coach .mode-cue {\n  display: none;\n", "gains a row at Empezar, Spanish"],
+    ["PH4 the relief outlives the take: the cue never comes back after Detener", "js/app.js", "      clearStageRelief(stage);\n      if (!document.body.classList.contains(\"view-exercise\")) {", "      if (!document.body.classList.contains(\"view-exercise\")) {", "gains a row at Empezar, English"],
+    ["PH16 a take stopped early is not fitted again: the cue it gave up stays hidden", "js/app.js", "      if (wasLive) leaveLivePractice();\n", "", "gains a row at Empezar, Spanish"],
+    ["PH5 the cue is dropped during every take, also where the take fits with it", "js/app.js", "return restBottom > screen.bottom - 2;", "return restBottom > 0;", "a take that fits keeps its cue"],
+    ["PH6 the cue is dropped to lift Empezar too, before anyone has read it", "js/app.js", "    const stop = document.getElementById(\"btn-practice-stop\");\n    if (!stop || stop.hidden) return false;\n    const b = stop.getBoundingClientRect();\n    if (b.height < 1) return false;", "    const live = document.getElementById(\"btn-practice-stop\");\n    const stop = live && !live.hidden ? live : document.getElementById(\"btn-practice-start\");\n    if (!stop || stop.hidden) return false;\n    const b = stop.getBoundingClientRect();\n    if (b.height < 1) return false;", "before a take nothing yields"],
+    ["PH20 Detener is judged where the scroll has put it: a take started with the page scrolled a little gets no relief, and at the top Detener is under the page", "js/app.js", "const restBottom = stageRestTop(stage, screen.vh) + (b.bottom - stage.getBoundingClientRect().top);", "const restBottom = b.bottom;", "scrolled a little"],
+    ["PH21 the relief is decided against a pinch-zoomed viewport: the sentence a reader zoomed in on is taken away", "js/app.js", "const zoom = vv && vv.scale > 1.01 ? vv.scale : 1;", "const zoom = 1;", "pinch-zooms"],
+    ["PH19 only the fit at Empezar looks: a row that arrives in the middle of a take (a longer chord, a bigger score) takes Detener under the page", "js/app.js", "        if (reliefDueMidTake()) {\n          fitHighwayToViewport();\n          return;\n        }\n", "", "in the middle of a take"],
+    ["PH7 on its side a picture starts under the status corner again: cut, on opening and during a take", "css/exercise-viz.css", "    top: var(--pic-t, var(--rail-t, 10%));\n", "", "on opening, Pixel 5|first half"],
+    ["PH17 no fit when the view has arrived: the stage opens 5 px short and only gets its height at Empezar", "js/app.js", "      if (e.target === e.currentTarget) fitHighwayToViewport();\n", "", "on opening the stage has its resting height"],
+    ["PH8 the status corner keeps its row beside the picture: on the narrowest page the picture is left two thirds of the stage", "css/exercise-viz.css", "    flex-direction: column;\n    align-items: stretch;\n    gap: 0.1rem;", "    align-items: stretch;\n    gap: 0.1rem;", "on opening, iPhone SE"],
+    ["PH18 the A/B buttons' columns give way to the picture again: Toma lista loses its first letter on a phone on its side", "css/scenes/resonance.css", "grid-template-columns: repeat(2, minmax(min-content, auto));", "grid-template-columns: repeat(2, minmax(44px, auto));", "on opening, iPhone SE"],
+    ["PH9 the picture's left edge is a fixed number: it lies over a status word longer than today's", "js/app.js", "stage.style.setProperty(\"--pic-l\", `${Math.ceil(left) + BESIDE_GAP}px`);", "stage.style.setProperty(\"--pic-l\", \"99px\");", "a longer status word"],
+    ["PH10 the status corner is not watched: a new word leaves the picture where the last fit put it", "js/app.js", "    if (corner) ro.observe(corner);\n", "", "a longer status word"],
+    ["PH11 the picture starts at the top whatever else is in the rail, and lies over it", "js/app.js", "const alone = shown.length === 1 && shown[0].el.classList.contains(\"hud-tl\");", "const alone = shown.length >= 1 && shown[0].el.classList.contains(\"hud-tl\");", "anything else in the top rail"],
+    ["PH12 the rule reaches a folded phone's cover screen: a picture about 100 px wide", "css/exercise-viz.css", "@media (max-height: 500px) and (min-width: 540px) {", "@media (max-height: 500px) {", "folded phone's cover screen"],
+    ["PH13 the rule reaches an upright phone: the status stacks and the picture moves beside it there too", "css/exercise-viz.css", "@media (max-height: 500px) and (min-width: 540px) {", "@media (min-width: 0px) {", "not on an upright phone"],
+    ["PH15 the rule no longer waits for the script: with something else in the rail the corner still stacks, and the picture is under a rail 29 px taller", "css/exercise-viz.css", ".highway-stage[data-beside]:has(.mode-focus-live .mode-panel.has-viz) .hud-tl {\n    flex-direction: column;", ".highway-stage:has(.mode-focus-live .mode-panel.has-viz) .hud-tl {\n    flex-direction: column;", "anything else in the top rail"],
+    ["PH14 the rule reaches a pitch exercise on its side: its status row stacks over the lanes", "css/exercise-viz.css", ".highway-stage[data-beside]:has(.mode-focus-live .mode-panel.has-viz) .hud-tl {\n    flex-direction: column;", ".highway-stage .hud-tl {\n    flex-direction: column;", "not on an upright phone"]
+  ].map(([name, file, from, to, grep]) => ({
+    name,
+    file,
+    from,
+    to,
+    cmd: [...PIANO_SPEC.slice(0, 3), "tests/phone-fit.spec.js", "--project=chromium", "--workers=2", "--reporter=dot", "-g", grep]
   }))
 };
 
@@ -2064,6 +2129,17 @@ const THIRD = Math.ceil(TIME_LIMIT.length / 3);
 MUTANTS.promises = TIME_LIMIT.slice(0, THIRD);
 MUTANTS["promises-time-2"] = TIME_LIMIT.slice(THIRD, 2 * THIRD);
 MUTANTS["promises-time-3"] = TIME_LIMIT.slice(2 * THIRD);
+
+MUTANTS.sets.push(...[
+  ["SK8 returning home replays the discovery celebration", "js/session-sets.js", 'event.currentTarget.classList.remove("is-new-skill");', "return;", "tests/node/skill-teaching-boundaries.test.mjs"],
+  ["SK7 delayed next-day review is accepted in a short same-session set", "qa/audit-skill-sets.mjs", "if(ex?.audio?.reviewWorkflow)", "if(false)", "tests/node/skill-sets.test.mjs"],
+  ["SK5 stale saved order receives incompatible new curriculum teaching", "js/session-sets.js", "    if (JSON.stringify(session.order) !== JSON.stringify(set.order)) return null;", "", "tests/node/skill-teaching-boundaries.test.mjs"],
+  ["SK6 new steps retain quiet feedback from the prior step", "js/session-sets.js", 'if (teachingStep !== key || !context) $("#view-exercise")?.classList.remove("skill-feedback-quiet");', 'if (!context) $("#view-exercise")?.classList.remove("skill-feedback-quiet");', "tests/node/skill-teaching-boundaries.test.mjs"],
+  ["SK1 future premium gate silently becomes a launch preview", "js/billing.js", "const preview = cfg().skillSetsRequirePro === false;", "const preview = true;", "tests/node/skill-access-policy.test.mjs"],
+  ["SK2 trial or paid expiry is ignored", "js/billing.js", "const current = endsAt === null || nowMs() < endsAt;", "const current = true;", "tests/node/skill-access-policy.test.mjs"],
+  ["SK3 missing premium curriculum tag passes authoring", "qa/audit-skill-sets.mjs", 'if(set.accessTier!=="pro")', "if (false)", "tests/node/skill-sets.test.mjs"],
+  ["SK4 locked direct skill start reaches the engine", "js/session-sets.js", 'if (set.kind === "skill" && !skillAccess().allowed) return null;', "", "tests/node/skill-sets.test.mjs"]
+].map(([name,file,from,to,spec])=>({name,file,from,to,cmd:node([spec])})));
 
 export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger", "claims", "path", "curriculum", "guards", "ops"];
 

@@ -51,11 +51,12 @@
 
 /* —— The picker —— */
 .sets-overlay {
+  grid-template-rows: minmax(0, 1fr);
   overscroll-behavior: contain;
 }
 .sets-card {
   width: min(760px, 100%);
-  max-height: calc(100dvh - 2rem);
+  max-height: min(calc(100dvh - 2rem), 100%);
   display: flex;
   flex-direction: column;
   padding: 1rem 1.1rem 1.1rem;
@@ -249,7 +250,7 @@
   }
   .sets-card {
     width: 100%;
-    max-height: min(88dvh, calc(100dvh - 2.5rem));
+    max-height: min(88dvh, calc(100dvh - 2.5rem), 100%);
     padding: 0.35rem 0.85rem calc(0.85rem + var(--safe-bottom));
     border-radius: 18px 18px 0 0;
     border-bottom: 0;
@@ -301,7 +302,7 @@
     padding: 0.4rem;
   }
   .sets-card {
-    max-height: calc(100dvh - 0.8rem);
+    max-height: min(calc(100dvh - 0.8rem), 100%);
     border-radius: var(--radius);
     padding: 0.6rem 0.8rem 0.7rem;
   }
@@ -421,3 +422,31 @@
 .song-library { grid-column: 1 / -1; min-width: 0; }
 .song-study { margin-block: 0.75rem; padding: 1rem; }
 .song-study a { display: inline-flex; align-items: center; min-height: var(--min-tap); overflow-wrap: anywhere; }
+
+/* Skill repair: readable and reflowing instructions, with no mastery badge. */
+.set-skill-plan{padding:.55rem .7rem;background:var(--bg-elevated);border-inline-start:3px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+.set-skill-label{margin:0 0 .25rem;font-size:.76rem;font-weight:750}
+.set-skill-plan ol{margin:.25rem 0 .45rem;padding-inline-start:1.4rem;display:grid;gap:.3rem}
+.set-skill-plan li{font-size:.84rem;line-height:1.45;overflow-wrap:anywhere}
+.set-skill-safe{margin:0;font-size:.82rem;line-height:1.45;overflow-wrap:anywhere}
+
+/* Returning-visit discovery remains available after the first practice day. */
+#start-panel .skill-first-entry:not([hidden]) { display: inline-flex; min-height: var(--min-tap); margin-top: .6rem; }
+.set-pro-tag { color: var(--accent-2); font-size: .76rem; font-weight: 750; }
+.skill-context { overflow-wrap: anywhere; }
+.skill-context h3 { font-size: 1rem; margin: 0 0 .5rem; }
+.skill-feedback-quiet #pitch-canvas,
+.skill-feedback-quiet #pitch-stats,
+.skill-feedback-quiet #pitch-game-hud > .hud-score,
+.skill-feedback-quiet #pitch-game-hud > .hud-combo,
+.skill-feedback-quiet #pitch-game-hud > .hud-acc { visibility: hidden; }
+@media (prefers-reduced-motion: no-preference) {
+  .skill-first-entry.is-new-skill { animation: skill-discovery 1.8s ease-out 1; }
+}
+@keyframes skill-discovery {
+  0%, 100% { box-shadow: 0 0 0 transparent; }
+  45% { box-shadow: 0 0 22px color-mix(in srgb, var(--accent-2) 55%, transparent); }
+}
+
+/* Access terms remain readable even in the compact landscape header. */
+#skill-access-status:not([hidden]) { display: block; }

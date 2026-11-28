@@ -840,41 +840,143 @@
     setTimeout(finish, 400);
   }
 
+  /**
+   * Visual bottom of the usable screen in viewport px (visualViewport may be
+   * offset), above the statistics question when the EEA bar is up
+   * (region-gate.js sets --region-consent-h on <html> while it is).
+   */
+  function stageVisualBottom() {
+    const { vh, offsetTop } = getViewportMetrics();
+    return offsetTop + vh - consentBarHeight();
+  }
+
+  /** Px the statistics question takes from the bottom of the screen while it is up. */
+  function consentBarHeight() {
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--region-consent-h")) || 0;
+  }
+
+  /**
+   * One fit of the stage to the screen, from scratch.
+   * @param {HTMLElement} stage #highway-stage.
+   */
+  function fitStageOnce(stage) {
+    // A refit measures layout; only explicit navigation may move the reader.
+    syncStageInsets();
+    const { vh, safeBottom } = getViewportMetrics();
+    // Gap: short/landscape + safe-area (home indicator)
+    const gap = (vh < 500 ? 12 : 8) + Math.max(0, safeBottom);
+    const visualBottom = stageVisualBottom();
+    const top = stageRestTop(stage, vh);
+    const maxH = Math.max(120, Math.floor(visualBottom - top - gap));
+    const pianoCap = fitStageBesidePiano(stage, visualBottom, safeBottom);
+    const h = Math.min(preferredStageHeight(vh, maxH), pianoCap);
+    stage.style.minHeight = "0";
+    setStageHeight(stage, h, Math.min(maxH, pianoCap));
+    clampStageToScreen(stage, visualBottom);
+    // Rails re-measured at the fitted height, so mode-focus and the lanes
+    // never run under Start/Mic (hit-target safety) or the top controls.
+    syncStageInsets();
+    fitStageGuide();
+    keepStartOnScreen(stage, visualBottom);
+    // Fitting the screen came first; the stage is never shorter than what is
+    // on it, so a very small screen scrolls instead of losing its lanes.
+    syncStageInsets();
+  }
+
+  /* —— Design: stage-relief ——
+     What the stage gives up so that Detener stays on the page during a take.
+     The stage is never shorter than its rails plus the lanes
+     (growStageForContent), so when a rail gains a row at Empezar ("En vivo" is
+     10 px wider than "Tiempo", and the tuning readout wraps under it) the
+     stage grows past the page and takes Detener with it: 33 px under a
+     375x629 iPhone mini in the song exercise. keepStartOnScreen cannot help:
+     it looks at Empezar, and what it shrinks the content floor grows back.
+     The one thing on the stage that is neither a control nor live is the
+     coach strip's cue, the exercise's fixed sentence, on screen since the
+     exercise opened: it yields (css [data-relief~="cue"], hidden to the eye,
+     kept for screen readers) and comes back at the next fit that has room,
+     which is at the latest the one after Detener. A rail also grows in the
+     middle of a take (the tuning readout and the chord change width as one
+     sings), so the rail observer asks the same question (reliefDueMidTake);
+     once given up in a take the cue stays down, so it cannot flicker with
+     the readout. docs/58-PHONE-FIT.md. */
+
+  /** Every fit starts with all of the stage's content shown. */
+  function clearStageRelief(stage) {
+    stage.removeAttribute("data-relief");
+  }
+
+  /**
+   * The screen Detener is judged against: its height and bottom edge in px, as
+   * they are unzoomed. A reader who pinch-zooms sees a part of the page no
+   * layout can serve (at twice the size, half of it), and the sentence they
+   * zoomed in on must not be taken away for it.
+   */
+  function restScreen() {
+    const { vh, offsetTop } = getViewportMetrics();
+    const vv = window.visualViewport;
+    const zoom = vv && vv.scale > 1.01 ? vv.scale : 1;
+    return { vh: vh * zoom, bottom: (zoom > 1 ? vh * zoom : offsetTop + vh) - consentBarHeight() };
+  }
+
+  /**
+   * True while a take's Detener ends under the screen. Judged where the stage
+   * rests, which is the position it is sized for (stageRestTop): someone who
+   * had scrolled a little when they pressed Empezar has Detener in view just
+   * then, and at the top of the page it is under it for the rest of the take.
+   * @param {HTMLElement} stage #highway-stage.
+   */
+  function stopUnderPage(stage) {
+    const stop = document.getElementById("btn-practice-stop");
+    if (!stop || stop.hidden) return false;
+    const b = stop.getBoundingClientRect();
+    if (b.height < 1) return false;
+    const screen = restScreen();
+    const restBottom = stageRestTop(stage, screen.vh) + (b.bottom - stage.getBoundingClientRect().top);
+    return restBottom > screen.bottom - 2;
+  }
+
+  /**
+   * Hide the coach strip's cue when Detener would otherwise be under the page.
+   * @param {HTMLElement} stage #highway-stage, just fitted.
+   * @returns {boolean} True when the cue was given up, so the stage must be fitted again.
+   */
+  function applyStageRelief(stage) {
+    if (!stopUnderPage(stage) || !cueOnStage()) return false;
+    stage.setAttribute("data-relief", "cue");
+    return true;
+  }
+
+  /** True while the coach strip's cue is on the stage, so there is something to give up. */
+  function cueOnStage() {
+    const cue = document.getElementById("mode-cue");
+    return !!cue && !cue.hidden && cue.getBoundingClientRect().height >= 1;
+  }
+
+  /**
+   * True when a rail that grew in the middle of a take has taken Detener under
+   * the page and the cue has not been given up for it yet: time for a fit.
+   * Where there is no cue (a picture's stage) a fit would change nothing, so
+   * the observer goes on as it always has.
+   */
+  function reliefDueMidTake() {
+    const stage = document.getElementById("highway-stage");
+    if (!stage || stage.hasAttribute("data-relief") || !cueOnStage()) return false;
+    return stopUnderPage(stage);
+  }
+
   function fitHighwayToViewport() {
     try {
       syncHeaderHeightVar();
       const stage = document.getElementById("highway-stage");
       if (!stage) return;
+      clearStageRelief(stage);
       if (!document.body.classList.contains("view-exercise")) {
         clearStageFit(stage);
         return;
       }
-      // A refit measures layout; only explicit navigation may move the reader.
-      syncStageInsets();
-      const { vh, offsetTop, safeBottom } = getViewportMetrics();
-      // Gap: short/landscape + safe-area (home indicator)
-      const gap = (vh < 500 ? 12 : 8) + Math.max(0, safeBottom);
-      // Visual bottom of the usable screen (visualViewport may be offset), above
-      // the statistics question when the EEA bar is up (region-gate.js sets
-      // --region-consent-h on <html> while it is).
-      const consentH =
-        parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--region-consent-h")) || 0;
-      const visualBottom = offsetTop + vh - consentH;
-      const top = stageRestTop(stage, vh);
-      const maxH = Math.max(120, Math.floor(visualBottom - top - gap));
-      const pianoCap = fitStageBesidePiano(stage, visualBottom, safeBottom);
-      const h = Math.min(preferredStageHeight(vh, maxH), pianoCap);
-      stage.style.minHeight = "0";
-      setStageHeight(stage, h, Math.min(maxH, pianoCap));
-      clampStageToScreen(stage, visualBottom);
-      // Rails re-measured at the fitted height, so mode-focus and the lanes
-      // never run under Start/Mic (hit-target safety) or the top controls.
-      syncStageInsets();
-      fitStageGuide();
-      keepStartOnScreen(stage, visualBottom);
-      // Fitting the screen came first; the stage is never shorter than what is
-      // on it, so a very small screen scrolls instead of losing its lanes.
-      syncStageInsets();
+      fitStageOnce(stage);
+      if (applyStageRelief(stage)) fitStageOnce(stage);
       redrawPitchForStage();
     } catch {
       /* ignore */
@@ -958,6 +1060,46 @@
     return true;
   }
 
+  /* —— Design: landscape-beside ——
+     A phone on its side has a stage of about 230 px, 124 of them a two-row
+     bottom rail (UIB-03), and the stage does not grow there: a picture under
+     the status row got 55 px at 802x293 where its own minimum is 84, and was
+     cut by 9 to 47 px in 15 exercises. The status row is a pill and a clock
+     with ~590 px empty beside them, so css (exercise-viz.css, same name)
+     starts a picture at the stage's top, beside the status corner. The
+     breakpoint lives in the css alone; this says whether the corner is alone
+     in its rail and where it ends. */
+
+  /** Px between the status corner and a picture beside it. */
+  const BESIDE_GAP = 6;
+
+  /**
+   * Where a picture may start beside the status corner: data-beside on the
+   * stage, with --pic-t and --pic-l in px from its padding edge. Set only while
+   * the corner is the one thing showing in the top rail; with anything else
+   * there (or nothing) all three are removed and the stage is laid out as it
+   * always was, the picture under the rail (--rail-t).
+   * @param {HTMLElement} stage #highway-stage.
+   * @param {DOMRect} sr The stage's box.
+   * @param {{ el: Element, b: DOMRect }[]} shown The top rail's children that have a box.
+   */
+  function syncPictureInset(stage, sr, shown) {
+    const alone = shown.length === 1 && shown[0].el.classList.contains("hud-tl");
+    stage.toggleAttribute("data-beside", alone);
+    if (!alone) {
+      stage.style.removeProperty("--pic-t");
+      stage.style.removeProperty("--pic-l");
+      return;
+    }
+    // Measured after the attribute: with it the css may stack the corner, which narrows it.
+    const corner = shown[0].el.getBoundingClientRect();
+    const cs = getComputedStyle(stage);
+    const top = corner.top - sr.top - (parseFloat(cs.borderTopWidth) || 0);
+    const left = corner.right - sr.left - (parseFloat(cs.borderLeftWidth) || 0);
+    stage.style.setProperty("--pic-t", `${Math.max(0, Math.round(top))}px`);
+    stage.style.setProperty("--pic-l", `${Math.ceil(left) + BESIDE_GAP}px`);
+  }
+
   /**
    * Place what sits between the stage's two rails from their measured edges.
    * The top rail (status, chords, score and, on a pitch exercise, the coach
@@ -974,10 +1116,14 @@
       const sr = stage.getBoundingClientRect();
       if (sr.height < 1) return false;
       let railBottom = 0;
+      const shown = [];
       [...(document.getElementById("hud-top-rail")?.children || [])].forEach((el) => {
         const b = el.getBoundingClientRect();
-        if (b.height) railBottom = Math.max(railBottom, b.bottom - sr.top);
+        if (!b.height) return;
+        railBottom = Math.max(railBottom, b.bottom - sr.top);
+        shown.push({ el, b });
       });
+      syncPictureInset(stage, sr, shown);
       const rail = document.getElementById("hud-bottom-rail");
       const rh = Math.ceil(rail?.getBoundingClientRect().height || 0);
       // +12px gap so mode-focus bottom stays above rail top
@@ -1103,6 +1249,11 @@
         const moved = syncStageInsets();
         fitStageGuide();
         if (!moved) return;
+        // Design: stage-relief. The fit redraws the lanes itself.
+        if (reliefDueMidTake()) {
+          fitHighwayToViewport();
+          return;
+        }
         try {
           if (state.pitchViz && !$("#pitch-block")?.hidden) {
             if (!state.practiceLive && typeof state.pitchViz.redrawIdle === "function") {
@@ -1120,6 +1271,10 @@
       const el = document.getElementById(id);
       if (el) ro.observe(el);
     });
+    // A picture that sits beside the status corner follows it when its word
+    // changes width (design: landscape-beside); the rail's own box does not move.
+    const corner = $("#hud-top-rail > .hud-tl");
+    if (corner) ro.observe(corner);
     // "🎹 Piano ▾" drops its word when it would take a row of its own.
     // Measured a frame later, as the header's title is: dropping the word
     // resizes the very box this observer reports on, which Chrome flags as a
@@ -2674,10 +2829,21 @@
       everStarted: false,
       liveSince: null,
       accumulatedMs: 0,
+      // Time a live take spent with the page hidden (QA-77): the step's timer
+      // runs on through it, the practice clock does not.
+      hiddenMs: 0,
+      hiddenSince: null,
       saved: false,
       entryId: null,
       creditedSec: 0
     };
+  }
+
+  /** Seconds a live take of this open spent hidden, the span still open included. */
+  function hiddenSec() {
+    const sp = state.sessionPractice;
+    const open = sp.hiddenSince != null ? performance.now() - sp.hiddenSince : 0;
+    return ((sp.hiddenMs || 0) + open) / 1000;
   }
 
   function getExerciseTargetSec(ex) {
@@ -3224,6 +3390,7 @@
       state.micBlockedClosed = false;
     }
     renderExercise();
+    renderSkillTeaching();
   }
 
   function renderExercise() {
@@ -3610,6 +3777,17 @@
    * lose what they hold): the panel's words are swapped in place when the take
    * stops (stopPractice), or at once when none is running (onChange).
    */
+  function renderSkillTeaching() {
+    const ex = state.exercise;
+    if (!ex) return;
+    const teaching = window.VTSets?.renderTeaching(state.structured ? VTSession.get() : null, ex.id);
+    if (!teaching) return;
+    const profile = getProfile(ex);
+    const cue = $("#mode-cue");
+    if (cue) cue.textContent = teaching.task;
+    renderStageGuide([teaching.task, teaching.fallback], !profile.showPitch);
+  }
+
   function relabelExercise() {
     const ex = state.exercise;
     if (!ex) return;
@@ -3620,6 +3798,7 @@
     const cue = $("#mode-cue");
     if (cue) cue.textContent = (window.VTI18n?.lang === "es" && profile.cueEs) || profile.cue || tt("practice.hint");
     // The switch put these back to their defaults (data-i18n); say what is true now.
+    renderSkillTeaching();
     relabelExerciseToggles();
     relabelTakeButtons();
     paintRating();
@@ -4245,6 +4424,7 @@
   }
 
   function setPracticeUI(live) {
+    const wasLive = !!state.practiceLive;
     state.practiceLive = live;
     syncPracticeBodyState(live);
     if (live) {
@@ -4255,7 +4435,10 @@
     paintPracticeControls(live);
     syncStageNow();
     if (live) enterLivePractice();
-    else flushPracticeClock();
+    else {
+      flushPracticeClock();
+      if (wasLive) leaveLivePractice();
+    }
   }
 
   /** The body class for the compact pitch strip, and the manual-sound state a stopped take must not keep. */
@@ -4301,11 +4484,27 @@
     }
   }
 
+  /**
+   * A take is over: the stage is fitted again, on the next frame, once Detener
+   * has given its place back to Empezar. Only a take that ran to the end of its
+   * clock got a fit (setExerciseEnded); one stopped early kept the height its
+   * rails had grown it to, and would keep what it gave up for the take (design:
+   * stage-relief), the cue, hidden.
+   */
+  function leaveLivePractice() {
+    requestAnimationFrame(fitHighwayToViewport);
+  }
+
   /** A take is running: the practice clock for the leave prompt (>=10% of the exercise), focus off the buttons, layout re-fitted. */
   function enterLivePractice() {
     state.sessionPractice.everStarted = true;
-    if (state.sessionPractice.liveSince == null) {
+    if (state.sessionPractice.liveSince == null && !document.hidden) {
       state.sessionPractice.liveSince = performance.now();
+    }
+    // Permission can resolve after visibilitychange: the timer must exclude
+    // that initial hidden interval too, even though no live clock ran yet.
+    if (document.hidden && state.sessionPractice.hiddenSince == null) {
+      state.sessionPractice.hiddenSince = performance.now();
     }
     // Blur Start/Stop so Space is not consumed as button activation (browser default)
     try {
@@ -4552,11 +4751,28 @@
     updateSessionBanner();
   }
 
+  /**
+   * A recorded take left playing (the rating card's, or History's) would play
+   * on through the next take: the microphone, without echo cancellation, hears
+   * it as the learner, the hold log keeps its holds and the new recording holds
+   * it (QA-79). Start stops every take player; a mode's own sounds are its own.
+   */
+  function pauseTakePlayers() {
+    document.querySelectorAll("audio.audio-player").forEach((a) => {
+      try {
+        if (!a.paused) a.pause();
+      } catch {
+        /* a player that cannot pause is not playing */
+      }
+    });
+  }
+
   async function startPractice() {
     const ex = state.exercise;
     if (!ex || state.practiceLive || state.practiceStarting) return;
     hideStepDone();
     setExerciseEnded(false);
+    pauseTakePlayers();
     const profile = getProfile(ex);
     // Generation token: Stop / leave / exercise switch aborts in-flight Start
     const gen = ++state.practiceGen;
@@ -5208,6 +5424,11 @@
   }
 
   function stopPractice(silent) {
+    // A take to end: live, or a Start still on its way. Every other way out
+    // (Puntuar ahora, a view switch, leaving) stops too, and asking the mode to
+    // end a take a second time measured it again: the rate ladder's minutes ran
+    // on to that second call, and the larger number was saved and scored (QA-78).
+    const hadTake = !!(state.practiceLive || state.practiceStarting);
     // Invalidate any in-flight Start
     state.practiceGen = (state.practiceGen || 0) + 1;
     state.practiceStarting = false;
@@ -5216,14 +5437,15 @@
       clearInterval(state._pianoKeepAlive);
       state._pianoKeepAlive = null;
     }
-    const modeResult = takeModeResult();
+    const modeResult = hadTake ? takeModeResult() : null;
     haltTake();
     if (modeResult?.patches) applyMetricPatches(modeResult.patches);
     setPracticeUI(false);
     $("#level-fill").style.width = "0%";
     // This take's own words, kept whether or not the Stop is announced: a timer
-    // that ends the take must not leave the previous take's numbers on the card
-    state.rate.summary = modeResult?.summary || null;
+    // that ends the take must not leave the previous take's numbers on the card,
+    // and a stop with no take must not take them off it
+    if (hadTake) state.rate.summary = modeResult?.summary || null;
     if (!silent) announceStop(modeResult);
   }
 
@@ -5237,7 +5459,8 @@
     try {
       if (state.modeInstance) {
         result = state.modeInstance.onStop({
-          pitchGame: window.VTAppPitchGameSnap || null
+          pitchGame: window.VTAppPitchGameSnap || null,
+          practicedSec: getPracticedSec()
         });
         // The language was switched during the take: the panel (built in the
         // old one) and its review text now read in the new one
@@ -5374,7 +5597,8 @@
    */
   function takeTimes() {
     const total = state.timer.total > 0 ? state.timer.total : 0;
-    const ran = total ? Math.max(0, Math.min(total, total - state.timer.remaining)) : 0;
+    // The timer runs on while the page is hidden; that time was not sung (QA-77).
+    const ran = total ? Math.max(0, Math.min(total, total - state.timer.remaining - hiddenSec())) : 0;
     return { done: Math.round(Math.max(ran, getPracticedSec())), total };
   }
 
@@ -7823,10 +8047,38 @@
       window.VTSync?.flush?.({ unloading: true });
     });
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState !== "hidden") return;
+      if (document.visibilityState !== "hidden") {
+        resumePracticeClock();
+        return;
+      }
       if (state.view === "exercise") recordPracticeIfDue("hidden");
+      pausePracticeClock();
       window.VTSync?.flush?.();
     });
+  }
+
+  /**
+   * Hidden in the middle of a take. Time nobody could hear is not practice:
+   * the engine already counts none of it, but the take's clock ran on, so
+   * half an hour in another app read "31:00 de 5:00 ✓" and went on the day
+   * (QA-77). The step's timer keeps running, so the microphone still closes
+   * when the step ends; only the credit stops.
+   */
+  function pausePracticeClock() {
+    const sp = state.sessionPractice;
+    if (sp.liveSince == null) return;
+    flushPracticeClock();
+    sp.hiddenSince = performance.now();
+  }
+
+  /** Shown again: a take still live runs its clock from now, not from when the page was hidden. */
+  function resumePracticeClock() {
+    const sp = state.sessionPractice;
+    if (sp.hiddenSince != null) {
+      sp.hiddenMs = (sp.hiddenMs || 0) + performance.now() - sp.hiddenSince;
+      sp.hiddenSince = null;
+    }
+    if (state.practiceLive && sp.liveSince == null) sp.liveSince = performance.now();
   }
 
   function bind() {
@@ -8384,8 +8636,16 @@
     const goalSel = $("#sel-week-goal");
     if (goalSel) {
       const g = VTStorage?.getGoals?.() || { weeklySessionsTarget: 3 };
-      const t = String(g.weeklySessionsTarget || 3);
-      if (["3", "5", "7"].includes(t)) goalSel.value = t;
+      const t = String(Math.max(1, Math.min(14, Math.floor(Number(g.weeklySessionsTarget)) || 3)));
+      goalSel.querySelector("[data-custom-goal]")?.remove();
+      if (!["3", "5", "7"].includes(t)) {
+        const option = document.createElement("option");
+        option.value = t;
+        option.textContent = t;
+        option.dataset.customGoal = "true";
+        goalSel.add(option);
+      }
+      goalSel.value = t;
       goalSel.disabled = !isProUser && !window.VTBilling?.can?.("studio_goals");
       // Free can see default goal progress but not change
       if (!window.VTBilling?.can?.("studio_goals")) goalSel.disabled = true;
@@ -8557,7 +8817,8 @@
     const wrap2 = $("#rem-time-2-wrap");
     const t2 = $("#rem-time-2");
     if (wrap2) wrap2.hidden = !isPro;
-    if (t2 && cfg.times[1]) t2.value = cfg.times[1];
+    // Empty unless chosen: a pre-filled 09:00 was saved as if picked, and spent the day's reminder (QA-80).
+    if (t2) t2.value = cfg.times[1] || "";
     const bn = $("#chk-browser-notify");
     if (bn) bn.checked = !!cfg.browserNotify;
     // A browser without notifications (an iPhone outside the home screen) has
@@ -8590,10 +8851,20 @@
     }
   }
 
+  /** The reminder's times as one phrase ("6:00 p. m. y 8:00 p. m."): a second time was never named (QA-80). */
+  function reminderTimes(times) {
+    const said = times.filter(Boolean).map(clockTime);
+    try {
+      return new Intl.ListFormat(locale(), { type: "conjunction" }).format(said);
+    } catch {
+      return said.join(" · ");
+    }
+  }
+
   /** The week card's way in to the reminder says whether one is set. */
   function renderReminderWayIn(cfg, loopOn) {
     const remText =
-      cfg.enabled && cfg.times[0] ? tt("retain.openOn", { time: clockTime(cfg.times[0]) }) : tt("retain.open");
+      cfg.enabled && cfg.times[0] ? tt("retain.openOn", { time: reminderTimes(cfg.times) }) : tt("retain.open");
     const remLabel = $("#btn-reminder-label");
     if (remLabel) remLabel.textContent = remText;
     // The classic arm has no week card: its way in sits in the start panel.
@@ -11293,6 +11564,7 @@
       setTab,
       findExercise,
       startSet: (r) => startStructured("set", r),
+      openPricing,
       hideToast,
       refresh: () => {
         renderNextStepCard();
@@ -11343,6 +11615,12 @@
     syncHeaderHeightVar();
     fitHighwayToViewport();
     watchStageRails();
+    // The exercise view slides up 6 px as it opens (css fadeIn, 0.22 s). The fits made on the
+    // way measure the stage that much too low and leave it up to 5 px too short until the next
+    // fit, which was Empezar: on a 293 px page those are the px a picture lacks. Once more at rest.
+    $("#view-exercise")?.addEventListener("animationend", (e) => {
+      if (e.target === e.currentTarget) fitHighwayToViewport();
+    });
     window.addEventListener("resize", () => {
       syncHeaderHeightVar();
       scheduleFitHighway();

@@ -240,7 +240,7 @@ export const PRACTICE_ROOTS = [
  * the account (nothing, but where written), and why each is not a way in.
  */
 export const NOT_A_WAY_IN = {
-  init: ["", "the page's start: it hands startDaily to the daily loop and to the page's own hooks, and calls neither"],
+  init: ["openPricing:2", "initialization hands practice callbacks to sets and the separate explicit premium-details opener; it calls neither and never starts a trial"],
   "init.onChange": ["", "the redraw after the language changes: it draws the price dialog too, and starts nothing"],
   "bindRetention document": ["", "when the tab comes back, it redraws the next step's card: it starts nothing"],
   "bindAuth #admin-clear-progress": ["VTAuth:1", "the owner's admin button: it asks the older sign-in whether this is the owner, clears the progress and redraws the history"]
@@ -282,7 +282,7 @@ export const SIGN_IN_READERS = {
 export const REVIEWED = {
   accountDate: ["e115090f7375", "handed the plan's end: words it as a date"],
   accountPlanState: ["04ad386e9bd4", "handed the account's plan: names its kind, days left and end for the header"],
-  "bindPageLifecycle document": ["34f1aa01e16c", "when the tab is hidden, a signed-in visitor's progress is sent; it touches no take and no control"],
+  "bindPageLifecycle document": ["258a5cd0c1de", "when the tab is hidden, a signed-in visitor's progress is sent and the take's credit clock pauses until the tab is shown again (QA-77); it stops no take and touches no control"],
   "bindPageLifecycle window": ["98854a941fd2", "the same when the page closes, after the take is kept here"],
   browserPlanState: ["a81248caa813", "handed the browser's plan: names its kind, days left and end for the header"],
   fillProgressionSelect: ["427d041d4d03", "handed the progressions the piano offers, Pro's among them: fills their picker"],
@@ -298,8 +298,8 @@ export const REVIEWED = {
   renderProInsights: ["16e25d761cf8", "handed whether this is Pro: the board's insights panel, locked or open"],
   renderProSpark: ["b70d065fe419", "handed whether this is Pro: the board's spark bars, dimmed or not"],
   renderProStudio: ["36bc138d2d7e", "handed whether this is Pro: draws the board's Pro panels, and Tu camino's card beside them (free, not handed the answer), and nothing else"],
-  renderProGoalPicker: ["623363793da6", "Pro's goal picker, shown locked to a free visitor"],
-  renderReminderSettings: ["ed9fb6c72da7", "the reminders card's second time field, Pro's"],
+  renderProGoalPicker: ["2f52608f1197", "Pro's goal picker, shown locked to a free visitor; the temporary numeric option preserves a synced target and never gates practice"],
+  renderReminderSettings: ["25550dc9ef36", "the reminders card's second time field, Pro's, empty unless chosen (QA-80)"],
   renderRetentionChrome: ["7ad87c5e4427", "the reminders card: Pro's second reminder"],
   renderValuePulse: ["9b25f6afc411", "the progress board's Pro panel, its tag and the trial line"],
   showValueBanner: ["8a681379dce0", "the trial's days left on the note"],
@@ -364,6 +364,7 @@ export const PLAN_FILES = {
   "js/license.js": "the signed licence itself, the only proof of a paid plan billing trusts",
   "js/practice-days.js": "Pro's extra rest days for the streak",
   "js/reminders.js": "Pro's second reminder",
+  "js/session-sets.js": "Pro-tagged skill curriculum with explicit launch preview; individual exercises and original goal routines remain free",
   "js/value-pulse.js": "the trial's days left on the progress board"
 };
 
@@ -380,6 +381,7 @@ export const PLAN_USES = {
     refresh: ["VTLicense:1", "asks the worker for the account and its licence again"],
     getState: ["VTLicense:1", "the account's state: Pro when the account holds a signed licence"],
     init: ["VTLicense:1", "hands the licence its way to refresh itself"],
+    followStoredSession: ["VTLicense:1", "a session another tab stored: hands the licence its way to refresh, as init does (QA-76)"],
     "(top)": ["vt_pro_paid_first_v1:1", "the key of the first paid plan's event, sent once"]
   },
   "js/ads.js": {
@@ -388,6 +390,7 @@ export const PLAN_USES = {
     "renderNativeCard [data-ad-cta]": ["btn-pricing:1", "the house card that sells Pro opens the plans when it is pressed"]
   },
   "js/app.js": {
+    init: ["openPricing:2", "hands pricing opener to the separate skill-offer hook, no invocation or automatic trial"],
     progressionKeysFor: ["VTBilling:1", "Pro's extra piano progressions, an extra on top of the exercise"],
     isCheckoutPrelaunch: ["VTBilling:1", "whether checkout is open yet, for the pricing dialog's buttons"],
     headerPlanState: ["VTBilling:1 getEntitlement:1", "the header's plan label, the board's tag, and Start's trial funnel"],
@@ -436,6 +439,7 @@ export const PLAN_USES = {
     login: ["VTBilling:3", "the QA unlock of a test account"]
   },
   "js/billing.js": {
+    skillSetAccess: ["getEntitlement:1 trialStartedAt:1", "bounded Pro/trial skill curriculum policy; explicit launch preview, expired trial explanation, never gates individual exercises"],
     verificationConfigured: ["VTLicense:1", "the plan itself: whether a licence can be checked here"],
     licenseClaims: ["VTLicense:1", "the plan itself: the signed licence's claims"],
     getLicenseStatus: ["VTLicense:1", "the plan itself: whether the licence is being checked"],
@@ -466,6 +470,14 @@ export const PLAN_USES = {
   "js/practice-days.js": {
     isPro: ["VTBilling:2 isPro:2", "Pro's extra rest days for the streak"],
     restCap: ["isPro:1", "how many rest days the streak can bank"]
+  },
+  "js/session-sets.js": {
+    paint: ["#sets-list:2", "renders goal and skill cards; only explicitly tagged skill-upgrade controls offer pricing"],
+    openSheet: ["#sets-list:1", "opens the curriculum picker without starting a trial or navigating to pricing"],
+    bind: ["#sets-list:2", "separate delegated Start and premium-details click handlers; goal start remains free"],
+    skillAccess: ["VTBilling:1", "reads the explicit skill curriculum capability; a new skill start can be locked after paid activation, original goal sets and every individual exercise stay free"],
+    openSkillOffer: ["openPricing:1", "only a deliberate data-skill-upgrade click opens pricing; Start never invokes this"],
+    bindAccess: ["VTBilling:1", "listens for entitlement changes to redraw skill offer buttons and the true expiry, never starts a trial"]
   },
   "js/reminders.js": {
     freezeAllowance: ["isPro:2", "the old name for that rest-day allowance"]
@@ -506,6 +518,7 @@ export const ACCOUNT_USES = {
     getState: ["VTLicense:1 signedIn:1", "the account itself: its state"],
     getSessionToken: ["getSessionToken:1", "the account itself: its session"],
     init: ["VTLicense:1", "the account itself: hands the licence its way to refresh"],
+    followStoredSession: ["VTLicense:1", "the account itself: follows the session another tab stored, as init reads it (QA-76)"],
     "(top)": ["VTAccount:1 getSessionToken:2 renderGoogleButton:2 signInWithGoogle:2 startEmailSignIn:2 vt_account_plan_v1:1 vt_account_session_v1:1", "the account's storage keys and its exports"]
   },
   "js/admin-layouts.js": {
@@ -1146,6 +1159,8 @@ test("every element bound to open the sale or the sign-in is a handle the scanne
  */
 export const NOT_MARKS = {
   billing: {
+    "data-set-kind": "curriculum picker kind (goal/skill), not the visitor's entitlement; read only to redraw skill availability",
+    "data-custom-goal": "temporary numeric option for an existing session target outside the three presets; it names no plan and is never read to gate practice",
     "ad-slot": "the ad card's own class, drawn the same whatever the plan",
     "ad-slot--native": "the same card's kind",
     "btn-ghost": "a style a hundred buttons share; on the header button it is one plan's look, but read alone it names no plan, and the button's id or plan-* class is a mark",

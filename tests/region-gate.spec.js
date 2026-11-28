@@ -35,11 +35,8 @@ const ENDPOINT = "https://events.test/v1/events";
  * @returns {Promise<{ctx: object, page: object, sent: {batches: object[], geo: number}}>} Case.
  */
 async function open(browser, opts) {
-  const ctx = await browser.newContext(
-    // No timezoneId leaves the container's own zone, which is Etc/UTC — the case
-    // a hardened browser and this suite both present.
-    opts.timezoneId ? { timezoneId: opts.timezoneId, locale: opts.locale } : { locale: opts.locale }
-  );
+  // Pin the privacy case: hosted runners may use a non-UTC local zone.
+  const ctx = await browser.newContext({ timezoneId: opts.timezoneId || "Etc/UTC", locale: opts.locale });
   const page = await ctx.newPage();
   const sent = { batches: [], geo: 0 };
   await page.route("https://events.test/**", async (route) => {

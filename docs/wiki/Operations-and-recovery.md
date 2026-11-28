@@ -35,6 +35,16 @@ private-key recovery backup exists.
 
 ## Recovery and release gates
 
+Latest verification, 2026-11-27: PR55 merged as
+`03f59bc0aa854ac1d54a4255cc9312995f4f3568` after37 successful exact-head checks
+and3 intentional skips. Pages deployed that commit successfully; its index
+and all77 stamped assets matched, and [live Chromium9/9 passed](https://github.com/PillB/vocal-singing-training/actions/runs/46002164387/job/140516303208).
+This check was manually dispatched; automatic post-Pages triggering was not
+observed. The broader post-merge quality run was still running at this snapshot.
+Cloudflare remains a separate local-practice preview, with earlier9/9 browser
+evidence and a fresh matching-byte check. See the [release ledger](../54-RELEASE-LEDGER-2026-11-26.md)
+for exact sources, mutation evidence and unresolved payment/device gates.
+
 Source account access, D1/KV exports, signing-key recovery and owner/recovery
 membership must be verified separately. A new key cannot validate old
 licenses. Before cutover, test existing and fresh users, sign-in, trial,

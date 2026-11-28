@@ -1,5 +1,51 @@
 # Release ledger — 2026-11-26
 
+## Feature completion follow-up — 2026-11-27
+
+The subsequent [recent-PR red-team round](60-FEATURE-COMPLETION-2026-11-27.md)
+integrates PR58 phone fit and PR59 session/active-time/reminder fixes with
+main03f59bc. It additionally corrects late-hidden permission credit, rate
+ladder wall-time scoring, and a reproduced cross-tab account-pull data loss.
+Weekly days and sessions are labeled separately and existing custom targets
+are preserved. That branch has its own CI/served-release gate; the completed
+deployment below verifies03f59bc, not these newer features. Payment security
+completion is isolated on a different branch and payments remain disabled.
+
+## Post-merge verification — 2026-11-27
+
+This entry supersedes the earlier pending/blocked release status below while
+preserving those observations as history. [PR55](https://github.com/PillB/vocal-singing-training/pull/55)
+merged as `03f59bc0aa854ac1d54a4255cc9312995f4f3568` after its exact head
+`54307b81b4b1a7b3714f9ab5f7a74074eb30c7bb` had 37 successful checks and
+three intentional manual/nightly skips. The local checkout was brought onto
+that main commit after preserving operator documentation as commit `2beaa81`;
+ignored identity/configuration files retained their byte hashes. No private
+binding file in the historical Documents checkout was changed.
+
+| Target / oracle | Observed result and evidence |
+| --- | --- |
+| Pages publishing at merged main | [Deployment46001538365](https://github.com/PillB/vocal-singing-training/actions/runs/46001538365) succeeded at `03f59bc`. |
+| Production bytes | Independent HTTPS check and hosted verification both matched index.html and all77 versioned assets. An index mismatch, stale same-version asset or HTTP404 fails the existing negative controls. |
+| Production live browser | [Job140516303208](https://github.com/PillB/vocal-singing-training/actions/runs/46002164387/job/140516303208), manually dispatched on merged main: Chromium9/9 passed in9.9s. The workflow's automatic post-deployment trigger was not observed this round; manual dispatch is verified. |
+| Cloudflare preview | Its separately packaged index/all77 assets were freshly rechecked; its earlier hosted Chromium9/9 remains the browser evidence. Source8c87acc and active version29b171b5 are unchanged. This is local practice only, with accounts/payments/sync off. |
+| Deployment regression controls | [Post-merge ops job](https://github.com/PillB/vocal-singing-training/actions/runs/46001539676/job/140516591692) killed all12 mutants, measured0.40s each. The earlier60s allowance remains a conservative scheduling policy, not this measurement. |
+| Broader post-merge CI | [Run46001539676](https://github.com/PillB/vocal-singing-training/actions/runs/46001539676) was still running when this entry was saved; contracts/core, integration-focus and ops had passed. Do not label the whole run complete from those jobs alone. |
+
+The round selected independent live-byte checks plus hosted Chromium over
+repeating the known broken local macOS browser launch. This checks the deployed
+release and avoids relabeling synthetic UI as physical audio evidence. No app
+code changed in this documentation round; fresh `npm run lint` passed,
+including all14 lint-gate controls. Exact-head core/browser gates are recorded
+above rather than rerun against unchanged code. Existing mutation
+and malformed-release controls establish the wrong-behavior oracle.
+
+Remaining gates: PR54's checkout/portal issues60/61, original backend
+ownership/key/data recovery issue62, authenticated origin migration, actual
+iOS/acoustic audio and human accessibility checks. The earlier local latency
+failure and four billing TODOs remain recorded. GitHub wiki publication and
+health-alarm activation are not claimed. Public documentation excludes private
+operator IDs; the ignored receipts are not an encrypted external backup.
+
 ## Subsequent deployment round: PyArcana web-route reference
 
 The earlier approval-review limitation below was temporary. On the user's
@@ -181,3 +227,21 @@ The half-limit budget is a project policy derived from observed runner variance,
 not a guarantee offered by GitHub. Observable assertion polling is distinct
 from retrying an entire failing test. The scroll specification is a draft;
 actual browser behavior still needs its regression suite.
+
+## 2026-11-27 — PR65 discovery, trial policy and actual transfer
+
+See [round61](61-SKILL-DISCOVERY-AND-ACCESS.md) for alternatives, primary
+research, actual CI failures, fixes and negative controls. First tab session
+hides skills; returning tab session reveals a finite reduced-motion-aware glow.
+All10 skill sets tagged Pro with explicit free launch preview, truthful opt-in
+trial expiry, preserved ongoing practice/history and free individual exercises.
+Teaching persists during actual sessions; applicable sequences end on a new
+phrase and optional pitch feedback quieting preserves piano/Stop. Stale saved
+orders fall back to original exercise guidance. No efficacy or conversion
+claim is inferred from curriculum integrity tests.
+
+Core1532/0fail/4existing payment TODO and29/29set mutants passed locally;
+final changed-head hosted browser, merge and live checks pending. PR53 merged
+only to its feature base (ca2292f); PR51 remains draft. Updated AGENTS.md and
+CLAUDE.md references preserve the existing per-round falsifiability and<=15
+complexity contract. Versioned wiki is updated locally; remote wiki unpublished.

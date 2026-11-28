@@ -98,6 +98,7 @@ test("negative fixtures reject missing catalogue IDs, unsafe time, missing teach
   assert.match(plant(x=>x[0].es.why="Guaranteed improvement"),/unsupported clinical promise/);
   assert.match(plant(x=>x[0].kind="medical"),/not a skill-repair/);
   assert.match(plant(x=>delete x[0].accessTier),/missing Pro curriculum tag/);
+  assert.match(plant(x=>x[0].steps[0][0]="v7-record-review"),/delayed review cannot fit/);
 });
 
 test("locked direct start cannot replace the session; original goal sets remain available",()=>{

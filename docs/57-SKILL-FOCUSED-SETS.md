@@ -32,7 +32,7 @@ Fecha 2026-11-27. Implementación educativa en rama apilada sobre PR #64; no es 
 | s-skill-pitch | Centro afinación | s9 150 → s10 120 → s13 150 → s3 90 | Primero referencia, luego sin gráfico. |
 | s-skill-phrasing | Fraseo y legato | s14 150 → s20 90 → s3 180 | Texto original y pausa cómoda. |
 | v-skill-breath | Aire al hablar | s18 60 → v10 120 → v23 150 | Pausas por sentido. |
-| v-skill-clarity | Dicción | v7 120 → v23 150 → v10 90 | Claridad para oyente, no solo velocidad. |
+| v-skill-clarity | Dicción | v14 120 → v23 150 → v10 90 | Claridad para oyente, no solo velocidad. |
 | v-skill-ease | Voz cómoda | s7 60 → v21 210 → v23 120 | No practicar con ronquera/dolor. |
 | v-skill-expression | Intención | v12 120 → v14 120 → v19 120 | No perseguir volumen o carisma numérico. |
 | v-skill-recovery | Descanso | s17 90 → v22 600 | Si hay ronquera, solo descanso; no terapia automática. |

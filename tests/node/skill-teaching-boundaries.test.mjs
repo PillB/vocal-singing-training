@@ -146,8 +146,8 @@ test("a persisted old set order never overlays the new curriculum's instructions
   const stale = { path: "set", set: "v-skill-clarity", order: ["v1-diction", "v23-clear-speech", "v10-power-pause"], index: 0, status: "active", startedAt: "2026-11-27T12:00:00Z" };
   assert.equal(q.win.VTSets.teachingFor(stale, "v1-diction"), null, "the old over-articulation mode cannot inherit the new listen-first instruction");
   const current = q.win.VTSets.start("v-skill-clarity");
-  assert.equal(current.order[0], "v7-record-review");
-  assert.equal(q.win.VTSets.teachingFor(current, "v7-record-review").task, "Listen to one sentence at your usual pace.");
-  assert.equal(q.win.VTSets.teachingFor({ ...current, status: "completed" }, "v7-record-review"), null);
+  assert.equal(current.order[0], "v14-pace-variation");
+  assert.equal(q.win.VTSets.teachingFor(current, "v14-pace-variation").task, "Listen to one sentence at your usual pace.");
+  assert.equal(q.win.VTSets.teachingFor({ ...current, status: "completed" }, "v14-pace-variation"), null);
   assert.equal(q.win.VTSets.teachingFor(current, "s9-pitch-match"), null);
 });

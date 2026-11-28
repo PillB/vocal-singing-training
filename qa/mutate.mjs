@@ -2129,6 +2129,7 @@ MUTANTS["promises-time-2"] = TIME_LIMIT.slice(THIRD, 2 * THIRD);
 MUTANTS["promises-time-3"] = TIME_LIMIT.slice(2 * THIRD);
 
 MUTANTS.sets.push(...[
+  ["SK7 delayed next-day review is accepted in a short same-session set", "qa/audit-skill-sets.mjs", "if(ex?.audio?.reviewWorkflow)", "if(false)", "tests/node/skill-sets.test.mjs"],
   ["SK5 stale saved order receives incompatible new curriculum teaching", "js/session-sets.js", "    if (JSON.stringify(session.order) !== JSON.stringify(set.order)) return null;", "", "tests/node/skill-teaching-boundaries.test.mjs"],
   ["SK6 new steps retain quiet feedback from the prior step", "js/session-sets.js", 'if (teachingStep !== key || !context) $("#view-exercise")?.classList.remove("skill-feedback-quiet");', 'if (!context) $("#view-exercise")?.classList.remove("skill-feedback-quiet");', "tests/node/skill-teaching-boundaries.test.mjs"],
   ["SK1 future premium gate silently becomes a launch preview", "js/billing.js", "const preview = cfg().skillSetsRequirePro === false;", "const preview = true;", "tests/node/skill-access-policy.test.mjs"],

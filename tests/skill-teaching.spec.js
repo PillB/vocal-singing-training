@@ -130,7 +130,7 @@ test("clarity starts with a listen-first task instead of the contradictory over-
   const started = await page.evaluate(() => VTSets.start("v-skill-clarity"));
   expect(started).toBeTruthy();
   await expect(page.locator("#view-exercise")).toHaveClass(/active/);
-  expect(await page.evaluate(() => VTApp.getState().exercise?.id)).toBe("v7-record-review");
+  expect(await page.evaluate(() => VTApp.getState().exercise?.id)).toBe("v14-pace-variation");
   await expect(page.locator("#skill-context-task")).toHaveText("Listen to one sentence at your usual pace.");
   await expect(page.locator("#stage-guide-steps")).not.toContainText(/over-articulat/i);
   await nextStep(page, "v23-clear-speech");

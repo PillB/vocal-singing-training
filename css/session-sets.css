@@ -446,3 +446,6 @@
   0%, 100% { box-shadow: 0 0 0 transparent; }
   45% { box-shadow: 0 0 22px color-mix(in srgb, var(--accent-2) 55%, transparent); }
 }
+
+/* Access terms remain readable even in the compact landscape header. */
+#skill-access-status:not([hidden]) { display: block; }

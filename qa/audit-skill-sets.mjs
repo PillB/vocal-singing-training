@@ -17,6 +17,14 @@ function shapeProblems(set,seen) {
      set.evidence.some(id=>!SOURCES.has(id))) errors.push(set.id+": missing evidence");
   return errors;
 }
+function stepProblems(setId,id,sec,catalog) {
+  const errors=[];
+    const ex=catalog.get(id);
+    if(!ex) errors.push(setId+": missing catalogue ID "+id);
+    if(ex?.audio?.reviewWorkflow) errors.push(setId+": delayed review cannot fit a single-session skill set");
+    if(!Number.isInteger(sec)||sec<30||(ex&&sec>ex.timerDefaultSec)) errors.push(setId+": unsafe timer "+id);
+  return errors;
+}
 function timingProblems(set,catalog) {
   const errors=[];
   const rows=Array.isArray(set.steps)?set.steps:[];
@@ -24,9 +32,7 @@ function timingProblems(set,catalog) {
   if(ids.length<2||ids.length>5||new Set(ids).size!==ids.length) errors.push(set.id+": invalid steps");
   let total=0;
   for(const [id,sec] of rows) {
-    const ex=catalog.get(id);
-    if(!ex) errors.push(set.id+": missing catalogue ID "+id);
-    if(!Number.isInteger(sec)||sec<30||(ex&&sec>ex.timerDefaultSec)) errors.push(set.id+": unsafe timer "+id);
+    errors.push(...stepProblems(set.id,id,sec,catalog));
     total+=sec;
   }
   if(total<150||total>900) errors.push(set.id+": outside bounded session");

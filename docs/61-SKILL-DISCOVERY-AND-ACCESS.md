@@ -108,3 +108,18 @@ with26green and2intentional skipped checks. It is not a production promotion.
 PR51's old browser failure is an ambiguous .guide-site-link a selector after
 adding a second distinct guide link; update to the actual full-guide anchor
 and retain separate link-destination tests before any feature-branch release.
+
+### Counter-review: delayed listening is a different workflow
+
+Rejected the first clarity repair (v7-record-review): its catalog explicitly
+requires waiting a full day, so it cannot fulfill this short same-session
+routine. Use v14-pace-variation for a normal-pace recorded baseline, then
+clear speech and a new paused message. The authoring gate now rejects any
+`audio.reviewWorkflow` exercise in these bounded skill sets; a negative
+fixture and SK7 restore the rejected route. Trade-off: baseline practice is
+pace-aware, not an objective intelligibility assessment; a listener remains
+the meaningful check. Access disclosures are also kept visible in landscape,
+where the old compact-header rule hid every muted paragraph.
+
+Final local core on273d4af:1532tests,1528pass,0fail,4existing payment TODO.
+The subsequent curriculum/disclosure correction requires refreshed tests/CI.

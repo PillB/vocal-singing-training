@@ -924,7 +924,7 @@
     "focus": "speech",
     "steps": [
       [
-        "v7-record-review",
+        "v14-pace-variation",
         120
       ],
       [

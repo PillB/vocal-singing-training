@@ -27,3 +27,5 @@ test is not a pass. Keep every trade-off and unfinished release gate visible.
 
 Personal operator emails, resource IDs and credential recovery references are
 in ignored private records. Never copy those records into a public wiki.
+
+- [Skill discovery, Pro access and authentic transfer](../61-SKILL-DISCOVERY-AND-ACCESS.md): second-tab discovery, explicit rollout policy and current verification gates.

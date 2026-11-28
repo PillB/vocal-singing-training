@@ -3390,6 +3390,7 @@
       state.micBlockedClosed = false;
     }
     renderExercise();
+    renderSkillTeaching();
   }
 
   function renderExercise() {
@@ -3776,6 +3777,17 @@
    * lose what they hold): the panel's words are swapped in place when the take
    * stops (stopPractice), or at once when none is running (onChange).
    */
+  function renderSkillTeaching() {
+    const ex = state.exercise;
+    if (!ex) return;
+    const teaching = window.VTSets?.renderTeaching(state.structured ? VTSession.get() : null, ex.id);
+    if (!teaching) return;
+    const profile = getProfile(ex);
+    const cue = $("#mode-cue");
+    if (cue) cue.textContent = teaching.task;
+    renderStageGuide([teaching.task, teaching.fallback], !profile.showPitch);
+  }
+
   function relabelExercise() {
     const ex = state.exercise;
     if (!ex) return;
@@ -3786,6 +3798,7 @@
     const cue = $("#mode-cue");
     if (cue) cue.textContent = (window.VTI18n?.lang === "es" && profile.cueEs) || profile.cue || tt("practice.hint");
     // The switch put these back to their defaults (data-i18n); say what is true now.
+    renderSkillTeaching();
     relabelExerciseToggles();
     relabelTakeButtons();
     paintRating();
@@ -4487,6 +4500,11 @@
     state.sessionPractice.everStarted = true;
     if (state.sessionPractice.liveSince == null && !document.hidden) {
       state.sessionPractice.liveSince = performance.now();
+    }
+    // Permission can resolve after visibilitychange: the timer must exclude
+    // that initial hidden interval too, even though no live clock ran yet.
+    if (document.hidden && state.sessionPractice.hiddenSince == null) {
+      state.sessionPractice.hiddenSince = performance.now();
     }
     // Blur Start/Stop so Space is not consumed as button activation (browser default)
     try {
@@ -11546,6 +11564,7 @@
       setTab,
       findExercise,
       startSet: (r) => startStructured("set", r),
+      openPricing,
       hideToast,
       refresh: () => {
         renderNextStepCard();

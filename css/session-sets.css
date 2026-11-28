@@ -421,3 +421,28 @@
 .song-library { grid-column: 1 / -1; min-width: 0; }
 .song-study { margin-block: 0.75rem; padding: 1rem; }
 .song-study a { display: inline-flex; align-items: center; min-height: var(--min-tap); overflow-wrap: anywhere; }
+
+/* Skill repair: readable and reflowing instructions, with no mastery badge. */
+.set-skill-plan{padding:.55rem .7rem;background:var(--bg-elevated);border-inline-start:3px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+.set-skill-label{margin:0 0 .25rem;font-size:.76rem;font-weight:750}
+.set-skill-plan ol{margin:.25rem 0 .45rem;padding-inline-start:1.4rem;display:grid;gap:.3rem}
+.set-skill-plan li{font-size:.84rem;line-height:1.45;overflow-wrap:anywhere}
+.set-skill-safe{margin:0;font-size:.82rem;line-height:1.45;overflow-wrap:anywhere}
+
+/* Returning-visit discovery remains available after the first practice day. */
+#start-panel .skill-first-entry:not([hidden]) { display: inline-flex; min-height: var(--min-tap); margin-top: .6rem; }
+.set-pro-tag { color: var(--accent-2); font-size: .76rem; font-weight: 750; }
+.skill-context { overflow-wrap: anywhere; }
+.skill-context h3 { font-size: 1rem; margin: 0 0 .5rem; }
+.skill-feedback-quiet #pitch-canvas,
+.skill-feedback-quiet #pitch-stats,
+.skill-feedback-quiet #pitch-game-hud > .hud-score,
+.skill-feedback-quiet #pitch-game-hud > .hud-combo,
+.skill-feedback-quiet #pitch-game-hud > .hud-acc { visibility: hidden; }
+@media (prefers-reduced-motion: no-preference) {
+  .skill-first-entry.is-new-skill { animation: skill-discovery 1.8s ease-out 1; }
+}
+@keyframes skill-discovery {
+  0%, 100% { box-shadow: 0 0 0 transparent; }
+  45% { box-shadow: 0 0 22px color-mix(in srgb, var(--accent-2) 55%, transparent); }
+}

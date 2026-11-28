@@ -9,7 +9,7 @@ for (const [lang, dayWords, sessionWords, explanation] of [
   test(`weekly units stay distinct and a synced 14-session goal survives rendering (${lang})`, async ({ page }) => {
     await enableQaPro(page);
     await boot(page, { lang, mic: "silent" });
-    await expect(page.locator('[data-i18n="loop.goalLabel"]')).toContainText(dayWords);
+    await expect(page.locator("#loop-goal-label")).toContainText(dayWords);
     await page.evaluate(() => VTStorage.setGoals({ weeklySessionsTarget: 14 }));
     await page.locator('[data-view="history"]').first().click();
     await expect(page.locator('label[for="sel-week-goal"]')).toContainText(sessionWords);

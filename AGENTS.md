@@ -359,3 +359,38 @@ trade-off of the fix to the user.
 
 See `docs/40-PRODUCTION-AUDIT-2026-11-01.md` for the current evidence, debt,
 trade-offs, and explicit outstanding release gates.
+
+
+## BreathFlow scientific design and source-status gate (2026-11-27)
+
+Before editing or shipping BreathFlow exercises, read
+[docs/56-BREATHFLOW-EVIDENCE-BASED-DESIGN.md](docs/56-BREATHFLOW-EVIDENCE-BASED-DESIGN.md)
+and its versioned [evidence registry](data/breathflow-evidence-design.v1.json).
+The design document distinguishes shipped-main functionality from draft PR #51
+and #53 fixes, as well as future animations, SOVT, human examples and opt-in
+gamification. Its teaching cues are hypotheses requiring qualified observations,
+not anatomy measured through a microphone.
+
+Per task and red-team round, run the existing chore(lint) complexity ceiling
+(McCabe modified <=15) and test:core, plus this independent positive/negative
+documentation drift check:
+
+    node --test tests/node/breathflow-evidence-design.test.mjs
+
+A future PR merging BreathFlow into main MUST update registry status and retest
+before merging: a known draft path appearing in main is an intentional red
+flag to review which features are truly live. Never claim the evidence-audit
+test proves clinical effects; it proves traceability, status and counterexamples.
+
+## Skill discovery and paid curriculum
+
+Read `docs/61-SKILL-DISCOVERY-AND-ACCESS.md` before changing discovery, trials
+or skill sequences. Keep the first tab session simple; returning-tab discovery
+must not open a modal, move focus or silently start a trial. Honor reduced
+motion. All skill definitions carry `accessTier: "pro"`; launch preview is an
+explicit configuration policy, separate from the Pro capability. A paid rollout
+must retain individual free practice and history, recheck actual expiry at new
+starts, and preserve ongoing recordings. No resetting urgency counter or claim
+that a drill score proves retained singing skill. Test old persisted sequences
+against newer curriculum before overlaying teaching cues. Falsifiable tests,
+independent QA and the complexity ceiling above apply to every round.

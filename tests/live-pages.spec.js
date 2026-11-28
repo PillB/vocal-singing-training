@@ -213,4 +213,37 @@ describeLive("Live Pages validation", () => {
     await page.locator("#btn-history").click();
     await expect(page.locator("#view-history")).toHaveClass(/active/, { timeout: 8000 });
   });
+  for (const viewport of [{width:1280,height:720},{width:360,height:740},{width:844,height:390}]) {
+    test(`live returning-visit skill discovery and practice at ${viewport.width}x${viewport.height}`, async ({page,context}) => {
+      await page.setViewportSize(viewport);
+      await bootLive(page);
+      await expect(page.locator("#btn-next-step")).toBeVisible();
+      await expect(page.locator("#btn-skill-first")).toBeHidden();
+      await page.reload({waitUntil:"domcontentloaded"});
+      await expect(page.locator("#btn-skill-first")).toBeHidden();
+      const next=await context.newPage();
+      await next.setViewportSize(viewport);
+      await bootLive(next);
+      await expect(next.locator("#btn-skill-first")).toBeVisible();
+      await expect(next.locator("#sets-sheet")).toBeHidden();
+      expect(await next.evaluate(()=>VTBilling.trialStartedAt())).toBeNull();
+      await next.locator("#btn-skill-first").click();
+      await expect(next.locator("#sets-sheet")).toBeVisible();
+      await expect(next.locator("#skill-access-status")).toContainText(/lanzamiento/);
+      await expect(next.locator("#sets-list .set-card")).toHaveCount(5);
+      await next.locator("#sets-focus").selectOption("breath");
+      await expect(next.locator("#sets-list .set-card")).toHaveCount(1);
+      await next.locator("[data-skill-set]").click();
+      await expect(next.locator("#view-exercise")).toHaveClass(/active/);
+      await expect(next.locator("#skill-context")).toBeVisible();
+      await expect(next.locator("#skill-context-task")).toContainText(/pausa/);
+      await next.locator("#btn-practice-start").click();
+      await expect(next.locator("#btn-practice-stop")).toBeVisible();
+      await next.locator("#btn-practice-stop").click();
+      await expect(next.locator("#btn-practice-start")).toBeVisible();
+      expect(await next.evaluate(()=>VTBilling.trialStartedAt())).toBeNull();
+      await next.close();
+    });
+  }
+
 });

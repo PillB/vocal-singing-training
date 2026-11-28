@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "reviewed": "2026-11-27",
+  "baselineMain": "03f59bc0aa854ac1d54a4255cc9312995f4f3568",
+  "sources": [
+    {
+      "id": "E01",
+      "url": "https://www.asha.org/practice-portal/clinical-topics/voice-disorders/"
+    },
+    {
+      "id": "E02",
+      "url": "https://www.nidcd.nih.gov/es/espanol/cuidando-su-voz"
+    },
+    {
+      "id": "E03",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/16671856/"
+    },
+    {
+      "id": "E04",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/41058356/"
+    },
+    {
+      "id": "E05",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/41896048/"
+    },
+    {
+      "id": "E06",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/42982685/"
+    },
+    {
+      "id": "E07",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/27159498/"
+    },
+    {
+      "id": "E08",
+      "url": "https://link.springer.com/article/10.1007/s11423-023-10337-7"
+    },
+    {
+      "id": "E09",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/41440823/"
+    },
+    {
+      "id": "E10",
+      "url": "https://www.w3.org/TR/WCAG22/"
+    },
+    {
+      "id": "E11",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia"
+    },
+    {
+      "id": "E12",
+      "url": "https://support.yousician.com/hc/en-us/articles/360000553289-Practice-and-Play-modes-in-singing"
+    },
+    {
+      "id": "E13",
+      "url": "https://link.springer.com/article/10.1007/s10648-026-10225-5"
+    },
+    {
+      "id": "E14",
+      "url": "https://www.nidcd.nih.gov/health/hoarseness"
+    }
+  ],
+  "features": [
+    {
+      "id": "BF-F01",
+      "status": "draft",
+      "path": "breathflow.html",
+      "pr": 51,
+      "evidence": [
+        "E01",
+        "E07"
+      ],
+      "observable": "Primera apertura exige guía visual o skip explícito",
+      "counterexample": "El usuario inicia sin guía ni skip"
+    },
+    {
+      "id": "BF-F02",
+      "status": "draft",
+      "path": "js/breathflow-teach.js",
+      "pr": 51,
+      "evidence": [
+        "E07",
+        "E09"
+      ],
+      "observable": "Elección palabra por palabra no desbloquea Start",
+      "counterexample": "La respuesta errónea habilita completar"
+    },
+    {
+      "id": "BF-F03",
+      "status": "draft",
+      "path": "js/breathflow.js",
+      "pr": 51,
+      "evidence": [
+        "E02",
+        "E11"
+      ],
+      "observable": "Micrófono negado mantiene ruta manual y no diagnostica inhalaciones",
+      "counterexample": "Micrófono denegado bloquea toda la práctica"
+    },
+    {
+      "id": "BF-F04",
+      "status": "main",
+      "path": "js/practice-days.js",
+      "evidence": [
+        "E09"
+      ],
+      "observable": "Los días se guardan en ledger único por perfil",
+      "counterexample": "Dos calendarios acreditan días distintos"
+    },
+    {
+      "id": "BF-F05",
+      "status": "draft",
+      "path": "js/breathflow-teach.js",
+      "pr": 53,
+      "evidence": [
+        "E11"
+      ],
+      "observable": "Guía sonora cesa antes de pedir micrófono",
+      "counterexample": "TTS y getUserMedia suenan a la vez"
+    },
+    {
+      "id": "BF-F06",
+      "status": "proposal",
+      "evidence": [
+        "E03",
+        "E04",
+        "E05",
+        "E06"
+      ],
+      "observable": "Hum/SOVT se transfiere a frase sin aumento declarado de esfuerzo",
+      "counterexample": "Se exige pajilla o se recompensa soplar más tiempo"
+    },
+    {
+      "id": "BF-F07",
+      "status": "proposal",
+      "evidence": [
+        "E08",
+        "E09"
+      ],
+      "observable": "Logros optativos por decisión de pausa segura sin premio por duración",
+      "counterexample": "Una racha castiga descanso por fatiga"
+    },
+    {
+      "id": "BF-F08",
+      "status": "draft",
+      "path": "css/breathflow-teach.css",
+      "pr": 51,
+      "evidence": [
+        "E10"
+      ],
+      "observable": "Comparación de frases refluye sin overflow a 320px",
+      "counterexample": "min-width 550px rompe controles"
+    },
+    {
+      "id": "BF-F09",
+      "status": "main",
+      "path": "js/sync.js",
+      "evidence": [
+        "E09",
+        "E11"
+      ],
+      "observable": "Se reutiliza el sync existente y se compara el mismo ledger",
+      "counterexample": "BreathFlow escribe una copia no sincronizable del progreso"
+    },
+    {
+      "id": "BF-F10",
+      "status": "proposal",
+      "evidence": [
+        "E01",
+        "E09",
+        "E12"
+      ],
+      "observable": "El docente evalúa una frase NUEVA con ejemplo original/licenciado",
+      "counterexample": "Se acredita dominio por contestar una sola pregunta"
+    },
+    {
+      "id": "BF-F11",
+      "status": "proposal",
+      "evidence": [
+        "E07",
+        "E13"
+      ],
+      "observable": "Revisión en día posterior con pausa cómoda y reto transferido",
+      "counterexample": "Se premian segundos de apnea o se castiga respirar"
+    }
+  ]
+}

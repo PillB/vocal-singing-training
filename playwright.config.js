@@ -85,12 +85,12 @@ module.exports = {
     {
       name: "firefox",
       use: { browserName: "firefox" },
-      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call)\.spec\.js/
+      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call|practice-hidden-time|skill-discovery-access|skill-teaching)\.spec\.js/
     },
     {
       name: "webkit",
       use: { browserName: "webkit" },
-      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call)\.spec\.js/
+      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call|practice-hidden-time|skill-discovery-access|skill-teaching)\.spec\.js/
     },
     {
       name: "webkit-layout",
@@ -103,7 +103,7 @@ module.exports = {
         browserName: "chromium",
         ...devices["Pixel 7"]
       },
-      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call)\.spec\.js/
+      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call|practice-hidden-time|skill-discovery-access|skill-teaching)\.spec\.js/
     },
     {
       name: "mobile-safari",
@@ -111,7 +111,7 @@ module.exports = {
         browserName: "webkit",
         ...devices["iPhone 14"]
       },
-      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call)\.spec\.js/
+      testMatch: /(cross-browser-audio|safari-mobile-recovery|exercise-start-visibility|piano-dropped-call|practice-hidden-time|skill-discovery-access|skill-teaching)\.spec\.js/
     }
   ],
   // The second reporter fails the run on a skipped test nobody reviewed (QA-57): a skip is reported as a success

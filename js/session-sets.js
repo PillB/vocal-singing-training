@@ -625,10 +625,496 @@
     }
   ];
 
+  /** Optional targeted skills; exercises, timers and day ledger remain unchanged. */
+  const SKILL_SETS = [
+  {
+    "id": "s-skill-breath",
+    "track": "singing",
+    "focus": "breath",
+    "steps": [
+      [
+        "s18-costal-breath",
+        60
+      ],
+      [
+        "s8-breath-support",
+        120
+      ],
+      [
+        "s3-song-stanzas",
+        180
+      ]
+    ],
+    "grade": "lim",
+    "evidence": [
+      "RMT26",
+      "ASHA"
+    ],
+    "kind": "skill",
+    "accessTier": "pro",
+    "es": {
+      "name": "Aire entre frases",
+      "goal": "Respira por ideas, sin cortar cada palabra ni empujar.",
+      "cue": "Señala una pausa de sentido en un texto propio.",
+      "check": "Prueba una idea completa con hombros y cuello libres.",
+      "transfer": "Canta otra frase nueva y elige dónde descansar.",
+      "fallback": "Sin micrófono: acorta la frase. Para ante dolor o mareo.",
+      "why": "Mejor fuerza respiratoria no equivale a mejor canto; la transferencia musical no es concluyente.",
+      "tip": "Si falta aire, divide la frase en vez de aguantar.",
+      "src": "RMT26, ASHA"
+    },
+    "en": {
+      "name": "Breath between phrases",
+      "goal": "Choose meaningful breaths without pushing.",
+      "cue": "Mark a natural pause in your own sentence.",
+      "check": "Sing a thought with a relaxed neck and shoulders.",
+      "transfer": "Try a fresh phrase and choose a comfortable pause.",
+      "fallback": "No mic: shorten the line. Stop for pain or dizziness.",
+      "why": "Respiratory strength is not musical performance; transfer evidence remains inconclusive.",
+      "tip": "Breathe sooner rather than force the line.",
+      "src": "RMT26, ASHA"
+    }
+  },
+  {
+    "id": "s-skill-onset",
+    "track": "singing",
+    "focus": "coordination",
+    "steps": [
+      [
+        "s7-humming",
+        90
+      ],
+      [
+        "s12-easy-onset",
+        120
+      ],
+      [
+        "s20-five-vowels",
+        120
+      ],
+      ["s3-song-stanzas", 90]
+    ],
+    "grade": "lim",
+    "evidence": [
+      "ASHA",
+      "NIDCD"
+    ],
+    "kind": "skill",
+    "accessTier": "pro",
+    "es": {
+      "name": "Iniciar sin apretar",
+      "goal": "Explora el inicio suave de una vocal cómoda.",
+      "cue": "Comienza con un tarareo ligero.",
+      "check": "Alterna una vocal y una palabra sin apretar mandíbula.",
+      "transfer": "Empieza otra frase sin buscar volumen máximo.",
+      "fallback": "Descansa ante ronquera o dolor; evita ataques duros.",
+      "why": "Fonación fluida orienta el ejercicio, no prescribe una dosis universal.",
+      "tip": "La comodidad importa más que el volumen.",
+      "src": "ASHA, NIDCD"
+    },
+    "en": {
+      "name": "Gentle sound onset",
+      "goal": "Explore an easy start on a comfortable vowel.",
+      "cue": "Begin with a light hum.",
+      "check": "Alternate a vowel and a word without jaw tension.",
+      "transfer": "Start a fresh phrase without chasing loudness.",
+      "fallback": "Rest for pain or hoarseness; avoid hard attacks.",
+      "why": "Flow phonation informs this task but does not prescribe a universal dose.",
+      "tip": "Comfort matters more than loudness.",
+      "src": "ASHA, NIDCD"
+    }
+  },
+  {
+    "id": "s-skill-sovt",
+    "track": "singing",
+    "focus": "coordination",
+    "steps": [
+      [
+        "s4-lip-trills",
+        90
+      ],
+      [
+        "s6-straw",
+        120
+      ],
+      [
+        "s3-song-stanzas",
+        90
+      ]
+    ],
+    "grade": "lim",
+    "evidence": [
+      "SOVT25",
+      "SOVT26",
+      "MAP26"
+    ],
+    "kind": "skill",
+    "accessTier": "pro",
+    "es": {
+      "name": "Sonido fácil y SOVT",
+      "goal": "Prueba hum, trino o pajita sin aumentar la fuerza.",
+      "cue": "Compara un hum suave con un trino cómodo.",
+      "check": "Pasa de un sonido semiocluido a una palabra breve.",
+      "transfer": "Usa esa palabra en una frase no ensayada.",
+      "fallback": "Si el trino no sale, elige hum; nunca soples fuerte.",
+      "why": "Estudios de SOVT muestran algunos beneficios grupales, no una dosis universal.",
+      "tip": "La vibración facial no mide tu anatomía.",
+      "src": "SOVT25, SOVT26, MAP26"
+    },
+    "en": {
+      "name": "Easy sound and SOVT",
+      "goal": "Try humming, a trill or straw without force.",
+      "cue": "Compare an easy hum with a gentle trill.",
+      "check": "Move from a semi-occluded sound into a short word.",
+      "transfer": "Use that word in an unfamiliar phrase.",
+      "fallback": "If trilling fails, hum gently; never blow hard.",
+      "why": "SOVT studies show some group outcomes, not universal doses.",
+      "tip": "Facial buzzing does not measure anatomy.",
+      "src": "SOVT25, SOVT26, MAP26"
+    }
+  },
+  {
+    "id": "s-skill-pitch",
+    "track": "singing",
+    "focus": "pitch",
+    "steps": [
+      [
+        "s9-pitch-match",
+        150
+      ],
+      [
+        "s10-five-note",
+        120
+      ],
+      [
+        "s13-arpeggio-match",
+        150
+      ],
+      ["s3-song-stanzas", 90]
+    ],
+    "grade": "lim",
+    "evidence": [
+      "MOTOR26",
+      "ASHA"
+    ],
+    "kind": "skill",
+    "accessTier": "pro",
+    "es": {
+      "name": "Centro de afinación",
+      "goal": "Encuentra una nota cómoda sin depender siempre del gráfico.",
+      "cue": "Escucha una nota antes de verla en pantalla.",
+      "check": "Iguala con la guía y repite sin mirarla.",
+      "transfer": "Usa una nota nueva y escucha primero.",
+      "fallback": "Sin pitch fiable, apóyate en oído y piano; no fuerces agudos.",
+      "why": "El feedback variable puede apoyar aprendizaje; no prueba dominio musical.",
+      "tip": "Una curva no es el juez de tu comodidad.",
+      "src": "MOTOR26, ASHA"
+    },
+    "en": {
+      "name": "Find pitch center",
+      "goal": "Match comfortable notes without relying on a graph.",
+      "cue": "Listen to a note before seeing its trace.",
+      "check": "Try with feedback and once without it.",
+      "transfer": "Use an unfamiliar note and listen first.",
+      "fallback": "When pitch tracking fails, use ear and piano; no forced highs.",
+      "why": "Variable feedback may aid learning, not certify competence.",
+      "tip": "A pitch trace cannot judge comfort.",
+      "src": "MOTOR26, ASHA"
+    }
+  },
+  {
+    "id": "s-skill-phrasing",
+    "track": "singing",
+    "focus": "song",
+    "steps": [
+      [
+        "s14-staccato-legato",
+        150
+      ],
+      [
+        "s20-five-vowels",
+        90
+      ],
+      [
+        "s3-song-stanzas",
+        180
+      ]
+    ],
+    "grade": "trad",
+    "evidence": [
+      "MOTOR26",
+      "NIDCD"
+    ],
+    "kind": "skill",
+    "accessTier": "pro",
+    "es": {
+      "name": "Fraseo y legato",
+      "goal": "Une sílabas y respira cuando cambia la idea.",
+      "cue": "Compara notas separadas con legato fácil.",
+      "check": "Une dos palabras sin morder consonantes.",
+      "transfer": "Canta un fragmento propio con una pausa natural.",
+      "fallback": "Acorta la línea antes de tensarte; usa texto propio.",
+      "why": "Transferir un gesto a repertorio es una hipótesis de enseñanza.",
+      "tip": "No hagas frases largas por competir.",
+      "src": "MOTOR26, NIDCD"
+    },
+    "en": {
+      "name": "Phrasing and legato",
+      "goal": "Connect syllables and breathe where meaning shifts.",
+      "cue": "Compare separated notes with easy legato.",
+      "check": "Join two words without squeezing consonants.",
+      "transfer": "Sing a new original line with a natural pause.",
+      "fallback": "Shorten the line before strain; use your own words.",
+      "why": "Transfer into repertoire is a teaching hypothesis.",
+      "tip": "Longer is not automatically better.",
+      "src": "MOTOR26, NIDCD"
+    }
+  },
+  {
+    "id": "v-skill-breath",
+    "track": "vocal",
+    "focus": "breath",
+    "steps": [
+      [
+        "s18-costal-breath",
+        60
+      ],
+      [
+        "v10-power-pause",
+        120
+      ],
+      [
+        "v23-clear-speech",
+        150
+      ]
+    ],
+    "grade": "lim",
+    "evidence": [
+      "RMT26",
+      "NIDCD"
+    ],
+    "kind": "skill",
+    "accessTier": "pro",
+    "es": {
+      "name": "Aire para hablar",
+      "goal": "Sostén una idea con pausas útiles.",
+      "cue": "Marca pausas de sentido en un mensaje propio.",
+      "check": "Di la idea y toma aire antes si hace falta.",
+      "transfer": "Explica otro tema con pausas cómodas.",
+      "fallback": "Sin mic: lee y marca pausas; no aguantes aire.",
+      "why": "Fuerza respiratoria no equivale a claridad al hablar.",
+      "tip": "Una pausa dentro de la oración es válida.",
+      "src": "RMT26, NIDCD"
+    },
+    "en": {
+      "name": "Breath for speaking",
+      "goal": "Keep one idea clear with useful pauses.",
+      "cue": "Mark natural breaks in your own message.",
+      "check": "Say the idea and breathe sooner if needed.",
+      "transfer": "Explain a new topic with comfortable pauses.",
+      "fallback": "No mic: read and mark breaks; do not hold air.",
+      "why": "Respiratory strength does not equal speech clarity.",
+      "tip": "Breathing within a sentence is allowed.",
+      "src": "RMT26, NIDCD"
+    }
+  },
+  {
+    "id": "v-skill-clarity",
+    "track": "vocal",
+    "focus": "speech",
+    "steps": [
+      [
+        "v7-record-review",
+        120
+      ],
+      [
+        "v23-clear-speech",
+        150
+      ],
+      [
+        "v10-power-pause",
+        90
+      ]
+    ],
+    "grade": "lim",
+    "evidence": [
+      "MOTOR26",
+      "ASHA"
+    ],
+    "kind": "skill",
+    "accessTier": "pro",
+    "es": {
+      "name": "Dicción entendible",
+      "goal": "Que te entiendan sin exagerar la boca.",
+      "cue": "Escucha primero una frase a tu ritmo habitual.",
+      "check": "Repite con consonantes claras y pausas naturales.",
+      "transfer": "Di otra idea y escucha si se entiende.",
+      "fallback": "Sin grabación: lee y consulta a un oyente.",
+      "why": "Claridad necesita oyentes, no solo velocidad o gráficos.",
+      "tip": "No hay una sola forma obligatoria de boca.",
+      "src": "MOTOR26, ASHA"
+    },
+    "en": {
+      "name": "Understandable speech",
+      "goal": "Be understood without exaggerated mouth shapes.",
+      "cue": "Listen to one sentence at your usual pace.",
+      "check": "Repeat with clear consonants and useful pauses.",
+      "transfer": "Speak about a new topic and notice intelligibility.",
+      "fallback": "No recording: read to another listener.",
+      "why": "Intelligibility needs listeners, not only speed or graphs.",
+      "tip": "No single compulsory mouth position.",
+      "src": "MOTOR26, ASHA"
+    }
+  },
+  {
+    "id": "v-skill-ease",
+    "track": "vocal",
+    "focus": "coordination",
+    "steps": [
+      [
+        "s7-humming",
+        60
+      ],
+      [
+        "v21-straw-to-speech",
+        210
+      ],
+      [
+        "v23-clear-speech",
+        120
+      ]
+    ],
+    "grade": "lim",
+    "evidence": [
+      "SOVT25",
+      "ASHA"
+    ],
+    "kind": "skill",
+    "accessTier": "pro",
+    "es": {
+      "name": "Voz cómoda al hablar",
+      "goal": "Busca una voz fácil sin empujar el volumen.",
+      "cue": "Prueba un hum suave o pajita opcional.",
+      "check": "Pasa del sonido a una frase breve.",
+      "transfer": "Di otra frase con volumen habitual.",
+      "fallback": "Ante ronquera/dolor, descansa; no fuerces una pajita.",
+      "why": "SOVT tiene indicios en grupos estudiados; su transferencia diaria no está probada.",
+      "tip": "La suavidad no exige susurrar.",
+      "src": "SOVT25, ASHA"
+    },
+    "en": {
+      "name": "Comfortable speech",
+      "goal": "Explore easy voice without pushing loudness.",
+      "cue": "Try gentle humming or an optional straw.",
+      "check": "Move from sound to a short sentence.",
+      "transfer": "Say a new sentence at normal loudness.",
+      "fallback": "Rest for pain/hoarseness; never force straw work.",
+      "why": "SOVT has evidence in studied groups, not proven daily transfer.",
+      "tip": "Ease does not require whispering.",
+      "src": "SOVT25, ASHA"
+    }
+  },
+  {
+    "id": "v-skill-expression",
+    "track": "vocal",
+    "focus": "speech",
+    "steps": [
+      [
+        "v12-melodic-speech",
+        120
+      ],
+      [
+        "v14-pace-variation",
+        120
+      ],
+      [
+        "v19-authority-close",
+        120
+      ]
+    ],
+    "grade": "trad",
+    "evidence": [
+      "MOTOR26",
+      "GAME24"
+    ],
+    "kind": "skill",
+    "accessTier": "pro",
+    "es": {
+      "name": "Intención al hablar",
+      "goal": "Haz que una idea destaque sin actuar de más.",
+      "cue": "Escoge la palabra importante en una frase.",
+      "check": "Dila con dos intenciones a un oyente imaginario.",
+      "transfer": "Aplícala a un mensaje diferente sin gráfica.",
+      "fallback": "Practica sin micrófono o descansa ante fatiga.",
+      "why": "Variar más el tono no significa necesariamente ser mejor orador.",
+      "tip": "Busca comunicación, no carisma puntuado.",
+      "src": "MOTOR26, GAME24"
+    },
+    "en": {
+      "name": "Expressive speech",
+      "goal": "Highlight meaning without overacting.",
+      "cue": "Choose one important word in a sentence.",
+      "check": "Say it with two intentions for a listener.",
+      "transfer": "Apply the choice to a new message without graphs.",
+      "fallback": "No mic needed; rest if tired.",
+      "why": "More pitch variation is not automatically better speaking.",
+      "tip": "Communicate; do not chase a charisma score.",
+      "src": "MOTOR26, GAME24"
+    }
+  },
+  {
+    "id": "v-skill-recovery",
+    "track": "vocal",
+    "focus": "recovery",
+    "steps": [
+      [
+        "s17-jaw-neck-release",
+        90
+      ],
+      [
+        "v22-voice-recovery",
+        600
+      ]
+    ],
+    "grade": "lim",
+    "evidence": [
+      "NIDCD",
+      "ASHA"
+    ],
+    "kind": "skill",
+    "accessTier": "pro",
+    "es": {
+      "name": "Descanso de voz",
+      "goal": "Decide si necesitas descanso después de hablar.",
+      "cue": "Observa cansancio, ronquera o dolor antes de empezar.",
+      "check": "Solo si es cómodo, prueba la rutina de pausa y sonido suave.",
+      "transfer": "Después compara comodidad sin subir el volumen.",
+      "fallback": "Si hay ronquera/dolor, descansa y consulta si persiste.",
+      "why": "El cuidado vocal es prioritario; esta rutina no es terapia.",
+      "tip": "Descansar no es perder una racha.",
+      "src": "NIDCD, ASHA"
+    },
+    "en": {
+      "name": "Rest your voice",
+      "goal": "Choose rest after a lot of speaking.",
+      "cue": "Notice fatigue, hoarseness or pain first.",
+      "check": "Only if comfortable, try quiet and gentle sound.",
+      "transfer": "Compare ease after rest, not loudness.",
+      "fallback": "For pain/hoarseness rest and seek advice if persistent.",
+      "why": "Vocal-care guidance is not a clinical treatment recipe.",
+      "tip": "Rest is not a broken streak.",
+      "src": "NIDCD, ASHA"
+    }
+  }
+];
+
   let hooks = {};
   let bound = false;
   /** How to close the picker / the finishing card while open, as their own buttons do. */
   const closeOpen = { sheet: null, done: null };
+  let accessTimer = null;
+  let discovery = null;
+  let teachingStep = null;
 
   /* —— Small helpers —— */
 
@@ -644,6 +1130,76 @@
 
   function esc(s) {
     return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  }
+
+  /** Functional browser preference only: a new tab session is a visit, reload/BF-cache is not. */
+  function skillVisit() {
+    try {
+      const session = sessionStorage.getItem("vt_skill_visit_v1");
+      if (session === "first" || session === "return") return { eligible: session === "return", celebrate: false };
+      const raw = JSON.parse(localStorage.getItem("vt_skill_discovery_v1") || "null");
+      const old = raw?.v === 1 && [1, 2].includes(raw.visits) ? raw.visits : 0;
+      const visits = Math.min(2, old + 1);
+      localStorage.setItem("vt_skill_discovery_v1", JSON.stringify({ v: 1, visits }));
+      sessionStorage.setItem("vt_skill_visit_v1", visits === 1 ? "first" : "return");
+      return { eligible: visits === 2, celebrate: old === 1 };
+    } catch {
+      return { eligible: false, celebrate: false, storageUnavailable: true };
+    }
+  }
+
+  function renderSkillDiscovery() {
+    discovery = discovery || skillVisit();
+    const entry = $("#btn-skill-first");
+    const menu = $("#btn-skill-sets");
+    if (entry) {
+      entry.hidden = !discovery.eligible;
+      entry.classList.toggle("is-new-skill", discovery.celebrate);
+    }
+    if (menu) menu.hidden = !discovery.eligible && !discovery.storageUnavailable;
+  }
+
+  /** Missing/stale billing code cannot silently authorize future premium starts. */
+  function skillAccess() {
+    return global.VTBilling?.skillSetAccess?.() || { allowed: false, mode: "unavailable", endsAt: null };
+  }
+
+  function skillAccessMessage(access) {
+    if (access.mode !== "trial") return tt("sets.access." + access.mode);
+    const date = new Date(access.endsAt).toLocaleString(lang(), { dateStyle: "medium", timeStyle: "short" });
+    return tt("sets.access.trial", { date });
+  }
+
+  /** Recheck on entitlement/visibility changes and expiry; no network, no ticking urgency. */
+  function refreshSkillAccess() {
+    if (accessTimer) clearTimeout(accessTimer);
+    accessTimer = null;
+    const modal = $("#sets-sheet");
+    const status = $("#skill-access-status");
+    if (!modal || !status || modal.hidden || modal.dataset.setKind !== "skill") return;
+    const access = skillAccess();
+    status.hidden = false;
+    status.textContent = skillAccessMessage(access);
+    modal.querySelectorAll("[data-skill-set]").forEach((button) => paintSkillStart(button, access));
+    if (access.endsAt) accessTimer = setTimeout(refreshSkillAccess, Math.max(1, Math.min(3600000, access.endsAt - Date.now() + 1)));
+  }
+
+  function paintSkillStart(button, access) {
+    button.textContent = tt(access.allowed ? "sets.start" : "sets.skillOffer");
+    button.disabled = access.mode === "unavailable";
+    if (access.allowed) {
+      button.dataset.setStart = button.dataset.skillSet;
+      delete button.dataset.skillUpgrade;
+    } else {
+      delete button.dataset.setStart;
+      button.dataset.skillUpgrade = button.dataset.skillSet;
+    }
+  }
+
+  /** Deliberate premium-details action, separate from Start and from trial opt-in. */
+  function openSkillOffer() {
+    closeDialogs();
+    hooks.openPricing?.();
   }
 
   function track(name, props) {
@@ -682,7 +1238,7 @@
    * @returns {{ id, track, grade, order: string[], sec: Object<string,number>, totalSec: number, minutes: number, name, goal, why, tip, src } | null}
    */
   function resolve(id) {
-    const def = SETS.find((s) => s.id === id);
+    const def = [...SETS, ...SKILL_SETS].find((s) => s.id === id);
     if (!def) return null;
     const order = [];
     const sec = {};
@@ -699,6 +1255,9 @@
       track: def.track,
       grade: def.grade,
       focus: def.focus,
+      kind: def.kind || "goal",
+      accessTier: def.accessTier || "free",
+      evidence: def.evidence || [],
       order,
       sec,
       totalSec,
@@ -707,8 +1266,58 @@
       goal: words.goal,
       why: words.why,
       tip: words.tip,
-      src: words.src
+      src: words.src,
+      cue: words.cue || "",
+      check: words.check || "",
+      transfer: words.transfer || "",
+      fallback: words.fallback || ""
     };
+  }
+
+  /** Teaching follows the real guided step, never a second completion ledger. */
+  function teachingFor(session, exerciseId) {
+    if (!session || session.path !== "set" || session.status === "completed") return null;
+    const set = resolve(session.set);
+    if (!set || set.kind !== "skill" || !Array.isArray(session.order)) return null;
+    if (JSON.stringify(session.order) !== JSON.stringify(set.order)) return null;
+    const index = session.index;
+    if (session.order[index] !== exerciseId) return null;
+    const last = index === session.order.length - 1;
+    const phase = index === 0 ? "Observe" : last ? "Transfer" : "Try";
+    return { key: `${session.startedAt}:${set.id}:${index}`, title: `${set.name} · ${tt("sets.skill" + phase)}`,
+      task: index === 0 ? set.cue : last ? set.transfer : set.check,
+      fallback: set.fallback, feedback: set.focus === "pitch" };
+  }
+
+  function paintFeedbackToggle(quiet) {
+    const button = $("#skill-feedback-toggle");
+    if (!button) return;
+    button.setAttribute("aria-pressed", String(quiet));
+    button.textContent = tt(quiet ? "sets.feedbackShow" : "sets.feedbackHide");
+  }
+
+  function toggleSkillFeedback() {
+    const view = $("#view-exercise");
+    if (!view) return;
+    paintFeedbackToggle(view.classList.toggle("skill-feedback-quiet"));
+  }
+
+  /** Text only; reset the optional visual aid on a new step or individual practice. */
+  function renderTeaching(session, exerciseId) {
+    const context = teachingFor(session, exerciseId);
+    const panel = $("#skill-context");
+    if (!panel) return context;
+    const key = context?.key || null;
+    if (teachingStep !== key || !context) $("#view-exercise")?.classList.remove("skill-feedback-quiet");
+    teachingStep = key;
+    panel.hidden = !context;
+    if (!context) return null;
+    $("#skill-context-title").textContent = context.title;
+    $("#skill-context-task").textContent = context.task;
+    $("#skill-context-fallback").textContent = context.fallback;
+    $("#skill-feedback-toggle").hidden = !context.feedback;
+    paintFeedbackToggle(!!$("#view-exercise")?.classList.contains("skill-feedback-quiet"));
+    return context;
   }
 
   /** The sets of a track, in the order written. */
@@ -716,6 +1325,11 @@
     return SETS.filter((s) => s.track === trackId)
       .map((s) => resolve(s.id))
       .filter(Boolean);
+  }
+
+  /** Separate skill repairs are optional; the original goal sets remain unchanged. */
+  function skillList(trackId) {
+    return SKILL_SETS.filter((s) => s.track === trackId).map((s) => resolve(s.id)).filter(Boolean);
   }
 
   /** The exercise ids practised today, from the day's ledger. */
@@ -740,6 +1354,7 @@
   function start(id) {
     const set = resolve(id);
     if (!set) return null;
+    if (set.kind === "skill" && !skillAccess().allowed) return null;
     closeDialogs();
     if (hooks.getTab?.() !== set.track) hooks.setTab?.(set.track);
     track("set_start", { set: set.id, track: set.track, steps: set.order.length, sec: set.totalSec });
@@ -777,6 +1392,7 @@
     const live = !!session && session.status !== "completed" && Array.isArray(session.order) && session.order.length > 1;
     if (!live) {
       if (trail) trail.hidden = true;
+      renderTeaching(null);
       return;
     }
     if (!trail) {
@@ -808,6 +1424,18 @@
       .join("");
   }
 
+  /** A skill card explicitly distinguishes a cue, an attempt and transfer. */
+  function skillPlanHtml(set) {
+    if (set.kind !== "skill") return "";
+    const items = [["sets.skillObserve", set.cue], ["sets.skillTry", set.check],
+      ["sets.skillTransfer", set.transfer]];
+    const steps = items.map(([label, message]) =>
+      "<li><strong>" + esc(tt(label)) + ":</strong> " + esc(message) + "</li>").join("");
+    return '<div class="set-skill-plan"><p class="set-skill-label">' +
+      esc(tt("sets.skillPlan")) + "</p><ol>" + steps + "</ol>" +
+      '<p class="set-skill-safe"><strong>' + esc(tt("sets.skillFallback")) +
+      ":</strong> " + esc(set.fallback) + "</p></div>";
+  }
   function cardHtml(set, done) {
     const all = set.order.every((id) => done.includes(id));
     const meta = tt("sets.meta", { min: String(set.minutes), n: String(set.order.length) });
@@ -817,6 +1445,7 @@
         <span class="set-meta">${esc(meta)}</span>
       </div>
       <p class="set-goal">${esc(set.goal)}</p>
+      ${skillPlanHtml(set)}
       <ol class="set-steps" aria-label="${esc(tt("sets.stepsAria"))}">${stepsHtml(set, done)}</ol>
       ${all ? `<p class="set-today">${esc(tt("sets.doneToday"))}</p>` : ""}
       <details class="set-why">
@@ -825,7 +1454,8 @@
         ${set.tip ? `<p class="set-tip">${esc(set.tip)}</p>` : ""}
         <p class="set-src">${esc(tt("sets.src", { src: set.src }))}</p>
       </details>
-      <button type="button" class="btn btn-primary set-start" data-set-start="${esc(set.id)}" aria-describedby="set-name-${esc(set.id)}">${esc(tt("sets.start"))}</button>
+      ${set.kind === "skill" ? '<span class="set-pro-tag">Pro</span>' : ""}
+      <button type="button" class="btn btn-primary set-start" data-set-start="${esc(set.id)}" ${set.kind === "skill" ? 'data-skill-set="' + esc(set.id) + '"' : ""} aria-describedby="set-name-${esc(set.id)}">${esc(tt("sets.start"))}</button>
     </li>`;
   }
 
@@ -895,31 +1525,48 @@
     const paint = () => {
       $("#sets-list").innerHTML = filterFocus(sets, picker.value).map((set) => cardHtml(set, done)).join("");
       $("#sets-list").scrollTop = 0;
+      refreshSkillAccess();
     };
     picker.onchange = paint;
     paint();
   }
 
-  function openSheet(opener) {
+  /** Keep label logic out of the eventful modal lifecycle (CC <= 15). */
+  function sheetLabels(trackId, skills) {
+    const title = skills ? "sets.skillTitle" : "sets.title";
+    const sub = skills
+      ? (trackId === "vocal" ? "sets.skillSubVocal" : "sets.skillSubSinging")
+      : (trackId === "vocal" ? "sets.subVocal" : "sets.subSinging");
+    return { title, sub };
+  }
+
+  function openSheet(opener, kind = "goal") {
     const modal = $("#sets-sheet");
     if (!modal) return;
     const trackId = hooks.getTab?.() === "vocal" ? "vocal" : "singing";
-    const sets = list(trackId);
+    const skills = kind === "skill";
+    modal.dataset.setKind = kind;
+    $("#skill-access-status").hidden = !skills;
+    const sets = skills ? skillList(trackId) : list(trackId);
     const done = practisedToday();
-    $("#sets-title").textContent = tt("sets.title");
-    $("#sets-sub").textContent = tt(trackId === "vocal" ? "sets.subVocal" : "sets.subSinging");
+    const labels = sheetLabels(trackId, skills);
+    $("#sets-title").textContent = tt(labels.title);
+    $("#sets-sub").textContent = tt(labels.sub);
     drawFocusPicker(sets, done);
     const close = $("#sets-close");
     close.setAttribute("aria-label", tt("sets.close"));
     hooks.hideToast?.();
     modal.hidden = false;
     modal.style.display = "";
+    refreshSkillAccess();
     $("#sets-list").scrollTop = 0;
     global.VTFocusTrap?.activate?.(modal, { initialFocus: close, returnFocus: opener || null });
     const card = modal.querySelector(".sets-card");
     const handle = $("#sets-handle");
     const finish = () => {
       closeOpen.sheet = null;
+      if (accessTimer) clearTimeout(accessTimer);
+      accessTimer = null;
       modal.hidden = true;
       global.VTFocusTrap?.release?.(modal);
       close.onclick = null;
@@ -993,7 +1640,7 @@
     };
     closeOpen.done = () => finish();
     close.onclick = () => finish();
-    more.onclick = () => finish(() => openSheet());
+    more.onclick = () => finish(() => openSheet(undefined, set.kind));
     wireModal(modal, () => finish());
   }
 
@@ -1002,6 +1649,11 @@
    * card; anything else is left to the loop or the plain toast.
    * @returns {boolean} true when this file handled the ending
    */
+  function noteGoalCompletion(set, n) {
+    if (set.kind === "skill") return;
+    if (global.VTPath) global.VTPath.noteSet(set.id, n, set.order.length);
+  }
+
   function onComplete(session) {
     if (!session || session.path !== "set") return false;
     const set = resolve(session.set);
@@ -1009,7 +1661,8 @@
     const n = practisedCount(set.order);
     track("set_complete", { set: set.id, track: set.track, practiced: n, steps: set.order.length });
     // Sets keep no record of their own; Tu camino keeps the one that a set was finished.
-    if (global.VTPath) global.VTPath.noteSet(set.id, n, set.order.length);
+    // Only established goal routines earn their existing set milestone.
+    noteGoalCompletion(set, n);
     hooks.refresh?.();
     if (quiet()) return true;
     showDone(set);
@@ -1018,15 +1671,30 @@
 
   /* —— Wiring —— */
 
+  function bindAccess() {
+    $("#skill-feedback-toggle")?.addEventListener("click", toggleSkillFeedback);
+    global.VTBilling?.onChange?.(refreshSkillAccess);
+    document.addEventListener?.("visibilitychange", refreshSkillAccess);
+    global.addEventListener?.("pageshow", refreshSkillAccess);
+    global.addEventListener?.("storage", refreshSkillAccess);
+  }
+
   function bind(h) {
     hooks = h || {};
     if (bound) return;
     bound = true;
+    renderSkillDiscovery();
     $("#btn-sets")?.addEventListener("click", (e) => openSheet(e.currentTarget));
+    $("#btn-skill-sets")?.addEventListener("click", (e) => openSheet(e.currentTarget, "skill"));
+    $("#btn-skill-first")?.addEventListener("click", (e) => openSheet(e.currentTarget, "skill"));
     $("#sets-list")?.addEventListener("click", (e) => {
       const b = e.target.closest?.("[data-set-start]");
       if (b) start(b.dataset.setStart);
     });
+    $("#sets-list")?.addEventListener("click", (e) => {
+      if (e.target.closest?.("[data-skill-upgrade]")) openSkillOffer();
+    });
+    bindAccess();
     // Both dialogs open over home. When home stops being the page under them
     // (the browser's Back into an exercise, an address typed), they close
     // unanswered, as their own close buttons do. Watching the view itself
@@ -1046,9 +1714,15 @@
     GRADES,
     GRADE_MARKS,
     SETS,
+    SKILL_SETS,
     SHORT,
     bind,
     list,
+    skillList,
+    skillAccess,
+    teachingFor,
+    renderTeaching,
+    refreshSkillAccess,
     resolve,
     start,
     bannerName,

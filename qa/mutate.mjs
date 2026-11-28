@@ -1393,6 +1393,11 @@ export const MUTANTS = {
     ["LF18 a rest day reads as a day practised on Inicio's week", "js/practice-days.js", '      if (bag.rest.used.includes(key)) return "rest";', '      if (bag.rest.used.includes(key)) return "done";', "first visit, then seven days", "tests/usage-calendar.spec.js"],
     ["LF19 late microphone permission starts hidden practice credit", "js/app.js", "state.sessionPractice.liveSince == null && !document.hidden", "state.sessionPractice.liveSince == null", "permission granted after hiding", "tests/practice-hidden-time.spec.js"],
     ["LF20 rate ladder scores wall time including time hidden", "js/practice-modes.js", "const sec = Number.isFinite(ctx?.practicedSec) ? Math.max(0, ctx.practicedSec) : 0;", "const sec = (performance.now() - (st.wallStart || st.startedAt)) / 1000;", "rate ladder's minutes exclude hidden", "tests/practice-hidden-time.spec.js"],
+    ["LF23 skill training overwhelms the first visit", "js/session-sets.js", "entry.hidden = !discovery.eligible;", "entry.hidden = false;", "first website session", "tests/skill-discovery-access.spec.js"],
+    ["LF24 reloading the same tab counts as a return visit", "js/session-sets.js", 'if (session === "first" || session === "return") return { eligible: session === "return", celebrate: false };', "", "first website session", "tests/skill-discovery-access.spec.js"],
+    ["LF25 optional quiet feedback never hides the trace", "css/session-sets.css", ".skill-feedback-quiet #pitch-canvas,", ".skill-feedback-quiet #removed-pitch-canvas,", "pitch graph off/on", "tests/skill-teaching.spec.js"],
+    ["LF26 skill task disappears after opening the exercise", "js/app.js", "    renderExercise();\n    renderSkillTeaching();", "    renderExercise();", "a running set retains", "tests/skill-teaching.spec.js"],
+    ["LF22 hidden late permission is subtracted from the visible timer card", "js/app.js", "    if (document.hidden && state.sessionPractice.hiddenSince == null) {\n      state.sessionPractice.hiddenSince = performance.now();\n    }\n", "", "permission granted after hiding", "tests/practice-hidden-time.spec.js"],
     ["LF21 a synced custom weekly session target is shown as the old default", "js/app.js", "      goalSel.value = t;", "      goalSel.value = \"3\";", "weekly units stay distinct", "tests/weekly-goal-units.spec.js"]
   ].map(([name, file, from, to, grep, spec]) => ({
     name,
@@ -2122,6 +2127,15 @@ const THIRD = Math.ceil(TIME_LIMIT.length / 3);
 MUTANTS.promises = TIME_LIMIT.slice(0, THIRD);
 MUTANTS["promises-time-2"] = TIME_LIMIT.slice(THIRD, 2 * THIRD);
 MUTANTS["promises-time-3"] = TIME_LIMIT.slice(2 * THIRD);
+
+MUTANTS.sets.push(...[
+  ["SK5 stale saved order receives incompatible new curriculum teaching", "js/session-sets.js", "    if (JSON.stringify(session.order) !== JSON.stringify(set.order)) return null;", "", "tests/node/skill-teaching-boundaries.test.mjs"],
+  ["SK6 new steps retain quiet feedback from the prior step", "js/session-sets.js", 'if (teachingStep !== key || !context) $("#view-exercise")?.classList.remove("skill-feedback-quiet");', 'if (!context) $("#view-exercise")?.classList.remove("skill-feedback-quiet");', "tests/node/skill-teaching-boundaries.test.mjs"],
+  ["SK1 future premium gate silently becomes a launch preview", "js/billing.js", "const preview = cfg().skillSetsRequirePro === false;", "const preview = true;", "tests/node/skill-access-policy.test.mjs"],
+  ["SK2 trial or paid expiry is ignored", "js/billing.js", "const current = endsAt === null || nowMs() < endsAt;", "const current = true;", "tests/node/skill-access-policy.test.mjs"],
+  ["SK3 missing premium curriculum tag passes authoring", "qa/audit-skill-sets.mjs", 'if(set.accessTier!=="pro")', "if (false)", "tests/node/skill-sets.test.mjs"],
+  ["SK4 locked direct skill start reaches the engine", "js/session-sets.js", 'if (set.kind === "skill" && !skillAccess().allowed) return null;', "", "tests/node/skill-sets.test.mjs"]
+].map(([name,file,from,to,spec])=>({name,file,from,to,cmd:node([spec])})));
 
 export const DEFAULT_SETS = ["audio", "pitch", "lint", "coaching", "sets", "ledger", "claims", "path", "curriculum", "guards", "ops"];
 

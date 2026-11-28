@@ -227,3 +227,21 @@ The half-limit budget is a project policy derived from observed runner variance,
 not a guarantee offered by GitHub. Observable assertion polling is distinct
 from retrying an entire failing test. The scroll specification is a draft;
 actual browser behavior still needs its regression suite.
+
+## 2026-11-27 — PR65 discovery, trial policy and actual transfer
+
+See [round61](61-SKILL-DISCOVERY-AND-ACCESS.md) for alternatives, primary
+research, actual CI failures, fixes and negative controls. First tab session
+hides skills; returning tab session reveals a finite reduced-motion-aware glow.
+All10 skill sets tagged Pro with explicit free launch preview, truthful opt-in
+trial expiry, preserved ongoing practice/history and free individual exercises.
+Teaching persists during actual sessions; applicable sequences end on a new
+phrase and optional pitch feedback quieting preserves piano/Stop. Stale saved
+orders fall back to original exercise guidance. No efficacy or conversion
+claim is inferred from curriculum integrity tests.
+
+Core1532/0fail/4existing payment TODO and29/29set mutants passed locally;
+final changed-head hosted browser, merge and live checks pending. PR53 merged
+only to its feature base (ca2292f); PR51 remains draft. Updated AGENTS.md and
+CLAUDE.md references preserve the existing per-round falsifiability and<=15
+complexity contract. Versioned wiki is updated locally; remote wiki unpublished.

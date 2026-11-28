@@ -1044,6 +1044,7 @@
       multi_profile: false,
       pro_insights: false,
       coach_pack: false,
+      skill_sets: false,
       studio_goals: false,
       pro_progressions: false,
       achievements_export: false,
@@ -1061,6 +1062,7 @@
       multi_profile: pro,
       pro_insights: pro,
       coach_pack: pro,
+      skill_sets: pro,
       studio_goals: pro,
       pro_progressions: pro,
       achievements_export: pro,
@@ -1071,6 +1073,19 @@
       ad_free: pro
     };
     return !!map[feature];
+  }
+
+  /** Pro curriculum has an explicit launch preview; never silently starts a trial. */
+  function skillSetAccess() {
+    const ent = getEntitlement();
+    const dates = [ent.expiresAt, ent.licenseExpiresAt].map(Date.parse).filter(Number.isFinite);
+    const endsAt = dates.length ? Math.min(...dates) : null;
+    const current = endsAt === null || nowMs() < endsAt;
+    const entitled = can("skill_sets") && current;
+    const preview = cfg().skillSetsRequirePro === false;
+    const trial = ent.plan === "trial" || ent.source === "trial";
+    const mode = entitled ? (trial ? "trial" : "pro") : (preview ? "preview" : trialStartedAt() ? "expired" : "locked");
+    return { allowed: entitled || preview, mode, endsAt: entitled ? endsAt : null };
   }
 
   function exportProgressJson() {
@@ -1151,6 +1166,7 @@
     getEntitlement,
     isPro,
     can,
+    skillSetAccess,
     activate,
     activateDemo,
     clearEntitlement,

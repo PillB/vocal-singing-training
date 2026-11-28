@@ -240,7 +240,7 @@ export const PRACTICE_ROOTS = [
  * the account (nothing, but where written), and why each is not a way in.
  */
 export const NOT_A_WAY_IN = {
-  init: ["", "the page's start: it hands startDaily to the daily loop and to the page's own hooks, and calls neither"],
+  init: ["openPricing:2", "initialization hands practice callbacks to sets and the separate explicit premium-details opener; it calls neither and never starts a trial"],
   "init.onChange": ["", "the redraw after the language changes: it draws the price dialog too, and starts nothing"],
   "bindRetention document": ["", "when the tab comes back, it redraws the next step's card: it starts nothing"],
   "bindAuth #admin-clear-progress": ["VTAuth:1", "the owner's admin button: it asks the older sign-in whether this is the owner, clears the progress and redraws the history"]
@@ -364,6 +364,7 @@ export const PLAN_FILES = {
   "js/license.js": "the signed licence itself, the only proof of a paid plan billing trusts",
   "js/practice-days.js": "Pro's extra rest days for the streak",
   "js/reminders.js": "Pro's second reminder",
+  "js/session-sets.js": "Pro-tagged skill curriculum with explicit launch preview; individual exercises and original goal routines remain free",
   "js/value-pulse.js": "the trial's days left on the progress board"
 };
 
@@ -389,6 +390,7 @@ export const PLAN_USES = {
     "renderNativeCard [data-ad-cta]": ["btn-pricing:1", "the house card that sells Pro opens the plans when it is pressed"]
   },
   "js/app.js": {
+    init: ["openPricing:2", "hands pricing opener to the separate skill-offer hook, no invocation or automatic trial"],
     progressionKeysFor: ["VTBilling:1", "Pro's extra piano progressions, an extra on top of the exercise"],
     isCheckoutPrelaunch: ["VTBilling:1", "whether checkout is open yet, for the pricing dialog's buttons"],
     headerPlanState: ["VTBilling:1 getEntitlement:1", "the header's plan label, the board's tag, and Start's trial funnel"],
@@ -437,6 +439,7 @@ export const PLAN_USES = {
     login: ["VTBilling:3", "the QA unlock of a test account"]
   },
   "js/billing.js": {
+    skillSetAccess: ["getEntitlement:1 trialStartedAt:1", "bounded Pro/trial skill curriculum policy; explicit launch preview, expired trial explanation, never gates individual exercises"],
     verificationConfigured: ["VTLicense:1", "the plan itself: whether a licence can be checked here"],
     licenseClaims: ["VTLicense:1", "the plan itself: the signed licence's claims"],
     getLicenseStatus: ["VTLicense:1", "the plan itself: whether the licence is being checked"],
@@ -467,6 +470,14 @@ export const PLAN_USES = {
   "js/practice-days.js": {
     isPro: ["VTBilling:2 isPro:2", "Pro's extra rest days for the streak"],
     restCap: ["isPro:1", "how many rest days the streak can bank"]
+  },
+  "js/session-sets.js": {
+    paint: ["#sets-list:2", "renders goal and skill cards; only explicitly tagged skill-upgrade controls offer pricing"],
+    openSheet: ["#sets-list:1", "opens the curriculum picker without starting a trial or navigating to pricing"],
+    bind: ["#sets-list:2", "separate delegated Start and premium-details click handlers; goal start remains free"],
+    skillAccess: ["VTBilling:1", "reads the explicit skill curriculum capability; a new skill start can be locked after paid activation, original goal sets and every individual exercise stay free"],
+    openSkillOffer: ["openPricing:1", "only a deliberate data-skill-upgrade click opens pricing; Start never invokes this"],
+    bindAccess: ["VTBilling:1", "listens for entitlement changes to redraw skill offer buttons and the true expiry, never starts a trial"]
   },
   "js/reminders.js": {
     freezeAllowance: ["isPro:2", "the old name for that rest-day allowance"]
@@ -1148,6 +1159,7 @@ test("every element bound to open the sale or the sign-in is a handle the scanne
  */
 export const NOT_MARKS = {
   billing: {
+    "data-set-kind": "curriculum picker kind (goal/skill), not the visitor's entitlement; read only to redraw skill availability",
     "data-custom-goal": "temporary numeric option for an existing session target outside the three presets; it names no plan and is never read to gate practice",
     "ad-slot": "the ad card's own class, drawn the same whatever the plan",
     "ad-slot--native": "the same card's kind",

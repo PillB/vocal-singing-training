@@ -92,7 +92,7 @@ const byId = (...ids) => ids.flatMap((id) => [id, "#" + id]);
  * page, and fails when a new one is missing here.
  */
 export const BILLING_HANDLES = new Set([
-  ...byId("btn-pricing", "btn-value-pro", "value-banner-cta", "btn-account-pricing", "btn-profile-add", "sel-week-goal", "rem-time-2", "btn-export-progress"),
+  ...byId("sets-list", "btn-pricing", "btn-value-pro", "value-banner-cta", "btn-account-pricing", "btn-profile-add", "sel-week-goal", "rem-time-2", "btn-export-progress"),
   "[data-ad-cta]"
 ]);
 /**

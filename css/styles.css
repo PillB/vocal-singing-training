@@ -1927,7 +1927,7 @@ body.view-exercise.practice-live #pitch-game-hud {
   position: relative;
   z-index: 42;
   padding: 0.4rem 0.75rem;
-  min-height: 40px;
+  min-height: var(--min-tap);
   min-width: 6.25rem; /* U3: "Detener" / "Empezar" must not ellipsize */
   font-size: 0.85rem;
   font-weight: 700;

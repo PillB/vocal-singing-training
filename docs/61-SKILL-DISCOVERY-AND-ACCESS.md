@@ -123,3 +123,27 @@ where the old compact-header rule hid every muted paragraph.
 
 Final local core on273d4af:1532tests,1528pass,0fail,4existing payment TODO.
 The subsequent curriculum/disclosure correction requires refreshed tests/CI.
+
+### Hosted visual round — actual failures, not inferred passes
+
+Exact head2ac7115, integration-focus job140850681473:137pass/3fail.
+Two product findings: the CSS-zoomed sheet let a Start target sit outside the
+visible viewport; desktop Stop was40px against the44px project target. Give
+the sheet a bounded minmax(0,1fr) grid row and cap the card to its available
+height as well as viewport units; keep list scrolling. Raise the existing
+practice hit-target minimum to44px. New LF27/LF28 must kill these defects.
+Trade-off: slightly taller desktop control rail; existing stage measurement
+and all exercise layout regressions must still pass.
+
+The third failure was the test's deliberately paused clock preventing piano
+requestAnimationFrame/transition callbacks. Advance that controlled clock400ms
+after opening the panel, retaining visible/hit/piano-output assertions. This
+is fixture time, not a production delay or a swallowed wait. See
+[Playwright Clock](https://playwright.dev/docs/api/class-clock),
+[CSS zoom](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/zoom)
+and[W3C reflow](https://www.w3.org/WAI/WCAG22/Understanding/reflow.html).
+CSS layout scale and viewport emulation do not prove physical browser zoom.
+
+Current-live baseline main5d740f3 passed deployment-byte verification and
+hosted live Playwright run46103242637/job140850200841. New skill behavior is
+still pending merge/deployment, and must not be advertised as live yet.

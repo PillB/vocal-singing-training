@@ -102,6 +102,8 @@ for (const viewport of [{ name: "desktop", width: 1280, height: 900 }, { name: "
     await ownsPointer(page.locator("#btn-practice-stop"));
     await expect(page.locator("#btn-toggle-piano")).toBeVisible();
     await page.locator("#btn-toggle-piano").click();
+    // The controlled clock also owns requestAnimationFrame and panel transition timers.
+    await page.clock.runFor(400);
     await expect(page.locator("#piano-block")).toBeVisible();
     await expect(page.locator("#btn-ref-pitch")).toBeVisible();
     await page.locator("#btn-ref-pitch").click();

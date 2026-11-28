@@ -8,6 +8,7 @@ const { patchBillingConfig } = require("./helpers/billing");
 async function ready(page, lang = "en") {
   await patchBillingConfig(page, { skillSetsRequirePro: false, verification: { apiBaseUrl: "" } });
   await page.addInitScript(() => {
+    localStorage.setItem("vt_settings_v1", JSON.stringify({lastTab:"singing"}));
     localStorage.setItem("vt_skill_discovery_v1", JSON.stringify({ v: 1, visits: 1 }));
     sessionStorage.setItem("vt_sets_e2e", "1");
     sessionStorage.setItem("vt_rate_e2e", "1");

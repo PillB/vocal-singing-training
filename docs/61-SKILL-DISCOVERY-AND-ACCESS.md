@@ -147,3 +147,22 @@ CSS layout scale and viewport emulation do not prove physical browser zoom.
 Current-live baseline main5d740f3 passed deployment-byte verification and
 hosted live Playwright run46103242637/job140850200841. New skill behavior is
 still pending merge/deployment, and must not be advertised as live yet.
+
+The finite glow also clears its decoration class on animation end/cancellation:
+otherwise CSS recreates the animation after leaving and returning home within
+the second visit. Independent end/cancel event controls and SK8 require the
+entry to remain available while the spent celebration cannot replay.
+
+The follow-up hosted run on e1e891c (job140852514595) confirms the enlarged
+Start target and44px Stop/piano interaction now pass their earlier assertions.
+It still reports137pass/3fail at later assertions: the full-page width oracle
+and the real reflection step. The latter correctly hides #btn-next-structured
+while reflection is open; the test now explicitly clicks the visible
+#btn-rate-skip path, retaining actual session-ID and feedback-reset checks.
+
+The width oracle now compares scrollWidth with clientWidth (same layout
+measurement units) and records viewport plus overflowing element boxes, rather
+than reporting only a false boolean. [MDN dimensions](https://developer.mozilla.org/en-US/docs/Web/API/CSS_Object_Model/Determining_the_dimensions_of_elements)
+explains why layout and rendered dimensions differ. The recorded CI artifact
+was downloaded and inspected; no speculative overflow-hiding CSS was added.
+The corrected same-unit oracle still must pass in the hosted rerun.

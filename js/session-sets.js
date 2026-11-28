@@ -1148,6 +1148,10 @@
     }
   }
 
+  function finishSkillGlow(event) {
+    event.currentTarget.classList.remove("is-new-skill");
+  }
+
   function renderSkillDiscovery() {
     discovery = discovery || skillVisit();
     const entry = $("#btn-skill-first");
@@ -1155,6 +1159,8 @@
     if (entry) {
       entry.hidden = !discovery.eligible;
       entry.classList.toggle("is-new-skill", discovery.celebrate);
+      entry.addEventListener("animationend", finishSkillGlow, { once: true });
+      entry.addEventListener("animationcancel", finishSkillGlow, { once: true });
     }
     if (menu) menu.hidden = !discovery.eligible && !discovery.storageUnavailable;
   }

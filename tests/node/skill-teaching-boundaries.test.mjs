@@ -23,7 +23,8 @@ function element() {
     },
     setAttribute(name, value) { this[name] = String(value); },
     addEventListener: (name, fn) => listeners.set(name, fn),
-    click: () => listeners.get("click")?.({})
+    click: () => listeners.get("click")?.({}),
+    dispatch(type) { listeners.get(type)?.({currentTarget:this}); }
   };
 }
 
@@ -150,4 +151,16 @@ test("a persisted old set order never overlays the new curriculum's instructions
   assert.equal(q.win.VTSets.teachingFor(current, "v14-pace-variation").task, "Listen to one sentence at your usual pace.");
   assert.equal(q.win.VTSets.teachingFor({ ...current, status: "completed" }, "v14-pace-variation"), null);
   assert.equal(q.win.VTSets.teachingFor(current, "s9-pitch-match"), null);
+});
+
+test("the discovery glow is spent on animation end or cancellation, so returning home cannot replay it",()=>{
+  for(const event of ["animationend","animationcancel"]) {
+    const local=new Map([["vt_skill_discovery_v1", JSON.stringify({v:1,visits:1})]]);
+    const q=page({local});
+    const entry=q.nodes.get("btn-skill-first");
+    assert.equal(entry.classList.contains("is-new-skill"),true);
+    entry.dispatch(event);
+    assert.equal(entry.classList.contains("is-new-skill"),false);
+    assert.equal(entry.hidden,false,"discovery remains accessible after its decoration ends");
+  }
 });

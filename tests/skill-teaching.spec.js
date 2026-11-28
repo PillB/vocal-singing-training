@@ -115,7 +115,10 @@ for (const viewport of [{ name: "desktop", width: 1280, height: 900 }, { name: "
     await toggle.click();
     await page.locator("#btn-practice-stop").click();
     await expect.poll(() => page.evaluate(() => VTApp.getState().practiceLive)).toBe(false);
-    await nextStep(page, "s10-five-note");
+    // A real Stop opens reflection; explicitly use its unrated continuation.
+    await expect(page.locator("#btn-rate-skip")).toBeVisible();
+    await page.locator("#btn-rate-skip").click();
+    await expect.poll(() => page.evaluate(() => VTApp.getState().exercise?.id)).toBe("s10-five-note");
     await expect(page.locator("#pitch-canvas")).toBeVisible();
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await toggle.click();

@@ -134,7 +134,13 @@ for (const layout of [
     await second.locator("#sets-focus").selectOption("breath");
     const start = second.locator('[data-set-start="s-skill-breath"]');
     await hittable(start);
-    expect(await second.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    const overflow = await second.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth, viewport: innerWidth,
+      offenders: [...document.querySelectorAll("body *")].map(el => ({el, r:el.getBoundingClientRect()}))
+        .filter(({r}) => r.width > 0 && r.height > 0 && r.right > innerWidth + 1)
+        .slice(0, 12).map(({el,r}) => ({id:el.id,cls:String(el.className),right:r.right,width:r.width}))
+    }));
+    expect(overflow.scroll, JSON.stringify(overflow)).toBeLessThanOrEqual(overflow.client + 1);
     await start.click();
     await expect(second.locator("#sets-sheet")).toBeHidden();
     await expect(second.locator("#view-exercise")).toHaveClass(/active/);
